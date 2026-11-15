@@ -45,6 +45,10 @@ SCHEMA = [
           help="Initial value for new operations. Where a pocket region reaches the blank edge, the cutter's outer "
                "edge may travel this far relative to that edge: 0 touches it, -1 leaves 1 mm of material, "
                "+1 lets the tool pass 1 mm beyond it."),
+    Param("default_area_order", "choice", "area", group="Default operation settings",
+          label="Area order", choices=[("area", "Each area to full depth"), ("depth", "Each depth across all areas")],
+          help="Initial order for new operations with separate machining areas. Each area to full depth finishes "
+               "one area before moving to the next; each depth visits all areas before stepping down."),
     Param("default_overcut", "float", 0.0, min=0, max=1000, unit="mm", group="Default operation settings",
           label="Pocket overcut into void",
           help="Initial overcut for new Pocket operations."),
@@ -115,6 +119,8 @@ def validated(data: dict) -> dict:
             if p.max is not None:
                 v = min(p.max, v)
             out[p.name] = int(v) if p.type == "int" else v
+        elif p.type == "choice":
+            out[p.name] = v if v in p.choice_values() else p.default
         else:
             out[p.name] = v
     return out

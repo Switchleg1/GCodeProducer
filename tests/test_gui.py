@@ -658,6 +658,30 @@ def test_dont_ask_again_never_remembers_no(win, monkeypatch):
     assert win.preferences["messages"]["outside_volume"] is True
 
 
+def test_area_order_uses_global_default_and_operation_override(win):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.gui.settings_dialog import SettingsDialog
+    win.preferences["default_area_order"] = "depth"
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    ed = win.cam_editor
+    ed.defaults = win.preferences
+    ed.add_tool()
+    ed.kind.setCurrentIndex(ed.kind.findData("pocket"))
+    ed.add_operation()
+    assert ed.operation().area_order == "depth"
+    assert ed.area_order.currentData() == "depth"
+    ed.area_order.setCurrentIndex(ed.area_order.findData("area"))
+    saved = CAMSetup.from_dict(ed.setup.to_dict())
+    assert saved.groups[0].operations[0].area_order == "area"
+    ed.set_setup(saved)
+    assert ed.area_order.currentData() == "area"
+    dlg = SettingsDialog(win.preferences, win)
+    dlg._defaults()
+    assert dlg.result_values()["default_area_order"] == "area"
+    dlg.close()
+    assert ed.operation().area_order == "area"   # global defaults never rewrite saved operations
+
+
 def test_settings_dialog_messages_section(win):
     from gcodeproducer.core import app_settings
     from gcodeproducer.gui.settings_dialog import SettingsDialog

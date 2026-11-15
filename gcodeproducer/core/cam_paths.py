@@ -126,6 +126,31 @@ def boundary_paths(region, direction, start_index=0):
     return result
 
 
+def machining_areas(paths, kind, region=None):
+    """Group all paths of a connected pocket region, or each independent non-pocket path.
+
+    An annulus (outer ring plus island) is ONE area, as are its inward offset
+    fronts even if they later split. Overcut can merge two pockets into one
+    region. Preserve generated ordering within each area. Do not group by
+    touching cutter sweeps: neighbouring offset contours naturally overlap.
+    """
+    if kind != "pocket":
+        return [[p] for p in paths]
+    # Spatial order avoids tiny area differences in tessellated copies changing
+    # which of otherwise identical pockets is visited first.
+    components = sorted(_polygons(region), key=lambda p: p.bounds)
+    grouped = [[] for _ in components]
+    for path in paths:
+        # Cutter centres are inside their component, including raster endpoints
+        # and boundary contours (allow only GEOS roundoff at the boundary).
+        point = Point(np.asarray(path.points)[0, :2])
+        matches = [i for i, poly in enumerate(components) if poly.distance(point) < 1e-6]
+        if len(matches) != 1:
+            raise ValueError("Pocket path cannot be assigned to a unique machining area")
+        grouped[matches[0]].append(path)
+    return [group for group in grouped if group]
+
+
 def _nearest_seam(points, position):
     """Rotate/insert a seam at the nearest point on a closed loop, preserving winding."""
     p = np.asarray(points, float)

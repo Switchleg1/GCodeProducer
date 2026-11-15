@@ -19,6 +19,7 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | End | Pocket: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
 | Tool/material axial depth default | On for new GUI operations | Material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; configurable per tool and capped by max depth/pass |
 | Stepdown | Explicit value when automatic depth is off | Existing operations retain saved explicit depths |
+| Area order | Each area to full depth | Finish one area before moving to the next, or visit all areas at each depth. New-operation default is in Settings → Default operation settings; saved operations own their choice |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
 | Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
@@ -57,6 +58,42 @@ estimated engagement modifier; positive machine `max_feed` caps cut/link and
 plunge G1 requests. These calculations still need calibrated tool/material data.
 See [cutting data](cutting-data.md), [leads/material state](material-state-and-leads.md)
 and [engagement/feed controls](engagement-and-feeds.md).
+
+## Multiple machining areas
+
+Choose **Area order** on the operation:
+
+- **Each area to full depth** (default): machine area A at every depth to End,
+  then area B at every depth, and so on. This avoids repeatedly travelling
+  between separate holes/pockets.
+- **Each depth across all areas**: machine A and B at the first depth, then
+  A and B at the next depth, until End.
+
+For two pockets from Z0 to Z-3 with 1 mm stepdown, the execution orders are:
+`A-1, A-2, A-3, B-1, B-2, B-3` versus
+`A-1, B-1, A-2, B-2, A-3, B-3`.
+
+For **Pocket**, an area is a connected removal region: all offset contours,
+raster strokes and islands belonging to that region stay together. An annular
+pocket is one area, not an area for each contour. Disconnected regions are
+visited in spatial order (minimum X, then minimum Y); growing regions together
+with overcut makes them a single area. For Profile, Drill, Slot and Engrave,
+each independent generated contour/position/path is an area. All areas share
+the operation's Start/End definitions and other settings.
+
+Earlier-operation removal and air-cut skipping still apply. Between areas the
+emitter checks current material before moving at depth; it retracts if the
+move crosses uncut material. Stay-down link permissions never carry across
+area/depth boundaries. The Preview depth slider follows **execution order**,
+not globally increasing depth: with area-first ordering it returns to the
+shallower passes when the next area begins. Calculated material outputs remain
+per operation, after **all** its areas have completed.
+
+Set the default for newly created operations in
+[Settings → Default operation settings](../settings.md). Changing the default
+never changes saved operations. Older setups without an Area order field use
+*Each area to full depth*; choose depth-first explicitly to retain their former
+interleaved behaviour.
 
 ## Pocket
 

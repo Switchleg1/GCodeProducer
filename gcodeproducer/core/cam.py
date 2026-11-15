@@ -83,6 +83,7 @@ class Operation:
     lead_length: float = 0.0            # 0 = half tool diameter
     overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
+    area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
 
 
 @dataclass
@@ -351,7 +352,7 @@ def generate(job, ctx):
     from .job import Layer, Path
     from .infill_gen import scan_fill
     from .cam_paths import (contour_pocket, direction_for, orient_contour, link_contours,
-                            pocket_region, part_section, overcut_region)
+                            pocket_region, part_section, overcut_region, machining_areas)
     from .app_settings import pref
     from shapely.geometry import box as shapely_box
     from shapely import BufferJoinStyle
@@ -427,6 +428,9 @@ def generate(job, ctx):
             if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
                 raise ValueError(f"{op.name}: 2.5D operations require constant-Z edges")
             paths = []
+            region = None
+            if op.area_order not in ("area", "depth"):
+                raise ValueError(f"{op.name}: unknown area order '{op.area_order}'")
             direction = direction_for(job, op)
             if op.kind in ("profile", "pocket", "drill"):
                 if any(not np.allclose(p[0], p[-1]) for p in polys):
@@ -535,13 +539,25 @@ def generate(job, ctx):
                     ctx.log(f"  {op.name}: start lowered from Z{start:g} to Z{effective:g} (material above is already removed)")
                     start = effective
                     count = max(1, math.ceil((start - end) / step))
+            areas = machining_areas(paths, op.kind, region)
+            # The first path of an area must enter independently: stay-down metadata
+            # from the combined XY plan cannot cross an area or depth boundary.
+            for area in areas:
+                area[0].stay_down, area[0].stay_down_from = False, None
+            if len(areas) * count > 100000:
+                raise ValueError(f"{op.name}: too many area/depth passes")
+            schedule = [(ai, i) for ai in range(len(areas)) for i in range(count)]
+            if op.area_order == "depth":
+                schedule.sort(key=lambda item: (item[1], item[0]))
+            label = "each area to full depth" if op.area_order == "area" else "each depth across all areas"
+            ctx.log(f"  {op.name}: {len(areas)} machining areas, {label}")
             cached_key, planned = None, None
-            for i in range(count):
+            for ai, i in schedule:
                 z = max(end, start - (i + 1) * step)
                 remaining = material_history.at(z) if material_history else None
-                key = remaining.normalize().wkb if remaining is not None else b"unallocated"
+                key = (ai, remaining.normalize().wkb if remaining is not None else b"unallocated")
                 if key != cached_key:
-                    planned = copy.deepcopy(paths)
+                    planned = copy.deepcopy(areas[ai])
                     if skip_air and remaining is not None and op.kind == "pocket":
                         planned = _drop_air_paths(planned, remaining, diameter/2, op.name, ctx.log)
                     cached_key = key
@@ -563,6 +579,7 @@ def generate(job, ctx):
                 layer.cam_group = gi
                 layer.cam_operation = op.name
                 layer.cam_operation_key = (gi, oi)
+                layer.cam_area = ai
                 layer.cam_operation_config = op
                 layer.cam_cutting = cutting
                 layers.append(layer)

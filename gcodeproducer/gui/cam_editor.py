@@ -146,6 +146,12 @@ class CAMEditor(QWidget):
         form.addRow("Lead length (mm)",self.lead_length)
         self.stepdown = self.spin(0.001, 1000, 1)
         self.stepover = self.spin(1, 100, 40)
+        self.area_order = QComboBox()
+        self.area_order.addItem("Each area to full depth", "area")
+        self.area_order.addItem("Each depth across all areas", "depth")
+        self.area_order.setToolTip("Separate pocket regions are areas; all contours around a pocket and its islands stay together. "
+                                   "Finish one area before moving to the next, or visit all areas at each depth. "
+                                   "Default for new operations comes from Settings → Default operation settings.")
         self.side = QComboBox()
         for k in ("outside", "inside", "on"):
             self.side.addItem(k.title(), k)
@@ -167,7 +173,7 @@ class CAMEditor(QWidget):
         for label, key in (("Machine default", "machine"), ("Climb", "climb"),
                            ("Conventional", "conventional"), ("Meander", "meander")):
             self.direction.addItem(label, key)
-        for label, w in (("Stepdown (mm)", self.stepdown), ("Pocket stepover (%)", self.stepover),
+        for label, w in (("Stepdown (mm)", self.stepdown), ("Area order", self.area_order), ("Pocket stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
                          ("Pocket overcut into void (mm)", self.overcut),
                          ("Material boundary limit (mm)", self.material_limit),
@@ -276,6 +282,7 @@ class CAMEditor(QWidget):
         kind = self.kind.currentData()
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
         op = Operation(name=kind.title(), kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
+                       area_order=self.defaults.get("default_area_order", "area"),
                        material_limit=float(self.defaults.get("default_material_limit", 0.0)),
                        overcut=float(self.defaults.get("default_overcut", 0.0)) if kind == "pocket" else 0.0)
         if kind == "pocket":
@@ -339,6 +346,7 @@ class CAMEditor(QWidget):
             self.lead_out.setChecked(op.lead_out)
             self.lead_length.setValue(op.lead_length)
             self.stepover.setValue(op.stepover)
+            self.area_order.setCurrentIndex(self.area_order.findData(op.area_order))
             self.side.setCurrentIndex(self.side.findData(op.side))
             self.stock.setValue(op.stock)
             self.overcut.setValue(op.overcut)
@@ -372,6 +380,7 @@ class CAMEditor(QWidget):
         op.auto_stepdown = self.auto_stepdown.isChecked()
         self.stepdown.setEnabled(not op.auto_stepdown)
         op.stepdown, op.stepover = self.stepdown.value(), self.stepover.value()
+        op.area_order = self.area_order.currentData()
         for key,(unlock,value) in self.rate_controls.items():
             flag = "unlock_rpm" if key=="rpm" else "unlock_feed" if key=="feed" else "unlock_lead_feed"
             setattr(op,flag,unlock.isChecked())
