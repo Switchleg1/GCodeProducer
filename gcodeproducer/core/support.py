@@ -147,7 +147,7 @@ def _gap_free(s, masks, i, gap, grow):
     n = len(masks)
     for k in range(1, gap + 1):
         if i + k < n and masks[i + k].any():
-            s &= ~(geometry.dilate(masks[i + k], grow) if grow else masks[i + k])
+            s &= ~(geometry.dilate_round(masks[i + k], grow) if grow else masks[i + k])
     return s
 
 
@@ -158,7 +158,7 @@ def _with_margin(core, reach, grow, masks, i, xy, gap):
     the perimeters along the model's edges (and around holes) sit fully on it."""
     if not grow or not core.any():
         return core
-    s = geometry.dilate(core, grow) & geometry.dilate(reach, grow) & ~geometry.dilate(masks[i], xy)
+    s = geometry.dilate_round(core, grow) & geometry.dilate_round(reach, grow) & ~geometry.dilate(masks[i], xy)
     return _gap_free(s, masks, i, gap, grow) | core
 
 

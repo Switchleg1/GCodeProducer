@@ -370,6 +370,29 @@ def dilate(grid: np.ndarray, r: int) -> np.ndarray:
     return out
 
 
+def dilate_round(grid: np.ndarray, r: int) -> np.ndarray:
+    """Binary dilation by an (approximate) disc of radius ``r`` cells.
+
+    A square reaches sqrt(2) times further along the diagonals, which makes
+    margins around round edges too wide.  An octagon - a square of 0.414 r
+    followed by a diamond of 0.586 r - reaches r along the axes *and* the
+    diagonals (within ~8 % everywhere), at the cost of a few cheap passes.
+    """
+    if r <= 0:
+        return grid.copy()
+    a = int(round(0.4142 * r))
+    b = r - a
+    out = dilate(grid, a) if a else grid.copy()
+    for _ in range(b):                      # diamond = repeated 4-neighbour dilation
+        nxt = out.copy()
+        nxt[1:, :] |= out[:-1, :]
+        nxt[:-1, :] |= out[1:, :]
+        nxt[:, 1:] |= out[:, :-1]
+        nxt[:, :-1] |= out[:, 1:]
+        out = nxt
+    return out
+
+
 def erode(grid: np.ndarray, r: int) -> np.ndarray:
     return ~dilate(~grid, r)
 

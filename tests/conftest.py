@@ -77,3 +77,20 @@ def libset(tmp_path):
     ls = LibrarySet(tmp_path / "lib")
     defaults.seed(ls, save=False)
     return ls
+
+
+def ring_tris(cx, cy, r_out, r_in, z0, z1, n=64):
+    """Closed annulus (disc with a round through-hole) as triangles."""
+    import math
+    out = []
+    for k in range(n):
+        a0, a1 = 2 * math.pi * k / n, 2 * math.pi * (k + 1) / n
+        o0 = (cx + r_out * math.cos(a0), cy + r_out * math.sin(a0))
+        o1 = (cx + r_out * math.cos(a1), cy + r_out * math.sin(a1))
+        i0 = (cx + r_in * math.cos(a0), cy + r_in * math.sin(a0))
+        i1 = (cx + r_in * math.cos(a1), cy + r_in * math.sin(a1))
+        out += [((0, 0, 1), (*o0, z1), (*o1, z1), (*i1, z1)), ((0, 0, 1), (*o0, z1), (*i1, z1), (*i0, z1)),
+                ((0, 0, -1), (*o0, z0), (*i1, z0), (*o1, z0)), ((0, 0, -1), (*o0, z0), (*i0, z0), (*i1, z0)),
+                ((0, 0, 0), (*o0, z0), (*o1, z0), (*o1, z1)), ((0, 0, 0), (*o0, z0), (*o1, z1), (*o0, z1)),
+                ((0, 0, 0), (*i0, z0), (*i1, z1), (*i1, z0)), ((0, 0, 0), (*i0, z0), (*i0, z1), (*i1, z1))]
+    return out

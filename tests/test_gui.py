@@ -321,3 +321,10 @@ def test_extend_past_edge_control(win):
     from gcodeproducer.gui.process_editor import summary
     step.enabled = True
     assert "+0.6 mm" in summary(step)
+
+
+def test_fill_holes_control(win):
+    step = win.pipelines["fdm"].step("fdm_support")
+    assert win.sp_fill_holes.value() == 0 and win.sp_fill_holes.text() == "off"
+    win.sp_fill_holes.setValue(150)
+    assert step.params["fill_holes"] == 150 and win.dirty["fdm"]

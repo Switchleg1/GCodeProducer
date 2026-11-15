@@ -496,6 +496,20 @@ class MainWindow(QMainWindow):
                                   "edge. Process setting (Support section).")
         self.sp_extend.valueChanged.connect(self._on_extend_spin)
         row.addWidget(self.sp_extend)
+        row.addSpacing(8)
+        row.addWidget(QLabel("Fill holes \u2264"))
+        self.sp_fill_holes = QDoubleSpinBox()
+        self.sp_fill_holes.setRange(0, 100000)
+        self.sp_fill_holes.setDecimals(0)
+        self.sp_fill_holes.setSingleStep(10)
+        self.sp_fill_holes.setSuffix(" mm\u00b2")
+        self.sp_fill_holes.setSpecialValueText("off")
+        self.sp_fill_holes.setKeyboardTracking(False)
+        self.sp_fill_holes.setToolTip("Off: holes are edges like the outside of the model (support stops "
+                                      "'Extend past edge' into them). Otherwise holes up to this area are "
+                                      "treated as solid and supported right across. Process setting.")
+        self.sp_fill_holes.valueChanged.connect(self._on_fill_holes_spin)
+        row.addWidget(self.sp_fill_holes)
         row.addStretch(1)
         v.addLayout(row)
 
@@ -1201,7 +1215,7 @@ class MainWindow(QMainWindow):
     def _sync_support_controls(self):
         step = self._support_step()
         self.support_box.setVisible(self.workflow == wf.FDM)
-        for w in (self.cb_support, self.sp_overhang, self.sp_extend):
+        for w in (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes):
             w.blockSignals(True)
         if step is None:
             self.cb_support.setCurrentIndex(0)
@@ -1217,7 +1231,8 @@ class MainWindow(QMainWindow):
                 noz = self._consumable("nozzle")
                 ext = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
             self.sp_extend.setValue(float(ext))
-        for w in (self.cb_support, self.sp_overhang, self.sp_extend):
+            self.sp_fill_holes.setValue(float(p["fill_holes"]))
+        for w in (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes):
             w.blockSignals(False)
         self.blocks_box.setVisible(self._support_mode() == "blocks")
         if self._support_mode() != "blocks":
@@ -1232,6 +1247,14 @@ class MainWindow(QMainWindow):
         step.enabled = mode != "none"
         if mode != "none":
             step.params = {**step.params, "placement": mode}
+        self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._mark_dirty()
+
+    def _on_fill_holes_spin(self, v):
+        step = self._support_step()
+        if step is None:
+            return
+        step.params = {**step.params, "fill_holes": float(v)}
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._mark_dirty()
 

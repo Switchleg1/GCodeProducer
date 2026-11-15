@@ -113,9 +113,9 @@ def _count(pts, x0, y0, x1, y1, z=14.8):
 @pytest.mark.parametrize("mode", ["buildplate", "blocks"])
 def test_small_hole_is_supported_underneath(libset, tmp_path, mode):
     from gcodeproducer.core.support import SupportBlock
-    path = _hole_plate(tmp_path, hole=8)                     # 64 mm2 < default 100 mm2
+    path = _hole_plate(tmp_path, hole=8)                     # 64 mm2 < 100 mm2
     blocks = [SupportBlock(95, 95, 0, 125, 125, 30)]
-    pts = _support_pts(libset, path, mode, blocks)
+    pts = _support_pts(libset, path, mode, blocks, fill_holes=100)
     assert _count(pts, 115, 115, 119, 119) > 0              # under the hole centre
     assert not (pts[:, 2] > 15.0 + 1e-6).any()              # never climbs into the hole / plate
     off = _support_pts(libset, path, mode, blocks, fill_holes=0, edge_margin=0)
@@ -123,8 +123,8 @@ def test_small_hole_is_supported_underneath(libset, tmp_path, mode):
 
 
 def test_edge_margin_supports_hole_perimeters(libset, tmp_path):
-    path = _hole_plate(tmp_path, hole=14)                   # 196 mm2: stays open with the default
-    pts = _support_pts(libset, path)
+    path = _hole_plate(tmp_path, hole=14)                   # 196 mm2: stays open
+    pts = _support_pts(libset, path, fill_holes=100)
     off = _support_pts(libset, path, edge_margin=0)
     ring = lambda q: _count(q, 109.5, 109.5, 110.5, 124.5) + _count(q, 123.5, 109.5, 124.5, 124.5)
     hole_edge = lambda q: _count(q, 110.2, 112, 110.8, 122)     # just inside the hole's wall
@@ -177,3 +177,51 @@ def test_extend_past_model_edge(libset, tmp_path, mode, margin):
 def test_extend_default_is_one_mm():
     from gcodeproducer.stages.fdm_support import FDMSupport
     assert FDMSupport.defaults()["edge_margin"] == 1.0
+
+
+def _ring_reach(libset, tmp_path, r_in, margin, fill):
+    """Median / min / max bead reach past the outer and the inner circle of a lifted ring."""
+    from conftest import ring_tris, write_tris
+    from gcodeproducer.core import sim
+    from gcodeproducer.core.placement import Placement
+    path = write_tris(tmp_path / f"ring{r_in}.stl", ring_tris(0, 0, 20.0, r_in, 0, 3))
+    pipe = SlicePipeline.default(wf.FDM)
+    st = pipe.step("fdm_support")
+    st.enabled = True
+    st.params.update({"placement": "buildplate", "edge_margin": margin, "fill_holes": fill})
+    job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=Placement(z=5))
+    p = slice_job(job, pipe).program
+    s = sim.simulate(p)
+    sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
+    pts = []
+    for x0, y0, x1, y1 in zip(s.px[sel], s.py[sel], s.x[sel], s.y[sel]):
+        t = np.linspace(0, 1, max(2, int(np.hypot(x1 - x0, y1 - y0) / 0.05)))
+        pts.append(np.stack([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t], 1))
+    P = np.concatenate(pts) - 110.0
+    r = np.hypot(P[:, 0], P[:, 1])
+    b = (np.degrees(np.arctan2(P[:, 1], P[:, 0])) % 360 // 5).astype(int)
+    outer = np.array([r[b == k].max() for k in range(72) if (b == k).any()]) + 0.225 - 20.0
+    inner = r_in - (np.array([r[b == k].min() for k in range(72) if (b == k).any()]) - 0.225)
+    return outer, inner
+
+
+@pytest.mark.parametrize("margin", [0.5, 1.0, 2.0])
+@pytest.mark.parametrize("r_in", [5.0, 8.0])
+def test_round_hole_is_an_edge_like_the_outside(libset, tmp_path, margin, r_in):
+    """The centre circle gets the same 'extend past edge' as the outer circle (holes are edges by default)."""
+    outer, inner = _ring_reach(libset, tmp_path, r_in, margin, fill=0.0)
+    assert np.median(outer) == pytest.approx(margin, abs=0.35)
+    assert np.median(inner) == pytest.approx(margin, abs=0.35)
+    assert abs(np.median(outer) - np.median(inner)) < 0.25          # same within the support grid
+    assert inner.max() < margin + 0.6 and outer.max() < margin + 0.6     # round, not square, growth
+
+
+def test_fill_holes_option_still_fills(libset, tmp_path):
+    _outer, inner = _ring_reach(libset, tmp_path, 5.0, 1.0, fill=100.0)   # 78.5 mm2 hole -> filled
+    assert inner.max() > 4.5                                               # support runs across the hole
+
+
+def test_fill_holes_default_off():
+    from gcodeproducer.stages.fdm_support import FDMSupport
+    assert FDMSupport.defaults()["fill_holes"] == 0.0

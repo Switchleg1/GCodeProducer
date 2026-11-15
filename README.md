@@ -83,16 +83,18 @@ versa.
   `xy_distance` away from the model. *Touching build plate* keeps only columns
   with no model underneath. *Everywhere* lets them stand on the model (with a
   one-layer gap). **Holes and edges** (all modes):
-  - Holes in the model up to *Support under holes up to* (default 100 mm²)
-    count as solid. Support runs on under them, so the hole and its
-    perimeters are supported, and it never climbs up inside the hole. Larger
-    openings (e.g. a pocket opening downward) stay open and are supported as
-    overhangs.
+  - Holes are edges just like the outside of the model: the support reaches
+    *Extend past model edge* into them, so the hole's perimeters sit on
+    support. Optionally, *Fill holes up to* (mm², default **off**) treats
+    holes up to that area as solid. Support then runs right across under
+    them, but never climbs up inside them. Larger openings stay open and are
+    supported as overhangs.
   - *Extend past model edge* (default **1.0 mm**, also in the Model dock's
     Support box) sets how far the support reaches past the model's edges and
-    into holes too large to fill, so the perimeters along every edge sit fully
-    on support. It is measured to the outside of the printed support and
-    rounded to the support grid (about ±0.3 mm). 0 stops the support at the
+    into holes, so the perimeters along every edge sit fully on support. It is
+    measured to the outside of the printed support and rounded to the support
+    grid (about ±0.3 mm). The growth is round (octagonal), so curved edges
+    and holes get the same distance as straight ones. 0 stops the support at the
     edge. It keeps the XY distance, the Z gap and the build-plate rule, and it
     never creates support on its own.
 
@@ -178,8 +180,9 @@ consumables, process and recent models are remembered.
 
    **Support** (its own box below Model): *None*, *Touching build plate*,
    *Everywhere* or **Manual blocks**, plus the overhang angle (*Show* tints
-   overhangs red) and **Extend past edge** (how far the support reaches past
-   the model's edges, default 1 mm). The mode is the same setting as the process's *Support*
+   overhangs red), **Extend past edge** (how far the support reaches past
+   the model's edges and into holes, default 1 mm) and **Fill holes ≤**
+   (off by default; otherwise holes up to that area are supported right across). The mode is the same setting as the process's *Support*
    section, so it is saved with the process.
 
    ![Support panel](docs/support_panel.jpg)
@@ -223,7 +226,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
-   | Support             | build plate / everywhere / manual blocks, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area, support under holes up to (mm²), extend past model edge (mm) |
+   | Support             | build plate / everywhere / manual blocks, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area, extend past model edge (mm), fill holes up to (mm², off by default) |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |
