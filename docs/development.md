@@ -57,8 +57,10 @@ infer safe linking from proximity alone or carry this permission across Z change
 hand (slots are neutral) and attaches per-segment/link `CutCondition` records.
 Closed-loop reversal preserves the seam and therefore valid link endpoints.
 The emitter applies feed factors/caps and carries engagement/notes into program
-metadata. This XY estimate is reused per depth and resets per operation; do
-not document it as complete 3D stock-removal simulation. The emitter marks program lines with layer and
+metadata. Depth-tagged planar sweeps now carry removal across operations;
+identical material states reuse engagement plans. Emitted movements additionally
+update a height field and per-operation display meshes in `cam_material.py`.
+Do not document these 2.5D representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
 ## Ownership invariants

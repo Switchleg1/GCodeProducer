@@ -38,9 +38,10 @@ FEATURE_TABLE = [
     ("retract",           "Retract (feed up)",    (0.60, 0.60, 1.00)),
     ("lead_in",           "Lead-in (ramp / helix / arc)", (0.15, 0.90, 0.95)),
     ("lead_out",          "Lead-out",             (0.20, 0.55, 1.00)),
-    ("slot",              "Slot (full width)",    (1.00, 0.55, 0.00)),
+    ("slot",              "Slot",    (1.00, 0.55, 0.00)),
     ("high_engagement",   "High engagement",     (1.00, 0.20, 0.10)),
     ("cut",               "Cut",                  (0.30, 0.85, 0.35)),
+    ("hsm",               "HSM (low horizontal engagement)", (0.20, 0.65, 1.00)),
     ("air",               "Air cut",              (0.55, 0.55, 0.55)),
     ("unknown",           "Unknown",              (0.65, 0.65, 0.65)),
 ]
@@ -49,7 +50,7 @@ FEATURE_IDS = [f[0] for f in FEATURE_TABLE]
 FEATURE_LABELS = {f[0]: f[1] for f in FEATURE_TABLE}
 _FEATURE_COLORS = {f[0]: f[2] for f in FEATURE_TABLE}
 
-CAM_FEATURES = ["rapid", "plunge", "retract", "lead_in", "lead_out", "slot", "high_engagement", "cut", "air"]
+CAM_FEATURES = ["rapid", "plunge", "retract", "lead_in", "lead_out", "slot", "high_engagement", "cut", "hsm", "air"]
 # Features a 3D printer speed modifier can act on (excludes custom/unknown and CAM features).
 PRINT_FEATURES = [f for f in FEATURE_IDS if f not in ("custom", "unknown") and f not in CAM_FEATURES]
 FDM_FEATURES = PRINT_FEATURES

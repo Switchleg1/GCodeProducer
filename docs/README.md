@@ -44,9 +44,11 @@ for a particular printer, material, cutter, or machine.
 |---|---|
 | [CAM workflow](cam/README.md) | Tool-change tree, negative-Z convention, generation and export |
 | [Selecting geometry and depths](cam/selection-and-depths.md) | Planar faces, feature chains, selection purpose, live Z references |
-| [Engagement, cutting hand and feeds](cam/engagement-and-feeds.md) | Neutral slots, remaining-material direction, Low/Standard/High/Slotting factors and feed caps |
+| [Cutting data](cam/cutting-data.md) | Six machining materials, per-tool SFM/chip load, axial defaults, RPM/feed calculations and unlocks |
+| [Material state and leads](cam/material-state-and-leads.md) | Current material, operation outputs, default-on Material display, leads and motion checks |
+| [Engagement, cutting hand and feeds](cam/engagement-and-feeds.md) | Slot, High engagement, Cut and HSM; machine thresholds/modifiers and feed caps |
 | [Toolpath strategy and direction](cam/toolpaths.md) | Wall-parallel offsets, square/circle transitions, climb/conventional/meander and machine defaults |
-| [Pocket, Profile, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |
+| [Pocket, Profile, Slot, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |
 | [Stock allocation and safety](cam/stock-and-safety.md) | Material properties, Auto margin, bounds, warning interpretation, verification |
 
 ## Cross-workflow topics

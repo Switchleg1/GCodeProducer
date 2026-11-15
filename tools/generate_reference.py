@@ -48,6 +48,8 @@ def param_table(params):
             limits.append(f"maximum {p.max:g}")
         if p.allow_auto:
             limits.append("`auto` accepted")
+        if p.hidden:
+            limits.append("Hidden in GUI (compatibility/API field)")
         if p.choices:
             limits.extend(f"`{cell(v)}` = {cell(label)}" for v, label in zip(p.choice_values(), p.choice_labels()))
         if p.choices_from:

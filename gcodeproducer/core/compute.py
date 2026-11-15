@@ -37,7 +37,8 @@ def run_slice(job, pipeline, log=None, progress=None) -> dict:
 
     res = slice_job(job, pipeline, log=log, progress=progress)
     prog = res.program
-    out = {"program": prog, "steps": res.steps, "toolpath": None, "filament_mm": 0.0, "warnings": list(job.warnings)}
+    out = {"program": prog, "steps": res.steps, "toolpath": None, "filament_mm": 0.0, "warnings": list(job.warnings),
+           "material_results": job.material_results}
     if prog is not None:
         out["toolpath"] = build_toolpath(prog)
         s = simulate(prog)

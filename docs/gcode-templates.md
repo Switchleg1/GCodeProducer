@@ -105,6 +105,10 @@ Important distinctions:
 - `print_min_*` / `print_max_*`: placed model bounds, not all adhesion/support
   paths or the raw blank bounds.
 - `stock_*`: CAM raw-stock description/dimensions, not remaining stock.
+- `machining_material`: machining category, independent of FDM filament.
+  `sfm` and `chip_load` are configured tool/material values, not measured
+  machining conditions. `axial_depth` is the resolved maximum depth/pass;
+  a final shortened pass can be shallower.
 
 When migrating old custom start code, replace any old use of `nozzle_temp`
 that meant the first layer with `nozzle_temp_first` (and similarly for bed).

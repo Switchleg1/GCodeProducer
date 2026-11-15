@@ -112,7 +112,8 @@ def cmd_slice(args):
     job = build_job(workflow, machine, material=material, nozzle=nozzle, tools=tools,
                     mesh=mesh, model_path=args.input, placement=placement, support_blocks=blocks,
                     support=model_support,
-                    settings={"layer_height": args.layer_height} if args.layer_height else {})
+                    settings={**({"layer_height": args.layer_height} if args.layer_height else {}),
+                              **({"machining_material": args.cam_material} if args.cam_material else {})})
 
     if args.config:
         pipeline = SlicePipeline.load(args.config)
@@ -176,6 +177,9 @@ def build_parser():
     s.add_argument("-o", "--output")
     s.add_argument("--machine"); s.add_argument("--material")
     s.add_argument("--nozzle"); s.add_argument("--tool")
+    from .core.cam_cutting import MATERIALS
+    s.add_argument("--cam-material",choices=[m[0] for m in MATERIALS],
+                   help="machining category for automatic CAM tool SFM/chip-load calculation")
     s.add_argument("--layer-height", type=float)
     g = s.add_argument_group("placement")
     g.add_argument("--x", type=float, help="model centre X on the bed (default: bed centre)")

@@ -44,6 +44,7 @@ class BedRenderer:
         self.m_outline = mesh_cls(False)
         self.m_volume = mesh_cls(False)
         self.m_stock = mesh_cls(False)
+        self.m_material = [mesh_cls(False) for _ in range(3)]
         self.rect = None
 
     def upload(self, rect) -> None:
@@ -56,12 +57,34 @@ class BedRenderer:
 
     def upload_stock(self, stock):
         points = []
+        faces = []
         if stock is not None and stock.allocated:
             lo, hi = stock.bounds
             c = np.array([[x, y, z] for z in (lo[2], hi[2]) for y in (lo[1], hi[1]) for x in (lo[0], hi[0])])
             for a, b in ((0,1), (1,3), (3,2), (2,0), (4,5), (5,7), (7,6), (6,4), (0,4), (1,5), (2,6), (3,7)):
                 points.extend((c[a], c[b]))
+            for a,b,d,e in ((0,1,3,2),(4,6,7,5),(0,4,5,1),(2,3,7,6),(0,2,6,4),(1,5,7,3)):
+                faces.extend((c[a],c[b],c[d],c[a],c[d],c[e]))
+        self.upload_material(np.asarray(faces,np.float32).reshape(-1,3))
         self.m_stock.upload(np.asarray(points, np.float32).reshape(-1, 3))
+
+    def upload_material(self,positions):
+        triangles=np.asarray(positions,np.float32).reshape(-1,3,3)
+        normal=np.cross(triangles[:,1]-triangles[:,0],triangles[:,2]-triangles[:,0])
+        axes=np.argmax(np.abs(normal),axis=1) if len(triangles) else np.zeros(0,int)
+        for axis,mesh in enumerate(self.m_material):mesh.upload(triangles[axes==axis].reshape(-1,3))
+
+    def draw_material(self,prog,mvp):
+        GL.glUseProgram(prog)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog,"uMVP"),1,GL.GL_TRUE,mvp)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glDepthMask(GL.GL_FALSE)
+        for mesh,color in zip(self.m_material,((.50,.35,.16,.45),(.70,.48,.20,.42),(.90,.70,.35,.35))):
+            GL.glUniform4f(GL.glGetUniformLocation(prog,"uColor"),*color)
+            mesh.draw(GL.GL_TRIANGLES)
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glDisable(GL.GL_BLEND)
 
     def draw_stock(self, prog, mvp):
         GL.glUseProgram(prog)

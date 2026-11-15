@@ -120,7 +120,8 @@ class LibraryDialog(QDialog):
             workflow = wf.ALL[labels.index(sel)]
         name, ok = QInputDialog.getText(self, f"New {kind}", "Name:")
         if ok and name.strip():
-            p = self._unique(Profile(kind, name.strip(), workflow=workflow))
+            p = self._unique(Profile(kind, name.strip(), workflow=workflow,
+                                     values={"auto_cutting_data": True} if kind == "tool" else {}))
             self.libset[kind].add(p)
             self._reload(p.id)
 

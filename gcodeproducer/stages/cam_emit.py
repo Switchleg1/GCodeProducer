@@ -12,7 +12,7 @@ import numpy as np
 
 from ..core.builder import GCodeBuilder
 from ..core.gcode import format_number
-from .base import CAM, Param, SliceStage
+from .base import CAM, SliceStage
 
 
 class CAMEmit(SliceStage):
@@ -22,10 +22,7 @@ class CAMEmit(SliceStage):
     workflows = (CAM,)
     optional = False
     category = "Output"
-    params = [
-        Param("ramp", "bool", False, label="Ramp entry (reserved)", group="Entry",
-              help="Reserved: ramp into cuts instead of a straight plunge."),
-    ]
+    params = []  # leads/rates belong to CAM operations, not global pipeline flags
 
     def run(self, job, params, ctx):
         b = GCodeBuilder(relative_e=False)
@@ -33,10 +30,24 @@ class CAMEmit(SliceStage):
         tool_map = {t.id: t for t in job.tools}
         first_id = getattr(job.layers[0], "cam_tool_id", None) if job.layers else None
         tool = tool_map.get(first_id) or (job.tools[0] if job.tools else None)
+        from ..core.cam_cutting import resolve_cutting
+        from ..core.cam_material import HeightStock, simulate_material
+        from ..core.cam_leads import ramp, walk
+        stock = getattr(job.cam_setup,"stock",None)
+        if stock is None and job.settings.get("machining_material"):
+            from ..core.stock import Stock
+            stock=Stock(category=job.settings["machining_material"])
+        if stock is None and any(t.get("auto_cutting_data",False) for t in job.tools):
+            raise ValueError("Automatic CAM tools need a machining material category (CLI: --cam-material)")
+        live = HeightStock(stock,job.m("stock_resolution",.5)) if stock is not None and stock.allocated else None
+        first_op = getattr(job.layers[0],"cam_operation_config",None) if job.layers else None
+        first_data = resolve_cutting(job.machine,tool,stock,first_op) if tool else None
+        position = np.zeros(3)
+        active_radius=float(tool.get("diameter",0))/2 if tool else 0.
         safe_z = job.m("safe_z", 15.0)
         feed = tool.get("feed", 800) if tool else job.m("max_feed", 800)
         plunge = tool.get("plunge_feed", 300) if tool else 300
-        rpm = tool.get("spindle_rpm", 18000) if tool else job.m("spindle_max", 18000)
+        rpm = first_data.rpm if first_data else (tool.get("spindle_rpm",18000) if tool else job.m("spindle_max",18000))
         rapid_xy = job.m("rapid_xy", 3000)
         max_feed = float(job.m("max_feed", 0) or 0)
         if not math.isfinite(max_feed) or max_feed < 0:
@@ -50,55 +61,96 @@ class CAMEmit(SliceStage):
                 raise ValueError("CAM cutting/plunge feeds must be positive and finite")
             if max_feed > 0 and value > max_feed:
                 capped.add((value, max_feed))
-                return max_feed
+                value=max_feed
+            if value<.0001:
+                raise ValueError("Effective CAM feed is too small to represent safely (below 0.0001 mm/min)")
             return value
 
+        def feed_text(value):
+            return format_number(value,4 if value<1 else 1)
+
         def cut_move(point, condition=None, comment=None, force=False):
-            nonlocal last_feed, last_condition
+            nonlocal last_feed, last_condition, position
             factor = condition.feed_factor if condition is not None else 1.0
             requested = limited(float(feed)*factor)
-            feature = ({"slot": "slot", "high": "high_engagement", "air": "air"}.get(condition.regime, "cut")
+            feature = ({"slot": "slot", "high": "high_engagement", "hsm": "hsm", "air": "air"}.get(condition.regime, "cut")
                        if condition is not None else "cut")
             b.set_feature(feature)
             note = None
             if condition is not None:
-                note = f"{condition.regime} {condition.engagement*100:.0f}% engagement; {condition.hand}"
+                note = f"{condition.regime} {condition.engagement*100:.2f}% engagement; {condition.hand}"
                 key = (condition.regime, condition.hand)
                 if key != last_condition and comment is None:
                     comment = note
                 last_condition = key
-            f = f" F{format_number(requested,1)}" if force or last_feed != requested else ""
+            f = f" F{feed_text(requested)}" if force or last_feed != requested else ""
             line = b.command(f"G1 X{format_number(point[0],3)} Y{format_number(point[1],3)}{f}", comment)
             if condition is not None:
                 line.engagement = condition.engagement
                 line.note = note
+            if live is not None:
+                target=np.r_[point[:2],position[2]]
+                live.cut(position,target,active_radius)
+            position[:2]=point[:2]
             last_feed = requested
 
-        self._start(b, job, tool, rpm, safe_z, log=ctx.log)
+        def move3(command,target,rate,feature,comment=None):
+            nonlocal position,last_feed
+            target=np.asarray(target,float)
+            b.set_feature(feature)
+            f=f" F{feed_text(limited(float(rate)))}" if rate is not None and command=="G1" else ""
+            line=b.command(f"{command} X{format_number(target[0],3)} Y{format_number(target[1],3)} Z{format_number(target[2],3)}{f}",comment)
+            if live is not None and command=="G1":
+                contact=live.contact(position,target,active_radius)
+                line.engagement=1. if contact else 0.
+                live.cut(position,target,active_radius)
+            position=target.copy()
+            last_feed=None
+
+        self._start(b, job, tool, rpm, safe_z, log=ctx.log, cutting=first_data)
+        from ..core.sim import simulate
+        start_state=simulate(b.program())
+        if len(start_state):position=np.array([start_state.x[-1],start_state.y[-1],start_state.z[-1]])
         b.set_feature("rapid", comment=False)
 
         n = max(1, len(job.layers))
+        data=first_data
+        rate_key=None
         previous_group = getattr(job.layers[0], "cam_group", None) if job.layers else None
         for li, layer in enumerate(job.layers):
             b.layer = li
-            b.op = getattr(layer, "cam_operation", None)
+            key=getattr(layer,"cam_operation_key",None)
+            name=getattr(layer,"cam_operation",None)
+            b.op = f"{key[0]+1}.{key[1]+1} {name}" if key is not None else name
             b.comment(f"LAYER:{li}")
             group = getattr(layer, "cam_group", None)
             next_tool = tool_map.get(getattr(layer, "cam_tool_id", None), tool)
+            config=getattr(layer,"cam_operation_config",None)
+            data=getattr(layer,"cam_cutting",None) or (resolve_cutting(job.machine,next_tool,stock,config) if next_tool else None)
             if group != previous_group:
                 b.set_feature("rapid", comment=False)
                 b.command(f"G0 Z{format_number(safe_z,3)}")
                 b.command("M5", "spindle off before tool change")
                 b.command(f"T{int(next_tool.get('tool_number', 1))} M6")
-                b.command(f"M3 S{format_number(next_tool.get('spindle_rpm', 18000),0)}")
+                b.command(f"M3 S{format_number(data.rpm if data else next_tool.get('spindle_rpm',18000),0)}")
+                position[2]=safe_z
+                rpm=data.rpm if data else rpm
                 previous_group = group
             tool = next_tool
-            feed = tool.get("feed", 800) if tool else feed
-            plunge = tool.get("plunge_feed", 300) if tool else plunge
+            active_radius=float(tool.get("diameter",0))/2 if tool else 0.
+            if data and (li==0 or data.rpm!=rpm):
+                b.command(f"M3 S{format_number(data.rpm,0)}","calculated / overridden RPM")
+            rpm=data.rpm if data else rpm
+            feed = data.feed if data else (tool.get("feed",800) if tool else feed)
+            plunge = data.lead_feed if data else (tool.get("plunge_feed",300) if tool else plunge)
+            current=(group,name,rpm,feed,plunge)
+            if current!=rate_key:
+                ctx.log(f"  {name or 'CAM'}: {data.material if data else 'legacy'} • {rpm:g} rpm • cut base {feed:g} • lead base {plunge:g} mm/min")
+                rate_key=current
             if hasattr(layer, "cam_operation"):
                 b.comment(f"Operation: {layer.cam_operation}")
             previous_end = None   # never carry stay-down permission across depth/operation/tool boundaries
-            for path in layer.paths:
+            for path_index,path in enumerate(layer.paths):
                 pts = np.asarray(path.points, float)
                 if len(pts) < (1 if path.feature == "drill" else 2):
                     continue
@@ -109,27 +161,56 @@ class CAMEmit(SliceStage):
                 if linked:
                     cut_move(start, path.link_condition, "stay-down link", force=True)
                 else:
+                    lead=None
+                    if config is not None and config.lead_in and len(pts)>1 and live is not None:
+                        surface=live.height_at(start,active_radius)
+                        entry_z=min(safe_z,max(surface,layer.z)+max(.1,float(job.m("clearance_z",1))))
+                        lead=ramp(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
+                        if lead is None:
+                            warning=f"{name}: insufficient contour length for 10-degree lead-in; vertical entry used. Confirm the tool can plunge."
+                            if warning not in job.warnings:job.warnings.append(warning)
+                            ctx.log("LEAD WARNING: "+warning)
+                    approach=lead[0,:2] if lead is not None else start
                     b.set_feature("rapid", comment=False)
                     b.command(f"G0 Z{format_number(safe_z,3)}")
-                    b.command(f"G0 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
-                              f"F{format_number(rapid_xy,1)}")
+                    position[2]=safe_z
+                    b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
+                    position[:2]=approach
                     b.set_feature("plunge", comment=False)
-                    b.command(f"G1 Z{format_number(layer.z,3)} F{format_number(limited(float(plunge)),1)}")
+                    entry=lead[0,2] if lead is not None else layer.z
+                    b.command(f"G1 Z{format_number(entry,3)} F{feed_text(limited(float(plunge)))}")
+                    if live is not None:live.cut(position,np.r_[approach,entry],active_radius)
+                    position[2]=entry
+                    if lead is not None:
+                        for q in lead[1:]:
+                            rate=plunge*(float(job.m("slotting_feed",50))/100 if live.contact(position,q,active_radius) else 1)
+                            move3("G1",q,rate,"lead_in","contour lead-in")
                     last_feed = None
                 for i, q in enumerate(loop[1:]):
                     condition = path.cut_conditions[i] if i < len(path.cut_conditions) else None
                     cut_move(q, condition, force=i == 0)
-                previous_end = loop[-1][:2]
+                next_path=layer.paths[path_index+1] if path_index+1<len(layer.paths) else None
+                if config is not None and config.lead_out and len(pts)>1 and not (next_path and next_path.stay_down):
+                    exit_xy=walk(pts,path.closed,config.lead_length or 2*active_radius,False)
+                    if exit_xy is not None:
+                        for q in exit_xy[1:]:
+                            target=np.r_[q,layer.z]
+                            if live is not None and live.contact(position,target,active_radius):
+                                ctx.log(f"  {name}: lead-out crosses uncertain remaining cells; retracting instead")
+                                break
+                            move3("G1",target,plunge,"lead_out","cleared contour lead-out")
+                previous_end = position[:2].copy()
             ctx.progress((li + 1) / n)
 
-        self._end(b, job, safe_z, tool=tool, log=ctx.log)
+        self._end(b, job, safe_z, tool=tool, log=ctx.log, cutting=data)
         prog = b.program()
         prog.machine = "cam"
         prog.layer_z = [l.z for l in job.layers]
         job.program = prog
         if job.cam_setup is not None:
             from ..core.stock import check_stock
-            stock_warnings = check_stock(job, prog)
+            current_warnings,job.material_results = simulate_material(job,prog,ctx.log)
+            stock_warnings = check_stock(job, prog, progressive=bool(job.material_results)) + current_warnings
             job.warnings = list(job.warnings) + stock_warnings
             for warning in stock_warnings:
                 ctx.log(f"STOCK WARNING: {warning}")
@@ -138,16 +219,23 @@ class CAMEmit(SliceStage):
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
         return f"{len(prog.lines)} lines, {moves} moves, {len(job.layers)} depth passes"
 
-    def _start(self, b, job, tool, rpm, safe_z, log=None):
+    def _start(self, b, job, tool, rpm, safe_z, log=None, cutting=None):
         from ..core.gcode_vars import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
-        b.raw(render_box(job, "start_gcode", extra=_tool_variables(tool), log=log).rstrip("\n"))
+        extra=_tool_variables(tool)
+        if cutting:extra.update(tool=int(tool.get("tool_number",1)),spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.lead_feed,
+                                machining_material=cutting.material,sfm=tool.get(f"{cutting.material}_sfm",0),
+                                chip_load=tool.get(f"{cutting.material}_chip_load",0),axial_depth=cutting.stepdown)
+        b.raw(render_box(job, "start_gcode", extra=extra, log=log).rstrip("\n"))
 
-    def _end(self, b, job, safe_z, tool=None, log=None):
+    def _end(self, b, job, safe_z, tool=None, log=None, cutting=None):
         from ..core.gcode_vars import render_box
         b.set_feature("retract", comment=False)
         last = job.layers[-1] if job.layers else None
         extra = _tool_variables(tool)
+        if cutting:extra.update(spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.lead_feed,
+                                machining_material=cutting.material,sfm=tool.get(f"{cutting.material}_sfm",0),
+                                chip_load=tool.get(f"{cutting.material}_chip_load",0),axial_depth=cutting.stepdown)
         if last is not None:
             extra.update(layer=len(job.layers), layer_z=last.z)
         b.raw(render_box(job, "end_gcode", extra=extra, log=log).rstrip("\n"))

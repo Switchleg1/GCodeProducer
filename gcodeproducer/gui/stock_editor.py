@@ -1,7 +1,7 @@
 """CAM stock controls, hosted in the same UI slot as FDM Support."""
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (QGroupBox, QFormLayout, QLineEdit, QDoubleSpinBox,
-                             QPushButton, QLabel)
+                             QPushButton, QLabel, QComboBox)
 
 
 class StockEditor(QGroupBox):
@@ -15,7 +15,12 @@ class StockEditor(QGroupBox):
         form = QFormLayout(self)
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
-        form.addRow("Material", self.name)
+        form.addRow("Material description", self.name)
+        from ..core.cam_cutting import MATERIALS
+        self.category = QComboBox()
+        for key,label,_,_ in MATERIALS:self.category.addItem(label,key)
+        self.category.currentIndexChanged.connect(self._edit)
+        form.addRow("Machining material",self.category)
         for key, label, lo, hi, unit in (
             ("density", "Density", 0, 100, " g/cm³"),
             ("margin", "Auto margin (sides / bottom)", 0, 1000, " mm"),
@@ -39,7 +44,7 @@ class StockEditor(QGroupBox):
         form.addRow(self.auto)
         self.info = QLabel("Auto keeps the stock surface at Z0 (or above a raised part), "
                            "adds margin on each XY side and beneath the part. "
-                           "Density is descriptive; feeds and speeds remain on the tools.")
+                           "Density is descriptive; the machining category selects per-tool SFM, chip load and axial defaults.")
         self.info.setWordWrap(True)
         form.addRow(self.info)
         self.size_info = QLabel("")
@@ -49,6 +54,9 @@ class StockEditor(QGroupBox):
     def set_stock(self, stock):
         self.stock = stock
         self.name.setText(stock.material)
+        self.category.blockSignals(True)
+        self.category.setCurrentIndex(self.category.findData(stock.category))
+        self.category.blockSignals(False)
         for key, sb in self.fields.items():
             sb.blockSignals(True)
             sb.setValue(getattr(stock, key))
@@ -67,6 +75,7 @@ class StockEditor(QGroupBox):
         if self.stock is None:
             return
         self.stock.material = self.name.text()
+        self.stock.category = self.category.currentData()
         for key, sb in self.fields.items():
             setattr(self.stock, key, sb.value())
         self._summary()

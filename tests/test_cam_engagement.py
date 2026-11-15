@@ -49,14 +49,14 @@ def test_radial_measurement_and_forward_slot_entry():
     measured=measure_segments(points,False,box(-100,-100,100,-.2),1)
     assert measured[2][0]==pytest.approx(.4)
     assert measured[0][0]==0 and measured[1][0]>0   # uncut material to right: climb
-    assert engagement_band(measured[2][0])=="standard"
+    assert engagement_band(measured[2][0])=="cut"
     # Centreline stays in air, but the cutter's leading edge enters full stock.
     front=measure_segments(np.array([[-1.,0.],[-.1,0.]]),False,box(0,-100,100,100),1)
     assert front[2][0]>.95
     assert engagement_band(front[2][0])=="slot"
 
 
-@pytest.mark.parametrize("value,band", [(0,"air"),(.2,"low"),(.4,"standard"),(.7,"standard"),(.8,"high"),(.99,"slot")])
+@pytest.mark.parametrize("value,band", [(0,"air"),(.2,"hsm"),(.4,"cut"),(.7,"cut"),(.8,"cut"),(.9,"high"),(.99,"slot")])
 def test_engagement_bands(value,band):
     assert engagement_band(value)==band
 
@@ -84,7 +84,7 @@ def test_emitted_slot_high_standard_feeds_and_machine_cap():
     path=Path("cut",np.array([[0.,0.],[1.,0.],[2.,0.],[3.,0.]]),cut_conditions=[
         CutCondition(1,"slot","neutral",.5),
         CutCondition(.8,"high","climb",.75),
-        CutCondition(.6,"standard","climb",1.5)])
+        CutCondition(.6,"cut","climb",1.5)])
     layer=Layer(0,-1,1,paths=[path])
     layer.cam_operation="test"
     job=Job("cam",machine,tools=[tool],layers=[layer])
@@ -119,6 +119,15 @@ def test_mixed_hand_warning_survives_emission_and_stock_checks():
     before=list(job.warnings)
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
     assert all(w in job.warnings for w in before)
+
+
+def test_small_positive_effective_feed_is_not_rounded_to_zero():
+    tool=Profile("tool","slow",values={"feed":1})
+    path=Path("cut",np.array([[0.,0.],[1.,0.]]),cut_conditions=[CutCondition(.1,"hsm","climb",.01)])
+    job=Job("cam",Profile("machine","mill",workflow="cam"),tools=[tool],layers=[Layer(0,-1,1,paths=[path])])
+    CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
+    line=next(ln for ln in job.program.lines if ln.cmd=="G1" and "X" in ln.params)
+    assert line.params["F"]==pytest.approx(.01)
 
 
 def test_stay_down_entries_are_classified_and_slowed(libset):

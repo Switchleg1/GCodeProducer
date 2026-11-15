@@ -1,6 +1,6 @@
 [Documentation](../README.md) / [CAM](README.md)
 
-# Pocket, Profile, Drill and Engrave
+# Pocket, Profile, Slot, Drill and Engrave
 
 These are tree operations (`core.cam.Operation`), not independent pipeline
 stage presets. They share a tool group, selection system, start/end depth
@@ -11,18 +11,22 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 
 | Field | New-operation behaviour | Meaning |
 |---|---|---|
-| Kind | Chosen in Add operation menu | Pocket, Profile, Drill or Engrave |
+| Kind | Chosen in Add operation menu | Pocket, Profile, Slot, Drill or Engrave |
 | Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
 | Start | Pocket: Material surface + 0; others: Model top + 0 | Pocket falls back to model top until stock is allocated; not safe approach height |
-| End | Pocket: machining selection minimum Z + 0; Profile/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
-| Stepdown | Tool max DOC when added, otherwise 1 mm | Requested vertical increment; capped at positive tool max DOC during generation |
+| End | Pocket: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
+| Tool/material axial depth default | On for new GUI operations | Material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; configurable per tool and capped by max depth/pass |
+| Stepdown | Explicit value when automatic depth is off | Existing operations retain saved explicit depths |
+| RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
+| Lead-in / lead-out | On | Contour-constrained ramp/cleared exit; checked against current material |
+| Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
 | Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
 | Cutting direction | Machine default | Inherit Climb/Conventional/Meander, or override per operation |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
-| Low / Standard / High / Slotting feed | Tool default (0) | Override each band's percentage of base tool feed; Low <40%, Standard 40–70%, High >70% below slot, Slotting ≈95–100% |
+| HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
 | Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
 
@@ -36,14 +40,17 @@ silently switching to another strategy.
 The emitter begins each depth pass with a safe-Z XY position and vertical
 plunge. Wall-parallel pockets can then stay down between nearby contours when
 the full cutter-centre link is inside the permitted region. Other paths or
-blocked/disconnected links retract before positioning and plunging. No ramp,
-helix, lead-in,
-lead-out or cutter-compensation cycle is inserted. Avoid geometry/tooling
-that cannot tolerate that entry. Tool cutting feed is adjusted by estimated engagement-band factors; plunge
-feed remains separate. Positive machine `max_feed` caps emitted cutting,
-link and plunge feed. Tool RPM still requires manual verification; there is
-no general spindle capability capping or chip-load optimizer.
-See [engagement/feed controls](engagement-and-feeds.md).
+blocked/disconnected links retract before re-entry. Enabled leads follow the
+selected contour while ramping in or exiting through calculated cleared stock.
+If a ramp cannot fit, a vertical fallback is explicitly warned. No helical
+macro or controller cutter-compensation cycle is inserted.
+
+Tool RPM/feed can be calculated from material SFM/chip load, with tool/machine
+RPM ceilings and independent operation unlocks. Cutting feed receives the
+estimated engagement modifier; positive machine `max_feed` caps cut/link and
+plunge G1 requests. These calculations still need calibrated tool/material data.
+See [cutting data](cutting-data.md), [leads/material state](material-state-and-leads.md)
+and [engagement/feed controls](engagement-and-feeds.md).
 
 ## Pocket
 
@@ -177,10 +184,25 @@ Climb/conventional/meander requests follow the machine default or operation
 override; actual clearing hand is chosen from estimated remaining material.
 Full-slot paths do not define the cutting hand. The assumed spindle is M3. See [direction rules](toolpaths.md).
 
-Not implemented: holding tabs, bridges, lead-ins/outs,
+Not implemented: holding tabs, bridges,
 controller G41/G42 compensation, and
 fixture-aware routing. Breaking through the bottom may release the part;
 workholding is your responsibility.
+
+## Slot
+
+**Purpose:** follow a selected constant-Z open/closed edge chain with the full
+tool diameter, stepping down to the selected end depth. There is no radial
+Profile compensation; choose a tool/centreline that defines the intended slot.
+A horizontal face contributes its boundary lines, not a filled pocket.
+
+Slot is distinct from a Pocket operation whose first pass happens to be full
+width. Automatic axial defaults use the tool/material **Slot % D** (initially
+15%), while a Pocket still uses its Pocket axial default. Estimated Slot/High
+feed modifiers apply to the actual contact, not merely the operation's name.
+Full-width contact is hand-neutral. Contour-constrained leads are available
+when the chain has sufficient length; drilling and non-centre-cutting
+capability are not certified by this operation type.
 
 ## Drill
 

@@ -63,6 +63,7 @@ class Job:
     model_path: Optional[str] = None
     settings: dict = field(default_factory=dict)    # resolved per-job overrides
     layers: list = field(default_factory=list)      # list[Layer]
+    material_results: list = field(default_factory=list)  # operation output surfaces from progressive stock simulation
     warnings: list = field(default_factory=list)   # advisory CAM stock safety findings
     program: object = None                          # GCodeProgram once emitted
 

@@ -14,11 +14,13 @@ output before operating a machine.
   rotation/scaling, layer inspection, feature colours, and linked G-code selection.
 - **FDM:** walls, top/bottom shells, sparse infill, skirt/brim, automatic support,
   editable support blocks, and reusable process presets.
-- **CAM:** ordered tool-change trees with Pocket, Profile, Drill, and Engrave
+- **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave
   operations; face/edge selection, geometry-linked depths, wall-following pockets,
-  machine-default climb/conventional/meander direction, and engagement-based feeds.
+  machine-default climb/conventional/meander direction, and Slot/High/Cut/HSM feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
-  top-at-Z0 placement, and conservative stock-contact warnings.
+  top-at-Z0 placement, current-material checks, leads and per-operation material outputs.
+- **CAM cutting data:** six machining materials, per-tool SFM/chip load and axial
+  defaults, constrained RPM calculation, and independent manual feed unlocks.
 - **Libraries:** separate machines, FDM materials/nozzles, and CAM tools.
 - **Custom G-code:** multi-line start/end templates, reset, variable insertion,
   expressions, conditionals, validation, and example preview.

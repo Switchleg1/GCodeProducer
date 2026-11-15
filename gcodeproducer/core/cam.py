@@ -15,7 +15,7 @@ import numpy as np
 from . import geometry
 from .stock import Stock
 
-KINDS = ("pocket", "profile", "drill", "engrave")
+KINDS = ("pocket", "profile", "drill", "engrave", "slot")
 
 
 @dataclass
@@ -71,6 +71,16 @@ class Operation:
     standard_engagement_feed: float = 0.0
     high_engagement_feed: float = 0.0
     slotting_feed: float = 0.0
+    auto_stepdown: bool = False         # new GUI operations use per-material axial defaults
+    unlock_rpm: bool = False
+    rpm: float = 18000.
+    unlock_feed: bool = False
+    feed: float = 800.
+    unlock_lead_feed: bool = False
+    lead_feed: float = 300.
+    lead_in: bool = True
+    lead_out: bool = True
+    lead_length: float = 0.0            # 0 = half tool diameter
 
 
 @dataclass
@@ -292,6 +302,15 @@ def highlight_geometry(payload):
     op_stock = stocks[0] if stocks else None
     topo = cached_topology(mesh)
     out = topo.highlight(op.geometry)
+    if len(stocks) > 1 and stocks[1]:
+        from .cam_cutting import resolve_cutting
+        context = stocks[1]
+        try:
+            data = resolve_cutting(context["machine"],context["tool"],op_stock,op)
+            out["cutting_values"] = asdict(data)
+            out["cutting"] = data.summary()
+        except ValueError as exc:
+            out["cutting"] = str(exc)
     try:
         out["depths"] = f"Resolved Z: start {op.start.resolve(mesh, topo, op.geometry, op_stock):.3f}, end {op.end.resolve(mesh, topo, op.geometry, op_stock):.3f} mm"
     except ValueError as exc:
@@ -307,8 +326,22 @@ def generate(job, ctx):
     setup = job.cam_setup
     topo = cached_topology(job.mesh)
     tools = {t.id: t for t in job.tools}
+    import copy
+    from .cam_material import PlanarStock
+    material_history = PlanarStock(setup.stock) if setup.stock.allocated else None
     layers = []
     job.warnings = []
+    numbers={}
+    for group in setup.groups:
+        t=tools.get(group.tool_id)
+        if t is not None:
+            number=int(t.get("tool_number",1))
+            if number in numbers and numbers[number]!=t.id:
+                warning=f"Tool number T{number} is shared by different tool profiles; verify the physical tool change."
+                if warning not in job.warnings:
+                    job.warnings.append(warning)
+                    ctx.log("TOOL WARNING: "+warning)
+            numbers[number]=t.id
     for gi, group in enumerate(setup.groups):
         if group.tool_id not in tools:
             raise ValueError(f"CAM tool '{group.tool_id}' is missing or not allowed by the machine")
@@ -316,7 +349,7 @@ def generate(job, ctx):
         diameter = float(tool.get("diameter", 0))
         if diameter <= 0:
             raise ValueError("Tool diameter must be positive")
-        for op in group.operations:
+        for oi, op in enumerate(group.operations):
             if not op.enabled:
                 continue
             if op.kind not in KINDS or not op.geometry:
@@ -325,9 +358,18 @@ def generate(job, ctx):
             end = op.end.resolve(job.mesh, topo, op.geometry, setup.stock)
             if not (math.isfinite(start) and math.isfinite(end)) or end > start:
                 raise ValueError(f"{op.name}: end Z must be at or below start Z")
-            if op.stepdown <= 0 or not math.isfinite(op.stepdown):
+            reach=float(tool.get("length",0) or 0)
+            surface=setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
+            if reach>0 and surface-end>reach+1e-3:
+                warning=f"{op.name}: depth below material surface exceeds tool cutting length; verify reach, shank and holder clearance."
+                if warning not in job.warnings:
+                    job.warnings.append(warning)
+                    ctx.log("REACH WARNING: "+warning)
+            if not op.auto_stepdown and (op.stepdown <= 0 or not math.isfinite(op.stepdown)):
                 raise ValueError(f"{op.name}: stepdown must be positive")
-            step = min(op.stepdown, float(tool.get("max_doc", op.stepdown) or op.stepdown))
+            from .cam_cutting import resolve_cutting
+            cutting = resolve_cutting(job.machine, tool, setup.stock, op)
+            step = cutting.stepdown
             if step <= 0 or not math.isfinite(step):
                 raise ValueError(f"{op.name}: tool depth per pass must be positive")
             count = max(1, math.ceil((start - end) / step))
@@ -389,7 +431,7 @@ def generate(job, ctx):
                         inside = not hole if op.side != "inside" else hole
                         q = orient_contour(q, direction, material_inside=inside, index=len(paths))
                         paths.append(Path("cut", q, closed=True, width=diameter))
-            elif op.kind == "engrave":
+            elif op.kind in ("engrave", "slot"):
                 if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
                     raise ValueError(f"{op.name}: only constant-Z engraving is supported")
                 paths = [Path("cut", p[:, :2], width=diameter) for p in polys]
@@ -408,18 +450,29 @@ def generate(job, ctx):
                     paths.append(Path("drill", np.array([[x, y]]), width=diameter))
             if not paths:
                 raise ValueError(f"{op.name}: no machinable paths")
-            if op.kind != "drill":
-                from .cam_engagement import plan_engagement
-                job.warnings.extend(plan_engagement(paths, job, op, tool, ctx.log))
-            if op.kind == "pocket" and op.strategy == "contour":
-                ctx.log(f"  {op.name}: {sum(p.stay_down for p in paths)} stay-down links, "
-                        f"{sum(not p.stay_down for p in paths)} safe-height entries per depth pass")
+            cached_key, planned = None, None
             for i in range(count):
                 z = max(end, start - (i + 1) * step)
-                layer = Layer(len(layers), z, min(step, start - z), paths=paths)
+                remaining = material_history.at(z) if material_history else None
+                key = remaining.normalize().wkb if remaining is not None else b"unallocated"
+                if key != cached_key:
+                    planned = copy.deepcopy(paths)
+                    if op.kind != "drill":
+                        from .cam_engagement import plan_engagement
+                        for warning in plan_engagement(planned, job, op, tool, ctx.log, remaining):
+                            if warning not in job.warnings:job.warnings.append(warning)
+                    cached_key = key
+                    if op.kind == "pocket" and op.strategy == "contour":
+                        ctx.log(f"  {op.name}: {sum(p.stay_down for p in planned)} stay-down links, "
+                                f"{sum(not p.stay_down for p in planned)} safe-height entries per depth pass")
+                if material_history:material_history.remove(planned,z,diameter/2)
+                layer = Layer(len(layers), z, min(step, start - z), paths=planned)
                 layer.cam_tool_id = tool.id
                 layer.cam_group = gi
                 layer.cam_operation = op.name
+                layer.cam_operation_key = (gi, oi)
+                layer.cam_operation_config = op
+                layer.cam_cutting = cutting
                 layers.append(layer)
             ctx.log(f"  {op.name}: {len(paths)} paths, {count} passes, Z{start:g} to Z{end:g}")
         ctx.progress((gi + 1) / max(1, len(setup.groups)))

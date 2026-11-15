@@ -369,9 +369,9 @@ def test_support_section_shows_only_process_settings():
     assert not FDMSupport.optional                          # no 'Enabled' switch in the process
 
 def test_ampersand_group_titles_render_literally():
-    from gcodeproducer.core.profiles import schema
     from gcodeproducer.gui.widgets import ParamEditor
-    ed = ParamEditor(schema("tool"), {})
+    from gcodeproducer.core.params import Param
+    ed = ParamEditor([Param("feed","float",800,group="Feeds & speeds")], {})
     titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
     assert "Feeds && speeds" in titles                     # shown as 'Feeds & speeds'
 
@@ -535,3 +535,56 @@ def test_cam_stock_shared_slot_top_zero_and_workflow_placement(win, cube_stl):
     assert win.placement.z == -2
     win.drop_model()
     assert win.placed.bounds[1][2] == 0
+
+
+def test_cam_material_output_and_unlock_controls(win,cube_stl,app,monkeypatch):
+    from gcodeproducer.core.cam import Depth,Reference
+    from PyQt6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox,"warning",lambda *a: QMessageBox.StandardButton.Ok)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    assert win.show_material_cb.isChecked() and win.state.show_material
+    assert win.stock_editor.category.count()==6
+    win.stock_editor.category.setCurrentIndex(win.stock_editor.category.findData("hard_plastic"))
+    assert win.cam_editor.setup.stock.category=="hard_plastic"
+    win._auto_stock()
+    ed=win.cam_editor;ed.add_tool();ed.add_operation()
+    op=ed.operation()
+    assert op.auto_stepdown and not ed.stepdown.isEnabled()
+    ed.auto_stepdown.setChecked(False)
+    assert not op.auto_stepdown and ed.stepdown.isEnabled()
+    unlock,value=ed.rate_controls["feed"]
+    unlock.setChecked(True);value.setValue(1200)
+    assert op.unlock_feed and op.feed==1200 and value.isEnabled()
+    t=win.placed.vertices[win.placed.triangles]
+    i=int(np.flatnonzero(np.all(np.isclose(t[:,:,2],0),axis=1))[0])
+    op.geometry=[Reference("face",[i])];op.end=Depth("top",-1)
+    win.run_slice()
+    deadline=time.monotonic()+20
+    while win._worker is not None and time.monotonic()<deadline:
+        app.processEvents();time.sleep(.01)
+    assert win._worker is None and win.program is not None
+    assert win.material_results and win.material_output.isEnabled()
+    assert win.material_output.count()==2
+    win.material_output.setCurrentIndex(0)
+    assert win.state.layer_min>win.state.layer_max>=0  # empty, not GL's -1/unlimited sentinel
+    assert win.viewer.cursor==-1 and not win.layer_slider.isEnabled()
+    win.material_output.setCurrentIndex(1)
+    assert win.layer_slider.isEnabled()
+    assert win.viewer.material_positions is win.material_results[1]["positions"]
+    win.show_material_cb.setChecked(False)
+    assert not win.state.show_material and not win.model_viewer.show_material
+    value.setValue(1300)
+    assert not win.material_results and not win.material_output.isEnabled()
+
+
+def test_new_cam_tool_enables_material_calculation(win,monkeypatch):
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    from PyQt6.QtWidgets import QInputDialog
+    monkeypatch.setattr(QInputDialog,"getText",lambda *a,**kw:("Material calculator",True))
+    dialog=LibraryDialog(win.libset,win,"tool")
+    dialog._new()
+    tool=win.libset["tool"].get("material-calculator")
+    assert tool.get("auto_cutting_data") is True
+    assert tool.get("steel_chip_load")>0 and tool.get("hard_plastic_sfm")>0
+    dialog.close()

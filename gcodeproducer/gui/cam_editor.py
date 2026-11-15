@@ -117,6 +117,31 @@ class CAMEditor(QWidget):
         self.b_selection_depths.setToolTip("Start at material surface; end at the lowest selected face/edge Z. Replaces both depth definitions.")
         self.b_selection_depths.clicked.connect(self.use_selection_depths)
         form.addRow(self.b_selection_depths)
+        self.auto_stepdown = QCheckBox("Tool/material axial depth default")
+        self.auto_stepdown.toggled.connect(self._edit)
+        form.addRow(self.auto_stepdown)
+        self.cutting_summary = QLabel("")
+        self.cutting_summary.setWordWrap(True)
+        form.addRow(self.cutting_summary)
+        self.rate_controls = {}
+        for key,label,maximum in (("rpm","Spindle RPM",100000), ("feed","Normal cut base feed",50000),
+                                  ("lead_feed","Lead / plunge base feed",50000)):
+            unlock = QCheckBox("Unlock " + label)
+            unlock.toggled.connect(self._edit)
+            value = self.spin(1,maximum,18000 if key=="rpm" else 800 if key=="feed" else 300)
+            value.valueChanged.connect(self._edit)
+            form.addRow(unlock,value)
+            self.rate_controls[key]=(unlock,value)
+        self.lead_in = QCheckBox("Lead-in ramp along selected contour")
+        self.lead_out = QCheckBox("Lead-out along cleared contour")
+        self.lead_in.toggled.connect(self._edit)
+        self.lead_out.toggled.connect(self._edit)
+        form.addRow(self.lead_in)
+        form.addRow(self.lead_out)
+        self.lead_length = self.spin(0,1000,0)
+        self.lead_length.setSpecialValueText("Auto length / 10° ramp")
+        self.lead_length.valueChanged.connect(self._edit)
+        form.addRow("Lead length (mm)",self.lead_length)
         self.stepdown = self.spin(0.001, 1000, 1)
         self.stepover = self.spin(1, 100, 40)
         self.side = QComboBox()
@@ -146,13 +171,13 @@ class CAMEditor(QWidget):
         self.feed_controls = {}
         feeds = QGroupBox("Engagement feeds (% of tool feed)")
         ff = QFormLayout(feeds)
-        for key, label in (("low_engagement_feed", "Low (<40%)"),
-                           ("standard_engagement_feed", "Standard (40–70%)"),
-                           ("high_engagement_feed", "High (>70%, below slot)"),
-                           ("slotting_feed", "Slotting (95–100%)")):
+        for key, label in (("low_engagement_feed", "HSM (low horizontal engagement)"),
+                           ("standard_engagement_feed", "Cut"),
+                           ("high_engagement_feed", "High engagement"),
+                           ("slotting_feed", "Slot")):
             sb = self.spin(0, 300, 0)
             sb.setDecimals(0)
-            sb.setSpecialValueText("Tool default")
+            sb.setSpecialValueText("Machine default" if key in ("high_engagement_feed","slotting_feed") else "Tool default")
             sb.setSuffix(" %")
             sb.setToolTip("0 inherits the tool profile. 100% is base tool feed; values above 100% increase it, subject to machine max feed.")
             sb.valueChanged.connect(self._edit)
@@ -236,7 +261,7 @@ class CAMEditor(QWidget):
             return
         kind = self.kind.currentData()
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
-        op = Operation(name=kind.title(), kind=kind, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1)
+        op = Operation(name=kind.title(), kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1)
         if kind == "pocket":
             op.start = Depth("stock_top")
             op.end = Depth("selection", extreme="min")
@@ -286,7 +311,17 @@ class CAMEditor(QWidget):
                 source.setCurrentIndex(source.findData(d.source))
                 val.setValue(d.value)
                 extreme.setCurrentIndex(extreme.findData(d.extreme))
+            self.auto_stepdown.setChecked(op.auto_stepdown)
             self.stepdown.setValue(op.stepdown)
+            self.stepdown.setEnabled(not op.auto_stepdown)
+            for key,(unlock,value) in self.rate_controls.items():
+                flag = "unlock_rpm" if key=="rpm" else "unlock_feed" if key=="feed" else "unlock_lead_feed"
+                unlock.setChecked(getattr(op,flag))
+                value.setValue(getattr(op,key))
+                value.setEnabled(unlock.isChecked())
+            self.lead_in.setChecked(op.lead_in)
+            self.lead_out.setChecked(op.lead_out)
+            self.lead_length.setValue(op.lead_length)
             self.stepover.setValue(op.stepover)
             self.side.setCurrentIndex(self.side.findData(op.side))
             self.stock.setValue(op.stock)
@@ -314,7 +349,16 @@ class CAMEditor(QWidget):
         for key, (source, val, extreme) in self.depth_controls.items():
             d = getattr(op, key)
             d.source, d.value, d.extreme = source.currentData(), val.value(), extreme.currentData()
+        op.auto_stepdown = self.auto_stepdown.isChecked()
+        self.stepdown.setEnabled(not op.auto_stepdown)
         op.stepdown, op.stepover = self.stepdown.value(), self.stepover.value()
+        for key,(unlock,value) in self.rate_controls.items():
+            flag = "unlock_rpm" if key=="rpm" else "unlock_feed" if key=="feed" else "unlock_lead_feed"
+            setattr(op,flag,unlock.isChecked())
+            setattr(op,key,value.value())
+            value.setEnabled(unlock.isChecked())
+        op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
+        op.lead_length = self.lead_length.value()
         op.side, op.stock = self.side.currentData(), self.stock.value()
         op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
         op.stay_down = self.stay_down.isChecked()
@@ -354,6 +398,13 @@ class CAMEditor(QWidget):
             val.setValue(0)
             self._loading = False
             self.changed.emit()
+
+    def set_calculated(self,values):
+        for key,(unlock,value) in self.rate_controls.items():
+            if not unlock.isChecked() and key in values:
+                value.blockSignals(True);value.setValue(values[key]);value.blockSignals(False)
+        if self.auto_stepdown.isChecked() and "stepdown" in values:
+            self.stepdown.blockSignals(True);self.stepdown.setValue(values["stepdown"]);self.stepdown.blockSignals(False)
 
     def use_selection_depths(self):
         op = self.operation()

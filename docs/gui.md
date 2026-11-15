@@ -76,9 +76,12 @@ when you deliberately want a different framing.
 Prepare displays geometry, support block overlays and CAM selections. FDM
 can tint overhangs red. The FDM plate becomes translucent from below. CAM has
 no opaque surface hiding the negative-Z part; the stock outline is amber.
-Preview displays generated moves, not the original solid model or a physical
-cutting simulation. CAM stock outlines appear in both views and represent the
-original blank, not material remaining after machining.
+Preview displays generated moves and, in CAM, the selected calculated material
+output. The outline remains the original blank; translucent surfaces show the
+height-field result after the chosen operation. **Show → Material** defaults
+on and **Calculated operation output** selects Initial material or each
+completed process. These are approximate 2.5D results, not physical simulation.
+See [material state and leads](cam/material-state-and-leads.md).
 
 ![Toolpath preview](pictures/preview.jpg)
 

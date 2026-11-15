@@ -143,5 +143,4 @@ Workflow: cam. Optional stage: no.
 
 | Key / label | Type / unit | Default | Allowed values / range | Group / meaning |
 |---|---|---|---|---|
-| `ramp` — Ramp entry (reserved) | bool | `False` | No schema bound | Entry. Reserved: ramp into cuts instead of a straight plunge. |
 

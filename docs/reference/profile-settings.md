@@ -50,6 +50,12 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `spindle_max` — Spindle max | float / rpm | `24000.0` | No schema bound | Spindle.  |
 | `units` — Units | choice | `mm` | `mm` = mm; `inch` = inch | Work area.  |
 | `cut_direction` — Default cutting direction | choice | `climb` | `climb` = Climb; `conventional` = Conventional; `meander` = Meander | Toolpaths. Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses direction; full slots are neutral. Operations may override. Meander alternates one-sided passes. |
+| `hsm_engagement_threshold` — HSM / Cut boundary | float / % | `40.0` | minimum 1; maximum 79 | Engagement.  |
+| `high_engagement_threshold` — High engagement above | float / % | `80.0` | minimum 1; maximum 99 | Engagement.  |
+| `slot_engagement_threshold` — Slot at / above | float / % | `95.0` | minimum 1; maximum 100 | Engagement.  |
+| `high_engagement_feed` — High engagement feed modifier | float / % | `75.0` | minimum 1; maximum 300 | Engagement.  |
+| `slotting_feed` — Slot feed modifier | float / % | `50.0` | minimum 1; maximum 300 | Engagement.  |
+| `stock_resolution` — Stock resolution | float / mm | `0.5` | minimum 0.1; maximum 5 | Material simulation. Requested height-field cell size; capped grid memory can coarsen it. Not a full solid/fixture simulation. |
 | `allowed_tools` — Allowed tools | multi | `*` | IDs from tool; `*` = all, `[]` = none | Allowed consumables. Tools from the tool library that are mounted / available. |
 | `start_gcode` — Start G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written before the job. A template: {variables}, {if ...}{else}{endif}. Empty = the default. |
 | `end_gcode` — End G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written after the job. A template like the start G-code. Empty = the default. |
@@ -94,13 +100,46 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `flutes` — Flutes | int | `2` | No schema bound | General.  |
 | `length` — Length | float / mm | `20.0` | No schema bound | General. Flute / cutting length. |
 | `vangle` — V angle | float / ° | `0.0` | No schema bound | General. Included angle for v-bits / engravers. |
-| `feed` — Feed | float / mm/min | `800.0` | No schema bound | Feeds & speeds.  |
-| `plunge_feed` — Plunge feed | float / mm/min | `300.0` | No schema bound | Feeds & speeds.  |
-| `spindle_rpm` — Spindle rpm | float / rpm | `18000.0` | No schema bound | Feeds & speeds.  |
-| `max_doc` — Max depth/pass | float / mm | `2.0` | No schema bound | Engagement.  |
+| `feed` — Fixed cut feed | float / mm/min | `800.0` | No schema bound | Fixed rates (calculation off). Used with SFM calculation off; operation unlocks can override calculated or fixed bases. |
+| `plunge_feed` — Fixed lead / plunge feed | float / mm/min | `300.0` | No schema bound | Fixed rates (calculation off).  |
+| `spindle_rpm` — Fixed spindle RPM | float / rpm | `18000.0` | No schema bound | Fixed rates (calculation off).  |
+| `max_doc` — Max depth/pass | float / mm | `2.0` | minimum 0 | Engagement. Positive values cap axial depth; 0 disables this cap, not a safety recommendation. |
 | `stepover` — Stepover | float / % | `40.0` | No schema bound | Engagement. Radial engagement as a % of diameter. |
-| `low_engagement_feed` — Low engagement feed (<40%) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. Percentage of base cutting feed; operations may override. Engagement is estimated. |
-| `standard_engagement_feed` — Standard engagement feed (40–70%) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. May exceed 100% when calibrated for the cutter/material; capped by machine max feed. |
-| `high_engagement_feed` — High engagement feed (>70%, below slot) | float / % | `75.0` | minimum 1; maximum 300 | Engagement feeds.  |
-| `slotting_feed` — Slotting feed (95–100%) | float / % | `50.0` | minimum 1; maximum 300 | Engagement feeds. Full-width slots have no single climb/conventional hand. Percentage of base cutting feed. |
+| `low_engagement_feed` — HSM feed (low horizontal engagement) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. Percentage of base cutting feed; operations may override. Engagement is estimated. |
+| `standard_engagement_feed` — Cut feed | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. May exceed 100% when calibrated for the cutter/material; capped by machine max feed. |
+| `high_engagement_feed` — Legacy high engagement feed (machine now owns default) | float / % | `75.0` | minimum 1; maximum 300; Hidden in GUI (compatibility/API field) | Engagement feeds.  |
+| `slotting_feed` — Legacy slot feed (machine now owns default) | float / % | `50.0` | minimum 1; maximum 300; Hidden in GUI (compatibility/API field) | Engagement feeds. Full-width slots have no single climb/conventional hand. Percentage of base cutting feed. |
+| `auto_cutting_data` — Calculate from SFM / chip load | bool | `False` | No schema bound | Cutting calculation. Enable after calibrating the per-material data. Legacy tools retain fixed feeds/RPM. |
+| `max_spindle_rpm` — Max spindle rpm | float / rpm | `24000.0` | minimum 1 | Cutting calculation. Tool RPM ceiling, also respected for manual RPM requests. |
+| `lead_feed_percent` — Lead feed percent | float / % | `35.0` | minimum 1; maximum 100 | Cutting calculation. Automatic lead/plunge feed as a percentage of calculated normal feed. |
+| `soft_wood_sfm` — SFM | float / ft/min | `600.0` | minimum 0.1 | Cut data: Soft wood.  |
+| `soft_wood_chip_load` — Chip load | float / mm/tooth | `0.05` | minimum 0.0001 | Cut data: Soft wood.  |
+| `soft_wood_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Soft wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `soft_wood_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Soft wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `soft_wood_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Soft wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_wood_sfm` — SFM | float / ft/min | `400.0` | minimum 0.1 | Cut data: Hard wood.  |
+| `hard_wood_chip_load` — Chip load | float / mm/tooth | `0.04` | minimum 0.0001 | Cut data: Hard wood.  |
+| `hard_wood_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Hard wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_wood_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Hard wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_wood_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Hard wood. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `soft_plastic_sfm` — SFM | float / ft/min | `300.0` | minimum 0.1 | Cut data: Soft plastic.  |
+| `soft_plastic_chip_load` — Chip load | float / mm/tooth | `0.03` | minimum 0.0001 | Cut data: Soft plastic.  |
+| `soft_plastic_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Soft plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `soft_plastic_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Soft plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `soft_plastic_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Soft plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_plastic_sfm` — SFM | float / ft/min | `200.0` | minimum 0.1 | Cut data: Hard plastic.  |
+| `hard_plastic_chip_load` — Chip load | float / mm/tooth | `0.02` | minimum 0.0001 | Cut data: Hard plastic.  |
+| `hard_plastic_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Hard plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_plastic_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Hard plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `hard_plastic_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Hard plastic. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `non_iron_metal_sfm` — SFM | float / ft/min | `300.0` | minimum 0.1 | Cut data: Non-iron metal.  |
+| `non_iron_metal_chip_load` — Chip load | float / mm/tooth | `0.03` | minimum 0.0001 | Cut data: Non-iron metal.  |
+| `non_iron_metal_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Non-iron metal. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `non_iron_metal_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Non-iron metal. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `non_iron_metal_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Non-iron metal. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `steel_sfm` — SFM | float / ft/min | `80.0` | minimum 0.1 | Cut data: Steel.  |
+| `steel_chip_load` — Chip load | float / mm/tooth | `0.015` | minimum 0.0001 | Cut data: Steel.  |
+| `steel_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Steel. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `steel_pocket_axial` — Pocket axial depth | float / % D | `25.0` | minimum 1; maximum 200 | Cut data: Steel. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
+| `steel_profile_axial` — Profile axial depth | float / % D | `40.0` | minimum 1; maximum 200 | Cut data: Steel. Default stepdown as percentage of tool diameter, capped by max depth/pass. |
 

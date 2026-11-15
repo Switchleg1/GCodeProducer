@@ -70,7 +70,11 @@ VARIABLES = [
     Var("retract_speed", "Material", "Retraction speed (mm/s)", 35.0, FDM),
     Var("tool_name", "Tool", "Cutter profile name", "6 mm flat endmill", CAM),
     Var("tool_diameter", "Tool", "Cutter diameter (mm)", 6.0, CAM),
-    Var("spindle_rpm", "Tool", "Spindle speed (rpm)", 18000.0, CAM),
+    Var("spindle_rpm", "Tool", "Selected spindle speed (rpm)", 18000.0, CAM),
+    Var("machining_material", "Stock", "Machining category (not FDM filament)", "non_iron_metal", CAM),
+    Var("sfm", "Tool", "Configured tool/material SFM ceiling (ft/min)", 200.0, CAM),
+    Var("chip_load", "Tool", "Configured tool/material chip load (mm/tooth)", .025, CAM),
+    Var("axial_depth", "Layers", "Resolved maximum depth per pass (mm)", .75, CAM),
     Var("feed", "Tool", "Cutting feed (mm/min)", 1000.0, CAM),
     Var("plunge_feed", "Tool", "Plunge feed (mm/min)", 300.0, CAM),
     # ---- CAM blank
@@ -226,7 +230,11 @@ def job_variables(job, temps: dict | None = None, extra: dict | None = None) -> 
         center = m.get("origin") == "center"
         tool = job.tools[0] if job.tools else None
         from .stock import Stock
-        stock = getattr(job.cam_setup, "stock", None) or Stock()
+        stock = getattr(job.cam_setup, "stock", None) or Stock(category=job.settings.get("machining_material","soft_wood"))
+        v.update(machining_material=stock.category,
+                 sfm=_num(tool.get(f"{stock.category}_sfm",0)) if tool else 0.,
+                 chip_load=_num(tool.get(f"{stock.category}_chip_load",0)) if tool else 0.,
+                 axial_depth=_num(tool.get("max_doc",0)) if tool else 0.)
         v.update(stock_material=stock.material, stock_density=stock.density,
                  stock_width=stock.width, stock_depth=stock.depth, stock_height=stock.height,
                  stock_top=stock.top, stock_bottom=stock.top - stock.height)

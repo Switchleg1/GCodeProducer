@@ -92,6 +92,7 @@ class MainWindow(QMainWindow):
         self._blocks_task = None        # id of the running Auto-generate task
         self._filament_mm = 0.0
         self.cam_warnings = []
+        self.material_results = []
         self.compute = ComputeService(self)  # slicing etc. run in a separate process
         self.compute.log.connect(self._on_compute_log)
         self.compute.progressed.connect(self._on_compute_progress)
@@ -158,6 +159,7 @@ class MainWindow(QMainWindow):
 
         # ---- prepare page: build plate + model
         self.model_viewer = ModelViewer(self.camera)
+        self.state.changed.connect(self._on_view_state)
         self.model_viewer.glError.connect(lambda m: (self.log(m), QMessageBox.critical(self, "OpenGL", m)))
         self.model_viewer.moved.connect(self._on_model_dragged)
         self.model_viewer.moveFinished.connect(self._save_placement)
@@ -356,12 +358,21 @@ class MainWindow(QMainWindow):
         sg = QVBoxLayout(show)
         for attr, lab, what in (("show_travel", "Travel / rapid moves", "colors"),
                                 ("show_retracts", "Retraction points", "colors"),
+                                ("show_extrude", "Toolpaths", "colors"),
+                                ("show_material", "Material", "view"),
                                 ("show_tool", "Tool head", "view"), ("show_grid", "Grid", "view"),
                                 ("dim_lower", "Dim layers below top", "view")):
             cb = QCheckBox(lab)
             cb.setChecked(getattr(self.state, attr))
             cb.toggled.connect(lambda val, a=attr, w=what: self.state.set(w, **{a: val}))
             sg.addWidget(cb)
+            if attr=="show_material":self.show_material_cb=cb
+        self.material_output = QComboBox()
+        self.material_output.addItem("No calculated material output")
+        self.material_output.setEnabled(False)
+        self.material_output.currentIndexChanged.connect(self._on_material_output)
+        sg.addWidget(QLabel("Calculated operation output"))
+        sg.addWidget(self.material_output)
         vl.addWidget(show)
         fbox = QGroupBox("Features (click to toggle)")
         fl = QVBoxLayout(fbox)
@@ -800,9 +811,11 @@ class MainWindow(QMainWindow):
         if self.model_path:
             self._save_placement()
         self.workflow = self.cb_workflow.currentData()
+        if self.material_results:self._reset_material_outputs()
         self.fdm_process_box.setVisible(self.workflow == wf.FDM)
         self.cam_editor.setVisible(self.workflow == wf.CAM)
         self.cam_scroll.setVisible(self.workflow == wf.CAM)
+        self.show_material_cb.setEnabled(self.workflow == wf.CAM)
         ei = self.color_combo.findData("engagement")
         self.color_combo.model().item(ei).setEnabled(self.workflow == wf.CAM)
         if self.workflow != wf.CAM and self.color_combo.currentData() == "engagement":
@@ -1081,6 +1094,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Import failed", str(exc))
             return
+        self._reset_material_outputs()
         self.mesh, self.model_path = mesh, path
         from ..core.cam import CAMSetup, fingerprint
         raw = self.settings.value(self._model_key("cam", path))
@@ -1345,6 +1359,21 @@ class MainWindow(QMainWindow):
         self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload))
 
     def _cam_highlight(self):
+        # Scalar rate calculation is cheap; do not leave locked rate fields stale
+        # while a large topology task is running in the compute process.
+        if self.workflow==wf.CAM:
+            op=self.cam_editor.operation()
+            gi,_=self.cam_editor.indices()
+            tool=(next((t for t in self.cam_editor.tools if t.id==self.cam_editor.setup.groups[gi].tool_id),None)
+                  if gi is not None else None)
+            if op and tool and self._machine():
+                from ..core.cam_cutting import resolve_cutting
+                from dataclasses import asdict
+                try:
+                    data=resolve_cutting(self._machine(),tool,self.cam_editor.setup.stock,op)
+                    self.cam_editor.cutting_summary.setText(data.summary())
+                    self.cam_editor.set_calculated(asdict(data))
+                except ValueError as exc:self.cam_editor.cutting_summary.setText(str(exc))
         self._cam_highlight_task = None
         self._cam_highlight_timer.stop()
         self.model_viewer.set_cam_selection()
@@ -1356,7 +1385,10 @@ class MainWindow(QMainWindow):
             return
         op = self.cam_editor.operation()
         if op:
-            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op), copy.deepcopy(self.cam_editor.setup.stock)))
+            gi,_=self.cam_editor.indices()
+            tool=next((t for t in self.cam_editor.tools if t.id==self.cam_editor.setup.groups[gi].tool_id),None)
+            context={"tool":tool,"machine":self._machine()} if tool and self._machine() else None
+            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op), copy.deepcopy(self.cam_editor.setup.stock),copy.deepcopy(context)))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
@@ -1597,7 +1629,45 @@ class MainWindow(QMainWindow):
     def fit_view(self):
         (self.model_viewer if self.mode == "prepare" else self.viewer).fit()
 
+    def _reset_material_outputs(self):
+        self.material_results=[]
+        self.material_output.blockSignals(True)
+        self.material_output.clear()
+        self.material_output.addItem("No calculated material output")
+        self.material_output.setEnabled(False)
+        self.material_output.blockSignals(False)
+        self.viewer.set_material_surface(None)
+        self.viewer.set_info("")
+        self.layer_slider.setEnabled(True);self.line_slider.setEnabled(True)
+
+    def _on_view_state(self,_what):
+        self.model_viewer.show_material=self.state.show_material
+        self.model_viewer.update()
+
+    def _on_material_output(self,index):
+        if not 0<=index<len(self.material_results):
+            self.viewer.set_material_surface(None)
+            return
+        result=self.material_results[index]
+        self.viewer.set_material_surface(result["positions"])
+        last=result["last_layer"]
+        if self.program is not None:
+            self.set_mode("preview")
+            if last<0:
+                # -1 means unlimited to the GL shader, not an empty range.
+                self.state.set("view",layer_min=1,layer_max=0)
+                self.layer_slider.setEnabled(False);self.line_slider.setEnabled(False)
+                self.layer_lbl.setText("Initial stock")
+                self.viewer.set_cursor(-1)
+                self.viewer.set_selected(-1)
+            else:
+                self.layer_slider.setEnabled(True);self.line_slider.setEnabled(True)
+                self.layer_slider.setValue(last)
+                self._on_layer_slider(last)
+        self.viewer.set_info(f"{result['label']} • calculated material grid {result['resolution']:.3f} mm")
+
     def _set_stale(self):
+        if self.workflow==wf.CAM and self.material_results:self._reset_material_outputs()
         if self.program is not None and not self.stale:
             self.stale = True
             self._update_stale_label()
@@ -1623,6 +1693,8 @@ class MainWindow(QMainWindow):
         self.slice_btn.setToolTip("Stop generation" if busy else "Generate toolpaths (Ctrl+R)")
         self.act_slice.setEnabled(ok and not busy)
         self.cam_editor.setEnabled(not busy)
+        self.cb_workflow.setEnabled(not busy)
+        self.cb_machine.setEnabled(not busy)
         self.stock_editor.setEnabled(not busy)
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
@@ -1708,6 +1780,8 @@ class MainWindow(QMainWindow):
             if self.workflow == wf.CAM:
                 self.model_viewer.set_cam_selection(result['faces'], result['edges'])
                 self.cam_editor.depth_summary.setText(result['depths'])
+                self.cam_editor.cutting_summary.setText(result.get('cutting',''))
+                self.cam_editor.set_calculated(result.get('cutting_values',{}))
             return
         if tid == self._worker:
             self._slice_done(result)
@@ -1749,6 +1823,15 @@ class MainWindow(QMainWindow):
         self.stale = False
         self.set_mode("preview")
         self._setup_layers()
+        self.material_results=out.get("material_results",[])
+        self.material_output.blockSignals(True)
+        self.material_output.clear()
+        for result in self.material_results:self.material_output.addItem(result["label"])
+        if not self.material_results:self.material_output.addItem("No calculated material output")
+        self.material_output.setCurrentIndex(max(0,len(self.material_results)-1))
+        self.material_output.setEnabled(bool(self.material_results))
+        self.material_output.blockSignals(False)
+        self._on_material_output(self.material_output.currentIndex())
         self._refresh_feature_list()
         self._update_stats()
         self._update_legend()

@@ -119,6 +119,7 @@ class ModelViewer(QOpenGLWidget):
         self.tris = None                      # (m,3,3) for picking
         self.rect = (0.0, 0.0, 220.0, 220.0, 250.0)
         self.stock = None
+        self.show_material = True
         self.overhang_angle = None            # None = do not show overhangs
         self.inside = True
         self.center_xy = (0.0, 0.0)
@@ -338,7 +339,9 @@ class ModelViewer(QOpenGLWidget):
             GL.glDisable(GL.GL_DEPTH_TEST)
             self.m_cam_edges.draw(GL.GL_LINES)
             GL.glEnable(GL.GL_DEPTH_TEST)
-        self.bed.draw_stock(self.p_flat, mvp)
+        if self.show_material:
+            self.bed.draw_stock(self.p_flat,mvp)
+            self.bed.draw_material(self.p_flat,mvp)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)

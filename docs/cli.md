@@ -42,6 +42,7 @@ python -m gcodeproducer slice INPUT.stl [options]
 | `--machine` | Profile ID/name matching the chosen workflow |
 | `--material`, `--nozzle` | FDM consumables |
 | `--tool` | One tool for the legacy CLI CAM profile |
+| `--cam-material` | Machining category for an automatic SFM/chip-load tool (e.g. `non_iron_metal`, `steel`) |
 | `--process` | Saved pipeline preset by ID/name |
 | `--config` | Pipeline JSON; takes precedence over `--process` |
 | `-m`, `--stage-param` | Repeatable `stage_id:key=value,...` override |
@@ -149,6 +150,11 @@ python -m gcodeproducer slice examples/cube20.stl -w cam -o part.nc \
 This profiles the part silhouette with **one tool**. `final_depth=auto` goes
 to the placed model bottom; a numeric final depth is a positive distance below
 its top. It is not the tree operation End Z source system.
+
+Automatic SFM/chip-load tools require explicit `--cam-material` so the CLI
+does not silently assume a machining material. RPM/feed calculation uses that
+category; legacy profile stepdown parameters still control axial passes rather
+than the GUI's automatic material/process depth setting.
 
 The CLI currently has **no tree/setup/stock import flags** for GUI Pocket,
 Drill, Engrave or multi-tool setups. `--config` loads a pipeline, not a

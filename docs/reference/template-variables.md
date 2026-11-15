@@ -47,7 +47,11 @@ Values are evaluated for the job, not taken from these examples. See
 | `retract_speed` | Material | fdm | Retraction speed (mm/s) | `35.0` |
 | `tool_name` | Tool | cam | Cutter profile name | `6 mm flat endmill` |
 | `tool_diameter` | Tool | cam | Cutter diameter (mm) | `6.0` |
-| `spindle_rpm` | Tool | cam | Spindle speed (rpm) | `18000.0` |
+| `spindle_rpm` | Tool | cam | Selected spindle speed (rpm) | `18000.0` |
+| `machining_material` | Stock | cam | Machining category (not FDM filament) | `non_iron_metal` |
+| `sfm` | Tool | cam | Configured tool/material SFM ceiling (ft/min) | `200.0` |
+| `chip_load` | Tool | cam | Configured tool/material chip load (mm/tooth) | `0.025` |
+| `axial_depth` | Layers | cam | Resolved maximum depth per pass (mm) | `0.75` |
 | `feed` | Tool | cam | Cutting feed (mm/min) | `1000.0` |
 | `plunge_feed` | Tool | cam | Plunge feed (mm/min) | `300.0` |
 | `stock_material` | Stock | cam | Stock material name | `Aluminium` |

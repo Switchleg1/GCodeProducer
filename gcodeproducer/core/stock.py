@@ -13,6 +13,7 @@ import numpy as np
 
 @dataclass
 class Stock:
+    category: str = "soft_wood"  # machining material, independent of FDM filament
     material: str = "Unspecified"
     density: float = 0.0  # g/cm³; descriptive, not a feed/speed calculator
     margin: float = 2.0  # per XY side and beneath the part; surface stays at Z0
@@ -64,7 +65,7 @@ def _intersects(a, b, lo, hi):
     return t0 < t1
 
 
-def check_stock(job, program, sim=None):
+def check_stock(job, program, sim=None, progressive=False):
     """Warnings, with G-code line numbers. Intended cuts/plunges are not rapid collisions."""
     from .sim import simulate
     stock = getattr(job.cam_setup, "stock", None)
@@ -112,6 +113,8 @@ def check_stock(job, program, sim=None):
             warn(f"{label}: multiple G commands in a custom block cannot be fully stock-checked.")
         if "M6" in commands and b[2] <= stock.top:
             warn(f"{label}: tool change at/below the material surface.")
+        if progressive:
+            continue  # current-material simulator checks motion/contact and removes stock in order
         if not sim.motion[i] or not sim.moved[i]:
             continue
         if min(a[2], b[2]) < lo[2] - 1e-4:
@@ -120,7 +123,7 @@ def check_stock(job, program, sim=None):
         if sim.motion_cmd[i] == "G0" and contact and not upward_retract:
             warn(f"{label}: rapid motion intersects the original material (tool radius {r:g} mm).")
         elif sim.motion_cmd[i] == "G1" and contact and not upward_retract:
-            intended = ln.feature in ("cut", "slot", "high_engagement", "air", "plunge") and ln.op is not None
+            intended = ln.feature in ("cut", "slot", "high_engagement", "hsm", "air", "plunge", "lead_in", "lead_out") and ln.op is not None
             if not intended:
                 warn(f"{label}: custom/unclassified feed move enters the material.")
             if not spindle:

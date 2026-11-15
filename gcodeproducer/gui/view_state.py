@@ -48,6 +48,7 @@ class ViewState(QObject):
         self.show_retracts = True
         self.show_tool = True
         self.show_grid = True
+        self.show_material = True
         self.dim_lower = False
         self.width = 0.45
         self.layer_min = 0

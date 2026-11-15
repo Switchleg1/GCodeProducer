@@ -1,179 +1,145 @@
 [Documentation](../README.md) / [CAM](README.md)
 
-# Remaining-material direction, engagement and feed adjustment
+# Slot, High engagement, Cut and HSM
 
-Climb/conventional describes the interaction with **uncut material**, not a
-universal CW/CCW winding for every loop. A full-width first slot cuts on both
-sides and has **no unique cutting hand**. Its chosen traversal cannot establish
-the hand of later clearing passes.
+The current machining engagement types are:
 
-## Correct clearing direction
-
-The previous wall-based contour winding was only appropriate when the named
-wall was the active material side. For an outside-to-inside annular clearing
-sequence, the first perimeter cuts a slot; the next inner loop encounters
-uncut material **toward the centre**, even though the final outside wall is
-on its other side.
-
-The planner now maintains a planar material estimate and subtracts each
-completed path and accepted feed-link cutter sweep. For each next path it:
-
-1. Measures material on the left and right of travel, including frontal tool
-   contact during entry.
-2. Treats full-slot paths as neutral instead of using their winding as a
-   climb/conventional decision. A path dominated by near-full-width cutting
-   (at least 75% of its length) is neutral as a whole, so short entry/closure
-   portions cannot incorrectly establish its overall hand.
-3. Chooses the next one-sided pass's direction from its remaining material.
-4. Preserves the seam of reversed closed contours so stay-down links remain
-   valid; an open path can reverse with a fresh entry.
-
-For the current **clockwise M3 spindle**, uncut material on the **right of
-travel** is climb; material on the left is conventional. Thus the annular
-outside-to-inside example uses a neutral first slot followed by **CW climb
-clearing loops**. Conventional reverses those one-sided passes. A different
-clearing order/material side can require the opposite winding. Do not judge
-all loops by an inside-wall or outside-wall rule alone.
-
-Meander alternates the requested hand between successive one-sided passes.
-Full-width neutral slots do not advance that alternation. Engrave receives
-engagement/feed estimates but has no requested-hand override; Drill uses its
-plunge feed rather than XY engagement factors.
-
-If material switches sides within one contour, reversing the whole loop may
-not make every local segment climb. Significant mismatched/mixed sections
-produce an **ENGAGEMENT WARNING** rather than a claim that the whole path is
-pure climb. Inspect the path and consider another strategy/selection. There
-is no general local re-routing or curve splitting guarantee yet.
-
-## Engagement bands
-
-Engagement is an estimated occupied cutter width divided by tool diameter.
-The planner samples chords at several positions and forward offsets along
-each move. Forward chords matter: a connector's centreline can be in cleared
-space while the front of the cutter enters a heavy cut. Peak sampled contact
-is used conservatively. Regime boundaries use rounded whole-percentage values
-so tiny STL/offset differences do not constantly switch a nominal 40% cut.
-
-| Regime | Estimated engagement | Default feed factor |
+| Type | Default estimated radial engagement | Default base-feed modifier |
 |---|---|---:|
-| Air | No detected contact | 100% of base feed, not a G0 |
-| Low | Below 40% | 100% |
-| Standard | 40–70% | 100% |
-| High | Above 70%, below slotting | 75% |
-| Slotting | Approximately 95–100% | 50% |
+| **HSM** (low horizontal engagement) | Below 40% | Tool HSM factor, initially 100% |
+| **Cut** | 40% through 80% | Tool Cut factor, initially 100% |
+| **High engagement** | **Above 80%**, below Slot | Machine modifier, initially 75% |
+| **Slot** | Approximately 95–100% | Machine modifier, initially 50% |
 
-A balanced two-sided frontal entry is hand-neutral even if its engagement
-falls in the High band rather than full-slot band. It still receives the
-High/Slotting reduction as measured. A one-sided feed connector that would
-oppose the requested hand is replaced with a retract/position/plunge; balanced
-neutral entries remain admissible when their geometric clearance is valid.
+HSM here names low horizontal engagement, not a new adaptive/trochoidal path
+strategy. Air is a separate no-contact result, not a fifth cutting type.
+The old user-facing names Low/Standard have been replaced by HSM/Cut. Stored
+keys `low_engagement_feed` / `standard_engagement_feed` remain compatibility
+aliases; the reference tables show their current labels.
 
-These defaults are starting values, **not calibrated chip loads or safety
-limits**. Full-slot entry need not use the same feed as a 40% radial pass.
-Likewise, a tested cutter/material setup may allow the Standard band to run
-faster than the base feed.
+## Machine thresholds and modifiers
 
-## Where to adjust feeds
+**Libraries → CAM machine → Engagement** sets:
 
-**Libraries → Tool → Engagement feeds** stores reusable defaults:
+- `hsm_engagement_threshold` (default 40%).
+- `high_engagement_threshold` (default 80%; High is strictly above it).
+- `slot_engagement_threshold` (default 95%; Slot starts at it).
+- `high_engagement_feed` (default 75% of normal base feed).
+- `slotting_feed` (default 50% of normal base feed).
 
-- `low_engagement_feed` — default 100%.
-- `standard_engagement_feed` — default 100%.
-- `high_engagement_feed` — default 75%.
-- `slotting_feed` — default 50%.
+Boundaries must satisfy `0 < HSM < High < Slot <= 100`. High is strictly
+above its configured percentage (80.01% is High at the default), while Slot
+starts at its configured threshold. Only floating-point roundoff is suppressed;
+estimates near a boundary can vary along the path. Changing a boundary changes
+classification, not physical engagement. Modifiers accept 1–300%, subject to machine maximum feed.
 
-**CAM operation → Engagement feeds (% of tool feed)** can override each
-independently. **Tool default** (numeric 0) inherits the tool profile. Explicit
-values are 1–300%. Tool profile factors cannot use 0. These are multipliers
-of the tool's **cutting feed in mm/min**, not the plunge feed or spindle RPM.
+Tool profiles retain HSM/Cut modifiers. High/Slot defaults now belong to the
+machine; old tool-level High/Slot fields are labelled legacy and do not override
+the new machine default; they are hidden from the tool editor. Move calibrated legacy values to machine settings or
+explicit operation overrides when migrating.
 
-Example with base tool feed 800 mm/min:
+## Cutting hand follows uncut material
 
-| Setting | Result before machine cap |
-|---|---:|
-| Slotting 50% | 400 mm/min |
-| High 75% | 600 mm/min |
-| Standard 150% | 1,200 mm/min |
-| Low 100% | 800 mm/min |
+A full-width first slot cuts on both sides and has **no unique climb/conventional
+hand**. It must not choose the direction of later clearing passes.
 
-Setting Standard to 150% does not increase slotting or High feed. This enables
-independent tuning of the requested 40–70% range. There is no automatic
-chip-thinning feed increase: choose increases from cutter/material guidance
-and calibrated tests.
+For the clockwise M3 convention, uncut material on the **right of travel** is
+climb; on the left it is conventional. In an outside-to-inside annulus, after
+the first neutral slot the uncut material lies inward, so subsequent climb
+loops are **CW**, not the CCW winding used to finish against an outer wall.
+A different remaining-material side can require the opposite winding.
 
-A positive **CAM machine `max_feed`** now caps emitted cutting, connecting
-feed and plunge requests, including increases above 100%. Caps are logged.
-Zero disables this particular cap; it does not establish physical capability.
-XY G0 rapid requests and spindle RPM are separate settings and are not these
-engagement multipliers.
+The planner subtracts completed tool sweeps at their depths. Earlier operations
+and tool changes do not reset this removal history. At a previously cleared
+level, later operations see the removed material; deeper cuts see stock that
+still exists below it. See [current material](material-state-and-leads.md).
 
-## Inspecting the output
+Slot-dominated paths (at least 75% of their length near full engagement) are
+neutral as a whole. Short closing/entry portions cannot establish their hand.
+Meander alternates successive **one-sided** passes; neutral slots do not
+advance it. Engrave estimates engagement/feed but has no requested-hand control;
+Drill uses its lead/plunge feed instead of an XY engagement multiplier.
 
-- **Colour by feature:** Slot is orange, High engagement red/orange, ordinary
-  Low/Standard cutting green, and estimated Air grey.
-- **Colour by Tool engagement (CAM):** shows normalized estimated contact,
-  not a live sensor reading.
-- **Colour by speed:** shows the actual emitted feed after factors/caps.
-- G-code contains feature annotations and comments such as
-  `slot 100% engagement; neutral` or `standard 40% engagement; climb` at
-  condition changes. Stay-down lines keep their link comment; in-memory
-  engagement/note metadata still records their conditions.
-- The log summarizes bands, neutral slot paths, direction reversals, retained
-  stay-down entries and warnings. A successful loop reversal is not proof of
-  every tool contact being physically correct.
+If uncut material switches sides inside one contour, reversing the whole loop
+may not make every local segment climb. Significant mismatches produce an
+**ENGAGEMENT WARNING** rather than silently claiming pure climb. There is no
+general local curve-splitting/re-routing guarantee.
+
+## Per-operation feed overrides and calculation
+
+An operation's **Engagement feeds (% of tool feed)** can override each band:
+
+- HSM and Cut at 0 inherit the tool.
+- High engagement and Slot at 0 inherit the machine.
+- Explicit values 1–300% override only that band.
+
+The base feed comes from tool SFM/chip-load calculation or an unlocked manual
+request. [Cutting data](cutting-data.md) explains units, material tables, RPM
+ceilings, axial defaults and independent feed unlocks.
+
+Example with base cut feed 800 mm/min: HSM 100%=800, Cut 150%=1,200,
+High 75%=600, Slot 50%=400. Increasing Cut does not increase Slot. Contacting
+lead-in uses the independent lead base and machine Slot modifier; normal XY
+cutting/link moves use their estimated band. Positive `max_feed` caps cutting,
+link and plunge rates. Air remains at capped base feed, not G0.
+
+These percentages are **not calibrated chip loads or safety limits**. There is
+no automatic chip-thinning feed increase. Use manufacturer/material guidance
+and controlled tests when increasing any band above 100%.
+
+## Estimation method and links
+
+The planner samples occupied cutter chords at multiple stations and forward
+offsets along each move. Leading-edge samples catch heavy entry even when a
+connector's centreline is in previously cleared space. A swept-area fallback
+avoids treating a missed grazing contact as air.
+
+Peak sampled contact is used conservatively. Balanced frontal entry is neutral
+even when classified High rather than Slot. One-sided feed links opposing the
+requested hand are replaced by retract/position/plunge; geometrically admissible
+neutral entries remain eligible for stay-down, at the heavier-cut rate.
+
+The planner uses planar depth-tagged sweeps. The emitted-motion pass separately
+updates a height field for display and movement checking. These are **2.5D
+estimates**, not tooth-level telemetry or a full 3D stock/fixture simulation.
+Within-path overlap/re-tracing can be conservative; actual axial engagement,
+V-bit/ballnose contact width, deflection and chatter are not predicted. M4
+posts do not automatically invert the M3 hand convention.
+
+## Inspecting output
+
+- Feature colours distinguish Slot (orange), High engagement (red/orange),
+  Cut (green), HSM (blue) and Air (grey). Leads have separate features.
+- **Colour by Tool engagement (CAM)** shows normalized estimated contact.
+- **Colour by speed** shows actual F after factors/caps.
+- G-code comments/metadata identify conditions such as `slot 100% engagement;
+  neutral` or `cut 40% engagement; climb`. Stay-down comments remain identifiable.
+- Logs summarize estimated bands, neutral paths, reversals, rates and warnings.
+- **Show → Material** and the operation-output selector show calculated stock
+  after each operation; the path slider is not a per-move removal animation.
 
 ### Illustrated annular example
 
-![Feature colouring: neutral slot and subsequent cutting passes](../pictures/cam-pocket-engagement-features.png)
+![Feature-coloured engagement example](../pictures/cam-pocket-engagement-features.png)
 
-The outer orange loop is the initial full-width slot, not a conventional
-clearing pass. Subsequent green passes are oriented CW against the remaining
-inner material for Climb. Short entry links receive their own heavier-cut
-classification. Direction is established by the generated order/metadata,
-not by line colour alone. Entry/rapid moves are hidden in this capture.
+![Estimated radial engagement example](../pictures/cam-pocket-engagement-estimate.png)
 
-![Estimated radial engagement colouring of the same pass](../pictures/cam-pocket-engagement-estimate.png)
-
-The outer red loop is approximately 100% engaged. Most subsequent passes are
-around 40%; thinner residual cuts and entry transitions have different values.
-The example uses a 3 mm tool with base feed 800 mm/min, Slotting 50% and an
-operation Standard override of 150%. These are demonstration values, not a
-calibrated machining recipe. The images are real application captures with
-isolated settings, not sensor measurements or physical simulation results.
-
-## Scope of the estimate
-
-This is **planar, path-granular in-operation removal**, not a full 3D stock
-simulation. The estimated XY plan is reused at each depth, starting fresh for
-each operation. It subtracts completed path/link tool sweeps; it does not
-track removal along every tooth or preserve cleared volume from earlier
-operations. Within-path re-tracing/overlap is conservatively represented by
-the pre-path material state. If stock is unallocated, a conservative XY blank
-is assumed and logged; configure real stock for meaningful estimates.
-
-Tool shape is treated as a constant-diameter planar cutter. Ballnose contact,
-V-bit effective width, axial engagement, runout, chatter, deflection,
-workholding, holders, fixtures and controller offsets are not simulated.
-The convention still assumes M3; a custom M4 post does not automatically
-invert engagement-hand logic.
-
-The existing [stock checks](stock-and-safety.md) remain separate. Engagement
-analysis does not certify clearance or replace independent simulation and an
-air cut. Mixed-hand warnings survive stock checking and require review before
-CAM export.
+These earlier captures illustrate the classifier before the current HSM colour
+and material-surface display; the outer first slot is neutral, not conventional.
+They are generated-view examples, not measurements or calibrated recipes.
+New material/lead examples are indexed in [pictures](../pictures/README.md).
 
 ## Existing projects
 
-Old tool profiles resolve the new factors to 100/100/75/50%. Operations
-without overrides inherit them. This deliberately changes effective feed for
-High/Slotting moves; inspect regenerated output. To preserve a previously
-calibrated uniform cutting feed, explicitly set all four factors to 100%,
-then evaluate direction and engagement separately.
+Review regenerated output: classification names, default High threshold and
+machine ownership of High/Slot modifiers have changed. Existing tools retain
+fixed-rate mode until their SFM/chip-load calculation is explicitly enabled;
+newly created tools start in calculated mode. Existing operations retain their
+saved explicit stepdown unless automatic axial depth is selected.
 
-Legacy CLI silhouette paths do not have the operation-level removal plan and
-therefore retain uniform tool feed (now machine-capped), rather than pretending
+Legacy CLI silhouette generation does not have operation-level removal history
+and therefore retains uniform machine-capped tool feed rather than pretending
 to have measured engagement. Use operation-driven CAM for these classifications.
 
-[Strategies and linking](toolpaths.md) · [Operation settings](operations.md) ·
-[Tool profile reference](../reference/profile-settings.md#cam-tool)
+[Cutting data](cutting-data.md) · [Material state and leads](material-state-and-leads.md) ·
+[Strategies/linking](toolpaths.md)

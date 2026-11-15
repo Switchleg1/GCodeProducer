@@ -104,9 +104,10 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   are used; a stored cooling target does not enforce a dwell or speed reduction.
 - Nozzle minimum/maximum layer heights are stored; the layer stage does not
   automatically validate or clamp its height to those nozzle recommendations.
-- CAM cutter type, flutes, cutting length and V angle are descriptive. They do
-  not provide full cutter-shape/holder collision geometry, chip-load
-  calculations, or automatic V-carving depth.
+- Flute count now participates in SFM/chip-load feed calculation. Cutter type,
+  cutting length and V angle still do not provide full cutter-shape/holder
+  collision geometry or automatic V-carving depth. Per-material cutting tables
+  need calibration; see [cutting data](cam/cutting-data.md).
 - CAM machine `cut_direction` defaults to Climb; Pocket/Profile inherit it
   unless overridden. Operation-driven paths now choose the hand from estimated
   remaining material, not a neutral first slot. Meander alternates one-sided
@@ -114,24 +115,28 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
 - CAM tool feed/plunge feed/RPM drive output; stepdown is capped at tool
   `max_doc`. Tree operation stepover currently starts at 40%, independently
   of the tool profile's stored stepover field.
-- CAM `safe_z` and XY rapid feed are used. Separate `clearance_z`, `rapid_z`
-  and the reserved ramp option do not currently implement extra clearance,
-  explicit Z rapid feed control or ramp entry.
+- CAM `safe_z`, XY rapid feed and lead-entry `clearance_z` are used.
+  `rapid_z` still does not provide explicit Z rapid feed control. The old
+  reserved pipeline ramp flag was removed; actual lead-in/out settings belong
+  to operations. See [material state/leads](cam/material-state-and-leads.md).
 - A positive CAM machine `max_feed` caps cutting/link and plunge feed requests,
-  including engagement-factor increases. CAM spindle-range fields still do
-  **not** generally cap tool RPM. Verify cutter/material suitability independently.
-- Tool engagement factors default to Low 100%, Standard (40–70%) 100%, High
-  75%, Slotting 50% of base feed. Operation fields at 0 inherit the tool;
-  1–300% overrides are supported. Air moves remain at machine-capped base feed.
-  This is a planar per-operation estimate, not a full 3D stock simulator.
+  including engagement-factor increases. Tool and machine RPM ceilings are
+  enforced, and below-minimum requests fail rather than overspeeding an SFM
+  target. Verify the configured ceilings and cutter/material suitability.
+- Current types are HSM, Cut, High engagement and Slot. Machine thresholds
+  default to 40/80/95%; High is above 80%. HSM/Cut inherit tool factors,
+  High/Slot inherit machine factors. Operation overrides accept 1–300%; 0
+  inherits. Prior depth-tagged removal now carries across operations; the
+  height-field display/checks remain approximate 2.5D, not a full solid simulator.
 - CAM output is currently millimetres (`G21` in the default template). The
   stored machine `units` field is not an automatic inch postprocessor.
 - CAM origin choices affect placement only as implemented: centre origin
   centres XY around zero; the named front-left alternatives share the same
   XY rectangle. Top-at-Z0 is the CAM model-placement convention, not automatic
   programming of a controller work offset or tool-length compensation.
-- Stock density is used for volume/mass reporting only. It does not select
-  cutting parameters or identify a material's machinability.
+- Stock density is for volume/mass reporting. Its separate machining category
+  selects the tool's SFM/chip-load/axial table, independently of FDM filament.
+  Material grade/machinability still need operator-qualified data.
 
 ## Backups and migration
 

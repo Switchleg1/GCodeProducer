@@ -76,6 +76,18 @@ def _machine_schema(workflow: str) -> list:
                   choices=[("climb", "Climb"), ("conventional", "Conventional"), ("meander", "Meander")],
                   help="Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses "
                        "direction; full slots are neutral. Operations may override. Meander alternates one-sided passes."),
+            Param("hsm_engagement_threshold", "float", 40., min=1, max=79, unit="%", group="Engagement",
+                  label="HSM / Cut boundary"),
+            Param("high_engagement_threshold", "float", 80., min=1, max=99, unit="%", group="Engagement",
+                  label="High engagement above"),
+            Param("slot_engagement_threshold", "float", 95., min=1, max=100, unit="%", group="Engagement",
+                  label="Slot at / above"),
+            Param("high_engagement_feed", "float", 75., min=1, max=300, unit="%", group="Engagement",
+                  label="High engagement feed modifier"),
+            Param("slotting_feed", "float", 50., min=1, max=300, unit="%", group="Engagement",
+                  label="Slot feed modifier"),
+            Param("stock_resolution", "float", .5, min=.1, max=5, unit="mm", group="Material simulation",
+                  help="Requested height-field cell size; capped grid memory can coarsen it. Not a full solid/fixture simulation."),
             Param("allowed_tools", "multi", ALL_ITEMS, choices_from="tool", group="Allowed consumables",
                   help="Tools from the tool library that are mounted / available."),
         ] + common_tail
@@ -153,24 +165,30 @@ _TOOL_SCHEMA = [
     Param("length", "float", 20.0, unit="mm", group="General", help="Flute / cutting length."),
     Param("vangle", "float", 0.0, unit="\u00b0", group="General", label="V angle",
           help="Included angle for v-bits / engravers."),
-    Param("feed", "float", 800.0, unit="mm/min", group="Feeds & speeds"),
-    Param("plunge_feed", "float", 300.0, unit="mm/min", group="Feeds & speeds"),
-    Param("spindle_rpm", "float", 18000.0, unit="rpm", group="Feeds & speeds"),
-    Param("max_doc", "float", 2.0, unit="mm", group="Engagement", label="Max depth/pass"),
+    Param("feed", "float", 800.0, unit="mm/min", group="Fixed rates (calculation off)", label="Fixed cut feed",
+          help="Used with SFM calculation off; operation unlocks can override calculated or fixed bases."),
+    Param("plunge_feed", "float", 300.0, unit="mm/min", group="Fixed rates (calculation off)", label="Fixed lead / plunge feed"),
+    Param("spindle_rpm", "float", 18000.0, unit="rpm", group="Fixed rates (calculation off)", label="Fixed spindle RPM"),
+    Param("max_doc", "float", 2.0, unit="mm", min=0, group="Engagement", label="Max depth/pass",
+          help="Positive values cap axial depth; 0 disables this cap, not a safety recommendation."),
     Param("stepover", "float", 40.0, unit="%", group="Engagement",
           help="Radial engagement as a % of diameter."),
     Param("low_engagement_feed", "float", 100.0, unit="%", min=1, max=300, decimals=0,
-          label="Low engagement feed (<40%)", group="Engagement feeds",
+          label="HSM feed (low horizontal engagement)", group="Engagement feeds",
           help="Percentage of base cutting feed; operations may override. Engagement is estimated."),
     Param("standard_engagement_feed", "float", 100.0, unit="%", min=1, max=300, decimals=0,
-          label="Standard engagement feed (40–70%)", group="Engagement feeds",
+          label="Cut feed", group="Engagement feeds",
           help="May exceed 100% when calibrated for the cutter/material; capped by machine max feed."),
     Param("high_engagement_feed", "float", 75.0, unit="%", min=1, max=300, decimals=0,
-          label="High engagement feed (>70%, below slot)", group="Engagement feeds"),
+          label="Legacy high engagement feed (machine now owns default)", group="Engagement feeds", hidden=True),
     Param("slotting_feed", "float", 50.0, unit="%", min=1, max=300, decimals=0,
-          label="Slotting feed (95–100%)", group="Engagement feeds",
+          label="Legacy slot feed (machine now owns default)", group="Engagement feeds", hidden=True,
           help="Full-width slots have no single climb/conventional hand. Percentage of base cutting feed."),
 ]
+
+
+from .cam_cutting import material_parameters
+_TOOL_SCHEMA += material_parameters()
 
 
 def schema(kind: str, workflow: str = wf.FDM) -> list:

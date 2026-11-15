@@ -6,7 +6,7 @@
 FDM Support. **Stored on:** model-specific CAM setup.
 
 This panel describes the **raw rectangular blank**, not the final solid model
-or a stock-removal result. It is separate from the FDM filament material
+or the calculated removal result. Results are selected separately in Preview. It is separate from the FDM filament material
 library. The amber outline in Prepare/Preview remains the original blank
 throughout toolpath inspection.
 
@@ -70,7 +70,8 @@ After an intentional re-fit, press Auto again and recheck workholding.
 
 ## What generation checks
 
-Checks run after CAM emission in the compute process. Findings include
+Checks run after CAM emission in the compute process, updating a current
+height-field material model in emitted-move order. Findings include
 G-code line numbers where applicable. Only setups with allocated stock can
 be checked; otherwise a warning states that checking could not run.
 
@@ -78,7 +79,7 @@ be checked; otherwise a warning states that checking could not run.
 |---|---|
 | Part outside stock | Model bounds are not fully contained; resize/reposition or use Auto |
 | Safe height at/below stock | Unsafe clearance; tree generation also rejects safe Z at/below the stock/model/start heights |
-| Rapid (`G0`) intersects blank | Straight segment enters a cutter-radius-expanded stock envelope below its surface |
+| Rapid (`G0`) contacts current material | Sampled cylindrical cutter sweep reaches remaining height-field stock; cleared regions carry forward |
 | Unclassified/custom feed into stock | Contact is not tagged as an intended generated cut/plunge |
 | Feed contact with spindle stopped | Spindle state inferred from program commands is off at contact |
 | Motion below blank bottom | Possible table/spoilboard contact, including moves outside the blank XY region |
@@ -87,24 +88,22 @@ be checked; otherwise a warning states that checking could not run.
 | Unknown controller effects | Offsets, compensation, cycles or unsupported G commands cannot be fully checked |
 | Custom arcs/multiple G commands | Arc clearance or combined-block semantics are not fully simulated |
 
-The envelope is a conservative **square XY expansion by cutter radius**, not
-an exact circular swept solid. The cutter is assumed to extend above its tip;
-cutting length/holder shape is not modelled. Strict surface-tangent moves are
-not treated as stock penetration. Vertical upward withdrawals are treated as
-retracts, not unexpected rapid entries; their safety still depends on actual
-prior cuts and machine position.
+Current movement checks use a centre-sampled cylindrical cutter/height field,
+not an exact solid sweep. Checking resolution can miss or approximate small
+features. Cutting length/holder shape is not modelled. Upward withdrawals are
+treated as retracts; initial physical machine state still needs independent
+clearance. See [current material, resolution and leads](material-state-and-leads.md).
 
 Generated `cut`/`plunge` paths have operation metadata and are considered
 intended cutting. That distinction avoids warning about every normal milling
 move. It does **not** prove that the intended cut avoids the retained part,
 has valid engagement or follows a valid machining strategy.
 
-For downward, same-XY feed entries, the checker remembers the deepest entry
-for that XY/cutter radius. This avoids treating repeated pecks as fresh full
-stock depth. It does not know that a preceding raster cleared a nearby point,
-that a larger tool removed a region, or how much side engagement remains.
-A warning after a legitimate previous clearing operation may therefore need
-independent verification rather than a blind change of parameters.
+Current height-field removal persists across paths, passes and operations,
+including leads. Entry checks compare with current local material. Planning
+also retains depth-tagged planar sweeps for later engagement/direction.
+Both representations have 2.5D/resolution limits; uncertainty still requires
+independent review.
 
 ## Warnings, generation errors and export
 
@@ -125,12 +124,13 @@ dialog does not recalculate the result.
 
 - Initial physical machine position, homing, coordinate systems or actual
   controller work/tool-length offsets.
-- Stock-removal state, fixtures, clamps, vises, holders, flute reach, shank
-  contact or full machine kinematics.
+- General 3D stock/undercut state, fixtures, clamps, vises, holders, flute reach,
+  shank contact or full machine kinematics. Only documented planar/height-field
+  removal state is tracked.
 - Retained-part gouging by every intended cut, cutter deflection, chip load,
   cutting forces, chatter, workholding stability or thermal behaviour. The
   separate [engagement estimator](engagement-and-feeds.md) subtracts planar
-  sweeps within an operation for direction/feed planning, but it is not a
+  depth-tagged sweeps across operations for direction/feed planning, but it is not a
   full 3D stock-removal/collision simulator.
 - Exact custom arc/canned-cycle geometry, controller macros, smoothing or
   arbitrary multi-command blocks.
@@ -140,9 +140,9 @@ dialog does not recalculate the result.
 - Guaranteed blank fit within every physical machine/fixture boundary just
   because the model's work-volume check passes.
 
-**No warnings is not proof of safety.** Original-blank checking can also warn
-about travel through an area already machined away, since it does not subtract
-material. Never simply disable concerns because a path is probably cleared.
+**No warnings is not proof of safety.** Height-field checks can still be
+inaccurate at small features or cell boundaries. Never ignore concerns solely
+because a display looks cleared; verify real tool/stock/controller geometry.
 
 ## Before running on hardware
 

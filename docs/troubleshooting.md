@@ -86,8 +86,9 @@ works. CPU tests passing does not validate your graphics driver.
 ## CAM stock warnings
 
 Use [the full warning guide](cam/stock-and-safety.md). A rapid collision warning
-can be conservative because the original stock is not subtracted. A stock
-outline that visually appears cleared is not evidence of removal. Tool radius
+now uses current height-field material, but grid resolution can still miss or
+approximate contact. The stock outline alone is not a removal result; select
+[calculated operation output](cam/material-state-and-leads.md). Tool radius
 can overlap stock when the centreline is outside it. An entry-depth warning
 may mean an operation starts below unremoved material. Below-bottom motion
 can hit a table even when the cutter is outside the blank XY bounds.
@@ -97,6 +98,12 @@ arcs require independent review. A warning-free program still lacks fixture,
 holder, full stock-removal and machine-kinematic verification. CAM export
 blocked as stale means regenerate after edits; confirming an earlier dialog
 does not recheck a changed blank.
+
+For SFM errors, compare material target RPM with both machine/tool ceilings
+and the machine minimum. A below-minimum target is not silently increased.
+Verify material category, tool-table units, flute count and independent rate
+unlocks. Lead-in fallback warnings mean the selected contour cannot fit the
+requested ramp; confirm plunge capability or revise the entry.
 
 ## Template problems
 

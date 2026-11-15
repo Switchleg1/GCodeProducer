@@ -2,8 +2,9 @@
 
 Choose clearing hand from the material remaining on each side, not from the
 final wall or a first full-width slot. Tool sweeps are subtracted after each
-path/link. This plan is reused at each depth and starts fresh per operation;
-previous operations, flute shape, axial engagement and fixtures are not modelled.
+path/link. The caller supplies depth-aware removal history from earlier
+operations; identical planar states may reuse plans. Flute shape, tooth-level
+axial engagement, holders and fixtures are not modelled.
 """
 from __future__ import annotations
 
@@ -18,33 +19,40 @@ from .cam_paths import direction_for
 from .job import CutCondition
 
 FEED_FIELDS = {
-    "low": ("low_engagement_feed", 100.0),
-    "standard": ("standard_engagement_feed", 100.0),
+    "hsm": ("low_engagement_feed", 100.0),
+    "cut": ("standard_engagement_feed", 100.0),
     "high": ("high_engagement_feed", 75.0),
     "slot": ("slotting_feed", 50.0),
 }
 
 
-def engagement_band(value):
-    """Stable whole-percentage bands; no automatic chip-thinning speed increase."""
+def engagement_band(value, machine=None):
+    """Machine-set radial bands; no automatic chip-thinning speed increase."""
     if value <= 1e-6:
         return "air"
-    percent = int(math.floor(float(np.clip(value, 0, 1))*100+0.5))
-    if percent >= 95:
+    percent = round(float(np.clip(value, 0, 1))*100,6)
+    low = float(machine.get("hsm_engagement_threshold",40)) if machine else 40
+    high = float(machine.get("high_engagement_threshold",80)) if machine else 80
+    slot = float(machine.get("slot_engagement_threshold",95)) if machine else 95
+    if not 0 < low < high < slot <= 100:
+        raise ValueError("Engagement boundaries must satisfy 0 < HSM < High < Slot <= 100")
+    if percent >= slot:
         return "slot"
-    if percent > 70:
+    if percent > high:
         return "high"
-    if percent >= 40:
-        return "standard"
-    return "low"
+    if percent >= low:
+        return "cut"
+    return "hsm"
 
 
-def feed_factor(regime, operation, tool):
+def feed_factor(regime, operation, tool, machine=None):
     if regime == "air":
         return 1.0
+    regime = {"low":"hsm", "standard":"cut"}.get(regime,regime)
     field, default = FEED_FIELDS[regime]
     override = float(getattr(operation, field, 0) or 0)
-    percent = override if override else float(tool.get(field, default))
+    inherited = machine.get(field,default) if machine is not None and regime in ("slot","high") else tool.get(field,default)
+    percent = override if override else float(inherited)
     if not math.isfinite(percent) or not 0 < percent <= 300:
         raise ValueError(f"{field} must be 1–300% (operation 0 inherits tool)")
     return percent/100
@@ -92,10 +100,10 @@ def measure_segments(points, closed, material, radius):
     return left, right, engagement, lengths
 
 
-def _hand(left, right, engagement):
+def _hand(left, right, engagement, machine=None):
     if engagement <= 1e-6:
         return "air"
-    if engagement_band(engagement) == "slot":
+    if engagement_band(engagement, machine) == "slot":
         return "neutral"
     difference = right-left
     if abs(difference) <= .2*max(left+right, 1e-12):
@@ -104,21 +112,26 @@ def _hand(left, right, engagement):
     return "climb" if difference > 0 else "conventional"
 
 
-def _conditions(measured, operation, tool, neutral=False):
+def _conditions(measured, operation, tool, neutral=False, machine=None):
     left, right, engagement, _ = measured
-    return [CutCondition(float(e), engagement_band(e),
-                         "neutral" if neutral and e > 1e-6 else _hand(l, r, e),
-                         feed_factor(engagement_band(e), operation, tool))
+    return [CutCondition(float(e), engagement_band(e,machine),
+                         "neutral" if neutral and e > 1e-6 else _hand(l, r, e,machine),
+                         feed_factor(engagement_band(e,machine), operation, tool,machine))
             for l, r, e in zip(left, right, engagement)]
 
 
-def plan_engagement(paths, job, operation, tool, log=None):
+def plan_engagement(paths, job, operation, tool, log=None, initial_material=None):
     """Orient/annotate operation paths using incremental planar material removal."""
-    radius = float(tool.get("diameter", 0))/2
+    tool_data = tool.resolved() if hasattr(tool,"resolved") else tool
+    machine_data = job.machine.resolved()
+    engagement_band(.5,machine_data)  # validate machine thresholds even for an all-air operation
+    radius = float(tool_data.get("diameter", 0))/2
     if radius <= 0 or not math.isfinite(radius):
         raise ValueError("Engagement estimation requires a positive tool diameter")
     stock = getattr(job.cam_setup, "stock", None)
-    if stock is not None and stock.allocated:
+    if initial_material is not None:
+        material = initial_material
+    elif stock is not None and stock.allocated:
         lo, hi = stock.bounds
         material = box(lo[0], lo[1], hi[0], hi[1])
     else:
@@ -127,7 +140,7 @@ def plan_engagement(paths, job, operation, tool, log=None):
         material = box(lo[0], lo[1], hi[0], hi[1])
         if log:
             log("  engagement uses a conservative XY blank estimate (stock not allocated)")
-    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile") else None
+    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot") else None
     totals = Counter()
     flipped = slots = handed = 0
     previous = None
@@ -142,7 +155,7 @@ def plan_engagement(paths, job, operation, tool, log=None):
         if previous is not None and path.stay_down and path.stay_down_from is not None:
             link = np.array([previous, p[0]])
             measured = measure_segments(link, False, material, radius)
-            condition = _conditions(measured, operation, tool)[0]
+            condition = _conditions(measured, operation, tool_data, machine=machine_data)[0]
             if condition.hand == "mixed":
                 # A balanced frontal entry cuts both sides; it cannot define a
                 # unique climb/conventional hand, just like a slot. Keep its
@@ -158,8 +171,9 @@ def plan_engagement(paths, job, operation, tool, log=None):
                 totals[condition.regime] += 1
         measured = measure_segments(p, path.closed, material, radius)
         left, right, engagement, lengths = measured
-        neutral = float(lengths[engagement >= .945].sum()) >= .75*max(float(lengths.sum()), 1e-12)
-        active = (engagement > 1e-6) & (engagement < .945)
+        slot_limit = float(machine_data.get("slot_engagement_threshold",95))/100-1e-9
+        neutral = float(lengths[engagement >= slot_limit].sum()) >= .75*max(float(lengths.sum()), 1e-12)
+        active = (engagement > 1e-6) & (engagement < slot_limit)
         vote = float(((right-left)*lengths*active).sum())
         desired = mode
         if mode == "meander" and not neutral and abs(vote) > 1e-9:
@@ -177,7 +191,7 @@ def plan_engagement(paths, job, operation, tool, log=None):
                 flipped += 1
             handed += 1
         slots += int(neutral)
-        path.cut_conditions = _conditions(measured, operation, tool, neutral)
+        path.cut_conditions = _conditions(measured, operation, tool_data, neutral, machine_data)
         totals.update(c.regime for c in path.cut_conditions)
         if desired in ("climb", "conventional") and not neutral:
             checked = [(c, d) for c, d in zip(path.cut_conditions, measured[3])
@@ -194,7 +208,7 @@ def plan_engagement(paths, job, operation, tool, log=None):
     if log:
         log(f"  {operation.name}: remaining-material direction, {flipped} paths reversed; "
             f"{slots} full-slot/neutral paths (do not choose cutting hand)")
-        log("  engagement moves: " + ", ".join(f"{k}={totals[k]}" for k in ("slot", "high", "standard", "low", "air")))
+        log("  engagement moves: " + ", ".join(f"{k}={totals[k]}" for k in ("slot", "high", "cut", "hsm", "air")))
         for warning in warnings:
             log("ENGAGEMENT WARNING: " + warning)
     return warnings
