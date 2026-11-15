@@ -409,7 +409,9 @@ def test_preview_uses_machine_plate_and_same_view(win, app):
     assert win.mode == "preview"
     assert (tuple(win.camera.target), win.camera.distance, win.camera.yaw, win.camera.pitch) == cam
     app.processEvents()
-    assert win.viewer.size() == win.model_viewer.size()
-    assert not win.layer_slider.isEnabled() or win.mode == "preview"
+    preview_size = win.viewer.size()
+    assert win.layer_slider.isEnabled()
     win.set_mode("prepare")
+    app.processEvents()
+    assert win.model_viewer.size() == preview_size        # same area, same framing
     assert not win.layer_slider.isEnabled()

@@ -172,7 +172,7 @@ class MainWindow(QMainWindow):
         self.layer_slider.valueChanged.connect(self._on_layer_slider)
         self.layer_lbl = QLabel("-")
         self.layer_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layer_lbl.setMinimumWidth(70)
+        self.layer_lbl.setFixedWidth(84)        # fixed: the view area must not change width
         lv = QVBoxLayout()
         lv.addWidget(self.layer_lbl)
         lv.addWidget(self.layer_slider, 1, Qt.AlignmentFlag.AlignHCenter)
