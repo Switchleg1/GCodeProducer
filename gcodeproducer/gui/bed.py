@@ -43,6 +43,7 @@ class BedRenderer:
         self.m_grid = mesh_cls(False)
         self.m_outline = mesh_cls(False)
         self.m_volume = mesh_cls(False)
+        self.m_stock = mesh_cls(False)
         self.rect = None
 
     def upload(self, rect) -> None:
@@ -53,7 +54,24 @@ class BedRenderer:
         self.m_outline.upload(outline)
         self.m_volume.upload(vol)
 
+    def upload_stock(self, stock):
+        points = []
+        if stock is not None and stock.allocated:
+            lo, hi = stock.bounds
+            c = np.array([[x, y, z] for z in (lo[2], hi[2]) for y in (lo[1], hi[1]) for x in (lo[0], hi[0])])
+            for a, b in ((0,1), (1,3), (3,2), (2,0), (4,5), (5,7), (7,6), (6,4), (0,4), (1,5), (2,6), (3,7)):
+                points.extend((c[a], c[b]))
+        self.m_stock.upload(np.asarray(points, np.float32).reshape(-1, 3))
+
+    def draw_stock(self, prog, mvp):
+        GL.glUseProgram(prog)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog, "uMVP"), 1, GL.GL_TRUE, mvp)
+        GL.glUniform4f(GL.glGetUniformLocation(prog, "uColor"), 0.95, 0.65, 0.22, 1.0)
+        self.m_stock.draw(GL.GL_LINES)
+
     def draw_plate(self, prog, mvp, alpha: float = 1.0) -> None:
+        if self.rect is not None and self.rect[4] < 0:
+            return   # CAM surface is Z0, not an opaque plate hiding the part below it
         GL.glUseProgram(prog)
         GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog, "uMVP"), 1, GL.GL_TRUE, mvp)
         ucol = GL.glGetUniformLocation(prog, "uColor")

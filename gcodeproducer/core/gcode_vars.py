@@ -73,6 +73,14 @@ VARIABLES = [
     Var("spindle_rpm", "Tool", "Spindle speed (rpm)", 18000.0, CAM),
     Var("feed", "Tool", "Cutting feed (mm/min)", 1000.0, CAM),
     Var("plunge_feed", "Tool", "Plunge feed (mm/min)", 300.0, CAM),
+    # ---- CAM blank
+    Var("stock_material", "Stock", "Stock material name", "Aluminium", CAM),
+    Var("stock_density", "Stock", "Stock density (g/cm³)", 2.7, CAM),
+    Var("stock_width", "Stock", "Stock size X (mm)", 24.0, CAM),
+    Var("stock_depth", "Stock", "Stock size Y (mm)", 24.0, CAM),
+    Var("stock_height", "Stock", "Stock thickness Z (mm)", 22.0, CAM),
+    Var("stock_top", "Stock", "Stock surface Z (mm)", 0.0, CAM),
+    Var("stock_bottom", "Stock", "Stock bottom Z (mm)", -22.0, CAM),
     # ---- layers
     Var("layer_height", "Layers", "Layer height (mm)", 0.2, FDM),
     Var("first_layer_height", "Layers", "First layer height (mm)", 0.2, FDM),
@@ -217,6 +225,11 @@ def job_variables(job, temps: dict | None = None, extra: dict | None = None) -> 
         wx, wy = _num(m.get("work_x", 300)), _num(m.get("work_y", 300))
         center = m.get("origin") == "center"
         tool = job.tools[0] if job.tools else None
+        from .stock import Stock
+        stock = getattr(job.cam_setup, "stock", None) or Stock()
+        v.update(stock_material=stock.material, stock_density=stock.density,
+                 stock_width=stock.width, stock_depth=stock.depth, stock_height=stock.height,
+                 stock_top=stock.top, stock_bottom=stock.top - stock.height)
         v.update(bed_x=wx, bed_y=wy, max_height=_num(m.get("work_z", 100)),
                  bed_center_x=0.0 if center else wx / 2, bed_center_y=0.0 if center else wy / 2,
                  safe_z=_num(m.get("safe_z", 15.0)),

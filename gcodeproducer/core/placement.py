@@ -92,7 +92,9 @@ class Placement:
     rz: float = 0.0
     scale: float = 100.0             # uniform scale (%)
     drop: bool = True                # put the lowest point at height ``z`` (else keep original Z)
-    z: float = 0.0                   # height of the model's lowest point above the bed (mm)
+    z: float = 0.0                   # anchor height: FDM bottom / CAM top (mm)
+
+    z_anchor: str = "bottom"         # CAM: top referenced to z (normally surface Z0)
 
     # ------------------------------------------------------------------
     def rotation(self) -> np.ndarray:
@@ -116,7 +118,9 @@ class Placement:
         mid = (lo2 + hi2) / 2
         tx = self.x if self.x is not None else (auto_xy[0] if auto_xy is not None else c[0])
         ty = self.y if self.y is not None else (auto_xy[1] if auto_xy is not None else c[1])
-        tz = (max(0.0, float(self.z)) - lo2[2]) if self.drop else c[2]
+        anchor = hi2[2] if self.z_anchor == "top" else lo2[2]
+        target = float(self.z) if self.z_anchor == "top" else max(0.0, float(self.z))
+        tz = (target - anchor) if self.drop else c[2]
         out = out + np.array([tx - mid[0], ty - mid[1], tz])
         return Mesh(out, mesh.triangles)
 
@@ -196,12 +200,12 @@ def bed_rect(machine, workflow: str):
         return (0.0, 0.0, bx, by, h)
     wx, wy, wz = machine.get("work_x", 300), machine.get("work_y", 300), machine.get("work_z", 100)
     if machine.get("origin") == "center":
-        return (-wx / 2, -wy / 2, wx / 2, wy / 2, wz)
-    return (0.0, 0.0, wx, wy, wz)
+        return (-wx / 2, -wy / 2, wx / 2, wy / 2, -wz)
+    return (0.0, 0.0, wx, wy, -wz)
 
 
 def fits(mesh: Mesh, rect, tol: float = 1e-3) -> bool:
     lo, hi = mesh.bounds
     x0, y0, x1, y1, h = rect
     return (lo[0] >= x0 - tol and lo[1] >= y0 - tol and hi[0] <= x1 + tol and hi[1] <= y1 + tol
-            and lo[2] >= -tol and hi[2] <= h + tol)
+            and lo[2] >= min(0, h) - tol and hi[2] <= max(0, h) + tol)

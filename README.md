@@ -94,7 +94,35 @@ T3 — drill
    within a tool group, or reorder whole tool groups. Disabled operations are
    skipped. **Generate paths**, inspect Preview, then save G-code.
 
-The setup (including selections and depth references) is automatically saved
+**Material / stock** occupies the same shared panel slot as FDM **Support**;
+relocating that slot keeps the workflow-specific controls together. Enter a
+material name, density (descriptive g/cm³), blank position, surface Z, width,
+depth and thickness. **Auto — fit material to part** allocates a rectangular
+blank with the spinner margin on **each XY side and below** the part, keeping
+the surface at Z0 (or above a raised part). Blank edges appear in amber in
+Prepare and Preview. Changing the margin does not resize stock until Auto is
+pressed; moving the part does not silently move/resize the allocated blank.
+
+CAM auto-placement references the **model top at Z0**, with the body extending
+in negative Z. The Z spinner edits the top height and **Top to Z0** restores it.
+CAM and FDM placement are remembered independently; FDM remains bottom-at-Z0.
+CAM's work-volume frame extends downward and has no opaque plate hiding the
+part. The CLI follows the same top-at-zero convention.
+
+Generation performs conservative stock checks: cutter-radius-expanded rapid
+intersections, custom/unclassified feed entry, spindle-off contact, motion
+below the blank bottom, insufficient entry stepdown, and controller-specific
+motions/arcs that cannot be verified. A same-XY/cutter-radius plunge history
+avoids counting repeated pecks as full-depth entries; this is **not** a removed
+volume model. Intended operation cuts are distinguished from travel. Stock
+containment and safe-Z clearance are checked too. Warnings go to the log and
+a dialog, and exporting a warned program requires confirmation. Editing the
+model, material or setup requires regeneration before CAM export. Rapid tests
+use the **original blank** even where previous operations may have cleared it,
+so warnings can be conservative. Initial machine position, coordinate/tool
+length offsets, fixtures and holder geometry still require independent checks.
+
+The setup (including stock, selections and depth references) is automatically saved
 per model path, separately from FDM presets. References use mesh indices and
 are reevaluated on the placed model; changed source geometry invalidates the
 saved setup. Topology, picking, highlights, and path generation run in the
@@ -118,7 +146,8 @@ machine **safe Z above the entire part and operation start heights**; unsupporte
 geometry, empty selections, missing tools, and unsafe clearance are errors.
 
 **Not production-ready CAM:** the minimal offset kernel is not robust for
-complex intersecting contours. No stock/fixture collision checking, entry
+complex intersecting contours. Stock checks are advisory and are not a full
+collision/stock-removal simulation. No fixture/holder collision checking, entry
 ramps, helical bores, adaptive clearing, 3D surface machining, or CAD/STEP
 selection yet. Verify all output in a machine-aware simulator and air-cut
 before machining. The CLI retains its older single-tool silhouette profile
@@ -366,6 +395,7 @@ nozzle / tool, process and model.
 | Machine | `bed_x`, `bed_y`, `max_height`, `bed_center_x/y`, `relative_e`, `heated_chamber`, `wait_for_chamber`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp` (CAM: `safe_z`) |
 | Temperatures | `nozzle_temp`, `nozzle_temp_first`, `bed_temp`, `bed_temp_first`, `chamber_temp` (capped at the machine limits; `chamber_temp` is 0 without a heated chamber) |
 | Tool / material | `tool`, `nozzle`, `nozzle_diameter`, `line_width`, `material`, `material_type`, `filament_diameter`, `flow`, `fan_speed`, `fan_speed_pwm`, `retract_length`, `retract_speed` (CAM: `tool_name`, `tool_diameter`, `spindle_rpm`, `feed`, `plunge_feed`) |
+| Stock (CAM) | `stock_material`, `stock_density`, `stock_width`, `stock_depth`, `stock_height`, `stock_top`, `stock_bottom` |
 | Layers | `layer_height`, `first_layer_height`, `current_layer_height`, `layer`, `layer_z`, `layer_count` |
 | Part | `print_min_x/y/z`, `print_max_x/y/z` |
 

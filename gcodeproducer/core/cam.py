@@ -13,6 +13,7 @@ import math
 import numpy as np
 
 from . import geometry
+from .stock import Stock
 
 KINDS = ("pocket", "profile", "drill", "engrave")
 
@@ -67,6 +68,7 @@ class ToolGroup:
 class CAMSetup:
     groups: list[ToolGroup] = field(default_factory=list)
     fingerprint: str = ""
+    stock: Stock = field(default_factory=Stock)
 
     def to_dict(self):
         return asdict(self)
@@ -87,7 +89,7 @@ class CAMSetup:
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])
                 ops.append(Operation(**d))
             groups.append(ToolGroup(g["tool_id"], ops))
-        return cls(groups, data.get("fingerprint", ""))
+        return cls(groups, data.get("fingerprint", ""), Stock.from_dict(data.get("stock", {})))
 
 
 def fingerprint(mesh):
@@ -292,7 +294,8 @@ def generate(job, ctx):
             if count > 10000:
                 raise ValueError(f"{op.name}: too many depth passes")
             safe = float(job.m("safe_z", 15))
-            if safe <= max(float(job.mesh.bounds[1][2]), start):
+            if safe <= max(float(job.mesh.bounds[1][2]), start,
+                           setup.stock.top if setup.stock.allocated else -math.inf):
                 raise ValueError("Safe Z must be above the model and all operation start heights")
             selected_edges = set()
             for ref in op.geometry:

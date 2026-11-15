@@ -36,11 +36,11 @@ def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = 
 
 def place_mesh(job: Job) -> None:
     """Apply the job's placement to its mesh (default: centred on the bed for FDM,
-    original XY for CAM; always dropped onto Z0)."""
+    original XY for CAM; FDM bottom at Z0, CAM top at Z0)."""
     from .placement import Placement, bed_xy
     if job.mesh is None:
         return
-    pl = job.placement or Placement()
+    pl = job.placement or Placement(z_anchor="top" if job.workflow == wf.CAM else "bottom")
     auto = bed_xy(job.machine, job.workflow) if job.workflow == wf.FDM else None
     job.mesh = pl.apply(job.mesh, auto_xy=auto)
 

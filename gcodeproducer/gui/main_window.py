@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         self._cam_pick_operation = None
         self._blocks_task = None        # id of the running Auto-generate task
         self._filament_mm = 0.0
+        self.cam_warnings = []
         self.compute = ComputeService(self)  # slicing etc. run in a separate process
         self.compute.log.connect(self._on_compute_log)
         self.compute.progressed.connect(self._on_compute_progress)
@@ -247,7 +248,15 @@ class MainWindow(QMainWindow):
         pl.addWidget(setup)
 
         pl.addWidget(self._build_model_box())
-        pl.addWidget(self._build_support_box())
+        # A single movable slot: FDM support / CAM material always stay together.
+        self.model_options = QStackedWidget()
+        self.model_options.addWidget(self._build_support_box())
+        from .stock_editor import StockEditor
+        self.stock_editor = StockEditor()
+        self.stock_editor.changed.connect(self._stock_changed)
+        self.stock_editor.autoRequested.connect(self._auto_stock)
+        self.model_options.addWidget(self.stock_editor)
+        pl.addWidget(self.model_options)
         pl.addStretch(1)
         msc = QScrollArea()
         msc.setWidgetResizable(True)
@@ -302,6 +311,7 @@ class MainWindow(QMainWindow):
         pl.addWidget(proc, 1)
         from .cam_editor import CAMEditor
         self.cam_editor = CAMEditor()
+        self.stock_editor.set_stock(self.cam_editor.setup.stock)
         self.cam_editor.setVisible(False)
         self.cam_editor.changed.connect(self._cam_changed)
         self.cam_editor.selectionChanged.connect(self._cam_highlight)
@@ -451,7 +461,8 @@ class MainWindow(QMainWindow):
             sb.setMinimumWidth(60)
             g.addWidget(sb, 0, c)
         g.addWidget(button("Center", "Centre the model on the bed (X / Y)", self.center_model), 1, 1)
-        g.addWidget(button("Drop to bed", "Put the model back on the bed (Z = 0)", self.drop_model), 1, 2)
+        self.b_drop = button("Drop to bed", "Put the model back on the bed (Z = 0)", self.drop_model)
+        g.addWidget(self.b_drop, 1, 2)
         # rotation: value + rotate -90 / +90 about the world axis
         self.sp_rot = {}
         for r, axis in enumerate(("x", "y", "z"), start=2):
@@ -786,6 +797,8 @@ class MainWindow(QMainWindow):
     def _on_workflow(self, _i=0):
         if self._loading:
             return
+        if self.model_path:
+            self._save_placement()
         self.workflow = self.cb_workflow.currentData()
         self.fdm_process_box.setVisible(self.workflow == wf.FDM)
         self.cam_editor.setVisible(self.workflow == wf.CAM)
@@ -796,6 +809,10 @@ class MainWindow(QMainWindow):
         self.act_process_export.setEnabled(self.workflow == wf.FDM)
         self.dock_process.setWindowTitle("CAM setup" if self.workflow == wf.CAM else "Process")
         self._reload_machines()
+        if self.model_path:
+            self.placement = self._load_workflow_placement(self.model_path)
+            self._pl_prev = copy.deepcopy(self.placement)
+            self._sync_placement_controls()
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._update_dirty()
@@ -1073,6 +1090,7 @@ class MainWindow(QMainWindow):
             setup = CAMSetup()
         setup.fingerprint = current
         self.cam_editor.set_setup(setup)
+        self.stock_editor.set_stock(setup.stock)
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
         self.placement, self.blocks, self.model_support = self._load_model_state(path)
@@ -1107,7 +1125,7 @@ class MainWindow(QMainWindow):
     def _load_model_state(self, path):
         """Remembered placement and support blocks of a model (or defaults)."""
         placement, blocks = None, []
-        raw = self.settings.value(self._model_key("placement", path))
+        raw = self.settings.value(self._model_key("placement_cam" if self.workflow == wf.CAM else "placement", path))
         if raw:
             try:
                 placement = Placement.from_dict(json.loads(raw))
@@ -1115,7 +1133,9 @@ class MainWindow(QMainWindow):
                 placement = None
         if placement is None:
             x, y = self._auto_xy()
-            placement = Placement(x=x, y=y)
+            placement = Placement(x=x, y=y, z_anchor="top" if self.workflow == wf.CAM else "bottom")
+        if self.workflow == wf.CAM and placement.z_anchor != "top":
+            placement.z_anchor, placement.z = "top", 0.0
         raw = self.settings.value(self._model_key("blocks", path))
         if raw:
             try:
@@ -1131,9 +1151,12 @@ class MainWindow(QMainWindow):
                 model_support = ModelSupport()
         return placement, blocks, model_support
 
+    def _load_workflow_placement(self, path):
+        return self._load_model_state(path)[0]
+
     def _save_placement(self):
         if self.model_path:
-            self.settings.setValue(self._model_key("placement", self.model_path),
+            self.settings.setValue(self._model_key("placement_cam" if self.workflow == wf.CAM else "placement", self.model_path),
                                    json.dumps(self.placement.to_dict()))
             self.settings.setValue(self._model_key("blocks", self.model_path),
                                    json.dumps([b.to_dict() for b in self.blocks]))
@@ -1141,6 +1164,12 @@ class MainWindow(QMainWindow):
                                    json.dumps(self.model_support.to_dict()))
 
     def _sync_placement_controls(self):
+        self.sp_z.blockSignals(True)
+        self.sp_z.setMinimum(-5000 if self.workflow == wf.CAM else 0)
+        self.sp_z.setToolTip("Model TOP Z; normally 0, with the part below the material surface" if self.workflow == wf.CAM
+                             else "Height of the model's lowest point above the bed (mm)")
+        self.sp_z.blockSignals(False)
+        self.b_drop.setText("Top to Z0" if self.workflow == wf.CAM else "Drop to bed")
         pl = self.placement
         vals = ((self.sp_x, pl.x if pl.x is not None else self._auto_xy()[0]),
                 (self.sp_y, pl.y if pl.y is not None else self._auto_xy()[1]),
@@ -1223,7 +1252,7 @@ class MainWindow(QMainWindow):
 
     def reset_placement(self):
         x, y = self._auto_xy()
-        self.placement = Placement(x=x, y=y)
+        self.placement = Placement(x=x, y=y, z_anchor="top" if self.workflow == wf.CAM else "bottom")
         self._sync_placement_controls()
         self._placement_changed()
 
@@ -1256,6 +1285,9 @@ class MainWindow(QMainWindow):
         show_blocks = self._support_mode() == "blocks"
         self.model_viewer.set_blocks(self.blocks, self.sel_block, show_blocks)
         self.viewer.set_bed(rect)                     # Preview shows the same machine plate
+        stock = self.cam_editor.setup.stock if self.workflow == wf.CAM else None
+        self.model_viewer.set_stock(stock)
+        self.viewer.set_stock(stock)
         if self.mesh is None:
             self.placed = None
             self.lbl_size.setText("")
@@ -1275,6 +1307,17 @@ class MainWindow(QMainWindow):
         self._cam_highlight()
 
     # --------------------------------------------------------------- CAM
+    def _stock_changed(self):
+        self._cam_changed()
+        self._update_scene()
+
+    def _auto_stock(self):
+        if self.placed is None:
+            return
+        self.cam_editor.setup.stock.auto(self.placed)
+        self.stock_editor.set_stock(self.cam_editor.setup.stock)
+        self._stock_changed()
+
     def _cam_changed(self):
         self._cam_highlight()
         if self.model_path:
@@ -1315,7 +1358,10 @@ class MainWindow(QMainWindow):
     def _sync_support_controls(self):
         """Show the model's support settings (they belong to the model, not the process)."""
         ms = self.model_support
+        self.model_options.setCurrentIndex(0 if self.workflow == wf.FDM else 1)
         self.support_box.setVisible(self.workflow == wf.FDM)
+        self.stock_editor.setVisible(self.workflow == wf.CAM)
+        self.stock_editor.auto.setEnabled(self.mesh is not None)
         self.support_box.setEnabled(self.workflow == wf.FDM)
         widgets = (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes)
         for w in widgets:
@@ -1573,6 +1619,7 @@ class MainWindow(QMainWindow):
         self.slice_btn.setToolTip("Stop generation" if busy else "Generate toolpaths (Ctrl+R)")
         self.act_slice.setEnabled(ok and not busy)
         self.cam_editor.setEnabled(not busy)
+        self.stock_editor.setEnabled(not busy)
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
         self.act_preview.setEnabled(self.program is not None)
@@ -1684,6 +1731,7 @@ class MainWindow(QMainWindow):
             self.log("The pipeline produced no G-code (is an output stage enabled?)")
             self._update_enabled()
             return
+        self.cam_warnings = out.get("warnings", [])
         self.program, self.tp = out["program"], out["toolpath"]
         self._filament_mm = out["filament_mm"]
         # a big program is ~1M Python objects; Python's periodic full garbage collection
@@ -1706,6 +1754,11 @@ class MainWindow(QMainWindow):
                                      f"{len(self.program.lines):,} lines, "
                                      f"est. {format_duration(tp.stats.get('est_time_s', 0))}", 8000)
 
+        if self.cam_warnings:
+            QMessageBox.warning(self, "CAM material / clearance warnings",
+                                "\n".join(self.cam_warnings[:15]) +
+                                "\n\nReview the toolpath and full log before machining. These checks are conservative, not a full collision simulation.")
+
     def _slice_failed(self, tb):
         self.progress.setVisible(False)
         self._worker = None
@@ -1717,6 +1770,14 @@ class MainWindow(QMainWindow):
     def save_gcode(self):
         if self.program is None:
             return
+        if self.workflow == wf.CAM and self.stale:
+            QMessageBox.warning(self, "Regenerate CAM paths",
+                                "The model, material or setup has changed. Regenerate paths to run stock checks before exporting.")
+            return
+        if self.workflow == wf.CAM and self.cam_warnings:
+            if QMessageBox.question(self, "Export with CAM warnings?",
+                                    "Material/clearance warnings remain. Export anyway?") != QMessageBox.StandardButton.Yes:
+                return
         ext = ".gcode" if self.workflow == wf.FDM else ".nc"
         base = Path(self.model_path).with_suffix(ext) if self.model_path else Path("out" + ext)
         path, _ = QFileDialog.getSaveFileName(self, "Save G-code", str(base), "G-code (*.gcode *.nc *.g *.tap)")

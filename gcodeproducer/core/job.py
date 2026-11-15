@@ -51,6 +51,7 @@ class Job:
     model_path: Optional[str] = None
     settings: dict = field(default_factory=dict)    # resolved per-job overrides
     layers: list = field(default_factory=list)      # list[Layer]
+    warnings: list = field(default_factory=list)   # advisory CAM stock safety findings
     program: object = None                          # GCodeProgram once emitted
 
     def __post_init__(self):

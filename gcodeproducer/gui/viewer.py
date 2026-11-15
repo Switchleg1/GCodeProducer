@@ -107,6 +107,7 @@ class GCodeViewer(QOpenGLWidget):
         self.setFormat(default_surface_format())
         self.camera = camera
         self.state = state
+        self.stock = None
         self.bed_rect = None            # machine plate; None = grid around the tool path
         self.tp: Toolpath | None = None
         self.cursor = 1 << 30
@@ -139,6 +140,11 @@ class GCodeViewer(QOpenGLWidget):
         self.info.adjustSize()
         self.info.move(6, self.height() - self.info.height() - 6)
         self.info.setVisible(bool(text))
+
+    def set_stock(self, stock):
+        self.stock = stock
+        self._bed_dirty = True
+        self.update()
 
     def set_bed(self, rect) -> None:
         """Machine plate (x0, y0, x1, y1, height) - the same plate the Prepare view shows."""
@@ -291,12 +297,14 @@ class GCodeViewer(QOpenGLWidget):
         if self._bed_dirty and self.bed_rect is not None:
             self._bed_dirty = False
             self.bed.upload(self.bed_rect)
+            self.bed.upload_stock(self.stock)
         below = cam.eye()[2] < 0.0
         if self.bed_rect is not None:
             # the machine's plate, exactly as in the Prepare view
             if not below:
                 self.bed.draw_plate(self.p_flat, mvp, 1.0)
             self.bed.draw_lines(self.p_flat, mvp, grid=st.show_grid)
+            self.bed.draw_stock(self.p_flat, mvp)
         # grid around the tool path (only when no machine plate is known)
         elif st.show_grid and self.m_grid.count:
             GL.glUseProgram(self.p_flat)

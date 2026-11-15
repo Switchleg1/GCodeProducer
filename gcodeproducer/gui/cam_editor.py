@@ -125,8 +125,8 @@ class CAMEditor(QWidget):
             else:
                 w.valueChanged.connect(self._edit)
         layout.addWidget(self.details)
-        warning = QLabel("2.5D CAM • STL planar faces and feature edges. No stock/collision simulation; "
-                         "verify toolpaths and safe Z before machining.")
+        warning = QLabel("2.5D CAM • Conservative original-stock checks only; no stock-removal, "
+                         "holder or fixture simulation. Verify clearance and air-cut before machining.")
         warning.setWordWrap(True)
         layout.addWidget(warning)
         self.rebuild()

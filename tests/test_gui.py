@@ -490,3 +490,37 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     assert [o.kind for o in ed.setup.groups[0].operations] == ["profile", "pocket"]
     ed.delete()
     assert [o.kind for o in ed.setup.groups[0].operations] == ["pocket"]
+
+
+def test_cam_stock_shared_slot_top_zero_and_workflow_placement(win, cube_stl):
+    from gcodeproducer.core.placement import fits, bed_rect
+    win.open_model(cube_stl)
+    win.sp_z.setValue(7)
+    fdm_placement = win.placement.to_dict()
+    assert win.model_options.currentWidget() is win.support_box
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    assert win.model_options.currentWidget() is win.stock_editor
+    assert win.placed.bounds[1][2] == 0 and win.placed.bounds[0][2] == -20
+    assert fits(win.placed, bed_rect(win._machine(), "cam"))
+    assert win.sp_z.minimum() < 0 and win.b_drop.text() == "Top to Z0"
+    win.stock_editor.fields["margin"].setValue(3)
+    win.stock_editor.auto.click()
+    stock = win.cam_editor.setup.stock
+    assert (stock.width, stock.depth, stock.height, stock.top) == (26, 26, 23, 0)
+    win.stock_editor.name.setText("Aluminium")
+    win.stock_editor.name.editingFinished.emit()
+    assert stock.material == "Aluminium"
+    assert win.model_viewer.stock is stock and win.viewer.stock is stock
+    win.sp_z.setValue(-2)
+    assert win.placed.bounds[1][2] == -2
+    win.open_model(cube_stl)
+    assert win.cam_editor.setup.stock.to_dict() == stock.to_dict()
+    assert win.placement.z == -2
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
+    assert win.placement.to_dict() == fdm_placement
+    assert win.model_options.currentWidget() is win.support_box
+    assert win.model_viewer.stock is None and win.viewer.stock is None
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    assert win.placement.z == -2
+    win.drop_model()
+    assert win.placed.bounds[1][2] == 0

@@ -118,6 +118,7 @@ class ModelViewer(QOpenGLWidget):
         self.triangles = None
         self.tris = None                      # (m,3,3) for picking
         self.rect = (0.0, 0.0, 220.0, 220.0, 250.0)
+        self.stock = None
         self.overhang_angle = None            # None = do not show overhangs
         self.inside = True
         self.center_xy = (0.0, 0.0)
@@ -162,6 +163,11 @@ class ModelViewer(QOpenGLWidget):
         self.inside = inside
         self._dirty = True
         self._update_info()
+        self.update()
+
+    def set_stock(self, stock):
+        self.stock = stock
+        self._dirty = True
         self.update()
 
     def set_cam_mode(self, mode):
@@ -212,10 +218,10 @@ class ModelViewer(QOpenGLWidget):
         if self.vertices is not None and len(self.vertices) and not whole_bed:
             lo, hi = self.vertices.min(axis=0), self.vertices.max(axis=0)
             pad = max(float(np.max(hi - lo)) * 0.6, 25.0)
-            lo = np.array([lo[0] - pad, lo[1] - pad, 0.0])
+            lo = np.array([lo[0] - pad, lo[1] - pad, min(0.0, lo[2])])
             hi = np.array([hi[0] + pad, hi[1] + pad, hi[2]])
         else:
-            lo, hi = np.array([x0, y0, 0.0]), np.array([x1, y1, min(h, 50.0)])
+            lo, hi = np.array([x0, y0, min(h, 0.0)]), np.array([x1, y1, max(0.0, min(h, 50.0))])
         self.camera.fit(lo, hi)
 
     def _update_info(self):
@@ -263,6 +269,7 @@ class ModelViewer(QOpenGLWidget):
     def _upload(self):
         self._dirty = False
         self.bed.upload(self.rect)
+        self.bed.upload_stock(self.stock)
         if self.vertices is None:
             self.m_model.count = 0
             return
@@ -328,6 +335,7 @@ class ModelViewer(QOpenGLWidget):
             GL.glDisable(GL.GL_DEPTH_TEST)
             self.m_cam_edges.draw(GL.GL_LINES)
             GL.glEnable(GL.GL_DEPTH_TEST)
+        self.bed.draw_stock(self.p_flat, mvp)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)

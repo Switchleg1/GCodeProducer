@@ -87,6 +87,11 @@ class CAMEmit(SliceStage):
         prog.machine = "cam"
         prog.layer_z = [l.z for l in job.layers]
         job.program = prog
+        if job.cam_setup is not None:
+            from ..core.stock import check_stock
+            job.warnings = check_stock(job, prog)
+            for warning in job.warnings:
+                ctx.log(f"STOCK WARNING: {warning}")
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
         return f"{len(prog.lines)} lines, {moves} moves, {len(job.layers)} depth passes"
 

@@ -91,7 +91,8 @@ def cmd_slice(args):
 
     from .core.placement import Placement
     mesh = load_mesh(args.input)
-    placement = Placement(x=args.x, y=args.y, z=args.z, scale=args.scale)
+    placement = Placement(x=args.x, y=args.y, z=args.z, scale=args.scale,
+                          z_anchor="top" if workflow == wf.CAM else "bottom")
     for axis in ("x", "y", "z"):
         deg = getattr(args, f"rotate_{axis}")
         if deg:
@@ -179,7 +180,7 @@ def build_parser():
     g = s.add_argument_group("placement")
     g.add_argument("--x", type=float, help="model centre X on the bed (default: bed centre)")
     g.add_argument("--y", type=float, help="model centre Y on the bed (default: bed centre)")
-    g.add_argument("--z", type=float, default=0.0, help="lift the model's lowest point this far above the bed")
+    g.add_argument("--z", type=float, default=0.0, help="FDM: bottom above bed; CAM: model top Z (default 0, body below surface)")
     g.add_argument("--rotate-x", type=float, default=0.0, metavar="DEG")
     g.add_argument("--rotate-y", type=float, default=0.0, metavar="DEG")
     g.add_argument("--rotate-z", type=float, default=0.0, metavar="DEG")
