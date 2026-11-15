@@ -26,7 +26,8 @@ from PyQt6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPix
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
                              QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QListWidget,
                              QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
-                             QPushButton, QSizePolicy, QSlider, QStackedWidget, QTableWidget, QTableWidgetItem,
+                             QPushButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTableWidget,
+                             QTableWidgetItem,
                              QToolBar, QToolButton, QVBoxLayout, QWidget)
 
 from .. import __version__
@@ -37,6 +38,8 @@ from ..core.geometry import Mesh
 from ..core.pipeline import SlicePipeline
 from ..core.placement import Placement, bed_rect, bed_xy, fits
 from ..core.process import ProcessPreset
+from ..core.support import SupportBlock
+from ..core.support import generate_blocks as support_generate
 from ..core.profiles import LibrarySet
 from ..core.session import build_job, find_importer, load_mesh, slice_job
 from ..core.toolpath import SOLID_KINDS, build_toolpath, format_duration
@@ -69,6 +72,10 @@ class MainWindow(QMainWindow):
         self.model_path = None
         self.placement = Placement()
         self.placed = None              # placement applied to the mesh (what gets sliced)
+        self._pl_prev = None            # last placement (to move support blocks with the model)
+        self.blocks: list = []          # manual support blocks (belong to the model, like placement)
+        self.sel_block = -1
+        self._block_origin = None
         self.mode = "prepare"
         self.stale = False              # preview no longer matches model / settings
         self.program = None
@@ -137,6 +144,10 @@ class MainWindow(QMainWindow):
         self.model_viewer.moved.connect(self._on_model_dragged)
         self.model_viewer.moveFinished.connect(self._save_placement)
         self.model_viewer.faceClicked.connect(self._on_face_clicked)
+        self.model_viewer.blockPressed.connect(self._on_block_pressed)
+        self.model_viewer.blockDragged.connect(self._on_block_dragged)
+        self.model_viewer.blockReleased.connect(self._on_block_released)
+        self.model_viewer.blockDeleteRequested.connect(self.remove_block)
 
         # ---- preview page: sliced tool path
         self.viewer = GCodeViewer(self.camera, self.state, "")
@@ -192,9 +203,9 @@ class MainWindow(QMainWindow):
         return d
 
     def _build_docks(self):
-        # ---------------------------------------------------- prepare dock
-        pw = QWidget()
-        pl = QVBoxLayout(pw)
+        # ------------------------------------------- model dock (setup, placement, support)
+        mw = QWidget()
+        pl = QVBoxLayout(mw)
 
         setup = QGroupBox("Setup")
         self.setup_form = QFormLayout(setup)
@@ -217,7 +228,17 @@ class MainWindow(QMainWindow):
         pl.addWidget(setup)
 
         pl.addWidget(self._build_model_box())
+        pl.addWidget(self._build_support_box())
+        pl.addStretch(1)
+        msc = QScrollArea()
+        msc.setWidgetResizable(True)
+        msc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        msc.setWidget(mw)
+        self.dock_prepare = self._dock("Model", msc, Qt.DockWidgetArea.LeftDockWidgetArea, "dock_model")
 
+        # ------------------------------------------------- process dock (settings + slice)
+        pw = QWidget()
+        pl = QVBoxLayout(pw)
         proc = QGroupBox("Process")
         prl = QVBoxLayout(proc)
         r1 = QHBoxLayout()
@@ -270,7 +291,8 @@ class MainWindow(QMainWindow):
         rb.addWidget(self.slice_btn, 2)
         rb.addWidget(self.save_btn, 1)
         pl.addLayout(rb)
-        self.dock_prepare = self._dock("Prepare", pw, Qt.DockWidgetArea.LeftDockWidgetArea, "dock_prepare")
+        self.dock_process = self._dock("Process", pw, Qt.DockWidgetArea.LeftDockWidgetArea, "dock_process")
+        self.splitDockWidget(self.dock_prepare, self.dock_process, Qt.Orientation.Vertical)
 
         # ------------------------------------------------------- view dock
         vw = QWidget()
@@ -368,70 +390,82 @@ class MainWindow(QMainWindow):
             sb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             return sb
 
-        # position
+        # 4 columns: label | three equal fields; buttons get their own rows so a narrow
+        # dock never clips them
+        for c in (1, 2, 3):
+            g.setColumnStretch(c, 1)
+
+        def button(text, tip, slot, checkable=False):
+            bt = QPushButton(text)
+            bt.setToolTip(tip)
+            bt.setCheckable(checkable)
+            (bt.toggled if checkable else bt.clicked).connect(slot)
+            bt.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            return bt
+
+        # position: X / Y = centre on the bed, Z = height of the lowest point above the bed
         g.addWidget(QLabel("Position"), 0, 0)
-        self.sp_x = spin(-5000, 5000, 2, " mm")
-        self.sp_y = spin(-5000, 5000, 2, " mm")
-        self.sp_x.setPrefix("X ")
-        self.sp_y.setPrefix("Y ")
-        g.addWidget(self.sp_x, 0, 1, 1, 2)
-        g.addWidget(self.sp_y, 0, 3, 1, 2)
-        b_center = QPushButton("Center")
-        b_center.setToolTip("Centre the model on the bed")
-        b_center.clicked.connect(self.center_model)
-        g.addWidget(b_center, 0, 5)
+        self.sp_x = spin(-5000, 5000, 2, "")
+        self.sp_y = spin(-5000, 5000, 2, "")
+        self.sp_z = spin(0, 5000, 2, "")
+        for c, (sb, a, tip) in enumerate(((self.sp_x, "X", "Model centre X (mm)"),
+                                          (self.sp_y, "Y", "Model centre Y (mm)"),
+                                          (self.sp_z, "Z", "Height of the model's lowest point above the bed "
+                                                           "(mm); above 0 the model floats and needs support "
+                                                           "underneath")), start=1):
+            sb.setPrefix(f"{a} ")
+            sb.setToolTip(tip)
+            sb.setMinimumWidth(60)
+            g.addWidget(sb, 0, c)
+        g.addWidget(button("Center", "Centre the model on the bed (X / Y)", self.center_model), 1, 1)
+        g.addWidget(button("Drop to bed", "Put the model back on the bed (Z = 0)", self.drop_model), 1, 2)
         # rotation: value + rotate -90 / +90 about the world axis
         self.sp_rot = {}
-        for r, axis in enumerate(("x", "y", "z"), start=1):
-            g.addWidget(QLabel(f"Rotate {axis.upper()}" if r == 1 else f"       {axis.upper()}"), r, 0)
+        for r, axis in enumerate(("x", "y", "z"), start=2):
+            g.addWidget(QLabel(f"Rotate {axis.upper()}"), r, 0)
             sb = spin(-360, 360, 1, "\u00b0", 5.0)
             sb.setWrapping(True)
             self.sp_rot[axis] = sb
-            g.addWidget(sb, r, 1, 1, 3)
-            for c, d in ((4, -90), (5, 90)):
+            g.addWidget(sb, r, 1)
+            for c, d in ((2, -90), (3, 90)):
                 arrow = "\u21ba" if d < 0 else "\u21bb"
-                b = QPushButton(f"{arrow} 90")
-                b.setToolTip(f"Rotate {d:+d}\u00b0 about the {axis.upper()} axis")
-                b.clicked.connect(lambda _=False, a=axis, dd=d: self.rotate_model(a, dd))
-                g.addWidget(b, r, c)
+                g.addWidget(button(f"{arrow} 90\u00b0", f"Rotate {d:+d}\u00b0 about the {axis.upper()} axis",
+                                   lambda _=False, a=axis, dd=d: self.rotate_model(a, dd)), r, c)
         # scale
-        g.addWidget(QLabel("Scale"), 4, 0)
+        g.addWidget(QLabel("Scale"), 5, 0)
         self.sp_scale = spin(0.1, 100000, 1, " %", 5.0)
-        g.addWidget(self.sp_scale, 4, 1, 1, 3)
+        g.addWidget(self.sp_scale, 5, 1)
         self.lbl_size = QLabel("")
         self.lbl_size.setStyleSheet("color:#9aa;")
-        g.addWidget(self.lbl_size, 4, 4, 1, 2)
-        # actions
-        row = QHBoxLayout()
-        b_flat = QPushButton("Lay flat")
-        b_flat.setToolTip("Rest the largest flat face on the bed")
-        b_flat.clicked.connect(self.lay_flat)
-        self.b_face = QPushButton("Place on face")
-        self.b_face.setCheckable(True)
-        self.b_face.setToolTip("Then click a face of the model in the Prepare view")
-        self.b_face.toggled.connect(self._on_place_on_face)
-        b_reset = QPushButton("Reset")
-        b_reset.setToolTip("Reset rotation and scale and centre the model")
-        b_reset.clicked.connect(self.reset_placement)
-        for b in (b_flat, self.b_face, b_reset):
-            row.addWidget(b)
-        g.addLayout(row, 5, 0, 1, 6)
-        for sb in (self.sp_x, self.sp_y, self.sp_scale, *self.sp_rot.values()):
+        g.addWidget(self.lbl_size, 5, 2, 1, 2)
+        # orientation helpers
+        g.addWidget(button("Lay flat", "Rest the largest flat face on the bed", self.lay_flat), 6, 1)
+        self.b_face = button("Place on face", "Then click a face of the model in the Prepare view",
+                             self._on_place_on_face, checkable=True)
+        g.addWidget(self.b_face, 6, 2)
+        g.addWidget(button("Reset", "Reset rotation, scale and Z and centre the model", self.reset_placement), 6, 3)
+        for sb in (self.sp_x, self.sp_y, self.sp_z, self.sp_scale, *self.sp_rot.values()):
             sb.valueChanged.connect(self._on_placement_spin)
         ml.addWidget(self.place_box)
 
-        # support (FDM) - the same setting as the process' Support section
-        self.support_box = QWidget()
-        sl = QHBoxLayout(self.support_box)
-        sl.setContentsMargins(0, 4, 0, 0)
-        sl.addWidget(QLabel("Support"))
+        self.place_box.setEnabled(False)
+        return model
+
+    def _build_support_box(self) -> QGroupBox:
+        """Support: mode + overhang angle (process settings) and the manual support blocks."""
+        box = QGroupBox("Support")
+        self.support_box = box
+        v = QVBoxLayout(box)
+        row = QHBoxLayout()
         self.cb_support = QComboBox()
         self.cb_support.addItem("None", "none")
         self.cb_support.addItem("Touching build plate", "buildplate")
         self.cb_support.addItem("Everywhere", "everywhere")
-        self.cb_support.setToolTip("Process setting (Support section)")
+        self.cb_support.addItem("Manual blocks", "blocks")
+        self.cb_support.setToolTip("Process setting (Support section). Manual blocks: support only inside "
+                                   "the support blocks below")
         self.cb_support.currentIndexChanged.connect(self._on_support_combo)
-        sl.addWidget(self.cb_support, 1)
+        row.addWidget(self.cb_support, 1)
         self.sp_overhang = QDoubleSpinBox()
         self.sp_overhang.setRange(0, 89)
         self.sp_overhang.setDecimals(0)
@@ -439,15 +473,69 @@ class MainWindow(QMainWindow):
         self.sp_overhang.setToolTip("Overhang angle (from vertical) that needs support")
         self.sp_overhang.setKeyboardTracking(False)
         self.sp_overhang.valueChanged.connect(self._on_overhang_spin)
-        sl.addWidget(self.sp_overhang)
+        row.addWidget(self.sp_overhang)
         self.cb_show_over = QCheckBox("Show")
         self.cb_show_over.setToolTip("Highlight overhangs that need support in red")
         self.cb_show_over.setChecked(True)
         self.cb_show_over.toggled.connect(lambda _v: self._update_scene())
-        sl.addWidget(self.cb_show_over)
-        ml.addWidget(self.support_box)
-        self.place_box.setEnabled(False)
-        return model
+        row.addWidget(self.cb_show_over)
+        v.addLayout(row)
+
+        # ---- manual support blocks
+        self.blocks_box = QWidget()
+        bl = QVBoxLayout(self.blocks_box)
+        bl.setContentsMargins(0, 2, 0, 0)
+        r1 = QHBoxLayout()
+        b_gen = QPushButton("Auto-generate")
+        b_gen.setToolTip("Replace the blocks with one block per island of automatic support")
+        b_gen.clicked.connect(self.generate_blocks)
+        self.cb_gen_everywhere = QCheckBox("Allow on model")
+        self.cb_gen_everywhere.setToolTip("Auto-generate support that may stand on the model "
+                                          "(otherwise only from the build plate)")
+        r1.addWidget(b_gen)
+        r1.addWidget(self.cb_gen_everywhere)
+        r1.addStretch(1)
+        bl.addLayout(r1)
+        r2 = QHBoxLayout()
+        for text, tip, fn in (("+ Add", "Add a block under the model", self.add_block),
+                              ("Remove", "Remove the selected block (Delete)", self.remove_block),
+                              ("Clear", "Remove all blocks", self.clear_blocks)):
+            b = QPushButton(text)
+            b.setToolTip(tip)
+            b.clicked.connect(fn)
+            r2.addWidget(b)
+        bl.addLayout(r2)
+        self.lst_blocks = QListWidget()
+        self.lst_blocks.setMaximumHeight(90)
+        self.lst_blocks.currentRowChanged.connect(self._on_block_row)
+        bl.addWidget(self.lst_blocks)
+        self.block_edit = QWidget()
+        ge = QGridLayout(self.block_edit)
+        ge.setContentsMargins(0, 0, 0, 0)
+        ge.setHorizontalSpacing(4)
+        ge.addWidget(QLabel("Position"), 0, 0)
+        ge.addWidget(QLabel("Size"), 1, 0)
+        self.sp_block = {}
+        tips = {"cx": "Block centre X", "cy": "Block centre Y", "z0": "Block bottom Z",
+                "w": "Width (X)", "d": "Depth (Y)", "h": "Height (Z)"}
+        for k, (key, label, lo) in enumerate((("cx", "X", -5000), ("cy", "Y", -5000), ("z0", "Z", 0),
+                                              ("w", "W", 0.1), ("d", "D", 0.1), ("h", "H", 0.1))):
+            sb = QDoubleSpinBox()
+            sb.setRange(lo, 5000)
+            sb.setDecimals(2)
+            sb.setPrefix(f"{label} ")
+            sb.setKeyboardTracking(False)
+            sb.setToolTip(tips[key] + " (mm)")
+            sb.valueChanged.connect(self._on_block_spin)
+            self.sp_block[key] = sb
+            ge.addWidget(sb, k // 3, 1 + k % 3)
+        bl.addWidget(self.block_edit)
+        self.lbl_blocks_hint = QLabel("")
+        self.lbl_blocks_hint.setWordWrap(True)
+        self.lbl_blocks_hint.setStyleSheet("color:#9aa;")
+        bl.addWidget(self.lbl_blocks_hint)
+        v.addWidget(self.blocks_box)
+        return box
 
     def _with_edit(self, combo, kind) -> QWidget:
         w = QWidget()
@@ -511,7 +599,8 @@ class MainWindow(QMainWindow):
         v.addAction(self.act_prepare)
         v.addAction(self.act_preview)
         v.addSeparator()
-        for d in (self.dock_prepare, self.dock_view, self.dock_text, self.dock_info, self.dock_log):
+        for d in (self.dock_prepare, self.dock_process, self.dock_view, self.dock_text, self.dock_info,
+                  self.dock_log):
             v.addAction(d.toggleViewAction())
         h = self.menuBar().addMenu("&Help")
         h.addAction(self._act("Controls", self._show_help))
@@ -529,8 +618,7 @@ class MainWindow(QMainWindow):
         if s.value("windowState") is not None:
             self.restoreState(s.value("windowState"))
         else:
-            QTimer.singleShot(0, lambda: self.resizeDocks([self.dock_prepare, self.dock_view],
-                                                          [420, 330], Qt.Orientation.Horizontal))
+            QTimer.singleShot(0, self._default_dock_sizes)
         for w in wf.ALL:
             pid = s.value(f"process/{w}") or None
             if pid and pid in self.libset.processes.ids():
@@ -551,6 +639,10 @@ class MainWindow(QMainWindow):
         self._loading = False
         self._on_workflow()
         self._refresh_recent()
+
+    def _default_dock_sizes(self):
+        self.resizeDocks([self.dock_prepare, self.dock_view], [430, 330], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.dock_prepare, self.dock_process], [430, 520], Qt.Orientation.Vertical)
 
     def closeEvent(self, ev):
         s = self.settings
@@ -871,7 +963,10 @@ class MainWindow(QMainWindow):
         self.mesh, self.model_path = mesh, path
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
-        self.placement = self._load_placement(path)
+        self.placement, self.blocks = self._load_model_state(path)
+        self._pl_prev = copy.deepcopy(self.placement)
+        self.sel_block = 0 if self.blocks else -1
+        self._refresh_block_list(keep=True)
         self.b_face.setChecked(False)
         self.place_box.setEnabled(True)
         # a new model invalidates the old tool path
@@ -893,27 +988,41 @@ class MainWindow(QMainWindow):
     def _auto_xy(self):
         return bed_xy(self._machine(), self.workflow) or (0.0, 0.0)
 
-    def _placement_key(self, path) -> str:
-        return "placement/" + hashlib.md5(str(Path(path).resolve()).lower().encode()).hexdigest()
+    def _model_key(self, kind, path) -> str:
+        return f"{kind}/" + hashlib.md5(str(Path(path).resolve()).lower().encode()).hexdigest()
 
-    def _load_placement(self, path) -> Placement:
-        raw = self.settings.value(self._placement_key(path))
+    def _load_model_state(self, path):
+        """Remembered placement and support blocks of a model (or defaults)."""
+        placement, blocks = None, []
+        raw = self.settings.value(self._model_key("placement", path))
         if raw:
             try:
-                return Placement.from_dict(json.loads(raw))
+                placement = Placement.from_dict(json.loads(raw))
             except Exception:
-                pass
-        x, y = self._auto_xy()
-        return Placement(x=x, y=y)
+                placement = None
+        if placement is None:
+            x, y = self._auto_xy()
+            placement = Placement(x=x, y=y)
+        raw = self.settings.value(self._model_key("blocks", path))
+        if raw:
+            try:
+                blocks = [SupportBlock.from_dict(d) for d in json.loads(raw)]
+            except Exception:
+                blocks = []
+        return placement, blocks
 
     def _save_placement(self):
         if self.model_path:
-            self.settings.setValue(self._placement_key(self.model_path), json.dumps(self.placement.to_dict()))
+            self.settings.setValue(self._model_key("placement", self.model_path),
+                                   json.dumps(self.placement.to_dict()))
+            self.settings.setValue(self._model_key("blocks", self.model_path),
+                                   json.dumps([b.to_dict() for b in self.blocks]))
 
     def _sync_placement_controls(self):
         pl = self.placement
         vals = ((self.sp_x, pl.x if pl.x is not None else self._auto_xy()[0]),
                 (self.sp_y, pl.y if pl.y is not None else self._auto_xy()[1]),
+                (self.sp_z, pl.z),
                 (self.sp_rot["x"], pl.rx), (self.sp_rot["y"], pl.ry), (self.sp_rot["z"], pl.rz),
                 (self.sp_scale, pl.scale))
         for sb, v in vals:
@@ -923,12 +1032,38 @@ class MainWindow(QMainWindow):
 
     def _on_placement_spin(self, _v=0.0):
         pl = self.placement
-        pl.x, pl.y = self.sp_x.value(), self.sp_y.value()
+        pl.x, pl.y, pl.z = self.sp_x.value(), self.sp_y.value(), self.sp_z.value()
         pl.rx, pl.ry, pl.rz = (self.sp_rot[a].value() for a in "xyz")
         pl.scale = self.sp_scale.value()
         self._placement_changed()
 
+    def _follow_model(self):
+        """Keep the support blocks attached to the model.
+
+        Moving the model moves its blocks with it; rotating or scaling it makes
+        them meaningless, so they are removed (re-run Auto-generate).
+        """
+        old, new = self._pl_prev, self.placement
+        if old is not None and self.blocks:
+            if (old.rx, old.ry, old.rz, old.scale) != (new.rx, new.ry, new.rz, new.scale):
+                n = len(self.blocks)
+                self.blocks, self.sel_block = [], -1
+                self._refresh_block_list()
+                self.statusBar().showMessage(
+                    f"{n} support block(s) removed because the model was rotated / scaled "
+                    f"\u2014 use Auto-generate to recreate them", 8000)
+            else:
+                dx = (new.x or 0.0) - (old.x or 0.0)
+                dy = (new.y or 0.0) - (old.y or 0.0)
+                dz = new.z - old.z
+                if dx or dy or dz:
+                    for blk in self.blocks:
+                        blk.translate(dx, dy, dz)
+                    self._refresh_block_list(keep=True)
+        self._pl_prev = copy.deepcopy(new)
+
     def _placement_changed(self):
+        self._follow_model()
         self._save_placement()
         self._update_scene()
         self._set_stale()
@@ -937,12 +1072,18 @@ class MainWindow(QMainWindow):
 
     def _on_model_dragged(self, x, y):
         self.placement.x, self.placement.y = round(x, 2), round(y, 2)
+        self._follow_model()
         self._sync_placement_controls()
         self._update_scene()
         self._set_stale()
 
     def center_model(self):
         self.placement.x, self.placement.y = self._auto_xy()
+        self._sync_placement_controls()
+        self._placement_changed()
+
+    def drop_model(self):
+        self.placement.z = 0.0
         self._sync_placement_controls()
         self._placement_changed()
 
@@ -979,10 +1120,18 @@ class MainWindow(QMainWindow):
     def _support_step(self):
         return self.pipelines[self.workflow].step("fdm_support") if self.workflow == wf.FDM else None
 
+    def _support_mode(self) -> str:
+        step = self._support_step()
+        if step is None or not step.enabled:
+            return "none"
+        return plugins.stages.get("fdm_support").resolve(step.params)["placement"]
+
     def _update_scene(self):
-        """Re-place the model and refresh the Prepare view (bed, overhangs, bounds)."""
+        """Re-place the model and refresh the Prepare view (bed, overhangs, bounds, blocks)."""
         machine = self._machine()
         rect = bed_rect(machine, self.workflow) if machine is not None else (0, 0, 220, 220, 250)
+        show_blocks = self._support_mode() == "blocks"
+        self.model_viewer.set_blocks(self.blocks, self.sel_block, show_blocks)
         if self.mesh is None:
             self.placed = None
             self.lbl_size.setText("")
@@ -1003,7 +1152,7 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
         step = self._support_step()
-        self.support_box.setVisible(step is not None or self.workflow == wf.FDM)
+        self.support_box.setVisible(self.workflow == wf.FDM)
         for w in (self.cb_support, self.sp_overhang):
             w.blockSignals(True)
         if step is None:
@@ -1017,6 +1166,8 @@ class MainWindow(QMainWindow):
             self.sp_overhang.setValue(p["overhang_angle"])
         for w in (self.cb_support, self.sp_overhang):
             w.blockSignals(False)
+        self.blocks_box.setVisible(self._support_mode() == "blocks")
+        self._update_blocks_hint()
 
     def _on_support_combo(self, _i=0):
         step = self._support_step()
@@ -1036,6 +1187,132 @@ class MainWindow(QMainWindow):
         step.params = {**step.params, "overhang_angle": float(v)}
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._mark_dirty()
+
+    # ---------------------------------------------------------- support blocks
+    def _blocks_changed(self, keep_row=True):
+        self._refresh_block_list(keep=keep_row)
+        self._save_placement()
+        self._update_scene()
+        self._set_stale()
+
+    def _refresh_block_list(self, keep: bool = False):
+        row = self.sel_block if keep else min(self.sel_block, len(self.blocks) - 1)
+        self.lst_blocks.blockSignals(True)
+        self.lst_blocks.clear()
+        for k, blk in enumerate(self.blocks):
+            w, d, h = blk.size
+            cx, cy = blk.center
+            self.lst_blocks.addItem(f"Block {k + 1}:  {w:.1f} \u00d7 {d:.1f} \u00d7 {h:.1f} mm  "
+                                    f"at ({cx:.1f}, {cy:.1f}, Z{blk.z0:.1f})")
+        self.sel_block = row if 0 <= row < len(self.blocks) else -1
+        self.lst_blocks.setCurrentRow(self.sel_block)
+        self.lst_blocks.blockSignals(False)
+        self._sync_block_spins()
+        self._update_blocks_hint()
+
+    def _update_blocks_hint(self):
+        if not hasattr(self, "lbl_blocks_hint"):
+            return
+        if not self.blocks:
+            txt = "No blocks \u2014 click Auto-generate, or + Add and size them. Support is only " \
+                  "generated inside blocks, where the model is above."
+        else:
+            txt = "Click a block in the view to select it, drag to move it, Delete removes it."
+        self.lbl_blocks_hint.setText(txt)
+
+    def _sync_block_spins(self):
+        blk = self.blocks[self.sel_block] if 0 <= self.sel_block < len(self.blocks) else None
+        self.block_edit.setEnabled(blk is not None)
+        if blk is None:
+            return
+        (cx, cy), (w, d, h) = blk.center, blk.size
+        for key, val in (("cx", cx), ("cy", cy), ("z0", blk.z0), ("w", w), ("d", d), ("h", h)):
+            sb = self.sp_block[key]
+            sb.blockSignals(True)
+            sb.setValue(val)
+            sb.blockSignals(False)
+
+    def _on_block_row(self, row):
+        self.sel_block = row
+        self._sync_block_spins()
+        self.model_viewer.set_blocks(self.blocks, self.sel_block, self._support_mode() == "blocks")
+
+    def _on_block_spin(self, _v=0.0):
+        if not 0 <= self.sel_block < len(self.blocks):
+            return
+        g = {k: sb.value() for k, sb in self.sp_block.items()}
+        self.blocks[self.sel_block].set_geometry(g["cx"], g["cy"], g["z0"], g["w"], g["d"], g["h"])
+        self._blocks_changed()
+
+    def _on_block_pressed(self, index):
+        self.sel_block = index
+        self._block_origin = copy.deepcopy(self.blocks[index])
+        self._refresh_block_list(keep=True)
+        self.model_viewer.set_blocks(self.blocks, self.sel_block, True)
+
+    def _on_block_dragged(self, index, dx, dy):
+        if not 0 <= index < len(self.blocks) or self._block_origin is None:
+            return
+        blk, org = self.blocks[index], self._block_origin
+        blk.x0, blk.x1 = org.x0 + dx, org.x1 + dx
+        blk.y0, blk.y1 = org.y0 + dy, org.y1 + dy
+        self._sync_block_spins()
+        self.model_viewer.set_blocks(self.blocks, self.sel_block, True)
+
+    def _on_block_released(self, _index):
+        self._block_origin = None
+        self._blocks_changed()
+
+    def generate_blocks(self):
+        """Auto-generate: one block per island of automatic support, for the placed model."""
+        if self.placed is None:
+            QMessageBox.information(self, "No model", "Import a model first.")
+            return
+        pipe = self.pipelines[self.workflow]
+        sl = plugins.stages.get("fdm_slice").resolve(pipe.step("fdm_slice").params if pipe.step("fdm_slice")
+                                                     else {})
+        sp = plugins.stages.get("fdm_support").resolve(self._support_step().params)
+        lh = float(sl["layer_height"])
+        flh = lh if sl["first_layer_height"] == "auto" else float(sl["first_layer_height"])
+        noz = self._consumable("nozzle")
+        lw = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
+        if sp["line_width"] != "auto":
+            lw = float(sp["line_width"])
+        from PyQt6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            blocks = support_generate(self.placed, lh, lw, sp["overhang_angle"],
+                                      everywhere=self.cb_gen_everywhere.isChecked(),
+                                      xy_distance=sp["xy_distance"], gap=sp["z_gap_layers"],
+                                      min_area=sp["min_area"], first_layer_height=flh)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.blocks = blocks
+        self.sel_block = 0 if blocks else -1
+        self._blocks_changed(keep_row=True)
+        msg = f"Generated {len(blocks)} support block(s)" if blocks else "No support needed \u2014 no blocks"
+        self.statusBar().showMessage(msg, 6000)
+        self.log(msg)
+
+    def add_block(self):
+        if self.placed is None:
+            return
+        lo, hi = self.placed.bounds
+        cx, cy = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2
+        self.blocks.append(SupportBlock(cx - 5, cy - 5, 0.0, cx + 5, cy + 5, float(hi[2])))
+        self.sel_block = len(self.blocks) - 1
+        self._blocks_changed()
+
+    def remove_block(self, index=None):
+        i = self.sel_block if index is None or isinstance(index, bool) else index
+        if 0 <= i < len(self.blocks):
+            del self.blocks[i]
+            self.sel_block = min(i, len(self.blocks) - 1)
+            self._blocks_changed()
+
+    def clear_blocks(self):
+        self.blocks, self.sel_block = [], -1
+        self._blocks_changed()
 
     # ----------------------------------------------------------------- views
     def set_mode(self, mode: str):
@@ -1102,7 +1379,8 @@ class MainWindow(QMainWindow):
                 return
         try:
             job = build_job(self.workflow, machine, mesh=mesh, model_path=self.model_path,
-                            placement=copy.deepcopy(self.placement), **kw)
+                            placement=copy.deepcopy(self.placement),
+                            support_blocks=copy.deepcopy(self.blocks), **kw)
         except ValueError as exc:
             QMessageBox.warning(self, "Cannot slice", str(exc))
             return

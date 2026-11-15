@@ -91,7 +91,8 @@ class Placement:
     ry: float = 0.0
     rz: float = 0.0
     scale: float = 100.0             # uniform scale (%)
-    drop: bool = True                # put the lowest point on the bed (Z0)
+    drop: bool = True                # put the lowest point at height ``z`` (else keep original Z)
+    z: float = 0.0                   # height of the model's lowest point above the bed (mm)
 
     # ------------------------------------------------------------------
     def rotation(self) -> np.ndarray:
@@ -115,7 +116,7 @@ class Placement:
         mid = (lo2 + hi2) / 2
         tx = self.x if self.x is not None else (auto_xy[0] if auto_xy is not None else c[0])
         ty = self.y if self.y is not None else (auto_xy[1] if auto_xy is not None else c[1])
-        tz = -lo2[2] if self.drop else c[2]
+        tz = (max(0.0, float(self.z)) - lo2[2]) if self.drop else c[2]
         out = out + np.array([tx - mid[0], ty - mid[1], tz])
         return Mesh(out, mesh.triangles)
 
@@ -158,16 +159,16 @@ class Placement:
 
 
 def overhang_faces(vertices: np.ndarray, triangles: np.ndarray, angle_deg: float,
-                   bed_tol: float = 0.05) -> np.ndarray:
+                   bed_tol: float = 0.05, bed_z: float = 0.0) -> np.ndarray:
     """Bool per triangle: faces that need support for an overhang ``angle_deg`` (from vertical).
 
     A face needs support when it points downward more steeply than the angle
-    allows; faces lying on the bed do not.
+    allows; faces lying on the bed (at ``bed_z``) do not - so the underside of a
+    model lifted off the bed does.
     """
     n, _a = face_normals(vertices, triangles)
     limit = -math.sin(math.radians(angle_deg))
-    zmin = float(np.asarray(vertices)[:, 2].min()) if len(vertices) else 0.0
-    on_bed = np.asarray(vertices)[triangles][:, :, 2].max(axis=1) <= zmin + bed_tol
+    on_bed = np.asarray(vertices)[triangles][:, :, 2].max(axis=1) <= bed_z + bed_tol
     return (n[:, 2] < limit) & ~on_bed
 
 
@@ -203,4 +204,4 @@ def fits(mesh: Mesh, rect, tol: float = 1e-3) -> bool:
     lo, hi = mesh.bounds
     x0, y0, x1, y1, h = rect
     return (lo[0] >= x0 - tol and lo[1] >= y0 - tol and hi[0] <= x1 + tol and hi[1] <= y1 + tol
-            and hi[2] <= h + tol)
+            and lo[2] >= -tol and hi[2] <= h + tol)

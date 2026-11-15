@@ -1,8 +1,6 @@
 """FDM stage: slice the mesh into per-layer contours (the *Layers* settings)."""
 from __future__ import annotations
 
-from ..core import geometry
-from ..core.job import Layer
 from .base import AUTO, FDM, Param, SliceStage
 
 
@@ -33,19 +31,13 @@ class FDMSlice(SliceStage):
         job.settings["layer_height"] = lh
         job.settings["first_layer_height"] = flh
 
-        lo, hi = mesh.bounds
-        top = float(hi[2])
-        layers = []
-        z = flh
-        idx = 0
-        while z <= top + 1e-6:
-            h = flh if idx == 0 else lh
-            contours = geometry.slice_z(mesh, z - h * 0.5)   # slice mid-layer
-            if contours:
-                layers.append(Layer(index=len(layers), z=round(z, 4), height=h,
-                                    contours=list(contours), outline=list(contours)))
-            idx += 1
-            z += lh
-            ctx.progress(min(1.0, z / max(top, 1e-6)))
+        # every layer from the bed up - empty layers under a model lifted off the bed
+        # are kept so support can be built underneath it
+        from ..core.support import slice_layers
+        layers = slice_layers(mesh, lh, flh)
+        ctx.progress(1.0)
         job.layers = layers
-        return f"{len(layers)} layers at {lh} mm (first {flh} mm)"
+        empty = sum(1 for layer in layers if not layer.outline)
+        lift = float(mesh.bounds[0][2])
+        extra = f", model starts at Z{lift:.2f} ({empty} empty layers below)" if lift > flh * 0.5 else ""
+        return f"{len(layers)} layers at {lh} mm (first {flh} mm){extra}"

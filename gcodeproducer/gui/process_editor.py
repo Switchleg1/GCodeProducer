@@ -64,6 +64,8 @@ def summary(step: Step) -> str:
             parts.append(f"brim {g('brim_width'):g} mm")
         return ", ".join(parts)
     if sid == "fdm_support":
+        if g("placement") == "blocks":
+            return f"manual blocks, {g('density'):g}%"
         where = "everywhere" if g("placement") == "everywhere" else "build plate"
         return f"{where}, {g('overhang_angle'):g}°, {g('density'):g}%"
     if sid == "fdm_emit":

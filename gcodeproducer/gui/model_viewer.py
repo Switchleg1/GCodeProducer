@@ -6,6 +6,8 @@
   as the sliced preview, so switching views keeps the viewpoint)
 * overhangs that need support are tinted red, a model outside the build volume
   is tinted orange
+* manual support blocks are drawn as translucent green boxes: click one to
+  select it (yellow), drag it to move it, Delete removes it
 """
 from __future__ import annotations
 
@@ -26,6 +28,31 @@ from .viewer import _compile, _Mesh, default_surface_format
 MODEL_COLOR = (0.30, 0.58, 0.92)
 OVERHANG_COLOR = (0.92, 0.30, 0.26)
 OUTSIDE_COLOR = (0.95, 0.62, 0.20)
+BLOCK_COLOR = (0.25, 0.85, 0.45)
+BLOCK_SEL_COLOR = (1.0, 0.85, 0.2)
+
+_BOX_FACES = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6), (0, 4, 5), (0, 5, 1),
+              (1, 5, 6), (1, 6, 2), (2, 6, 7), (2, 7, 3), (3, 7, 4), (3, 4, 0)]
+_BOX_EDGES = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+
+
+def box_corners(b):
+    return np.array([[b.x0, b.y0, b.z0], [b.x1, b.y0, b.z0], [b.x1, b.y1, b.z0], [b.x0, b.y1, b.z0],
+                     [b.x0, b.y0, b.z1], [b.x1, b.y0, b.z1], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]], np.float32)
+
+
+def ray_box(o, d, b):
+    """Slab test: distance along the ray to the box, or inf."""
+    lo = np.array([b.x0, b.y0, b.z0])
+    hi = np.array([b.x1, b.y1, b.z1])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t1 = (lo - o) / d
+        t2 = (hi - o) / d
+    tmin = np.nanmax(np.minimum(t1, t2))
+    tmax = np.nanmin(np.maximum(t1, t2))
+    if tmax < max(tmin, 0.0):
+        return math.inf
+    return float(tmin if tmin > 0 else tmax)
 
 
 class _TriMesh:
@@ -90,6 +117,10 @@ class ModelViewer(QOpenGLWidget):
     moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
     moveFinished = pyqtSignal()
     faceClicked = pyqtSignal(object)          # world-space normal of the clicked face
+    blockPressed = pyqtSignal(int)            # a support block was clicked (selected)
+    blockDragged = pyqtSignal(int, float, float)   # block index, total dX, dY since the press
+    blockReleased = pyqtSignal(int)
+    blockDeleteRequested = pyqtSignal(int)
     glError = pyqtSignal(str)
 
     def __init__(self, camera: Camera, parent=None):
@@ -104,6 +135,10 @@ class ModelViewer(QOpenGLWidget):
         self.inside = True
         self.center_xy = (0.0, 0.0)
         self.place_on_face = False
+        self.blocks = []                      # core.support.SupportBlock
+        self.sel_block = -1
+        self.show_blocks = False
+        self._bdrag = None                    # (index, plane z, start point)
         self._ready = False
         self._dirty = True
         self._drag = None                     # (plane z, start point, start centre)
@@ -133,6 +168,13 @@ class ModelViewer(QOpenGLWidget):
         self.inside = inside
         self._dirty = True
         self._update_info()
+        self.update()
+
+    def set_blocks(self, blocks, selected: int = -1, visible: bool = True):
+        self.blocks = list(blocks)
+        self.sel_block = selected
+        self.show_blocks = visible
+        self._blocks_dirty = True
         self.update()
 
     def set_place_on_face(self, on: bool):
@@ -180,6 +222,9 @@ class ModelViewer(QOpenGLWidget):
         self.m_grid = _Mesh(False)
         self.m_outline = _Mesh(False)
         self.m_volume = _Mesh(False)
+        self.m_bfaces = _Mesh(False)
+        self.m_bedges = _Mesh(False)
+        self._blocks_dirty = True
         self.m_axes = _Mesh(False)
         self.m_axes.upload(np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]], np.float32))
         GL.glEnable(GL.GL_DEPTH_TEST)
@@ -255,9 +300,56 @@ class ModelViewer(QOpenGLWidget):
             self.m_model.draw()
         if below:
             self._draw_bed(mvp, 0.45)
+        if self.show_blocks and self.blocks:
+            self._draw_blocks(mvp)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)
+
+    def _draw_blocks(self, mvp):
+        if self._blocks_dirty:
+            self._blocks_dirty = False
+            faces, edges = [], []
+            for b in self.blocks:
+                c = box_corners(b)
+                faces.append(c[np.array(_BOX_FACES).ravel()])
+                edges.append(c[np.array(_BOX_EDGES).ravel()])
+            self.m_bfaces.upload(np.concatenate(faces) if faces else np.zeros((0, 3), np.float32))
+            self.m_bedges.upload(np.concatenate(edges) if edges else np.zeros((0, 3), np.float32))
+        GL.glUseProgram(self.p_flat)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+        ucol = GL.glGetUniformLocation(self.p_flat, "uColor")
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glDepthMask(GL.GL_FALSE)
+        nf, ne = len(_BOX_FACES) * 3, len(_BOX_EDGES) * 2
+        for k in range(len(self.blocks)):
+            col = BLOCK_SEL_COLOR if k == self.sel_block else BLOCK_COLOR
+            GL.glUniform4f(ucol, *col, 0.30 if k == self.sel_block else 0.20)
+            GL.glBindVertexArray(self.m_bfaces.vao)
+            GL.glDrawArrays(GL.GL_TRIANGLES, k * nf, nf)
+        GL.glBindVertexArray(self.m_bedges.vao)
+        for depth, alpha in ((False, 0.35), (True, 1.0)):     # hidden edges faint, visible edges solid
+            (GL.glEnable if depth else GL.glDisable)(GL.GL_DEPTH_TEST)
+            for k in range(len(self.blocks)):
+                col = BLOCK_SEL_COLOR if k == self.sel_block else BLOCK_COLOR
+                GL.glUniform4f(ucol, *col, alpha)
+                GL.glDrawArrays(GL.GL_LINES, k * ne, ne)
+        GL.glEnable(GL.GL_DEPTH_TEST)
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glDisable(GL.GL_BLEND)
+
+    def pick_block(self, mx, my):
+        """(index, distance, point) of the nearest support block under the mouse."""
+        if not (self.show_blocks and self.blocks):
+            return -1, math.inf, None
+        o, d = self.ray(mx, my)
+        best, bt = -1, math.inf
+        for k, b in enumerate(self.blocks):
+            t = ray_box(o, d, b)
+            if t < bt:
+                best, bt = k, t
+        return best, bt, (o + d * bt if best >= 0 else None)
 
     def _draw_bed(self, mvp, alpha):
         GL.glUseProgram(self.p_flat)
@@ -336,7 +428,16 @@ class ModelViewer(QOpenGLWidget):
         self._buttons = ev.buttons()
         if ev.button() != Qt.MouseButton.LeftButton or ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
-        pt, tri = self.pick(ev.position().x(), ev.position().y())
+        mx, my = ev.position().x(), ev.position().y()
+        pt, tri = self.pick(mx, my)
+        if not self.place_on_face:
+            bi, bt, bpt = self.pick_block(mx, my)
+            mt = np.linalg.norm(pt - self.ray(mx, my)[0]) if pt is not None else math.inf
+            if bi >= 0 and bt <= mt + 1e-6:
+                self.blockPressed.emit(bi)
+                self._bdrag = (bi, float(bpt[2]), bpt)
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return
         if tri < 0:
             return
         if self.place_on_face:
@@ -348,6 +449,13 @@ class ModelViewer(QOpenGLWidget):
 
     def mouseMoveEvent(self, ev):
         pos = ev.position().toPoint()
+        if self._bdrag is not None:
+            bi, z, start = self._bdrag
+            p = self._plane_point(ev.position().x(), ev.position().y(), z)
+            if p is not None:
+                self.blockDragged.emit(bi, float(p[0] - start[0]), float(p[1] - start[1]))
+            self._last = pos
+            return
         if self._drag is not None:
             z, start, (cx, cy) = self._drag
             p = self._plane_point(ev.position().x(), ev.position().y(), z)
@@ -372,6 +480,12 @@ class ModelViewer(QOpenGLWidget):
                 self.update()
 
     def mouseReleaseEvent(self, ev):
+        if self._bdrag is not None:
+            bi = self._bdrag[0]
+            self._bdrag = None
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.blockReleased.emit(bi)
+            return
         if self._drag is not None:
             self._drag = None
             self.setCursor(Qt.CursorShape.OpenHandCursor if self._highlight else Qt.CursorShape.ArrowCursor)
@@ -389,5 +503,7 @@ class ModelViewer(QOpenGLWidget):
             self.camera.set_view(views[k])
         elif k == Qt.Key.Key_Escape and self.place_on_face:
             self.faceClicked.emit(None)
+        elif k in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.show_blocks and self.sel_block >= 0:
+            self.blockDeleteRequested.emit(self.sel_block)
         else:
             super().keyPressEvent(ev)

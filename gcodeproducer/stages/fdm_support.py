@@ -5,20 +5,21 @@ further than ``layer_height * tan(overhang_angle)`` from layer *i-1* need
 support.  Support columns are grown downward from those overhangs (leaving a
 Z gap under the part), kept ``xy_distance`` away from the model, and either
 
-* **touching build plate** - a column stops (and is dropped) as soon as the
-  model is below it, so support only ever stands on the bed; or
-* **everywhere** - a column may rest on top of the model (one-layer gap).
+* **touching build plate** - only columns with no model underneath, so
+  support only ever stands on the bed;
+* **everywhere** - a column may rest on top of the model (one-layer gap); or
+* **manual blocks** - support is generated inside the user's support blocks
+  (``job.support_blocks``) wherever the model is above them.  The GUI can
+  create the blocks from the automatic result and the user edits them.
 
 The top ``interface_layers`` of each column are printed denser
 (``support_interface``) to give the overhang a flat surface.
 """
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
-from ..core import geometry, infill_gen
+from ..core import geometry, infill_gen, support
 from ..core.job import Path
 from .base import AUTO, FDM, Param, SliceStage
 
@@ -31,7 +32,9 @@ class FDMSupport(SliceStage):
     category = "Support"
     params = [
         Param("placement", "choice", "buildplate", label="Support placement", group="Support",
-              choices=[("buildplate", "Touching build plate"), ("everywhere", "Everywhere")]),
+              choices=[("buildplate", "Touching build plate"), ("everywhere", "Everywhere"),
+                       ("blocks", "Manual blocks")],
+              help="Manual blocks: support only inside the support blocks placed on the model."),
         Param("overhang_angle", "float", 50.0, unit="\u00b0", min=0, max=89, decimals=1, group="Support",
               help="Overhangs steeper than this (measured from vertical) get support."),
         Param("density", "float", 15.0, unit="%", min=1, max=100, decimals=1, group="Pattern"),
@@ -56,52 +59,25 @@ class FDMSupport(SliceStage):
             return "nothing to support"
         lw = params["line_width"]
         lw = job.line_width if lw in (0, AUTO) else float(lw)
-        res = max(0.2, min(0.5, lw * 0.75))
         lo, hi = job.mesh.bounds
-        base = geometry.RegionMask(lo[:2], hi[:2], res)
+        base = support.make_grid(lo, hi, lw)
         n = len(layers)
-
-        masks = []
-        for layer in layers:
-            rm = base.like()
-            rm.fill([np.asarray(c, float) for c in (layer.outline or layer.contours) if len(c) >= 3])
-            masks.append(rm.grid)
+        masks = support.model_masks(layers, base)
         ctx.progress(0.2)
-
-        # ---- overhangs
-        tan_a = math.tan(math.radians(params["overhang_angle"]))
-        min_cells = params["min_area"] / (res * res)
-        over = [np.zeros_like(masks[0])]
-        for i in range(1, n):
-            reach = max(1, int(round(layers[i].height * tan_a / res)))
-            o = masks[i] & ~geometry.dilate(masks[i - 1], reach)
-            o = geometry.dilate(geometry.erode(o, 1), 1)          # drop raster noise
-            if o.sum() < min_cells:
-                o[:] = False
-            over.append(o)
-        ctx.progress(0.4)
-
-        # ---- grow columns downward from the overhangs
-        xy = max(1, int(math.ceil(params["xy_distance"] / res)))
+        mode = params["placement"]
         gap = params["z_gap_layers"]
-        everywhere = params["placement"] == "everywhere"
-        # below_any[i]: cells with model on any layer under layer i
-        below_any = [np.zeros_like(masks[0])]
-        for i in range(1, n):
-            below_any.append(below_any[-1] | masks[i - 1])
-        acc = np.zeros_like(masks[0])
-        sup = [None] * n
-        for i in range(n - 1, -1, -1):
-            j = i + 1 + gap
-            if j < n:
-                acc |= over[j]
-            acc &= ~masks[i]                     # a column stops where it meets the model
-            s = acc & ~geometry.dilate(masks[i], xy)
-            if not everywhere:
-                s &= ~below_any[i]               # build plate only: nothing of the model underneath
-            if everywhere and i > 0:
-                s &= ~masks[i - 1]               # one layer gap on top of the model
-            sup[i] = s
+        if mode == "blocks":
+            blocks = list(job.support_blocks or [])
+            if not blocks:
+                return "manual support: no support blocks"
+            over = None
+            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap)
+        else:
+            over = support.overhangs(masks, layers, base.res, params["overhang_angle"], params["min_area"])
+            ctx.progress(0.4)
+            sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
+                                       mode == "everywhere")
+        everywhere = mode == "everywhere"
         ctx.progress(0.6)
 
         # ---- toolpaths
@@ -149,8 +125,11 @@ class FDMSupport(SliceStage):
             layer.paths[at:at] = new
             ctx.progress(0.6 + 0.4 * (i + 1) / n)
         if not used:
+            if mode == "blocks":
+                return "manual support: the blocks are not under the model"
             if any(o.any() for o in over):
                 return "overhangs found, but none can be supported from the build plate (try 'everywhere')"
             return "no overhangs need support"
-        return (f"support on {used} layers: {n_body} lines + {n_roof} interface lines "
-                f"({'everywhere' if everywhere else 'touching build plate'})")
+        label = {"everywhere": "everywhere", "blocks": f"{len(job.support_blocks)} manual blocks"}.get(
+            mode, "touching build plate")
+        return f"support on {used} layers: {n_body} lines + {n_roof} interface lines ({label})"

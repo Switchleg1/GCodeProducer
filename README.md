@@ -76,14 +76,15 @@ versa.
 - **`fdm_skirt_brim`**: skirt around the first-layer convex hull (distance,
   loops, number of layers) and / or a brim attached to the part outline (width,
   gap). Holes are not brimmed.
-- **`fdm_support`**: automatic support. On a raster shared by all layers,
+- **`fdm_support`**: automatic or manual support. On a raster shared by all layers,
   a cell of layer *i* is an overhang when it lies more than
   `layer_height × tan(overhang_angle)` beyond layer *i-1*. Columns grow
   down from the overhangs, leave a Z gap under the part, and stay
   `xy_distance` away from the model. *Touching build plate* keeps only columns
   with no model underneath. *Everywhere* lets them stand on the model (with a
-  one-layer gap). The top `interface_layers` are printed denser as
-  `support_interface`.
+  one-layer gap). *Manual blocks* uses the job's support blocks instead
+  (`core/support.py`; `--support-blocks` on the CLI). The top
+  `interface_layers` are printed denser as `support_interface`.
 - **`fdm_perimeters`** — offsets each contour inward into wall loops
   (outer + inner). The innermost loop bounds the infill region.
 - **`fdm_top_bottom`** — top / bottom **solid** surfaces. A cell is sparse only
@@ -121,8 +122,9 @@ python -m gcodeproducer gui part.stl           # start and import a model
 ```
 
 On Windows you can double-click `GCodeProducer.bat`. The layout follows
-GCodeTools: a toolbar, a **Prepare** dock on the left, the 3D area in the
-centre, and **View / G-code / Statistics / Log** docks on the right.
+GCodeTools: a toolbar, the **Model** (setup, placement, support) and
+**Process** docks on the left, the 3D area in the centre, and **View / G-code /
+Statistics / Log** docks on the right.
 
 The 3D area has **two views** (switch with the buttons above it, the toolbar,
 or Ctrl+1 / Ctrl+2). Both use the same camera:
@@ -139,27 +141,48 @@ or Ctrl+1 / Ctrl+2). Both use the same camera:
 be moved, floated and hidden (View menu); the layout, last machine,
 consumables, process and recent models are remembered.
 
-**Prepare dock** (top to bottom):
+**Model and Process docks** (top to bottom):
 
 1. **Setup**: workflow (FDM / CAM), machine and the consumables that machine
    allows (material + nozzle, or tool). The ✎ buttons open the library
    editor on that profile.
 2. **Model**: import an STL (or drop it on the window). Recent models are under
    *File → Recent models*. Placement:
-   - **Position X / Y**: the centre of the model on the bed (*Center* puts it
-     back in the middle). You can also drag the model in the Prepare view.
+   - **Position X / Y / Z**: X / Y is the centre of the model on the bed
+     (*Center* puts it back in the middle; you can also drag the model in the
+     Prepare view). **Z** lifts the model's lowest point off the bed. A lifted
+     model is sliced with empty layers underneath, its underside shows as an
+     overhang, and support can be built up to it. *Drop to bed* sets Z back to 0.
    - **Rotate X / Y / Z**: type an angle, or use ↺ 90 / ↻ 90 to turn it about a
      world axis.
    - **Scale** in %, with the resulting size shown next to it.
    - **Lay flat** rests the largest flat face on the bed. **Place on face**:
      click it, then click any face of the model and that face goes down.
-     **Reset** clears rotation and scale and re-centres the model.
-   - **Support**: *None*, *Touching build plate* or *Everywhere*, plus the
-     overhang angle; *Show* tints overhangs red. This is the same setting as
-     the process's *Support* section, so it is saved with the process.
+   - **Reset** clears rotation, scale and Z and re-centres the model.
 
-   The model always rests on the bed (Z0). Each model's placement is
-   remembered, so re-opening the file restores it.
+   Each model's placement is remembered, so re-opening the file restores it.
+
+   **Support** (its own box below Model): *None*, *Touching build plate*,
+   *Everywhere* or **Manual blocks**, plus the overhang angle (*Show* tints
+   overhangs red). The mode is the same setting as the process's *Support*
+   section, so it is saved with the process.
+
+   ![Support panel](docs/support_panel.jpg)
+
+   **Manual support blocks** are boxes on the plate: support is generated
+   **only inside the blocks, wherever the model is above them** (with the
+   usual Z gap and XY distance).
+   - **Auto-generate** runs the automatic support and wraps each support island
+     in a block (*Allow on model* also lets support stand on the model). The
+     result slices the same as automatic support, and you can then edit it.
+   - **+ Add** puts a 10 × 10 mm block under the model. **Remove** (or
+     *Delete* in the view) and **Clear** remove blocks.
+   - Select a block in the list or click it in the Prepare view (it turns
+     yellow), then drag it to move it, or type its position (X / Y centre,
+     bottom Z) and size (W / D / H).
+   - Blocks belong to the model, like its placement: they move with it when
+     you change X / Y / Z, are saved per model, and are removed if you rotate
+     or scale the model (Auto-generate them again).
 3. **Process**: the *workflow options*, i.e. everything that is **not** machine,
    material or nozzle specific. Pick a saved process from the list and edit it
    in collapsible sections, each showing a summary when closed:
@@ -219,6 +242,11 @@ python -m gcodeproducer slice part.stl -w fdm -o part.gcode \
 python -m gcodeproducer slice bracket.stl -o bracket.gcode --rotate-x 90 --x 80 --y 100 \
     --lay-flat -m "fdm_support:placement=everywhere,overhang_angle=45"
 
+# lift the part 3 mm off the bed and support it with manual blocks
+# (blocks.json: [{"x0": 95, "y0": 95, "z0": 0, "x1": 125, "y1": 125, "z1": 20}, ...] in bed mm)
+python -m gcodeproducer slice bracket.stl --z 3 --support-blocks blocks.json \
+    -m "fdm_support:placement=blocks"
+
 # machining
 python -m gcodeproducer slice part.stl -w cam -o part.nc \
     --machine "Generic 300 Router" --tool "6 mm flat endmill" \
@@ -253,7 +281,8 @@ class Brim(SliceStage):
 gcodeproducer/
   core/        gcode model + emitter (builder.py), geometry kernel (slicing,
                polygon offset, RegionMask, raster helpers), model placement
-               (placement.py), state simulation, toolpath/features
+               (placement.py), support maths and blocks (support.py), state
+               simulation, toolpath/features
                (shared with GCodeTools), the profile/library system
                (profiles.py), process presets (process.py), job model, stage
                pipeline, plugin discovery, session driver, starter profiles

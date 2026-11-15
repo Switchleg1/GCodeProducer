@@ -157,3 +157,49 @@ def test_support_controls_follow_process(win):
     assert win.cb_support.currentData() == "none"
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     assert not win.support_box.isVisibleTo(win) or not win.support_box.isEnabled()
+
+
+def test_z_position_and_drop(win, tmp_path):
+    win.open_model(_bracket(tmp_path))
+    win.sp_z.setValue(6.0)
+    assert win.placement.z == 6.0 and win.placed.bounds[0][2] == 6.0
+    win.drop_model()
+    assert win.sp_z.value() == 0 and win.placed.bounds[0][2] == 0
+
+
+def test_manual_support_blocks(win, app, tmp_path):
+    win.open_model(_bracket(tmp_path))
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    assert win._support_mode() == "blocks" and win.blocks_box.isVisibleTo(win)
+    win.generate_blocks()
+    assert len(win.blocks) == 1 and win.lst_blocks.count() == 1
+    assert win.model_viewer.show_blocks and len(win.model_viewer.blocks) == 1
+    # add / resize / remove
+    win.add_block()
+    assert len(win.blocks) == 2 and win.sel_block == 1
+    win.sp_block["w"].setValue(4.0)
+    assert win.blocks[1].size[0] == pytest.approx(4.0)
+    win.remove_block()
+    assert len(win.blocks) == 1
+    # drag a block in the view
+    x0 = win.blocks[0].x0
+    win._on_block_pressed(0)
+    win._on_block_dragged(0, 5.0, 0.0)
+    win._on_block_released(0)
+    assert win.blocks[0].x0 == pytest.approx(x0 + 5)
+    # blocks follow the model when it moves...
+    win.sp_x.setValue(win.sp_x.value() + 10)
+    assert win.blocks[0].x0 == pytest.approx(x0 + 15)
+    win.sp_z.setValue(3)
+    assert win.blocks[0].z0 == pytest.approx(3)
+    # ...are remembered with the model...
+    path = win.model_path
+    win.open_model(path)
+    assert len(win.blocks) == 1 and win.blocks[0].x0 == pytest.approx(x0 + 15)
+    # ...and are used when slicing
+    win.run_slice()
+    _wait(win, app)
+    assert any(ln.feature == "support" for ln in win.program.lines)
+    # rotating the model removes them (they no longer match)
+    win.rotate_model("z", 90)
+    assert win.blocks == []

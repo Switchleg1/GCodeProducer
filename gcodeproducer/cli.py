@@ -91,15 +91,22 @@ def cmd_slice(args):
 
     from .core.placement import Placement
     mesh = load_mesh(args.input)
-    placement = Placement(x=args.x, y=args.y, scale=args.scale)
+    placement = Placement(x=args.x, y=args.y, z=args.z, scale=args.scale)
     for axis in ("x", "y", "z"):
         deg = getattr(args, f"rotate_{axis}")
         if deg:
             placement.rotate_by(axis, deg)
     if args.lay_flat:
         placement.lay_flat(mesh)
+    blocks = []
+    if args.support_blocks:
+        import json
+        from .core.support import SupportBlock
+        with open(args.support_blocks, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        blocks = [SupportBlock.from_dict(b) for b in (data.get("blocks", []) if isinstance(data, dict) else data)]
     job = build_job(workflow, machine, material=material, nozzle=nozzle, tools=tools,
-                    mesh=mesh, model_path=args.input, placement=placement,
+                    mesh=mesh, model_path=args.input, placement=placement, support_blocks=blocks,
                     settings={"layer_height": args.layer_height} if args.layer_height else {})
 
     if args.config:
@@ -168,11 +175,15 @@ def build_parser():
     g = s.add_argument_group("placement")
     g.add_argument("--x", type=float, help="model centre X on the bed (default: bed centre)")
     g.add_argument("--y", type=float, help="model centre Y on the bed (default: bed centre)")
+    g.add_argument("--z", type=float, default=0.0, help="lift the model's lowest point this far above the bed")
     g.add_argument("--rotate-x", type=float, default=0.0, metavar="DEG")
     g.add_argument("--rotate-y", type=float, default=0.0, metavar="DEG")
     g.add_argument("--rotate-z", type=float, default=0.0, metavar="DEG")
     g.add_argument("--scale", type=float, default=100.0, metavar="PCT")
     g.add_argument("--lay-flat", action="store_true", help="rest the largest flat face on the bed")
+    g.add_argument("--support-blocks", metavar="JSON",
+                   help="manual support blocks (list of {x0,y0,z0,x1,y1,z1}, bed coordinates); "
+                        "use with -m fdm_support:placement=blocks")
     s.add_argument("-m", "--stage-param", action="append",
                    help="stage_id:key=value,... override")
     s.add_argument("--process", help="named process preset (workflow options)")

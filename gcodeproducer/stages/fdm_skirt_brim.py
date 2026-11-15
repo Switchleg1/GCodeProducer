@@ -47,13 +47,18 @@ class FDMSkirtBrim(SliceStage):
         lw = job.line_width if lw in (0, AUTO) else float(lw)
         first = job.layers[0]
         outline = first.outline or first.contours
+        on_bed = bool(outline)
+        if not on_bed:          # model lifted off the bed: skirt around its lowest layer
+            outline = next((layer.outline for layer in job.layers if layer.outline), [])
         outers = geometry.outer_contours([np.asarray(c, float) for c in outline if len(c) >= 3])
         if not outers:
-            return "first layer is empty"
+            return "model is empty"
 
         msgs = []
         brim_extent = 0.0
-        if kind in ("brim", "both") and params["brim_width"] > 0:
+        if kind in ("brim", "both") and params["brim_width"] > 0 and not on_bed:
+            msgs.append("no brim (the model does not touch the bed)")
+        elif kind in ("brim", "both") and params["brim_width"] > 0:
             n = max(1, int(math.ceil(params["brim_width"] / lw)))
             gap = params["brim_gap"]
             loops = []
