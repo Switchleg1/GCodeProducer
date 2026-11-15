@@ -93,14 +93,23 @@ Drill/one-point paths keep their vertical drilling entry.
 
 For each entry (start of a pass, or a path that cannot stay down), the emitter:
 
-1. Retracts only as far as needed: to **Short retract clearance** (default
-   1 mm) above the highest *current* material under the cutter along the XY
-   travel, never above safe Z. Inside a pocket cleared by the previous pass
-   that is 1 mm above the last floor, not back to the top of the part. The
-   first entry after start-up or a tool change comes from safe Z.
-2. Rapids across, then **rapids down** to the ramp start, **Lead-in start above
-   material** (default 0.5 mm) above the current local material. No feed move
-   descends through air from safe Z or from the clearance plane.
+1. **Stays down when it can.** If the tool is already below safe Z and above
+   the new depth — normally on the floor of the pass just finished — and both
+   the straight move to the new ramp start and the ramp start itself are free
+   of *current* material under the full cutter radius, it moves across at that
+   height (a `G1` at the rapid XY feed, so the path is a guaranteed straight
+   line, not a G0 dog-leg) and ramps down from there. It does not go up at
+   all. The move carries the comment `stay at depth: cleared by the previous pass`.
+2. Otherwise it retracts only as far as needed: to **Short retract clearance**
+   (default 1 mm) above the highest current material under the cutter along
+   the XY travel, never above safe Z; rapids across; then **rapids down** to
+   the ramp start, **Lead-in start above material** (default 0.5 mm) above the
+   local material. The first entry after start-up or a tool change comes from
+   safe Z.
+
+No feed move descends through air from safe Z or from a clearance plane. On
+the example flange + counterbore setup, every depth pass after the first
+of each operation (19 entries) now begins without any retract.
 3. Follows the selected path itself while ramping down to cutting Z, at no
    more than about 10°. A closed loop is followed backwards from its seam so
    the ramp arrives moving in the cut direction; an open line is followed

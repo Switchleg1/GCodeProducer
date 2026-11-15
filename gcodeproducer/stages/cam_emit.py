@@ -81,6 +81,7 @@ class CAMEmit(SliceStage):
         lead_clearance = max(.05, float(pref(job,"lead_clearance")))
         travel_clearance = max(.1, float(pref(job,"retract_clearance")))
         short_count = [0]
+        stay_count = [0]
         last_feed = None
         last_condition = None
 
@@ -214,8 +215,33 @@ class CAMEmit(SliceStage):
                             lead_kinds[kind]=lead_kinds.get(kind,0)+1
                     approach=lead[0,:2] if lead is not None else start
                     entry=lead[0,2] if lead is not None else layer.z
+                    stayed=False
+                    if (live is not None and short_retracts and position[2]<safe_z-1e-9
+                            and position[2]>layer.z+1e-9 and config is not None):
+                        # Already down in material this operation has cleared (typically the floor of
+                        # the previous pass): move across at the current Z and ramp down from here,
+                        # instead of going up at all. Allowed only if the straight move and the ramp
+                        # start are free of CURRENT material under the full cutter radius.
+                        here=position[2]
+                        down_lead=None
+                        if lead is not None:
+                            down_lead,_=ramp_entry(pts,path.closed,layer.z,here,config.lead_length or 2*active_radius)
+                        target=down_lead[0,:2] if down_lead is not None else start
+                        moved=np.r_[target,here]
+                        if (live.height_at(target,active_radius)<=here+1e-6
+                                and not live.contact(position,moved,active_radius)):
+                            if lead is not None:lead=down_lead
+                            approach,entry,stayed=target,(down_lead[0,2] if down_lead is not None else layer.z),True
+                            b.set_feature("rapid", comment=False)
+                            # G1 at rapid feed: a straight line is guaranteed (a G0 dog-leg is not).
+                            b.command(f"G1 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}",
+                                      "stay at depth: cleared by the previous pass")
+                            position[:2]=approach
+                            stay_count[0]+=1
                     b.set_feature("rapid", comment=False)
-                    if live is not None and short_retracts:
+                    if stayed:
+                        pass
+                    elif live is not None and short_retracts:
                         # Retract only as high as the CURRENT material along the XY travel needs
                         # (plus clearance), not to safe Z: inside a cleared pocket the tool stays low.
                         # Cutter radius, the same footprint the rapid-contact check uses; walls stand
@@ -233,9 +259,10 @@ class CAMEmit(SliceStage):
                     else:
                         b.command(f"G0 Z{format_number(safe_z,3)}")
                         position[2]=safe_z
-                    b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
-                    position[:2]=approach
-                    if live is not None and short_retracts:
+                    if not stayed:
+                        b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
+                        position[:2]=approach
+                    if live is not None and short_retracts and not stayed:
                         # Rapid down to the clearance plane above the local material, then feed.
                         # Rapid straight to the ramp start (which already sits lead_clearance above the
                         # local material), or to clearance above the material for a plain plunge.
@@ -285,6 +312,8 @@ class CAMEmit(SliceStage):
             if pref(job,"highlight_conflicts"):
                 flagged=mark_collisions(prog,stock_warnings)
                 if flagged:ctx.log(f"  {flagged} flagged moves recoloured as Collision")
+        if stay_count[0]:
+            ctx.log(f"  {stay_count[0]} entries moved across cleared material at depth (no retract)")
         if short_count[0]:
             ctx.log(f"  {short_count[0]} entries used short retracts above current material instead of safe Z")
         for kind,count in sorted(lead_kinds.items()):

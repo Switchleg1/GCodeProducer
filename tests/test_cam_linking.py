@@ -1,4 +1,5 @@
 """Stay-down links must reduce air moves without crossing islands or region gaps."""
+import pytest
 import numpy as np
 from shapely.geometry import LineString
 
@@ -118,3 +119,25 @@ def test_later_depth_entries_start_just_above_the_previous_floor(libset):
     sim=simulate(job.program)
     assert any(ln.cmd=="G0" and ln.layer>0 and ln.feature!="retract" and abs(sim.z[i]-safe)<1e-6
                for i,ln in enumerate(job.program.lines))
+
+
+def test_next_depth_starts_from_previous_floor_without_going_up(libset):
+    from gcodeproducer.core.sim import simulate
+    mesh=stepped_part()
+    job,_=job_for(mesh,[floor_ref(mesh)],libset)
+    generate(job,StageContext())
+    CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
+    sim=simulate(job.program)
+    z_of={l.index:l.z for l in job.layers}
+    lines=job.program.lines
+    for i,ln in enumerate(lines):
+        if ln.layer>0 and sim.motion[i] and ln.feature!="retract":
+            assert sim.z[i]<=sim.pz[i]+1e-9          # after the first pass the tool never goes up
+    stays=[ln for ln in lines if ln.comment and "stay at depth" in ln.comment]
+    assert len(stays)==len(job.layers)-1
+    for ln in stays:
+        i=lines.index(ln)
+        assert ln.cmd=="G1" and sim.z[i]==pytest.approx(z_of[ln.layer-1])     # moved at the previous floor
+        nxt=next(l for l in lines[i+1:] if l.cmd=="G1" and "Z" in l.params)
+        assert nxt.feature=="lead_in"                                         # then ramps down from there
+    assert job.warnings==[]
