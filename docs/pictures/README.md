@@ -15,12 +15,16 @@ paths; do not scatter new images across the documentation root.
 | [support_panel.jpg](support_panel.jpg) | Earlier FDM support panel screenshot; ownership descriptions in the guide take precedence | [Support](../fdm/support.md) |
 | [cam-pocket-bounds-example.png](cam-pocket-bounds-example.png) | User-supplied example with red annotations marking intended outer rim and boss boundary; annotations are not app selection colours | [Pocket operations](../cam/operations.md#bounds-and-automatic-removal-height) |
 | [cam-pocket-floor-selected.png](cam-pocket-floor-selected.png) | Current application capture: selected annular floor yellow, raised boss blue, stock amber | [Pocket operations](../cam/operations.md#bounds-and-automatic-removal-height) |
-| [cam-pocket-generated-pass.png](cam-pocket-generated-pass.png) | Current application capture: one generated annular pocket depth pass; green cuts and magenta vertical entry/retract motion, original stock amber | [Pocket operations](../cam/operations.md#bounds-and-automatic-removal-height) |
+| [cam-pocket-generated-pass.png](cam-pocket-generated-pass.png) | Current application capture: default wall-parallel annular pocket pass, green concentric cuts and amber original stock; linking motion hidden | [Toolpath strategies](../cam/toolpaths.md) |
+| [cam-pocket-square-circle.png](cam-pocket-square-circle.png) | Actual generated paths for a constructed square pocket with circular island; straight and curved fronts transition into corner contours; linking motion hidden | [Toolpath strategies](../cam/toolpaths.md) |
+| [cam-pocket-raster-pass.png](cam-pocket-raster-pass.png) | Earlier raster-strategy capture for comparison, including magenta entry/retract motion | [Toolpath strategies](../cam/toolpaths.md#raster-comparison) |
 
-The two current CAM captures show a part with boss top Z0, flange floor Z-15,
-and base bottom Z-30. Generated removal stops at the selected floor Z-15.
-They were captured from the application's actual views with isolated settings
-and library state, then cropped for readability. They are not synthetic
+The selected-floor and annular-pass captures show a part with boss top Z0,
+flange floor Z-15, and base bottom Z-30. Generated removal stops at the selected
+floor Z-15. The square/circle image is a constructed 90 mm square removal
+region with a 25 mm-radius retained island, displayed using the actual generator
+and Preview. Captures use isolated settings/library state and are cropped for
+readability. They are not synthetic
 renderings or evidence of safe hardware execution.
 
 ## Adding pictures for a feature

@@ -12,7 +12,7 @@
 | FDM process | Layer heights, adhesion, wall/shell/infill style, support printing style, requested speeds/travel | Process preset JSON; dirty working pipeline in Qt settings |
 | Model support | Mode, angle, edge extension, hole filling, manual blocks | Per-model Qt settings, independent of presets |
 | Placement | Translation, rotation, scale, Z anchor | Per-model Qt settings, separately for FDM and CAM |
-| CAM machine | Work area, safe Z, rapid/feed/spindle fields, allowed tools, templates | Machine JSON |
+| CAM machine | Work area, safe Z, rapid/feed/spindle fields, default cutting direction, allowed tools, templates | Machine JSON |
 | CAM tool | T number, cutter dimensions/type, feeds/RPM, maximum depth/pass | Tool JSON |
 | CAM setup | Ordered tool groups/operations, cutting selections, depth references, allocated stock | Per-model Qt settings |
 | CAM stock | Material description/density, margin, position and blank dimensions | Inside CAM setup, not the FDM material library |
@@ -107,6 +107,9 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
 - CAM cutter type, flutes, cutting length and V angle are descriptive. They do
   not provide full cutter-shape/holder collision geometry, chip-load
   calculations, or automatic V-carving depth.
+- CAM machine `cut_direction` defaults to Climb; Pocket/Profile inherit it
+  unless overridden. Conventional reverses winding and Meander alternates
+  paths; the convention assumes M3. See [toolpath directions](cam/toolpaths.md).
 - CAM tool feed/plunge feed/RPM drive output; stepdown is capped at tool
   `max_doc`. Tree operation stepover currently starts at 40%, independently
   of the tool profile's stored stepover field.

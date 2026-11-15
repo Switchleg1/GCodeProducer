@@ -5,7 +5,8 @@
 ## Requirements
 
 - Python **3.10 or later**; use the same Python interpreter for installation and launching.
-- PyQt6 >= 6.5, PyOpenGL >= 3.1, NumPy >= 1.24 (installed as dependencies).
+- PyQt6 >= 6.5, PyOpenGL >= 3.1, NumPy >= 1.24 and Shapely >= 2.0
+  (installed as dependencies; Shapely supplies CAM pocket offsets).
 - A desktop session and functioning OpenGL driver for the 3D GUI. The CLI
   does not need a visible Qt window.
 - An STL model; one model is processed at a time. Binary and ASCII STL are supported.

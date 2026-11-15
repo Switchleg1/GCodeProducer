@@ -44,6 +44,7 @@ for a particular printer, material, cutter, or machine.
 |---|---|
 | [CAM workflow](cam/README.md) | Tool-change tree, negative-Z convention, generation and export |
 | [Selecting geometry and depths](cam/selection-and-depths.md) | Planar faces, feature chains, selection purpose, live Z references |
+| [Toolpath strategy and direction](cam/toolpaths.md) | Wall-parallel offsets, square/circle transitions, climb/conventional/meander and machine defaults |
 | [Pocket, Profile, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |
 | [Stock allocation and safety](cam/stock-and-safety.md) | Material properties, Auto margin, bounds, warning interpretation, verification |
 
@@ -67,8 +68,8 @@ tables alone cannot express.
 
 ## Status and safety
 
-The application supports one STL model at a time and a minimal NumPy geometry
-kernel. FDM and 2.5D CAM are implemented; robust general polygon operations,
+The application supports one STL model at a time. STL/FDM geometry uses a
+minimal NumPy kernel; CAM pocket offsets use Shapely/GEOS. FDM and 2.5D CAM are implemented; robust general polygon operations,
 general 3D machining and CAD topology are not. Preview is an inspection aid,
 not a machine-accurate material-removal simulator. Time estimates omit machine
 acceleration and controller effects. Never interpret a successful generation,

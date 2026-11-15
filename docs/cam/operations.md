@@ -18,7 +18,9 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Start | Pocket: Material surface + 0; others: Model top + 0 | Pocket falls back to model top until stock is allocated; not safe approach height |
 | End | Pocket: machining selection minimum Z + 0; Profile/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
 | Stepdown | Tool max DOC when added, otherwise 1 mm | Requested vertical increment; capped at positive tool max DOC during generation |
-| Pocket stepover | 40% | Raster spacing as percentage of cutter diameter; independent of stored tool stepover |
+| Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
+| Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
+| Cutting direction | Machine default | Inherit Climb/Conventional/Meander, or override per operation |
 | Profile side | Outside | Outside, Inside or On |
 | Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
 
@@ -79,9 +81,10 @@ amber outline is the original stock. Here the lowest selected Z is -15.
 
 ![One generated pocket pass between the outer boundary and the boss](../pictures/cam-pocket-generated-pass.png)
 
-A generated pass clears the annulus and retains its centre. Green shows
-cutting moves; magenta vertical moves show entry/retracts. The final pass is
-at Z-15, leaving the base down to Z-30 intact. This is a path preview, not a
+A generated wall-parallel pass clears the annulus and retains its centre.
+Green shows concentric cutting loops; entry/retract and linking moves are
+hidden in this image for clarity. The final pass is at Z-15, leaving the base
+down to Z-30 intact. This is a path preview, not a
 stock-removal or fixture simulation.
 
 For a selected horizontal floor face, hole boundaries descending **below** the
@@ -91,19 +94,35 @@ bolt holes during floor clearing. Explicit edge loops remain user-defined
 island boundaries. This is a limited 2.5D boundary rule, not general retained-
 solid collision detection; inspect islands and entries carefully.
 
-The cutter-centre region is inset by **radius + Stock to leave**. Horizontal
-raster lines clear the inset region at a spacing of
-`diameter × stepover / 100`, followed by boundary passes. For a 6 mm tool at
-40% stepover, nominal raster spacing is 2.4 mm. Smaller stepover creates more
-paths; it is not a chip-thickness or constant-engagement controller.
+The cutter-centre region is inset by **radius + Stock to leave**. The default
+**Wall-parallel contours** strategy repeatedly offsets the complete region,
+including island walls. On the illustrated circular flange/boss this creates
+concentric closed paths rather than straight raster lines. On a square pocket
+with a circular island, fronts change shape and split into mixed straight/curved
+contours where they meet the other wall. Paths are clipped by the region's
+changing topology, not allowed to continue blindly through the island.
+
+Nominal spacing is `diameter × stepover / 100`: a 6 mm tool at 40% uses 2.4 mm.
+Contour spacing is capped at 50% diameter (with a log message) so two advancing
+fronts cannot leave a wide uncut strip when they disappear between offsets.
+Each depth repeats the XY contours. Linking still retracts to safe Z; these
+are not one continuous spiral or fitted `G2/G3` controller arcs.
+
+**Raster lines** retains straight-line clearing plus wall boundary passes.
+It honours its full stepover range. Climb/conventional raster requests select
+consistent forward/reverse scan direction, but that does not prove mechanical
+climb engagement throughout arbitrary geometry. Meander alternates scan lines.
+See [toolpath strategy and direction](toolpaths.md) for the full rules.
 
 Restrictions and checks:
 
 - All required boundaries must be closed; open chains are rejected.
 - Insetting that leaves no region produces a “pocket too small” error.
 - Stepover must be >0 and ≤100% (the GUI offers 1–100%).
-- Thin channels, close islands, concave offsets or intersecting loops can
-  expose limitations of the minimal offset kernel. Inspect generated paths.
+- Pocket offsets use Shapely/GEOS so fronts can merge, split and disappear.
+  Invalid/self-intersecting loops or overlapping non-nested selections are
+  rejected rather than silently repaired into a different removal region.
+  Very narrow regions can disappear after cutter compensation; inspect output.
 - An offset region existing does not prove the cutter can access it with safe
   entry or that the retained material/fixtures are collision-free.
 
@@ -142,8 +161,11 @@ allowance increases that offset to 3.3 mm. That can still place the cutter
 inside the allocated raw blank: the vertical entry must be evaluated, not
 assumed to be in air.
 
-Not implemented: holding tabs, bridges, lead-ins/outs, automatic climb versus
-conventional direction strategy, controller G41/G42 compensation, and
+Climb/conventional/meander winding follows the machine default or operation
+override; the assumed spindle is clockwise M3. See [direction rules](toolpaths.md).
+
+Not implemented: holding tabs, bridges, lead-ins/outs,
+controller G41/G42 compensation, and
 fixture-aware routing. Breaking through the bottom may release the part;
 workholding is your responsibility.
 

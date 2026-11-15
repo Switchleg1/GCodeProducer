@@ -64,6 +64,8 @@ class Operation:
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
+    strategy: str = "contour"          # pocket: contour-parallel or legacy raster
+    cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
 
 
 @dataclass
@@ -296,6 +298,7 @@ def generate(job, ctx):
     """Generate ordered 2.5D operations. Fail rather than silently machining wrong geometry."""
     from .job import Layer, Path
     from .infill_gen import scan_fill
+    from .cam_paths import contour_pocket, direction_for, orient_contour
     setup = job.cam_setup
     topo = cached_topology(job.mesh)
     tools = {t.id: t for t in job.tools}
@@ -344,6 +347,7 @@ def generate(job, ctx):
             if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
                 raise ValueError(f"{op.name}: 2.5D operations require constant-Z edges")
             paths = []
+            direction = direction_for(job, op)
             if op.kind in ("profile", "pocket", "drill"):
                 if any(not np.allclose(p[0], p[-1]) for p in polys):
                     raise ValueError(f"{op.name}: select closed edges or a horizontal face")
@@ -351,21 +355,31 @@ def generate(job, ctx):
             if op.kind == "pocket":
                 if not 0 < op.stepover <= 100:
                     raise ValueError("Pocket stepover must be between 0 and 100 percent")
-                inset = diameter / 2 + op.stock
-                # Offset boundary then fill the cutter-centre region.
-                regions = []
-                for p, hole in zip(loops, geometry.hole_flags(loops)):
-                    regions.extend(geometry.offset_into_material(p, inset, hole))
-                if not regions:
-                    raise ValueError(f"{op.name}: pocket is too small for this tool")
-                for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
-                    paths.append(Path("cut", np.array([a, b]), width=diameter))
-                paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
+                if op.strategy == "contour":
+                    contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log)
+                    paths = [Path("cut", p, closed=True, width=diameter) for p in contours]
+                elif op.strategy == "raster":
+                    from .cam_paths import pocket_region, boundary_paths
+                    region = pocket_region(loops).buffer(-(diameter/2+op.stock))
+                    regions = [p for p, _ in boundary_paths(region, direction)]
+                    if not regions:
+                        raise ValueError(f"{op.name}: pocket is too small for this tool")
+                    for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
+                        pts = np.array([a, b])
+                        if direction == "conventional" or (direction == "meander" and len(paths) % 2):
+                            pts = pts[::-1]
+                        paths.append(Path("cut", pts, width=diameter))
+                    paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
+                else:
+                    raise ValueError(f"Unknown pocket strategy '{op.strategy}'")
             elif op.kind == "profile":
                 sign = {"outside": -1, "inside": 1, "on": 0}[op.side]
                 for p, hole in zip(loops, geometry.hole_flags(loops)):
                     out = geometry.offset_into_material(p, sign * (diameter / 2 + op.stock), hole) if sign else [p]
-                    paths.extend(Path("cut", q, closed=True, width=diameter) for q in out)
+                    for q in out:
+                        inside = not hole if op.side != "inside" else hole
+                        q = orient_contour(q, direction, material_inside=inside, index=len(paths))
+                        paths.append(Path("cut", q, closed=True, width=diameter))
             elif op.kind == "engrave":
                 if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
                     raise ValueError(f"{op.name}: only constant-Z engraving is supported")

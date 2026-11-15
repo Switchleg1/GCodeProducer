@@ -70,9 +70,14 @@ class CAMProfile(SliceStage):
             depths.append(round(z, 4))
             z -= step
         depths.append(round(final, 4))
+        from ..core.cam_paths import direction_for, orient_contour
+        direction = direction_for(job)
+        flags = geometry.hole_flags(paths2d)
         for di, depth in enumerate(depths):
             layer = Layer(index=di, z=depth, height=step)
-            for poly in paths2d:
+            for pi, (poly, hole) in enumerate(zip(paths2d, flags)):
+                material_inside = (not hole) if params["side"] != "inside" else hole
+                poly = orient_contour(poly, direction, material_inside=material_inside, index=pi)
                 layer.paths.append(Path("cut", poly, closed=True, width=tool.get("diameter", 6.0)))
             layers.append(layer)
         job.layers = layers

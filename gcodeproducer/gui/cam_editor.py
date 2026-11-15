@@ -123,8 +123,16 @@ class CAMEditor(QWidget):
         for k in ("outside", "inside", "on"):
             self.side.addItem(k.title(), k)
         self.stock = self.spin(0, 100, 0)
+        self.strategy = QComboBox()
+        self.strategy.addItem("Wall-parallel contours", "contour")
+        self.strategy.addItem("Raster lines", "raster")
+        self.direction = QComboBox()
+        for label, key in (("Machine default", "machine"), ("Climb", "climb"),
+                           ("Conventional", "conventional"), ("Meander", "meander")):
+            self.direction.addItem(label, key)
         for label, w in (("Stepdown (mm)", self.stepdown), ("Pocket stepover (%)", self.stepover),
-                         ("Profile side", self.side), ("Stock to leave (mm)", self.stock)):
+                         ("Profile side", self.side), ("Stock to leave (mm)", self.stock),
+                         ("Pocket strategy", self.strategy), ("Cutting direction", self.direction)):
             form.addRow(label, w)
             if isinstance(w, QComboBox):
                 w.currentIndexChanged.connect(self._edit)
@@ -258,6 +266,10 @@ class CAMEditor(QWidget):
             self.stepover.setValue(op.stepover)
             self.side.setCurrentIndex(self.side.findData(op.side))
             self.stock.setValue(op.stock)
+            self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
+            self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
+            self.strategy.setEnabled(op.kind == "pocket")
+            self.direction.setEnabled(op.kind in ("pocket", "profile"))
             self.stepover.setEnabled(op.kind == "pocket")
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
@@ -275,6 +287,7 @@ class CAMEditor(QWidget):
             d.source, d.value, d.extreme = source.currentData(), val.value(), extreme.currentData()
         op.stepdown, op.stepover = self.stepdown.value(), self.stepover.value()
         op.side, op.stock = self.side.currentData(), self.stock.value()
+        op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
         item = self.tree.currentItem()
         item.setText(0, f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else ""))
         self.changed.emit()

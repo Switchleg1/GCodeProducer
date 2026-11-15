@@ -49,6 +49,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `spindle_min` — Spindle min | float / rpm | `6000.0` | No schema bound | Spindle.  |
 | `spindle_max` — Spindle max | float / rpm | `24000.0` | No schema bound | Spindle.  |
 | `units` — Units | choice | `mm` | `mm` = mm; `inch` = inch | Work area.  |
+| `cut_direction` — Default cutting direction | choice | `climb` | `climb` = Climb; `conventional` = Conventional; `meander` = Meander | Toolpaths. Default for CAM pockets/profiles (M3 clockwise spindle). Operations may override it. Meander alternates adjacent passes. |
 | `allowed_tools` — Allowed tools | multi | `*` | IDs from tool; `*` = all, `[]` = none | Allowed consumables. Tools from the tool library that are mounted / available. |
 | `start_gcode` — Start G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written before the job. A template: {variables}, {if ...}{else}{endif}. Empty = the default. |
 | `end_gcode` — End G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written after the job. A template like the start G-code. Empty = the default. |

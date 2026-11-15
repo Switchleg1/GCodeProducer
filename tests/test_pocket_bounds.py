@@ -80,7 +80,8 @@ def test_floor_does_not_leave_stock_columns_over_downward_holes(libset):
     job, _ = job_for(mesh, [ref], libset)
     generate(job, StageContext())
     # Clearing above a hole must include its XY position, not preserve a stock island.
-    assert any(abs(p.points[:,1].mean()) < 1 for p in job.layers[0].paths if len(p.points)==2)
+    radius = job.tools[0].get("diameter") / 2
+    assert any(np.linalg.norm(p.points,axis=1).min() < radius for p in job.layers[0].paths)
 
 
 def test_selection_depth_follows_placement_and_requires_geometry():

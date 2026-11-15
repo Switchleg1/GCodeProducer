@@ -17,6 +17,11 @@ T3 — drill
   Drill: selected hole rims
 ```
 
+Pocket clearing defaults to **wall-parallel contours**. Offset fronts adapt to
+both walls and islands, including square/circle transitions. The CAM machine
+stores a default cutting direction—**Climb**, Conventional or Meander—with
+Climb as the default. Pocket/Profile operations may override it.
+
 The tree is the execution order. A repeated tool in a later group remains a
 separate tool-change group; groups are not automatically sorted by T number.
 
@@ -97,6 +102,7 @@ if the current blank is no longer suitable.
 Implemented machining is **initial 2.5D** from STL-derived topology:
 
 - [Geometry selection and linked depths](selection-and-depths.md)
+- [Wall-following strategies and cutting direction](toolpaths.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)
 

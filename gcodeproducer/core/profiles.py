@@ -71,6 +71,10 @@ def _machine_schema(workflow: str) -> list:
             Param("spindle_min", "float", 6000.0, unit="rpm", group="Spindle"),
             Param("spindle_max", "float", 24000.0, unit="rpm", group="Spindle"),
             Param("units", "choice", "mm", choices=["mm", "inch"], group="Work area"),
+            Param("cut_direction", "choice", "climb", label="Default cutting direction", group="Toolpaths",
+                  choices=[("climb", "Climb"), ("conventional", "Conventional"), ("meander", "Meander")],
+                  help="Default for CAM pockets/profiles (M3 clockwise spindle). Operations may override it. "
+                       "Meander alternates adjacent passes."),
             Param("allowed_tools", "multi", ALL_ITEMS, choices_from="tool", group="Allowed consumables",
                   help="Tools from the tool library that are mounted / available."),
         ] + common_tail

@@ -13,7 +13,7 @@
 | `core/profiles.py`, `core/params.py` | Profile schemas, default/coercion rules, allowed consumables |
 | `core/geometry.py` | STL loading/welding, slicing, offsets, raster masks, picking math |
 | `core/placement.py`, `core/support.py` | Model transformation, FDM support masks/blocks |
-| `core/cam.py`, `core/stock.py` | CAM setup/topology/references/paths and conservative stock checks |
+| `core/cam.py`, `core/cam_paths.py`, `core/stock.py` | CAM setup/topology/references, Shapely wall-parallel offsets/direction, and conservative stock checks |
 | `core/gcode_template.py`, `core/gcode_vars.py` | Template evaluation, variable registry and defaults |
 | `core/builder.py`, `core/gcode.py` | Emission and G-code line/program representation |
 | `core/sim.py`, `core/toolpath.py` | Modal state simulation and viewer-ready path arrays |
