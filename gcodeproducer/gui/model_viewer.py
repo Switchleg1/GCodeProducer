@@ -144,9 +144,11 @@ class ModelViewer(QOpenGLWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
         self.info = QLabel("", self)
+        self.info.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.info.setStyleSheet("color:#ddd;background:rgba(0,0,0,120);padding:3px 8px;border-radius:3px;")
         self.info.move(8, 8)
         self.warn = QLabel("", self)
+        self.warn.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.warn.setStyleSheet("color:#111;background:rgba(245,160,50,230);padding:3px 8px;border-radius:3px;")
         self.warn.setVisible(False)
         camera.changed.connect(self.update)
@@ -171,6 +173,7 @@ class ModelViewer(QOpenGLWidget):
         self.update()
 
     def set_cam_mode(self, mode):
+        self._drag = self._bdrag = self._cam_press = None
         self.cam_pick_mode = mode
         self._tool_cursor()
         self._update_info()
@@ -500,6 +503,10 @@ class ModelViewer(QOpenGLWidget):
                 self.moved.emit(cx + p[0] - start[0], cy + p[1] - start[1])
             self._last = pos
             return
+        if self.cam_pick_mode and getattr(self, "_cam_press", None) is not None and ev.buttons() & Qt.MouseButton.LeftButton:
+            if np.linalg.norm(np.subtract((pos.x(), pos.y()), self._cam_press)) < 4:
+                return   # Do not orbit on ordinary click jitter before hit testing.
+            self._cam_press = None
         dx, dy = pos.x() - self._last.x(), pos.y() - self._last.y()
         self._last = pos
         b = ev.buttons()

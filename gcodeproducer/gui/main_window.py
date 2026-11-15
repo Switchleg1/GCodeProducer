@@ -1352,7 +1352,7 @@ class MainWindow(QMainWindow):
             return
         op = self.cam_editor.operation()
         if op:
-            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op)))
+            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op), copy.deepcopy(self.cam_editor.setup.stock)))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):

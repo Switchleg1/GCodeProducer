@@ -85,7 +85,9 @@ class CAMEditor(QWidget):
         for key, title in (("start", "Start Z"), ("end", "End Z")):
             source = QComboBox()
             for label, val in (("Model top + offset", "top"), ("Model bottom + offset", "bottom"),
-                               ("Absolute Z", "absolute"), ("Selected geometry + offset", "geometry")):
+                               ("Absolute Z", "absolute"), ("Selected geometry + offset", "geometry"),
+                               ("Material surface + offset", "stock_top"),
+                               ("Machining selection + offset", "selection")):
                 source.addItem(label, val)
             val = self.spin(-10000, 10000, 0)
             extreme = QComboBox()
@@ -111,6 +113,10 @@ class CAMEditor(QWidget):
         self.depth_summary = QLabel("")
         self.depth_summary.setWordWrap(True)
         form.addRow(self.depth_summary)
+        self.b_selection_depths = QPushButton("Use pocket selection depths")
+        self.b_selection_depths.setToolTip("Start at material surface; end at the lowest selected face/edge Z. Replaces both depth definitions.")
+        self.b_selection_depths.clicked.connect(self.use_selection_depths)
+        form.addRow(self.b_selection_depths)
         self.stepdown = self.spin(0.001, 1000, 1)
         self.stepover = self.spin(1, 100, 40)
         self.side = QComboBox()
@@ -150,7 +156,8 @@ class CAMEditor(QWidget):
         self.setup = setup
         self.last_pick = None
         self.pick.setCurrentIndex(0)
-        self.rebuild()
+        first = next(((gi, 0) for gi, g in enumerate(setup.groups) if g.operations), (None, None))
+        self.rebuild(first)
 
     def indices(self):
         item = self.tree.currentItem()
@@ -198,7 +205,10 @@ class CAMEditor(QWidget):
         kind = self.kind.currentData()
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
         op = Operation(name=kind.title(), kind=kind, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1)
-        if kind == "engrave":
+        if kind == "pocket":
+            op.start = Depth("stock_top")
+            op.end = Depth("selection", extreme="min")
+        elif kind == "engrave":
             op.end = Depth("top", -0.2)
         self.setup.groups[gi].operations.append(op)
         self.rebuild((gi, len(self.setup.groups[gi].operations) - 1))
@@ -228,15 +238,17 @@ class CAMEditor(QWidget):
 
     def _selected(self, *_):
         self._loading = True
-        self.pick.setCurrentIndex(0)
-        self.last_pick = None
         op = self.operation()
+        self.pick.setCurrentIndex(self.pick.findData("face") if op is not None else 0)
+        self.last_pick = None
         self.details.setEnabled(op is not None)
+        self.b_selection_depths.setVisible(op is not None and op.kind == "pocket")
         if op:
             self.name.setText(op.name)
             self.enabled.setChecked(op.enabled)
             self.geom_label.setText(f"{len(op.geometry)} geometry references")
-            self.pick_status.setText("Click to toggle machining geometry; Use last pick also sets a depth reference.")
+            self.pick_status.setText("Face picking is active. Click the pocket floor, or choose Select edges for its bounds.")
+            self.depth_summary.setText("")
             for key, (source, val, extreme) in self.depth_controls.items():
                 d = getattr(op, key)
                 source.setCurrentIndex(source.findData(d.source))
@@ -269,7 +281,10 @@ class CAMEditor(QWidget):
 
     def accept_pick(self, result):
         op = self.operation()
-        if not op or result is None:
+        if not op:
+            return
+        if result is None:
+            self.pick_status.setText("Nothing selectable here. Click a visible face or switch to Select edges and click near a rim.")
             return
         self.last_pick = result
         ref = result["reference"]
@@ -293,6 +308,20 @@ class CAMEditor(QWidget):
             val.setValue(0)
             self._loading = False
             self.changed.emit()
+
+    def use_selection_depths(self):
+        op = self.operation()
+        if op is None or op.kind != "pocket":
+            return
+        op.start, op.end = Depth("stock_top"), Depth("selection", extreme="min")
+        self._loading = True
+        for key, (source, val, extreme) in self.depth_controls.items():
+            d = getattr(op, key)
+            source.setCurrentIndex(source.findData(d.source))
+            val.setValue(d.value)
+            extreme.setCurrentIndex(extreme.findData(d.extreme))
+        self._loading = False
+        self.changed.emit()
 
     def clear_geometry(self):
         op = self.operation()

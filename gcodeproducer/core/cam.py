@@ -31,7 +31,15 @@ class Depth:
     reference: Reference | None = None
     extreme: str = "max"
 
-    def resolve(self, mesh, topology):
+    def resolve(self, mesh, topology, references=(), stock=None):
+        if self.source == "stock_top":
+            return float(stock.top if stock is not None and stock.allocated else mesh.bounds[1][2]) + self.value
+        if self.source == "selection":
+            if not references:
+                raise ValueError("Select pocket bounds to resolve machining depth")
+            points = np.concatenate([topology.points(ref) for ref in references])
+            z = points[:, 2].min() if self.extreme == "min" else points[:, 2].max()
+            return float(z) + self.value
         if self.source == "absolute":
             return self.value
         if self.source == "geometry":
@@ -176,6 +184,21 @@ class Topology:
         faces = set(self.face(seed))
         return [e for e, fs in self.edges.items() if sum(f in faces for f in fs) == 1]
 
+    def pocket_face_edges(self, seed):
+        """Floor bounds: retain raised islands, not holes descending below the floor."""
+        boundary = self.face_edges(seed)
+        polygons = chains(boundary)
+        z = float(self.vertices[self.triangles[self.face(seed)]][:, :, 2].mean())
+        holes = geometry.hole_flags([self.vertices[p[:-1], :2] for p in polygons])
+        kept = []
+        for path, hole in zip(polygons, holes):
+            edges = [tuple(sorted((a, b))) for a, b in zip(path, path[1:])]
+            raised = any(self.vertices[self.triangles[f], 2].max() > z + 1e-4
+                         for e in edges for f in self.edges[e])
+            if not hole or raised:
+                kept.extend(edges)
+        return kept
+
     def edge_chain(self, ref):
         edge = tuple(sorted(ref.indices))
         for chain in self.feature_chains:
@@ -213,6 +236,7 @@ def pick_geometry(payload):
     elif mode == "edge":
         # Screen-space tolerance, with visibility checked against the surface ray.
         best = 10.0
+        inverse = np.linalg.inv(np.asarray(mvp, dtype=float))
         for chain in topo.feature_chains:
             p = topo.vertices[chain]
             clip = np.column_stack((p, np.ones(len(p)))) @ np.asarray(mvp).T
@@ -227,10 +251,15 @@ def pick_geometry(payload):
                 delta = np.linalg.norm(np.asarray(mouse) - (a + u * d))
                 # Separate visibility ray at the closest edge point (not the mouse).
                 point = p[j] + u * (p[j + 1] - p[j])
-                ray = point - origin
+                # Visibility must follow the candidate edge's pixel, not the mouse
+                # pixel: an offset mouse ray incorrectly hides edges in orthographic views.
+                projected = np.asarray(mvp) @ np.r_[point, 1]
+                near = inverse @ np.r_[projected[:2] / projected[3], -1, 1]
+                edge_origin = near[:3] / near[3]
+                ray = point - edge_origin
                 length = np.linalg.norm(ray)
                 if delta < best and length > 0:
-                    hit, _ = geometry.ray_triangles(origin, ray / length, topo.vertices[topo.triangles])
+                    hit, _ = geometry.ray_triangles(edge_origin, ray / length, topo.vertices[topo.triangles])
                     if hit < length - 1e-4:
                         continue
                     best, ref = delta, Reference("edge", sorted([int(chain[0]), int(chain[1])]))
@@ -252,11 +281,12 @@ def cached_topology(mesh):
 
 
 def highlight_geometry(payload):
-    mesh, op = payload
+    mesh, op, *stocks = payload
+    op_stock = stocks[0] if stocks else None
     topo = cached_topology(mesh)
     out = topo.highlight(op.geometry)
     try:
-        out["depths"] = f"Resolved Z: start {op.start.resolve(mesh, topo):.3f}, end {op.end.resolve(mesh, topo):.3f} mm"
+        out["depths"] = f"Resolved Z: start {op.start.resolve(mesh, topo, op.geometry, op_stock):.3f}, end {op.end.resolve(mesh, topo, op.geometry, op_stock):.3f} mm"
     except ValueError as exc:
         out["depths"] = str(exc)
     return out
@@ -282,7 +312,8 @@ def generate(job, ctx):
                 continue
             if op.kind not in KINDS or not op.geometry:
                 raise ValueError(f"{op.name}: select machining geometry first")
-            start, end = op.start.resolve(job.mesh, topo), op.end.resolve(job.mesh, topo)
+            start = op.start.resolve(job.mesh, topo, op.geometry, setup.stock)
+            end = op.end.resolve(job.mesh, topo, op.geometry, setup.stock)
             if not (math.isfinite(start) and math.isfinite(end)) or end > start:
                 raise ValueError(f"{op.name}: end Z must be at or below start Z")
             if op.stepdown <= 0 or not math.isfinite(op.stepdown):
@@ -303,7 +334,8 @@ def generate(job, ctx):
                     pts = topo.vertices[topo.triangles[topo.face(ref.indices[0])]].reshape(-1, 3)
                     if np.ptp(pts[:, 2]) > 1e-4:
                         raise ValueError(f"{op.name}: 2.5D operations require a horizontal face")
-                    edges = topo.face_edges(ref.indices[0])
+                    edges = (topo.pocket_face_edges(ref.indices[0]) if op.kind == "pocket"
+                             else topo.face_edges(ref.indices[0]))
                 else:
                     chain = topo.edge_chain(ref)
                     edges = zip(chain, chain[1:])

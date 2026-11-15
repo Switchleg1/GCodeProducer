@@ -188,8 +188,11 @@ For each new or changed feature/process:
 6. Regenerate checked-in reference pages after schema/default/variable changes.
    Do not hand-edit generated tables. Keep developer documentation alongside
    extension/API changes.
-7. Add regression tests, run link/reference tests and update screenshots only
-   when useful; label old screenshots rather than treating them as authoritative.
+7. Add regression tests, run link/reference tests and capture pictures as useful
+   features are added/documented. Store all images in `docs/pictures/`, add an
+   inventory entry in its README and link from the feature guide. Use real
+   application captures; label annotations and old screenshots explicitly.
+   Follow the [picture guidelines](pictures/README.md).
 8. Never turn numeric examples into claims of calibrated physical safety or
    silently document reserved fields as working behaviour.
 

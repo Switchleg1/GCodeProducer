@@ -21,8 +21,10 @@ This is not a replacement for exact B-rep/CAD topology.
 
 ## Selecting cutting geometry
 
-1. Select an operation in the CAM tree. Its geometry count and settings appear.
-2. Choose **Select faces** or **Select edges**.
+1. Select an operation in the CAM tree. Its geometry count and settings appear;
+   **face picking activates automatically**. Reopening a setup selects its first
+   operation rather than leaving all selection controls disabled.
+2. Keep **Select faces** or switch to **Select edges**.
 3. Keep **Pick purpose: Apply picks to machining geometry**.
 4. Click an element to add it; click it again to remove it.
 5. Use **Clear geometry** to remove all cutting references from this operation.
@@ -30,6 +32,11 @@ This is not a replacement for exact B-rep/CAD topology.
 Selected faces/edges highlight yellow. The operation owns its selections;
 switching to another operation displays that operation's geometry. Merely
 selecting another tree node does not copy geometry between operations.
+
+A miss now displays a message rather than silently leaving the selection
+unchanged. Edge picking allows a small screen-space tolerance and checks
+visibility along the candidate edge's pixel (important in orthographic views).
+Small click jitter does not orbit the camera before hit testing.
 
 Clicking different triangles of the same reconstructed face resolves to the
 same face reference. A different segment of the same feature chain resolves
@@ -73,8 +80,22 @@ Every operation has independent Start Z and End Z definitions:
 | Model bottom + offset | Offset in mm | Lowest placed model vertex Z + offset |
 | Absolute Z | World/work-coordinate height | Numeric value directly |
 | Selected geometry + offset | Offset in mm | Reference minimum or maximum Z + offset |
+| Material surface + offset | Offset in mm | Allocated stock top Z; falls back to model top when unallocated |
+| Machining selection + offset | Offset in mm | Minimum/maximum Z over all current cutting references |
 
-The minimum/maximum selector affects geometry references. It is irrelevant to
+New Pocket operations use Material surface for Start and Machining selection
+with Minimum Z for End. Thus a selected floor at Z-15 stops removal at -15,
+not the model bottom at -30. With an upper boss rim at Z0 and lower flange rim
+at Z-15, the selection also resolves to -15. Selecting only an upper rim at
+Z0 initially supplies no removal depth; add the lower boundary or set a
+specific end reference. Empty machining selections cannot resolve this source.
+Existing saved depth definitions are preserved. **Use pocket selection depths**
+explicitly switches both fields to these defaults and resets offsets; it is
+available on Pocket operations. See the
+[illustrated annular pocket example](operations.md#bounds-and-automatic-removal-height).
+
+The minimum/maximum selector affects geometry references and the machining
+selection source. It is irrelevant to
 an absolute height or the explicit Model top/bottom sources. The resolved
 start/end values are shown below the fields. A Geometry source without a
 reference is an error, not an implicit zero.

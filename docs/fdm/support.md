@@ -13,7 +13,7 @@ Changing a process does not change model support state. The support stage is
 core; it always reads the model mode, including when an older saved pipeline
 marks the stage disabled. Default mode **None** generates no support.
 
-![Support controls](../support_panel.jpg)
+![Support controls](../pictures/support_panel.jpg)
 
 The image is illustrative; old layouts may place some fields differently.
 

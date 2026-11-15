@@ -16,7 +16,7 @@ Move, float or close docks using their title bars. Restore hidden docks through
 **View**. Layout and window geometry are remembered using Qt settings. A
 missing dock is not evidence that its feature is disabled.
 
-![Prepare workspace](prepare.jpg)
+![Prepare workspace](pictures/prepare.jpg)
 
 Screenshots may precede current labels; the workflow-specific guides describe
 the current controls.
@@ -58,8 +58,10 @@ indices and are re-evaluated after placement; an operation may become invalid
 if its selected cutting geometry is no longer horizontal.
 
 Dragging the model in ordinary Prepare mode changes XY. Dragging empty space
-orbits. During CAM selection, dragging over the model orbits instead of moving
-it; leave selection mode before dragging the part. Model placements outside
+orbits. Selecting a CAM operation automatically activates face picking. Switch to
+Select edges to pick rims; a reopened setup selects its first operation so
+picking is immediately usable. During CAM selection, dragging over the model
+orbits instead of moving it; leave selection mode before dragging the part. Model placements outside
 the work volume are orange and show a warning. The CAM volume extends below
 Z0; the FDM volume extends above it. Stock and extra adhesion paths are not
 made safe merely because the model itself fits.
@@ -78,7 +80,7 @@ Preview displays generated moves, not the original solid model or a physical
 cutting simulation. CAM stock outlines appear in both views and represent the
 original blank, not material remaining after machining.
 
-![Toolpath preview](preview.jpg)
+![Toolpath preview](pictures/preview.jpg)
 
 Edits to placement, machine, process, consumables or CAM stock/setup make the
 preview **out of date**. Regenerate before relying on it. CAM export is blocked

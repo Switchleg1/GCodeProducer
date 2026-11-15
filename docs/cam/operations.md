@@ -15,8 +15,8 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
-| Start | Model top + 0 | Depth reference, not safe approach height |
-| End | Model bottom + 0 | Default for Pocket/Profile/Drill; **Engrave defaults to Model top - 0.2 mm** |
+| Start | Pocket: Material surface + 0; others: Model top + 0 | Pocket falls back to model top until stock is allocated; not safe approach height |
+| End | Pocket: machining selection minimum Z + 0; Profile/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
 | Stepdown | Tool max DOC when added, otherwise 1 mm | Requested vertical increment; capped at positive tool max DOC during generation |
 | Pocket stepover | 40% | Raster spacing as percentage of cutter diameter; independent of stored tool stepover |
 | Profile side | Outside | Outside, Inside or On |
@@ -43,6 +43,53 @@ Select a horizontal face boundary or a closed set of feature edges. Include
 island/hole boundaries when they should remain excluded from clearing; the
 kernel determines nesting from the supplied loops, not from an unselected
 whole CAD solid.
+
+### Bounds and automatic removal height
+
+![Pocket limits marked around the flange and raised boss](../pictures/cam-pocket-bounds-example.png)
+
+The red lines are annotations in the supplied example, not the app's selection
+colour. The intended pocket is the annular region **between the outer flange
+rim and the boss**, from the material surface down to the flange top—not
+through to the part's bottom.
+
+Two ways to select it:
+
+1. **Faces:** click the exposed annular floor face. Its outside boundary limits
+   the pocket; the raised boss is retained as an island.
+2. **Edges:** choose Select edges, click the outer flange's top rim and the
+   boss's outer rim. Closed projected loops bound the annulus, even when the
+   rims have different Z heights. Do not select the boss's whole top face as
+   a substitute for its outer edge: a face contributes all its boundaries.
+
+New Pocket operations start at **Material surface** and end at **Machining
+selection → Minimum Z**. For a boss top at Z0, flange top at Z-15 and part
+bottom at Z-30, the selected region is cleared only to **Z-15**. Depths update
+as the selection or placement changes. Numeric offsets allow axial allowance;
+changing to an explicit source allows a deliberate manual override. Existing
+saved operations retain their original sources rather than silently changing
+cutting depths; click **Use pocket selection depths** to set both sources at
+once, or choose the new sources individually. This button replaces both depth
+definitions and resets their offsets to zero.
+
+![The annular floor selected in the current application](../pictures/cam-pocket-floor-selected.png)
+
+The actual selected floor is yellow. The blue boss remains an island; the
+amber outline is the original stock. Here the lowest selected Z is -15.
+
+![One generated pocket pass between the outer boundary and the boss](../pictures/cam-pocket-generated-pass.png)
+
+A generated pass clears the annulus and retains its centre. Green shows
+cutting moves; magenta vertical moves show entry/retracts. The final pass is
+at Z-15, leaving the base down to Z-30 intact. This is a path preview, not a
+stock-removal or fixture simulation.
+
+For a selected horizontal floor face, hole boundaries descending **below** the
+floor do not create stock islands above those holes. Raised boundaries (such
+as the boss) remain protected. This avoids leaving uncut stock columns above
+bolt holes during floor clearing. Explicit edge loops remain user-defined
+island boundaries. This is a limited 2.5D boundary rule, not general retained-
+solid collision detection; inspect islands and entries carefully.
 
 The cutter-centre region is inset by **radius + Stock to leave**. Horizontal
 raster lines clear the inset region at a spacing of

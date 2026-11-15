@@ -74,6 +74,15 @@ def test_all_manual_pages_reachable_from_index():
     assert set(DOCS.rglob("*.md")) <= seen
 
 
+def test_documentation_images_are_centralized_and_indexed():
+    pictures = DOCS / "pictures"
+    inventory = (pictures / "README.md").read_text(encoding="utf-8")
+    for path in DOCS.rglob("*"):
+        if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
+            assert path.is_relative_to(pictures), f"Move {path} into docs/pictures"
+            assert f"]({path.name})" in inventory, f"Index {path.name} in pictures/README.md"
+
+
 def test_feature_reference_coverage_and_lightweight_readme():
     from gcodeproducer import stages as builtins
     from gcodeproducer.stages.base import SliceStage

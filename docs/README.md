@@ -76,7 +76,10 @@ an empty warning list, or a green-looking preview as certification that output
 is physically safe.
 
 Screenshots illustrate UI concepts and may show older labels or layouts:
-[Prepare](prepare.jpg), [Preview](preview.jpg), [Support panel](support_panel.jpg).
+[Prepare](pictures/prepare.jpg), [Preview](pictures/preview.jpg),
+[Support panel](pictures/support_panel.jpg). All documentation images live in
+[`docs/pictures/`](pictures/README.md); add feature illustrations there and link
+them from the relevant guide.
 
 To contribute or update this manual, follow the
 [documentation contract](development.md#documentation-contract).
