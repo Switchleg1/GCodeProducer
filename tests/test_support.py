@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from conftest import write_boxes
+from conftest import model_support, write_boxes
 from gcodeproducer.core import workflow as wf
 from gcodeproducer.core.pipeline import SlicePipeline
 from gcodeproducer.core.placement import Placement
@@ -13,11 +13,9 @@ SHELF = [(0, 0, 0, 30, 30, 4), (0, 0, 4, 10, 10, 20), (0, 0, 20, 30, 30, 22)]   
 
 def _support_lines(libset, path, enabled=True, placement="buildplate", pl=None):
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = enabled
-    st.params["placement"] = placement
+    ms, _ = model_support({"placement": placement}, enabled)
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
-                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=pl)
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=pl, support=ms)
     res = slice_job(job, pipe)
     lines = [ln for ln in res.program.lines
              if ln.feature in ("support", "support_interface") and ln.cmd == "G1" and "E" in ln.params]
@@ -25,7 +23,9 @@ def _support_lines(libset, path, enabled=True, placement="buildplate", pl=None):
 
 
 def test_support_off_by_default():
-    assert not SlicePipeline.default(wf.FDM).step("fdm_support").enabled
+    from gcodeproducer.core.support import ModelSupport
+    assert ModelSupport().mode == "none"                       # a model starts without support
+    assert SlicePipeline.default(wf.FDM).step("fdm_support").enabled
 
 
 def test_t_shape_gets_support_from_bed(libset, tmp_path):
@@ -73,7 +73,8 @@ def test_cli_stage_param_enables_support(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("GCODEPRODUCER_LIBRARY", str(tmp_path / "lib"))
     path = write_boxes(tmp_path / "t.stl", T_SHAPE)
     out = tmp_path / "t.gcode"
-    assert main(["slice", path, "-o", str(out), "-q", "-m", "fdm_support:placement=buildplate"]) == 0
+    assert main(["slice", path, "-o", str(out), "-q", "--support", "buildplate",
+                 "-m", "fdm_support:density=20"]) == 0
     assert ";TYPE:support" in out.read_text()
     assert main(["slice", path, "-o", str(out), "-q", "-m", "fdm_support:typo=1"]) == 2   # typo reported
 
@@ -89,11 +90,11 @@ def _hole_plate(tmp_path, hole=8):
 def _support_pts(libset, path, mode="buildplate", blocks=None, **params):
     from gcodeproducer.core import sim
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = True
-    st.params.update({"placement": mode, **params})
+    ms, proc = model_support({"placement": mode, **params})
+    pipe.step("fdm_support").params.update(proc)
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
-                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), support_blocks=blocks)
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), support_blocks=blocks,
+                    support=ms)
     p = slice_job(job, pipe).program
     s = sim.simulate(p)
     sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
@@ -160,12 +161,10 @@ def test_extend_past_model_edge(libset, tmp_path, mode, margin):
     from gcodeproducer.core.support import SupportBlock
     path = write_boxes(tmp_path / "t.stl", T_SHAPE)          # plate spans 95..125 on the bed
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = True
-    st.params.update({"placement": mode, "edge_margin": margin})
+    ms, _ = model_support({"placement": mode, "edge_margin": margin})
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
                     nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path),
-                    support_blocks=[SupportBlock(80, 80, 0, 140, 140, 15)])
+                    support_blocks=[SupportBlock(80, 80, 0, 140, 140, 15)], support=ms)
     p = slice_job(job, pipe).program
     s = sim.simulate(p)
     sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
@@ -175,8 +174,8 @@ def test_extend_past_model_edge(libset, tmp_path, mode, margin):
 
 
 def test_extend_default_is_one_mm():
-    from gcodeproducer.stages.fdm_support import FDMSupport
-    assert FDMSupport.defaults()["edge_margin"] == 1.0
+    from gcodeproducer.core.support import ModelSupport
+    assert ModelSupport().extend == 1.0
 
 
 def _ring_reach(libset, tmp_path, r_in, margin, fill):
@@ -186,11 +185,10 @@ def _ring_reach(libset, tmp_path, r_in, margin, fill):
     from gcodeproducer.core.placement import Placement
     path = write_tris(tmp_path / f"ring{r_in}.stl", ring_tris(0, 0, 20.0, r_in, 0, 3))
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = True
-    st.params.update({"placement": "buildplate", "edge_margin": margin, "fill_holes": fill})
+    ms, _ = model_support({"placement": "buildplate", "edge_margin": margin, "fill_holes": fill})
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
-                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=Placement(z=5))
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=Placement(z=5),
+                    support=ms)
     p = slice_job(job, pipe).program
     s = sim.simulate(p)
     sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
@@ -223,8 +221,8 @@ def test_fill_holes_option_still_fills(libset, tmp_path):
 
 
 def test_fill_holes_default_off():
-    from gcodeproducer.stages.fdm_support import FDMSupport
-    assert FDMSupport.defaults()["fill_holes"] == 0.0
+    from gcodeproducer.core.support import ModelSupport
+    assert ModelSupport().fill_holes == 0.0
 
 
 # ------------------------------------------------------------------ gaps & interfaces
@@ -235,11 +233,10 @@ def _layers(libset, tmp_path, boxes, mode, **params):
     from gcodeproducer.core import sim
     path = write_boxes(tmp_path / "m.stl", boxes)
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = True
-    st.params.update({"placement": mode, **params})
+    ms, proc = model_support({"placement": mode, **params})
+    pipe.step("fdm_support").params.update(proc)
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
-                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path))
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), support=ms)
     p = slice_job(job, pipe).program
     s = sim.simulate(p)
     feat = np.array([ln.feature for ln in p.lines])
@@ -285,12 +282,11 @@ def test_bottom_gap_in_block_mode(libset, tmp_path):
     from gcodeproducer.core.support import SupportBlock
     path = write_boxes(tmp_path / "s.stl", SHELF_EVERYWHERE)
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = True
-    st.params.update({"placement": "blocks", "bottom_z_gap_layers": 2})
+    ms, proc = model_support({"placement": "blocks", "bottom_z_gap_layers": 2})
+    pipe.step("fdm_support").params.update(proc)
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
                     nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path),
-                    support_blocks=[SupportBlock(110, 110, 0, 125, 125, 25)])
+                    support_blocks=[SupportBlock(110, 110, 0, 125, 125, 25)], support=ms)
     p = slice_job(job, pipe).program
     zs = [p.layer_z[ln.layer] for ln in p.lines if ln.feature.startswith("support") and ln.cmd == "G1"
           and ("X" in ln.params or "Y" in ln.params)]

@@ -64,14 +64,11 @@ def summary(step: Step) -> str:
             parts.append(f"brim {g('brim_width'):g} mm")
         return ", ".join(parts)
     if sid == "fdm_support":
-        ext = g("edge_margin")
-        ext = "" if ext == "auto" else f", +{ext:g} mm"
-        if g("placement") == "blocks":
-            return f"manual blocks, {g('density'):g}%{ext}"
-        where = "everywhere" if g("placement") == "everywhere" else "build plate"
-        return f"{where}, {g('overhang_angle'):g}°, {g('density'):g}%{ext}"
+        return (f"{g('density'):g}% {g('pattern')}, gap {g('z_gap_layers')}/{g('bottom_z_gap_layers')}, "
+                f"interface {g('interface_layers')}/{g('bottom_interface_layers')}")
     if sid == "fdm_emit":
-        return "retract on travel" if g("retract") else "no retraction"
+        return (f"walls {g('outer_wall_speed'):g}/{g('inner_wall_speed'):g}, infill {g('infill_speed'):g}, "
+                f"travel {g('travel_speed'):g} mm/s")
     if sid == "cam_profile":
         return f"{g('side')}" + ("" if g("stepdown") == "auto" else f", {g('stepdown'):g} mm/pass")
     return ""

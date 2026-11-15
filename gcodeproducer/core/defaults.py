@@ -11,8 +11,8 @@ def builtin_profiles() -> list:
     return [
         Profile("machine", "Generic 220 FDM", workflow=wf.FDM, values={
             "bed_x": 220, "bed_y": 220, "height": 250,
-            "print_speed": 60, "perimeter_speed": 45, "outer_perimeter_speed": 30,
-            "infill_speed": 60, "travel_speed": 150, "first_layer_speed": 20,
+            "max_print_speed": 200, "max_travel_speed": 300, "max_acceleration": 5000,
+            "max_nozzle_temp": 280, "max_bed_temp": 110,
         }),
         Profile("machine", "Generic 300 Router", workflow=wf.CAM, values={
             "work_x": 300, "work_y": 300, "work_z": 100,
@@ -25,6 +25,11 @@ def builtin_profiles() -> list:
         Profile("material", "PETG", values={
             "type": "PETG", "temp_nozzle": 235, "temp_nozzle_first": 240,
             "temp_bed": 80, "temp_bed_first": 80, "retract_length": 1.5, "fan_speed": 50,
+        }),
+        Profile("material", "ABS", values={
+            "type": "ABS", "density": 1.04, "temp_nozzle": 245, "temp_nozzle_first": 250,
+            "temp_bed": 100, "temp_bed_first": 100, "temp_chamber": 45, "fan_speed": 20,
+            "retract_length": 1.0,
         }),
         Profile("nozzle", "0.4 mm", values={"diameter": 0.4, "line_width": 0.45, "max_flow": 12}),
         Profile("nozzle", "0.6 mm", values={"diameter": 0.6, "line_width": 0.68, "max_flow": 20}),

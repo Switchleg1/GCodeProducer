@@ -62,7 +62,7 @@ def test_old_pipeline_upgraded_with_disabled_stage():
     ids = [s.stage for s in p.steps]
     assert ids == ["fdm_slice", "fdm_skirt_brim", "fdm_support", "fdm_perimeters", "fdm_top_bottom",
                    "fdm_infill", "fdm_emit"]
-    assert not p.step("fdm_support").enabled
+    assert p.step("fdm_support").enabled          # always runs; Model > Support decides
     assert not p.step("fdm_skirt_brim").enabled
     assert p.step("fdm_slice").enabled
 

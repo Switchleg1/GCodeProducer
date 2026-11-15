@@ -24,14 +24,14 @@ def load_mesh(path: str):
 def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = None,
               nozzle: Optional[Profile] = None, tools: Optional[list] = None,
               mesh=None, model_path: Optional[str] = None, settings: Optional[dict] = None,
-              placement=None, support_blocks=None) -> Job:
+              placement=None, support_blocks=None, support=None) -> Job:
     workflow = wf.normalize(workflow)
     if machine.workflow != workflow:
         raise ValueError(f"machine '{machine.name}' is a {machine.workflow} machine, not {workflow}")
     return Job(workflow=workflow, machine=machine, material=material, nozzle=nozzle,
                tools=list(tools or []), mesh=mesh, model_path=model_path,
                settings=dict(settings or {}), placement=placement,
-               support_blocks=list(support_blocks or []))
+               support_blocks=list(support_blocks or []), support=support)
 
 
 def place_mesh(job: Job) -> None:

@@ -78,21 +78,25 @@ def _machine_schema(workflow: str) -> list:
         Param("height", "float", 250.0, unit="mm", group="Build volume"),
         Param("origin_center", "bool", False, group="Build volume",
               help="Origin at bed centre (delta / some corexy) instead of front-left."),
-        Param("travel_speed", "float", 150.0, unit="mm/s", group="Speeds",
-              help="Non-printing (travel) moves."),
-        Param("print_speed", "float", 60.0, unit="mm/s", group="Speeds",
-              help="Default print speed; feature stages scale this."),
-        Param("perimeter_speed", "float", 45.0, unit="mm/s", group="Speeds"),
-        Param("outer_perimeter_speed", "float", 30.0, unit="mm/s", group="Speeds"),
-        Param("infill_speed", "float", 60.0, unit="mm/s", group="Speeds"),
-        Param("solid_infill_speed", "float", 40.0, unit="mm/s", group="Speeds",
-              help="Top / bottom solid surfaces."),
-        Param("support_speed", "float", 50.0, unit="mm/s", group="Speeds"),
-        Param("first_layer_speed", "float", 20.0, unit="mm/s", group="Speeds"),
-        Param("z_speed", "float", 10.0, unit="mm/s", group="Speeds"),
-        Param("acceleration", "float", 2000.0, unit="mm/s\u00b2", group="Motion", allow_auto=True),
-        Param("max_flow", "float", 0.0, unit="mm\u00b3/s", group="Motion", allow_auto=True,
-              help="0 / auto = limited by the nozzle instead."),
+        # limits: what the machine can do. The *requested* speeds are process settings
+        # (Process > Speed & travel); the slicer caps them at these values.
+        Param("max_print_speed", "float", 200.0, unit="mm/s", min=1, decimals=0, group="Speed limits",
+              help="Fastest printing move. Process speeds above this are capped."),
+        Param("max_travel_speed", "float", 300.0, unit="mm/s", min=1, decimals=0, group="Speed limits",
+              help="Fastest travel (non-printing) move."),
+        Param("max_acceleration", "float", 5000.0, unit="mm/s\u00b2", min=0, decimals=0, group="Speed limits",
+              help="Highest acceleration the process may request (0 = no limit)."),
+        Param("max_flow", "float", 0.0, unit="mm\u00b3/s", min=0, decimals=1, group="Speed limits",
+              help="Machine (hot-end / extruder) volumetric limit; 0 = only the nozzle's limit applies."),
+        Param("max_nozzle_temp", "float", 280.0, unit="\u00b0C", min=0, decimals=0, group="Temperature limits",
+              help="Material nozzle temperatures above this are capped."),
+        Param("max_bed_temp", "float", 110.0, unit="\u00b0C", min=0, decimals=0, group="Temperature limits"),
+        Param("heated_chamber", "bool", False, group="Chamber",
+              help="The machine has a heated / controlled chamber (M141)."),
+        Param("max_chamber_temp", "float", 60.0, unit="\u00b0C", min=0, decimals=0, group="Chamber",
+              help="Material chamber temperatures above this are capped."),
+        Param("wait_for_chamber", "bool", False, group="Chamber",
+              help="Wait for the chamber to reach temperature before printing (M191)."),
         Param("relative_e", "bool", True, group="Motion", help="Use M83 relative extrusion."),
         Param("allowed_nozzles", "multi", ALL_ITEMS, choices_from="nozzle", group="Allowed consumables"),
         Param("allowed_materials", "multi", ALL_ITEMS, choices_from="material", group="Allowed consumables"),
@@ -109,6 +113,9 @@ _MATERIAL_SCHEMA = [
           label="First layer nozzle"),
     Param("temp_bed", "float", 60.0, unit="\u00b0C", group="Temperature"),
     Param("temp_bed_first", "float", 60.0, unit="\u00b0C", group="Temperature", label="First layer bed"),
+    Param("temp_chamber", "float", 0.0, unit="\u00b0C", min=0, group="Temperature", label="Chamber",
+          help="Chamber temperature for this material (0 = not needed). Only used on machines with a heated "
+               "chamber; capped at the machine's maximum."),
     Param("flow", "float", 100.0, unit="%", group="Flow", help="Extrusion multiplier."),
     Param("fan_speed", "float", 100.0, unit="%", group="Cooling"),
     Param("fan_first_layers", "int", 1, group="Cooling", help="Layers with the fan off."),
@@ -192,8 +199,13 @@ class Profile:
         return schema(self.kind, self.workflow)
 
     def resolved(self) -> dict:
-        """Values with defaults filled and coerced to the right types."""
-        return resolve_params(self.schema(), self.values)
+        """Values with defaults filled and coerced to the right types.
+
+        Keys that are no longer part of the schema (settings removed or moved, e.g.
+        the speeds that moved from the machine to the process) are ignored, so older
+        profile files keep loading."""
+        known = {p.name for p in self.schema()}
+        return resolve_params(self.schema(), {k: v for k, v in self.values.items() if k in known})
 
     def get(self, key: str, default=None):
         v = self.resolved()

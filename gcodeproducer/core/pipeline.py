@@ -53,7 +53,7 @@ DEFAULT_PIPELINES = {
 }
 
 #: optional stages that are part of the default pipeline but start switched off
-DEFAULT_DISABLED = {"fdm_support"}
+DEFAULT_DISABLED: set = set()
 
 
 class SlicePipeline:
@@ -125,7 +125,8 @@ class SlicePipeline:
             progress: Optional[Callable[[float], None]] = None) -> PipelineResult:
         from ..stages.base import StageContext
         results = []
-        active = [s for s in self.steps if s.enabled]
+        # core stages always run, even if an older saved process has them switched off
+        active = [s for s in self.steps if s.enabled or not _optional(s.stage)]
         for k, step in enumerate(active):
             cls = plugins.stages.get(step.stage)
             params = cls.resolve(step.params)
@@ -150,6 +151,13 @@ class SlicePipeline:
         if progress:
             progress(1.0)
         return PipelineResult(job, results)
+
+
+def _optional(stage_id: str) -> bool:
+    try:
+        return plugins.stages.get(stage_id).optional
+    except KeyError:
+        return True
 
 
 def parse_stage_spec(spec: str) -> Step:

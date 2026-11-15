@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pytest
 
-from conftest import write_boxes
+from conftest import model_support, write_boxes
 from gcodeproducer.core import workflow as wf
 from gcodeproducer.core.pipeline import SlicePipeline
 from gcodeproducer.core.placement import Placement, bed_xy, overhang_faces
@@ -16,12 +16,10 @@ T_SHAPE = [(10, 10, 0, 20, 20, 15), (0, 0, 15, 30, 30, 18)]
 
 def _slice(libset, path, mode="buildplate", enabled=True, pl=None, blocks=None):
     pipe = SlicePipeline.default(wf.FDM)
-    st = pipe.step("fdm_support")
-    st.enabled = enabled
-    st.params["placement"] = mode
+    ms, _ = model_support({"placement": mode}, enabled)
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
                     nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=pl,
-                    support_blocks=blocks)
+                    support_blocks=blocks, support=ms)
     res = slice_job(job, pipe)
     sup = [ln for ln in res.program.lines
            if ln.feature.startswith("support") and ln.cmd == "G1" and "E" in ln.params and ln.params["E"] > 0]
@@ -128,7 +126,7 @@ def test_cli_z_and_blocks(tmp_path, monkeypatch):
     blocks.write_text(json.dumps([SupportBlock(95, 95, 0, 110, 125, 20).to_dict()]))
     out = tmp_path / "t.gcode"
     assert main(["slice", path, "-o", str(out), "-q", "--z", "3", "--support-blocks", str(blocks),
-                 "-m", "fdm_support:placement=blocks"]) == 0
+                 "--support", "blocks"]) == 0
     text = out.read_text()
     assert ";TYPE:support" in text
 

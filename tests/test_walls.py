@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from conftest import box_tris, frame_tris, ring_tris, write_tris
+from conftest import box_tris, frame_tris, model_support, ring_tris, write_tris
 from gcodeproducer.core import geometry, sim
 from gcodeproducer.core import workflow as wf
 from gcodeproducer.core.pipeline import SlicePipeline
@@ -38,10 +38,10 @@ def test_thin_rim_limits_hole_walls():
 
 def _slice(libset, path, walls=2, support=True, placement=None):
     pipe = SlicePipeline.default(wf.FDM)
-    pipe.step("fdm_support").enabled = support
     pipe.step("fdm_perimeters").params["perimeters"] = walls
     job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
-                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=placement)
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), placement=placement,
+                    support=model_support({}, support)[0])
     p = slice_job(job, pipe).program
     return p, sim.simulate(p)
 

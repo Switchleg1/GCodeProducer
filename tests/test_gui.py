@@ -1,4 +1,5 @@
 """Headless GUI tests (offscreen Qt platform, no modal dialogs)."""
+import json
 import os
 import time
 
@@ -32,7 +33,7 @@ def win(app, tmp_path, monkeypatch):
 def test_sections_and_setup(win):
     titles = [s._title for s in win.process_editor.sections]
     assert titles == ["Layers", "Skirt / brim", "Support", "Walls", "Top / bottom shells", "Infill",
-                      "Travel & output"]
+                      "Speed & travel"]
     rows = {k: win.setup_form.isRowVisible(r) for k, (_l, r, _c) in win.cons_rows.items()}
     assert rows == {"material": True, "nozzle": True, "tool": False}
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
@@ -144,20 +145,21 @@ def test_placement_controls(win, tmp_path):
     assert abs(win.placement.rx) == 180 or abs(win.placement.ry) == 180
 
 
-def test_support_controls_follow_process(win):
-    step = win.pipelines["fdm"].step("fdm_support")
-    assert win.cb_support.currentData() == "none" and not step.enabled
+def test_support_controls_are_model_state(win, tmp_path):
+    """Model > Support edits the model's support settings and never the process."""
+    win.open_model(_bracket(tmp_path))
+    proc_before = json.dumps(win.pipelines["fdm"].to_dict(), sort_keys=True)
+    assert win.cb_support.currentData() == "none" and win.model_support.mode == "none"
     win.cb_support.setCurrentIndex(win.cb_support.findData("everywhere"))
-    assert step.enabled and step.params["placement"] == "everywhere" and win.dirty["fdm"]
     win.sp_overhang.setValue(40)
-    assert step.params["overhang_angle"] == 40
-    # and the other way: the process editor's switch drives the combo
-    step.enabled = False
-    win.process_editor.changed.emit()
-    assert win.cb_support.currentData() == "none"
+    win.sp_extend.setValue(2.5)
+    win.sp_fill_holes.setValue(150)
+    ms = win.model_support
+    assert (ms.mode, ms.overhang_angle, ms.extend, ms.fill_holes) == ("everywhere", 40, 2.5, 150)
+    assert json.dumps(win.pipelines["fdm"].to_dict(), sort_keys=True) == proc_before
+    assert not win.dirty["fdm"]
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     assert not win.support_box.isVisibleTo(win) or not win.support_box.isEnabled()
-
 
 def test_z_position_and_drop(win, tmp_path):
     win.open_model(_bracket(tmp_path))
@@ -310,65 +312,52 @@ def test_remove_blocks_by_clicking(win, app, tmp_path):
     assert not win.b_remove_block.isChecked() and not win.model_viewer.remove_block
 
 
-def test_extend_past_edge_control(win):
-    step = win.pipelines["fdm"].step("fdm_support")
-    assert win.sp_extend.value() == pytest.approx(1.0)
-    win.sp_extend.setValue(2.5)
-    assert step.params["edge_margin"] == 2.5 and win.dirty["fdm"]
-    step.params["edge_margin"] = 0.6                     # edited in the process editor -> panel follows
-    win.process_editor.changed.emit()
-    assert win.sp_extend.value() == pytest.approx(0.6)
-    from gcodeproducer.gui.process_editor import summary
-    step.enabled = True
-    assert "+0.6 mm" in summary(step)
+def test_switching_process_keeps_model_support_and_position(win, tmp_path):
+    """Changing process never clears or changes the model (support, blocks, position)."""
+    from gcodeproducer.core.support import SupportBlock
+    win.open_model(_bracket(tmp_path))
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    win.sp_extend.setValue(1.7)
+    win.sp_overhang.setValue(55)
+    win.sp_x.setValue(80)
+    win.sp_z.setValue(3)
+    win.blocks = [SupportBlock(90, 90, 0, 100, 100, 10)]
+    win._blocks_changed()
+    before = (win.model_support.to_dict(), win.placement.to_dict(), [b.to_dict() for b in win.blocks])
+    for pid in ("0-30-mm-draft", "0-12-mm-fine", "strong-cubic-40", "0-20-mm-standard"):
+        win.select_process(pid)
+        after = (win.model_support.to_dict(), win.placement.to_dict(), [b.to_dict() for b in win.blocks])
+        assert after == before, pid
+        assert win.cb_support.currentData() == "blocks" and win.sp_extend.value() == pytest.approx(1.7)
+    win.process_save_as(name="Another")                       # saving a process: same
+    assert win.model_support.to_dict() == before[0]
+    # and it is used when slicing whatever the process
+    assert win.model_support.mode == "blocks"
 
 
-def test_fill_holes_control(win):
-    step = win.pipelines["fdm"].step("fdm_support")
-    assert win.sp_fill_holes.value() == 0 and win.sp_fill_holes.text() == "off"
-    win.sp_fill_holes.setValue(150)
-    assert step.params["fill_holes"] == 150 and win.dirty["fdm"]
-
-
-def test_support_placement_hidden_in_process_editor(win):
-    from gcodeproducer.gui.process_editor import ProcessEditor
-    from gcodeproducer.gui.widgets import ParamEditor
-    from gcodeproducer.stages.fdm_support import FDMSupport
-    params = FDMSupport.parameters()
-    ed = ParamEditor(params, {**FDMSupport.defaults(), "placement": "everywhere"})
-    assert "placement" not in ed._widgets and "overhang_angle" in {p.name for p in params}
-    labels = [w.text() for w in ed.findChildren(QtWidgets.QLabel)]
-    assert not any("placement" in t.lower() for t in labels)
-    assert any("Bottom interface" in t for t in labels) and any("Bottom Z gap" in t for t in labels)
-    # editing another value keeps the hidden placement
-    got = {}
-    ed.changed.connect(got.update)
-    ed._set("density", 25.0)
-    assert got["placement"] == "everywhere" and got["density"] == 25.0
-    # and in the main window: the Model > Support combo still drives it
+def test_model_support_saved_per_model(win, tmp_path):
+    a = _bracket(tmp_path)
+    win.open_model(a)
     win.cb_support.setCurrentIndex(win.cb_support.findData("everywhere"))
-    step = win.pipelines["fdm"].step("fdm_support")
-    assert step.params["placement"] == "everywhere"
+    win.sp_extend.setValue(2.0)
+    win.open_model(os.path.join(os.path.dirname(__file__), "..", "examples", "cube20.stl"))
+    assert win.model_support.mode == "none"                   # a different model has its own settings
+    win.open_model(a)
+    assert win.model_support.mode == "everywhere" and win.model_support.extend == 2.0
+
 
 
 def test_support_section_shows_only_process_settings():
-    """Placement, 'extend past edge' and 'fill holes' live in Model > Support, not in the process editor."""
+    """Placement, overhang angle, extend and fill holes live in Model > Support, not in the process."""
     from gcodeproducer.gui.widgets import ParamEditor
     from gcodeproducer.stages.fdm_support import FDMSupport
+    names = {p.name for p in FDMSupport.parameters()}
+    for moved in ("placement", "overhang_angle", "edge_margin", "fill_holes"):
+        assert moved not in names
     ed = ParamEditor(FDMSupport.parameters(), FDMSupport.defaults())
     titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
-    assert not any("Holes" in t for t in titles)
-    assert not any(t == "Support" for t in titles)         # the group only held settings set in Model
-    for hidden in ("placement", "overhang_angle", "edge_margin", "fill_holes"):
-        assert hidden not in ed._widgets
-    labels = " ".join(w.text() for w in ed.findChildren(QtWidgets.QLabel))
-    assert "Extend past" not in labels and "Fill holes" not in labels
-    # values are still carried along when other settings change
-    got = {}
-    ed.changed.connect(got.update)
-    ed._set("density", 20.0)
-    assert got["edge_margin"] == 1.0 and got["fill_holes"] == 0.0
-
+    assert not any("Holes" in t for t in titles) and "Support" not in titles
+    assert not FDMSupport.optional                          # no 'Enabled' switch in the process
 
 def test_ampersand_group_titles_render_literally():
     from gcodeproducer.core.profiles import schema

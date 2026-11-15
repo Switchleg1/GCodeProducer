@@ -27,16 +27,13 @@ from .base import AUTO, FDM, Param, SliceStage
 class FDMSupport(SliceStage):
     id = "fdm_support"
     name = "Support"
-    description = "Automatic support under overhangs (touching the build plate or everywhere)."
+    description = ("How support is printed: pattern, gaps and interfaces. Where support goes (none / "
+                   "build plate / everywhere / manual blocks), the overhang angle, how far it extends past "
+                   "the edges and hole filling are set per model in Model > Support.")
     workflows = (FDM,)
+    optional = False          # always runs; the model's support mode decides whether there is support
     category = "Support"
     params = [
-        Param("placement", "choice", "buildplate", label="Support placement", group="Support", hidden=True,
-              choices=[("buildplate", "Touching build plate"), ("everywhere", "Everywhere"),
-                       ("blocks", "Manual blocks")],
-              help="Set in Model > Support. Manual blocks: support only inside the support blocks."),
-        Param("overhang_angle", "float", 50.0, unit="\u00b0", min=0, max=89, decimals=1, group="Support", hidden=True,
-              help="Overhangs steeper than this (measured from vertical) get support."),
         Param("density", "float", 15.0, unit="%", min=1, max=100, decimals=1, group="Pattern"),
         Param("pattern", "choice", "lines", group="Pattern",
               choices=[("lines", "Lines"), ("grid", "Grid")]),
@@ -56,33 +53,26 @@ class FDMSupport(SliceStage):
         Param("interface_density", "float", 70.0, unit="%", min=5, max=100, decimals=1, group="Interface"),
         Param("min_area", "float", 1.0, unit="mm\u00b2", min=0, decimals=2, group="Distances",
               help="Ignore overhang specks smaller than this."),
-        Param("fill_holes", "float", 0.0, label="Fill holes up to", unit="mm²", min=0, max=100000,
-              decimals=1, group="Holes & edges", hidden=True,
-              help="0 (default): every hole is an edge like the outside - the support stops 'Extend past "
-                   "model edge' into it. Above 0: holes up to this area count as solid and the support "
-                   "runs right across under them."),
-        Param("edge_margin", "float", 1.0, label="Extend past model edge", unit="mm", min=0, max=20,
-              decimals=2, step=0.1, allow_auto=True, hint=1.0, group="Holes & edges", hidden=True,
-              help="How far the support reaches past the model's edges (and into holes too large to fill) "
-                   "so the perimeters along every edge sit on support. 0 = stop at the edge; "
-                   "auto = one line width. Rounded to the support grid (about \u00b10.2 mm)."),
         Param("line_width", "float", AUTO, unit="mm", min=0.05, max=3, allow_auto=True, hint=0.45,
               group="Pattern", help="auto = nozzle line width."),
     ]
 
     def run(self, job, params, ctx):
+        ms = job.support or support.ModelSupport()        # the model's support settings
+        if not ms.enabled:
+            return "no support (Model > Support: None)"
         layers = job.layers
         if job.mesh is None or len(layers) < 2:
             return "nothing to support"
         lw = params["line_width"]
         lw = job.line_width if lw in (0, AUTO) else float(lw)
         lo, hi = job.mesh.bounds
-        margin = lw if params["edge_margin"] == AUTO else float(params["edge_margin"])
+        margin = ms.extend
         base = support.make_grid(lo, hi, lw, margin)
         n = len(layers)
-        masks = support.model_masks(layers, base, params["fill_holes"])
+        masks = support.model_masks(layers, base, ms.fill_holes)
         ctx.progress(0.2)
-        mode = params["placement"]
+        mode = ms.mode
         gap = params["z_gap_layers"]
         bgap = params["bottom_z_gap_layers"]
         if mode == "blocks":
@@ -93,7 +83,7 @@ class FDMSupport(SliceStage):
             sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw,
                                         bgap)
         else:
-            over = support.overhangs(masks, layers, base.res, params["overhang_angle"], params["min_area"])
+            over = support.overhangs(masks, layers, base.res, ms.overhang_angle, params["min_area"])
             ctx.progress(0.4)
             sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
                                        mode == "everywhere", margin, lw, bgap)

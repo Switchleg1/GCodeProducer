@@ -24,8 +24,16 @@ FDM workflow  ->  machine profile  ->  material library + nozzle library
 CAM workflow  ->  machine profile  ->  tool library
 ```
 
-- **Speeds and feeds live on the machine profile.** A machine runs every
-  material / tool at *its* rates.
+- **The machine defines limits, the process defines requests.** The machine
+  has max print / travel speed, max acceleration, max volumetric flow and max
+  nozzle / bed / chamber temperatures (plus heated-chamber options). The
+  process asks for speeds (*Speed & travel*), and the material asks for
+  temperatures (including a chamber temperature). Anything above a limit is
+  capped and reported in the log.
+- **The model owns its placement and support.** Position, rotation, scale,
+  support mode, overhang angle, *extend past edge*, *fill holes* and support
+  blocks are saved per model and are never changed by picking another
+  process.
 - **Libraries are stored separately** as folders of JSON files, so materials,
   nozzles and tools can be shared and versioned independently.
 - **The machine selects which consumables are available.** Each machine has
@@ -192,7 +200,10 @@ consumables, process and recent models are remembered.
    *Everywhere* or **Manual blocks**, plus the overhang angle (*Show* tints
    overhangs red), **Extend past edge** (how far the support reaches past
    the model's edges and into holes, default 1 mm) and **Fill holes ≤**
-   (off by default; otherwise holes up to that area are supported right across). The mode is the same setting as the process's *Support*
+   (off by default; otherwise holes up to that area are supported right across).
+   These belong to the **model**: they are saved with it (like its position
+   and blocks) and switching process never changes them. The process only
+   decides *how* support is printed (density, pattern, gaps, interfaces). The mode is the same setting as the process's *Support*
    section, so it is saved with the process.
 
    ![Support panel](docs/support_panel.jpg)
@@ -240,7 +251,7 @@ consumables, process and recent models are remembered.
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |
-   | Travel & output     | retract on travel, min travel to retract, seam position               |
+   | Speed & travel      | requested speeds (outer / inner wall, infill, solid, top, support, interface, skirt, other, first layer, travel), acceleration, retract on travel, min travel to retract, seam |
 
    Changes show **● modified**. **Save** writes them to the selected process,
    **Save as…** creates a new one, **Revert** discards them. *More ▾* has
@@ -267,8 +278,10 @@ Double-click a move to jump to its G-code line; double-click a G-code line to
 jump to it in 3D. *Statistics* shows layers, estimated time, filament length
 and weight, and more.
 
-Speeds and feeds are set on the **machine**; temperatures, flow, cooling and
-retraction on the **material**; diameter and line width on the **nozzle**.
+Speed and temperature **limits** are set on the **machine**. **Requested**
+speeds are set on the **process**. Temperatures (nozzle, bed, chamber), flow,
+cooling and retraction are set on the **material**. Diameter, line width and the
+flow limit are set on the **nozzle**.
 Edit them with *Libraries…* (toolbar) or the ✎ buttons.
 
 ## CLI
@@ -293,14 +306,13 @@ python -m gcodeproducer slice part.stl -w fdm -o part.gcode \
     -m "fdm_top_bottom:top_layers=5,bottom_layers=4" \
     -m "fdm_infill:density=25,pattern=cubic"
 
-# placement and support from the command line (-m on a stage also switches it on)
+# placement and support (per model) from the command line
 python -m gcodeproducer slice bracket.stl -o bracket.gcode --rotate-x 90 --x 80 --y 100 \
-    --lay-flat -m "fdm_support:placement=everywhere,overhang_angle=45"
+    --lay-flat --support everywhere --overhang-angle 45 --support-extend 1.5
 
 # lift the part 3 mm off the bed and support it with manual blocks
 # (blocks.json: [{"x0": 95, "y0": 95, "z0": 0, "x1": 125, "y1": 125, "z1": 20}, ...] in bed mm)
-python -m gcodeproducer slice bracket.stl --z 3 --support-blocks blocks.json \
-    -m "fdm_support:placement=blocks"
+python -m gcodeproducer slice bracket.stl --z 3 --support blocks --support-blocks blocks.json
 
 # machining
 python -m gcodeproducer slice part.stl -w cam -o part.nc \

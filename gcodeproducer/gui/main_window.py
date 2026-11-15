@@ -38,7 +38,7 @@ from ..core.geometry import Mesh
 from ..core.pipeline import SlicePipeline
 from ..core.placement import Placement, bed_rect, bed_xy, fits
 from ..core.process import ProcessPreset
-from ..core.support import SupportBlock
+from ..core.support import ModelSupport, SupportBlock
 from ..core.support import block_at as support_block_at
 from ..core.support import generate_blocks as support_generate
 from ..core.profiles import LibrarySet
@@ -76,6 +76,7 @@ class MainWindow(QMainWindow):
         self.placed = None              # placement applied to the mesh (what gets sliced)
         self._pl_prev = None            # last placement (to move support blocks with the model)
         self.blocks: list = []          # manual support blocks (belong to the model, like placement)
+        self.model_support = ModelSupport()   # Model > Support (belongs to the model, not the process)
         self.sel_block = -1
         self._block_origin = None
         self.mode = "prepare"
@@ -879,8 +880,6 @@ class MainWindow(QMainWindow):
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._update_dirty()
         self._set_stale()
-        self._sync_support_controls()
-        self._update_scene()
 
     def _confirm_discard(self) -> bool:
         if not self.dirty[self.workflow]:
@@ -896,8 +895,6 @@ class MainWindow(QMainWindow):
         self.dirty[self.workflow] = True
         self._update_dirty()
         self._set_stale()
-        self._sync_support_controls()
-        self._update_scene()
 
     def _update_dirty(self):
         d = self.dirty[self.workflow]
@@ -1031,7 +1028,7 @@ class MainWindow(QMainWindow):
         self.mesh, self.model_path = mesh, path
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
-        self.placement, self.blocks = self._load_model_state(path)
+        self.placement, self.blocks, self.model_support = self._load_model_state(path)
         self._pl_prev = copy.deepcopy(self.placement)
         self.sel_block = 0 if self.blocks else -1
         self._refresh_block_list(keep=True)
@@ -1044,6 +1041,7 @@ class MainWindow(QMainWindow):
         self.feature_list.clear()
         self.stale = False
         self._sync_placement_controls()
+        self._sync_support_controls()
         self._update_scene()
         self.set_mode("prepare")
         self.camera.set_view("iso")
@@ -1077,7 +1075,14 @@ class MainWindow(QMainWindow):
                 blocks = [SupportBlock.from_dict(d) for d in json.loads(raw)]
             except Exception:
                 blocks = []
-        return placement, blocks
+        model_support = ModelSupport()
+        raw = self.settings.value(self._model_key("support", path))
+        if raw:
+            try:
+                model_support = ModelSupport.from_dict(json.loads(raw))
+            except Exception:
+                model_support = ModelSupport()
+        return placement, blocks, model_support
 
     def _save_placement(self):
         if self.model_path:
@@ -1085,6 +1090,8 @@ class MainWindow(QMainWindow):
                                    json.dumps(self.placement.to_dict()))
             self.settings.setValue(self._model_key("blocks", self.model_path),
                                    json.dumps([b.to_dict() for b in self.blocks]))
+            self.settings.setValue(self._model_key("support", self.model_path),
+                                   json.dumps(self.model_support.to_dict()))
 
     def _sync_placement_controls(self):
         pl = self.placement
@@ -1188,13 +1195,11 @@ class MainWindow(QMainWindow):
         self.b_face.setChecked(False)
 
     def _support_step(self):
+        """The process' support step (printing style only)."""
         return self.pipelines[self.workflow].step("fdm_support") if self.workflow == wf.FDM else None
 
     def _support_mode(self) -> str:
-        step = self._support_step()
-        if step is None or not step.enabled:
-            return "none"
-        return plugins.stages.get("fdm_support").resolve(step.params)["placement"]
+        return self.model_support.mode if self.workflow == wf.FDM else "none"
 
     def _update_scene(self):
         """Re-place the model and refresh the Prepare view (bed, overhangs, bounds, blocks)."""
@@ -1214,73 +1219,52 @@ class MainWindow(QMainWindow):
         self.lbl_size.setText(f"{sz[0]:.1f} \u00d7 {sz[1]:.1f} \u00d7 {sz[2]:.1f} mm")
         self.lbl_size.setStyleSheet("color:#9aa;" if inside else "color:#f0a040;")
         angle = None
-        step = self._support_step()
-        if step is not None and self.cb_show_over.isChecked():
-            angle = plugins.stages.get("fdm_support").resolve(step.params)["overhang_angle"]
+        if self.workflow == wf.FDM and self.cb_show_over.isChecked():
+            angle = self.model_support.overhang_angle
         self.model_viewer.set_scene(self.placed, rect, (self.placement.x, self.placement.y), angle, inside)
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
-        step = self._support_step()
+        """Show the model's support settings (they belong to the model, not the process)."""
+        ms = self.model_support
         self.support_box.setVisible(self.workflow == wf.FDM)
-        for w in (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes):
+        self.support_box.setEnabled(self.workflow == wf.FDM)
+        widgets = (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes)
+        for w in widgets:
             w.blockSignals(True)
-        if step is None:
-            self.cb_support.setCurrentIndex(0)
-            self.support_box.setEnabled(False)
-        else:
-            self.support_box.setEnabled(True)
-            p = plugins.stages.get("fdm_support").resolve(step.params)
-            mode = p["placement"] if step.enabled else "none"
-            self.cb_support.setCurrentIndex(max(0, self.cb_support.findData(mode)))
-            self.sp_overhang.setValue(p["overhang_angle"])
-            ext = p["edge_margin"]
-            if ext == "auto":
-                noz = self._consumable("nozzle")
-                ext = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
-            self.sp_extend.setValue(float(ext))
-            self.sp_fill_holes.setValue(float(p["fill_holes"]))
-        for w in (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes):
+        self.cb_support.setCurrentIndex(max(0, self.cb_support.findData(ms.mode)))
+        self.sp_overhang.setValue(ms.overhang_angle)
+        self.sp_extend.setValue(ms.extend)
+        self.sp_fill_holes.setValue(ms.fill_holes)
+        for w in widgets:
             w.blockSignals(False)
         self.blocks_box.setVisible(self._support_mode() == "blocks")
         if self._support_mode() != "blocks":
             self._end_block_tools()
         self._update_blocks_hint()
 
+    def _support_changed(self):
+        """Model > Support edited: model state only - the process is untouched."""
+        self._save_placement()
+        self._sync_support_controls()
+        self._update_scene()
+        self._set_stale()
+
     def _on_support_combo(self, _i=0):
-        step = self._support_step()
-        if step is None:
-            return
-        mode = self.cb_support.currentData()
-        step.enabled = mode != "none"
-        if mode != "none":
-            step.params = {**step.params, "placement": mode}
-        self.process_editor.set_pipeline(self.pipelines[self.workflow])
-        self._mark_dirty()
+        self.model_support.mode = self.cb_support.currentData()
+        self._support_changed()
 
     def _on_fill_holes_spin(self, v):
-        step = self._support_step()
-        if step is None:
-            return
-        step.params = {**step.params, "fill_holes": float(v)}
-        self.process_editor.set_pipeline(self.pipelines[self.workflow])
-        self._mark_dirty()
+        self.model_support.fill_holes = float(v)
+        self._support_changed()
 
     def _on_extend_spin(self, v):
-        step = self._support_step()
-        if step is None:
-            return
-        step.params = {**step.params, "edge_margin": float(v)}
-        self.process_editor.set_pipeline(self.pipelines[self.workflow])
-        self._mark_dirty()
+        self.model_support.extend = float(v)
+        self._support_changed()
 
     def _on_overhang_spin(self, v):
-        step = self._support_step()
-        if step is None:
-            return
-        step.params = {**step.params, "overhang_angle": float(v)}
-        self.process_editor.set_pipeline(self.pipelines[self.workflow])
-        self._mark_dirty()
+        self.model_support.overhang_angle = float(v)
+        self._support_changed()
 
     # ---------------------------------------------------------- support blocks
     def _blocks_changed(self, keep_row=True):
@@ -1372,12 +1356,12 @@ class MainWindow(QMainWindow):
         lw = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
         if sp["line_width"] != "auto":
             lw = float(sp["line_width"])
-        kwargs = dict(mesh=self.placed, layer_height=lh, line_width=lw, angle=sp["overhang_angle"],
+        ms = self.model_support
+        kwargs = dict(mesh=self.placed, layer_height=lh, line_width=lw, angle=ms.overhang_angle,
                       everywhere=self.cb_gen_everywhere.isChecked(), xy_distance=sp["xy_distance"],
                       gap=sp["z_gap_layers"], bottom_gap=sp["bottom_z_gap_layers"], min_area=sp["min_area"],
                       first_layer_height=flh, block_size=self.sp_place_size.value(),
-                      fill_holes=sp["fill_holes"],
-                      edge_margin=lw if sp["edge_margin"] == "auto" else sp["edge_margin"])
+                      fill_holes=ms.fill_holes, edge_margin=ms.extend)
         if wait:                                      # synchronous (tests / scripting)
             self._blocks_done(support_generate(**kwargs))
             return
@@ -1531,7 +1515,9 @@ class MainWindow(QMainWindow):
         try:
             job = build_job(self.workflow, machine, mesh=mesh, model_path=self.model_path,
                             placement=copy.deepcopy(self.placement),
-                            support_blocks=copy.deepcopy(self.blocks), **kw)
+                            support_blocks=copy.deepcopy(self.blocks),
+                            support=copy.deepcopy(self.model_support) if self.workflow == wf.FDM else None,
+                            **kw)
         except ValueError as exc:
             QMessageBox.warning(self, "Cannot slice", str(exc))
             return

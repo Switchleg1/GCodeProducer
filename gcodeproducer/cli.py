@@ -105,8 +105,12 @@ def cmd_slice(args):
         with open(args.support_blocks, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         blocks = [SupportBlock.from_dict(b) for b in (data.get("blocks", []) if isinstance(data, dict) else data)]
+    from .core.support import ModelSupport
+    model_support = ModelSupport(mode=args.support, overhang_angle=args.overhang_angle,
+                                 extend=args.support_extend, fill_holes=args.fill_holes)
     job = build_job(workflow, machine, material=material, nozzle=nozzle, tools=tools,
                     mesh=mesh, model_path=args.input, placement=placement, support_blocks=blocks,
+                    support=model_support,
                     settings={"layer_height": args.layer_height} if args.layer_height else {})
 
     if args.config:
@@ -181,9 +185,18 @@ def build_parser():
     g.add_argument("--rotate-z", type=float, default=0.0, metavar="DEG")
     g.add_argument("--scale", type=float, default=100.0, metavar="PCT")
     g.add_argument("--lay-flat", action="store_true", help="rest the largest flat face on the bed")
+    g = s.add_argument_group("support (per model)")
+    g.add_argument("--support", choices=["none", "buildplate", "everywhere", "blocks"], default="none",
+                   help="where support goes (default: none)")
+    g.add_argument("--overhang-angle", type=float, default=50.0, metavar="DEG",
+                   help="overhangs steeper than this (from vertical) get support")
+    g.add_argument("--support-extend", type=float, default=1.0, metavar="MM",
+                   help="how far support reaches past the model's edges")
+    g.add_argument("--fill-holes", type=float, default=0.0, metavar="MM2",
+                   help="support right across holes up to this area (0 = off)")
     g.add_argument("--support-blocks", metavar="JSON",
                    help="manual support blocks (list of {x0,y0,z0,x1,y1,z1}, bed coordinates); "
-                        "use with -m fdm_support:placement=blocks")
+                        "use with --support blocks")
     s.add_argument("-m", "--stage-param", action="append",
                    help="stage_id:key=value,... override")
     s.add_argument("--process", help="named process preset (workflow options)")

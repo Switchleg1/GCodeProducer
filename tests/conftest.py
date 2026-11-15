@@ -94,3 +94,23 @@ def ring_tris(cx, cy, r_out, r_in, z0, z1, n=64):
                 ((0, 0, 0), (*o0, z0), (*o1, z0), (*o1, z1)), ((0, 0, 0), (*o0, z0), (*o1, z1), (*o0, z1)),
                 ((0, 0, 0), (*i0, z0), (*i1, z1), (*i1, z0)), ((0, 0, 0), (*i0, z0), (*i0, z1), (*i1, z1))]
     return out
+
+
+#: settings that moved from the process' Support section to the model (Model > Support)
+MODEL_SUPPORT_KEYS = {"placement": "mode", "overhang_angle": "overhang_angle", "edge_margin": "extend",
+                      "fill_holes": "fill_holes"}
+
+
+def model_support(params: dict, enabled: bool = True):
+    """Split ``params`` into (ModelSupport, remaining process settings for the support step)."""
+    from gcodeproducer.core.support import ModelSupport
+    ms = ModelSupport(mode="buildplate")
+    proc = {}
+    for k, v in params.items():
+        if k in MODEL_SUPPORT_KEYS:
+            setattr(ms, MODEL_SUPPORT_KEYS[k], v)
+        else:
+            proc[k] = v
+    if not enabled:
+        ms.mode = "none"
+    return ms, proc
