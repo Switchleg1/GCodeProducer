@@ -107,7 +107,7 @@ versa.
     distance). Support on the bed starts on the first layer.
   - *Top interface layers* (default 2) and *Bottom interface layers* (default 2)
     are printed denser (*Interface density*) as `support_interface`. Bottom
-    interfaces only appear where support stands on the model, not on the bed.
+    interfaces are printed wherever support starts: on the model and on the bed.
 - **`fdm_perimeters`**: wall loops for every contour, offset into the
   material: outer contours shrink and **holes grow**, so the walls of a hole
   sit in the part and the hole keeps its size. A hole's walls stop before they
@@ -236,7 +236,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
-   | Support             | overhang angle, density, pattern, XY distance, top / bottom Z gap, top / bottom interface layers, interface density, min area. Placement (build plate / everywhere / manual blocks), *Extend past edge* and *Fill holes* are set in *Model → Support* (still saved with the process) |
+   | Support             | density, pattern, XY distance, top / bottom Z gap, top / bottom interface layers, interface density, min area. Placement (build plate / everywhere / manual blocks), overhang angle, *Extend past edge* and *Fill holes* are set in *Model → Support* (still saved with the process) |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |

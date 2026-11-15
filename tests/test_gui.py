@@ -358,7 +358,8 @@ def test_support_section_shows_only_process_settings():
     ed = ParamEditor(FDMSupport.parameters(), FDMSupport.defaults())
     titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
     assert not any("Holes" in t for t in titles)
-    for hidden in ("placement", "edge_margin", "fill_holes"):
+    assert not any(t == "Support" for t in titles)         # the group only held settings set in Model
+    for hidden in ("placement", "overhang_angle", "edge_margin", "fill_holes"):
         assert hidden not in ed._widgets
     labels = " ".join(w.text() for w in ed.findChildren(QtWidgets.QLabel))
     assert "Extend past" not in labels and "Fill holes" not in labels

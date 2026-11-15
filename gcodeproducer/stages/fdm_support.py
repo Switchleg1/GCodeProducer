@@ -35,7 +35,7 @@ class FDMSupport(SliceStage):
               choices=[("buildplate", "Touching build plate"), ("everywhere", "Everywhere"),
                        ("blocks", "Manual blocks")],
               help="Set in Model > Support. Manual blocks: support only inside the support blocks."),
-        Param("overhang_angle", "float", 50.0, unit="\u00b0", min=0, max=89, decimals=1, group="Support",
+        Param("overhang_angle", "float", 50.0, unit="\u00b0", min=0, max=89, decimals=1, group="Support", hidden=True,
               help="Overhangs steeper than this (measured from vertical) get support."),
         Param("density", "float", 15.0, unit="%", min=1, max=100, decimals=1, group="Pattern"),
         Param("pattern", "choice", "lines", group="Pattern",
@@ -51,8 +51,8 @@ class FDMSupport(SliceStage):
               help="Dense layers at the top of the support, under the overhang (0 = off)."),
         Param("bottom_interface_layers", "int", 2, label="Bottom interface layers", min=0, max=20,
               group="Interface",
-              help="Dense layers at the bottom of support standing on the model (0 = off). Support on the "
-                   "bed has none."),
+              help="Dense layers at the bottom of the support, where it stands on the model or on the bed "
+                   "(0 = off)."),
         Param("interface_density", "float", 70.0, unit="%", min=5, max=100, decimals=1, group="Interface"),
         Param("min_area", "float", 1.0, unit="mm\u00b2", min=0, decimals=2, group="Distances",
               help="Ignore overhang specks smaller than this."),
@@ -117,11 +117,13 @@ class FDMSupport(SliceStage):
                 above &= sup[i + k] if i + k < n else np.zeros_like(s)
             roof = s & ~above if ni > 0 else np.zeros_like(s)
             if nb > 0:
-                # floor: where the column started within nb layers - on the model, not the bed
+                # floor: where the column started within nb layers - on the model or on the bed
                 below = np.ones_like(s)
                 for k in range(1, nb + 1):
-                    if i - k >= 0:
-                        below &= sup[i - k]  # (layers below the bed count as supported)
+                    if i - k < 0:
+                        below[:] = False     # the bed: the first nb layers are a floor too
+                        break
+                    below &= sup[i - k]
                 roof |= s & ~below
             body = s & ~roof
             segs_body = []

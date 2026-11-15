@@ -274,9 +274,11 @@ def test_bottom_interface_layers(libset, tmp_path):
     assert iface == pytest.approx([19.6, 19.8])
 
 
-def test_no_bottom_interface_on_the_bed(libset, tmp_path):
+def test_bottom_interface_on_the_bed(libset, tmp_path):
     _, iface = _layers(libset, tmp_path, T_SHAPE, "buildplate", bottom_interface_layers=3)
-    assert iface == pytest.approx([14.6, 14.8])            # roof only
+    assert iface == pytest.approx([0.2, 0.4, 0.6, 14.6, 14.8])     # floor on the bed + roof
+    _, iface = _layers(libset, tmp_path, T_SHAPE, "buildplate", bottom_interface_layers=0)
+    assert iface == pytest.approx([14.6, 14.8])                    # roof only
 
 
 def test_bottom_gap_in_block_mode(libset, tmp_path):
