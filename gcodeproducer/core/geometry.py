@@ -47,35 +47,34 @@ def load_stl(path: str) -> Mesh:
     return _load_binary_stl(data)
 
 
+_STL_RECORD = np.dtype([("normal", "<f4", (3,)), ("v", "<f4", (3, 3)), ("attr", "<u2")])
+
+
 def _load_binary_stl(data: bytes) -> Mesh:
+    """Binary STL, read in one numpy pass (50-byte records: normal, 3 vertices, attribute)."""
     n = struct.unpack_from("<I", data, 80)[0]
-    verts = np.zeros((n * 3, 3), np.float64)
-    off = 84
-    for i in range(n):
-        vals = struct.unpack_from("<12f", data, off)
-        verts[i * 3 + 0] = vals[3:6]
-        verts[i * 3 + 1] = vals[6:9]
-        verts[i * 3 + 2] = vals[9:12]
-        off += 50
+    n = min(n, (len(data) - 84) // 50)              # tolerate a wrong count / truncated file
+    rec = np.frombuffer(data, dtype=_STL_RECORD, count=n, offset=84)
+    verts = rec["v"].reshape(-1, 3).astype(np.float64)
     tris = np.arange(n * 3).reshape(n, 3)
     return _weld(verts, tris)
 
 
 def _load_ascii_stl(text: str) -> Mesh:
-    verts = []
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("vertex"):
-            parts = s.split()
-            verts.append([float(parts[1]), float(parts[2]), float(parts[3])])
-    verts = np.asarray(verts, np.float64)
+    # every 'vertex x y z' line, parsed in one go
+    import re
+    nums = re.findall(r"^\s*vertex\s+(\S+)\s+(\S+)\s+(\S+)", text, flags=re.MULTILINE)
+    verts = np.array(nums, dtype=np.float64).reshape(-1, 3) if nums else np.zeros((0, 3))
+    verts = verts[: len(verts) // 3 * 3]
     tris = np.arange(len(verts)).reshape(-1, 3)
     return _weld(verts, tris)
 
 
 def _weld(verts: np.ndarray, tris: np.ndarray, tol: float = 1e-6) -> Mesh:
-    keys = np.round(verts / tol).astype(np.int64)
-    uniq, inv = np.unique(keys, axis=0, return_inverse=True)
+    keys = np.ascontiguousarray(np.round(verts / tol).astype(np.int64))
+    # unique rows via a 24-byte void view: ~2x faster than np.unique(axis=0)
+    rows = keys.view(np.dtype((np.void, keys.dtype.itemsize * 3))).ravel()
+    uniq, inv = np.unique(rows, return_inverse=True)
     inv = inv.ravel()
     out_v = np.zeros((len(uniq), 3))
     out_v[inv] = verts

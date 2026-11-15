@@ -248,7 +248,17 @@ consumables, process and recent models are remembered.
    **Delete**, and *Edit pipeline stages…* (advanced: add, remove, reorder or
    duplicate stages). Switching process with unsaved changes asks first, and
    unsaved edits survive a restart.
-4. **Slice** (Ctrl+R), then **Save G-code** (Ctrl+S).
+4. **Slice** (Ctrl+R), then **Save G-code** (Ctrl+S). While slicing, the
+   button reads **■ Cancel**.
+
+   Slicing (and *Auto-generate* for support blocks) runs in a separate
+   **compute process**, not a thread. The slicer is mostly Python, and Python
+   threads share one interpreter lock, so a slicing thread made the window
+   stutter. The process starts on the first slice and is reused. Large
+   programs come back in chunks, and they are kept out of Python's periodic
+   garbage collection, so the window stays responsive during and after a big
+   slice. (Measured on a 400k-triangle model, 670k-line program: the longest
+   UI pause went from ~200 ms to ~13 ms.)
 
 **Viewer**: the vertical slider picks the top layer (PgUp / PgDn, Home /
 End), *In layer* scrubs through it, *Single layer* isolates it. Colour by
@@ -337,6 +347,8 @@ gcodeproducer/
   gui/         Qt6 main window, Prepare view (model_viewer.py), Preview view
                (viewer.py), process editor (process_editor.py), library editor
                (library_dialog.py), widgets
+  core/compute.py      the compute process's tasks (Qt-free)
+  gui/compute_service.py  starts / talks to the compute process (Qt signals)
   cli.py       command-line interface
 plugins/       drop-in user stages / importers
 examples/      sample model (cube20.stl)

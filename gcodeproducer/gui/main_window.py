@@ -42,15 +42,16 @@ from ..core.support import SupportBlock
 from ..core.support import block_at as support_block_at
 from ..core.support import generate_blocks as support_generate
 from ..core.profiles import LibrarySet
-from ..core.session import build_job, find_importer, load_mesh, slice_job
-from ..core.toolpath import SOLID_KINDS, build_toolpath, format_duration
+from ..core.session import build_job, find_importer, load_mesh
+from ..core.toolpath import SOLID_KINDS, format_duration
 from .camera import Camera
 from .library_dialog import LibraryDialog
 from .model_viewer import ModelViewer
 from .process_editor import PipelineDialog, ProcessEditor
 from .view_state import COLOR_MODES, ViewState
 from .viewer import GCodeViewer
-from .widgets import GCodeTextPanel, Worker, small_button
+from .compute_service import ComputeService
+from .widgets import GCodeTextPanel, small_button
 
 MODEL_FILTER = "Meshes (*.stl)"
 
@@ -82,8 +83,15 @@ class MainWindow(QMainWindow):
         self.program = None
         self.tp = None
         self._fitted_for = None
-        self._worker = None
         self._loading = False
+        self._worker = None             # id of the running slice task (None = idle)
+        self._blocks_task = None        # id of the running Auto-generate task
+        self._filament_mm = 0.0
+        self.compute = ComputeService(self)  # slicing etc. run in a separate process
+        self.compute.log.connect(self._on_compute_log)
+        self.compute.progressed.connect(self._on_compute_progress)
+        self.compute.done.connect(self._on_compute_done)
+        self.compute.failed.connect(self._on_compute_failed)
 
         self.camera = Camera()
         self.state = ViewState()
@@ -519,8 +527,9 @@ class MainWindow(QMainWindow):
         bl.setContentsMargins(0, 2, 0, 0)
         r1 = QHBoxLayout()
         b_gen = QPushButton("Auto-generate")
+        self.b_gen_blocks = b_gen
         b_gen.setToolTip("Replace the blocks with automatic support, tiled with blocks of the Block size")
-        b_gen.clicked.connect(self.generate_blocks)
+        b_gen.clicked.connect(lambda: self.generate_blocks())
         self.cb_gen_everywhere = QCheckBox("Allow on model")
         self.cb_gen_everywhere.setToolTip("Auto-generate support that may stand on the model "
                                           "(otherwise only from the build plate)")
@@ -713,8 +722,7 @@ class MainWindow(QMainWindow):
             s.setValue(f"process/{w}", self.process_id[w] or "")
             s.setValue(f"working/{w}", json.dumps(self.pipelines[w].to_dict()) if self.dirty[w] else "")
         self._save_selection()
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.wait(3000)
+        self.compute.shutdown()
         super().closeEvent(ev)
 
     def _save_selection(self):
@@ -1349,7 +1357,7 @@ class MainWindow(QMainWindow):
         self._block_origin = None
         self._blocks_changed()
 
-    def generate_blocks(self):
+    def generate_blocks(self, wait: bool = False):
         """Auto-generate: one block per island of automatic support, for the placed model."""
         if self.placed is None:
             QMessageBox.information(self, "No model", "Import a model first.")
@@ -1364,18 +1372,29 @@ class MainWindow(QMainWindow):
         lw = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
         if sp["line_width"] != "auto":
             lw = float(sp["line_width"])
-        from PyQt6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            blocks = support_generate(self.placed, lh, lw, sp["overhang_angle"],
-                                      everywhere=self.cb_gen_everywhere.isChecked(),
-                                      xy_distance=sp["xy_distance"], gap=sp["z_gap_layers"],
-                                      bottom_gap=sp["bottom_z_gap_layers"],
-                                      min_area=sp["min_area"], first_layer_height=flh,
-                                      block_size=self.sp_place_size.value(), fill_holes=sp["fill_holes"],
-                                      edge_margin=lw if sp["edge_margin"] == "auto" else sp["edge_margin"])
-        finally:
-            QApplication.restoreOverrideCursor()
+        kwargs = dict(mesh=self.placed, layer_height=lh, line_width=lw, angle=sp["overhang_angle"],
+                      everywhere=self.cb_gen_everywhere.isChecked(), xy_distance=sp["xy_distance"],
+                      gap=sp["z_gap_layers"], bottom_gap=sp["bottom_z_gap_layers"], min_area=sp["min_area"],
+                      first_layer_height=flh, block_size=self.sp_place_size.value(),
+                      fill_holes=sp["fill_holes"],
+                      edge_margin=lw if sp["edge_margin"] == "auto" else sp["edge_margin"])
+        if wait:                                      # synchronous (tests / scripting)
+            self._blocks_done(support_generate(**kwargs))
+            return
+        if self._blocks_task is not None:
+            return
+        self._blocks_task = self.compute.submit("blocks", kwargs)
+        self._update_blocks_busy()
+        self.statusBar().showMessage("Generating support blocks\u2026")
+
+    def _update_blocks_busy(self):
+        busy = self._blocks_task is not None
+        self.b_gen_blocks.setEnabled(not busy)
+        self.b_gen_blocks.setText("Generating\u2026" if busy else "Auto-generate")
+
+    def _blocks_done(self, blocks):
+        self._blocks_task = None
+        self._update_blocks_busy()
         self.blocks = blocks
         self.sel_block = 0 if blocks else -1
         self._blocks_changed(keep_row=True)
@@ -1471,16 +1490,22 @@ class MainWindow(QMainWindow):
     # slicing
     # ======================================================================
     def _update_enabled(self):
-        busy = self._worker is not None and self._worker.isRunning()
-        ok = self.mesh is not None and self._machine() is not None and not busy
-        self.slice_btn.setEnabled(ok)
-        self.act_slice.setEnabled(ok)
+        busy = self._worker is not None
+        ok = self.mesh is not None and self._machine() is not None
+        # while slicing the Slice button cancels
+        self.slice_btn.setEnabled(ok or busy)
+        self.slice_btn.setText("\u25a0  Cancel" if busy else "\u25b6  Slice")
+        self.slice_btn.setToolTip("Stop slicing" if busy else "Slice (Ctrl+R)")
+        self.act_slice.setEnabled(ok and not busy)
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
         self.act_preview.setEnabled(self.program is not None)
         self._update_stale_label()
 
     def run_slice(self):
+        if self._worker is not None:             # the button reads 'Cancel' while slicing
+            self.cancel_slice()
+            return
         if self.mesh is None:
             QMessageBox.information(self, "No model", "Import a model first.")
             return
@@ -1513,33 +1538,64 @@ class MainWindow(QMainWindow):
         pipe = copy.deepcopy(self.pipelines[self.workflow])
         self.log(f"Slicing {Path(self.model_path).name} ({wf.short(self.workflow)}, {machine.name}, "
                  f"process '{self.cb_process.currentText()}'{' *modified*' if self.dirty[self.workflow] else ''})")
-
-        def task(worker, job=job, pipe=pipe):
-            res = slice_job(job, pipe, log=worker.message.emit, progress=worker.progressed.emit)
-            tp = build_toolpath(res.program) if res.program is not None else None
-            return res, tp
-
         self._t0 = time.perf_counter()
-        self._worker = Worker(task)
-        self._worker.message.connect(self.log)
-        self._worker.progressed.connect(lambda f: self.progress.setValue(int(f * 100)))
-        self._worker.done.connect(self._slice_done)
-        self._worker.failed.connect(self._slice_failed)
+        self._worker = self.compute.submit("slice", (job, pipe))
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.statusBar().showMessage("Slicing\u2026")
-        self._worker.start()
         self._update_enabled()
 
+    def cancel_slice(self):
+        if self._worker is None:
+            return
+        self._worker = None
+        self._blocks_task = None
+        self.compute.cancel()
+        self.progress.setVisible(False)
+        self.statusBar().showMessage("Slicing cancelled", 4000)
+        self.log("Slicing cancelled")
+        self._update_enabled()
+        self._update_blocks_busy()
+
+    # ---------------------------------------------------- compute messages
+    def _on_compute_log(self, tid, msg):
+        if tid in (self._worker, self._blocks_task):
+            self.log(msg)
+
+    def _on_compute_progress(self, tid, f):
+        if tid == self._worker:
+            self.progress.setValue(int(f * 100))
+
+    def _on_compute_done(self, tid, result):
+        if tid == self._worker:
+            self._slice_done(result)
+        elif tid == self._blocks_task:
+            self._blocks_done(result)
+
+    def _on_compute_failed(self, tid, tb):
+        if tid == self._worker:
+            self._slice_failed(tb)
+        elif tid == self._blocks_task:
+            self._blocks_task = None
+            self._update_blocks_busy()
+            self.log(tb)
+            QMessageBox.critical(self, "Auto-generate failed", tb.strip().splitlines()[-1])
+
     def _slice_done(self, out):
-        res, tp = out
         self.progress.setVisible(False)
         self._worker = None
-        if res.program is None:
+        if out["program"] is None:
             self.log("The pipeline produced no G-code (is an output stage enabled?)")
             self._update_enabled()
             return
-        self.program, self.tp = res.program, tp
+        self.program, self.tp = out["program"], out["toolpath"]
+        self._filament_mm = out["filament_mm"]
+        # a big program is ~1M Python objects; Python's periodic full garbage collection
+        # would scan them all (~0.2 s UI pauses). Freeze them out of the collector - they
+        # hold no reference cycles, so they are still freed when the next slice replaces them.
+        import gc
+        gc.freeze()
+        tp = self.tp
         self.viewer.set_toolpath(tp)
         if self._fitted_for != self.model_path:
             self.viewer.fit()
@@ -1560,6 +1616,7 @@ class MainWindow(QMainWindow):
     def _slice_failed(self, tb):
         self.progress.setVisible(False)
         self._worker = None
+        self._update_enabled()
         self.log(tb)
         self._update_enabled()
         QMessageBox.critical(self, "Slice failed", tb.strip().splitlines()[-1])
@@ -1713,7 +1770,7 @@ class MainWindow(QMainWindow):
                 ("Est. time (no accel.)", format_duration(st.get("est_time_s", 0)))]
         if self.workflow == wf.FDM:
             mat = self._consumable("material")
-            fil = self._filament_mm(prog)
+            fil = self._filament_mm
             rows.append(("Filament", f"{fil / 1000:.2f} m"))
             if mat is not None:
                 d = mat.get("filament_diameter", 1.75)
@@ -1729,12 +1786,6 @@ class MainWindow(QMainWindow):
             self.info_table.setItem(r, 0, QTableWidgetItem(k))
             self.info_table.setItem(r, 1, QTableWidgetItem(val))
         self.info_table.resizeColumnsToContents()
-
-    @staticmethod
-    def _filament_mm(prog) -> float:
-        from ..core.sim import simulate
-        s = simulate(prog)
-        return float(s.de[(s.de > 0) & s.moved].sum())
 
     # ======================================================================
     def log(self, msg: str):

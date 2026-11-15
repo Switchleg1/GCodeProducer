@@ -172,17 +172,17 @@ def test_manual_support_blocks(win, app, tmp_path):
     win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
     assert win._support_mode() == "blocks" and win.blocks_box.isVisibleTo(win)
     win.sp_place_size.setValue(6.0)
-    win.generate_blocks()
+    win.generate_blocks(wait=True)
     n = len(win.blocks)
     assert n > 1 and win.lst_blocks.count() == n
     assert all(b.size[0] == pytest.approx(6.0) for b in win.blocks)
     assert win.model_viewer.show_blocks and len(win.model_viewer.blocks) == n
     win.sp_place_size.setValue(12.0)
-    win.generate_blocks()
+    win.generate_blocks(wait=True)
     assert 0 < len(win.blocks) < n
     win.clear_blocks()
     win.sp_place_size.setValue(40.0)                  # one tile covers the whole support area
-    win.generate_blocks()
+    win.generate_blocks(wait=True)
     assert len(win.blocks) == 1
     # add / resize / remove
     win.add_block()
@@ -376,3 +376,27 @@ def test_ampersand_group_titles_render_literally():
     ed = ParamEditor(schema("tool"), {})
     titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
     assert "Feeds && speeds" in titles                     # shown as 'Feeds & speeds'
+
+
+def test_slice_button_cancels(win, app):
+    win.open_model(os.path.join(os.path.dirname(__file__), "..", "examples", "cube20.stl"))
+    win.run_slice()
+    assert win._worker is not None and "Cancel" in win.slice_btn.text()
+    win.run_slice()                                   # the button now cancels
+    assert win._worker is None and "Slice" in win.slice_btn.text() and win.program is None
+    win.run_slice()                                   # and slicing again works (fresh process)
+    _wait(win, app)
+    assert win.program is not None and win._filament_mm > 0
+
+
+def test_auto_generate_runs_in_background(win, app, tmp_path):
+    win.open_model(_bracket(tmp_path))
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    win.sp_place_size.setValue(6.0)
+    win.generate_blocks()                             # asynchronous
+    assert win._blocks_task is not None and not win.b_gen_blocks.isEnabled()
+    t = time.time()
+    while win._blocks_task is not None and time.time() - t < 60:
+        app.processEvents()
+        time.sleep(0.01)
+    assert win.b_gen_blocks.isEnabled() and len(win.blocks) > 1
