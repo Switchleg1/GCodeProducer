@@ -91,11 +91,16 @@ Operations expose **Lead-in ramp along selected contour**, **Lead-out along
 cleared contour**, and a lead length. Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 
-For an entry with enough selected-path length, the emitter:
+For each entry (start of a pass, or a path that cannot stay down), the emitter:
 
-1. Retracts to safe Z and positions above the lead start.
-2. Feeds to an entry plane above the *current* local material, respecting
-   machine clearance and the configured safe plane.
+1. Retracts only as far as needed: to **Short retract clearance** (default
+   1 mm) above the highest *current* material under the cutter along the XY
+   travel, never above safe Z. Inside a pocket cleared by the previous pass
+   that is 1 mm above the last floor, not back to the top of the part. The
+   first entry after start-up or a tool change comes from safe Z.
+2. Rapids across, then **rapids down** to the ramp start, **Lead-in start above
+   material** (default 0.5 mm) above the current local material. No feed move
+   descends through air from safe Z or from the clearance plane.
 3. Follows the selected path itself while ramping down to cutting Z, at no
    more than about 10°. A closed loop is followed backwards from its seam so
    the ramp arrives moving in the cut direction; an open line is followed

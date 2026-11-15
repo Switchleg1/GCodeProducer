@@ -53,6 +53,16 @@ def test_mixed_shape_links_and_meander_remain_valid():
             assert valid.covers(LineString((linked[i-1][0][0],p[0])))
 
 
+def entries(program):
+    """First descending move of each entry: a vertical plunge or the first lead-in ramp segment."""
+    out=[];previous=None
+    for ln in program.lines:
+        if ln.feature in ("plunge","lead_in") and "Z" in ln.params and previous not in ("plunge","lead_in"):
+            out.append(ln)
+        if ln.cmd in ("G0","G1"):previous=ln.feature
+    return out
+
+
 def test_emitter_uses_one_entry_per_connected_depth_pass(libset):
     mesh = stepped_part()
     job,op = job_for(mesh,[floor_ref(mesh)],libset)
@@ -60,7 +70,7 @@ def test_emitter_uses_one_entry_per_connected_depth_pass(libset):
     paths=job.layers[0].paths
     assert len(paths)>2 and all(p.stay_down for p in paths[1:])
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
-    plunges=[ln for ln in job.program.lines if ln.feature=="plunge" and "Z" in ln.params]
+    plunges=entries(job.program)
     links=[ln for ln in job.program.lines if ln.comment=="stay-down link"]
     assert len(plunges)==len(job.layers)
     assert len(links)==(len(paths)-1)*len(job.layers)
@@ -72,7 +82,7 @@ def test_emitter_uses_one_entry_per_connected_depth_pass(libset):
     generate(job,StageContext())
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
     assert not any(ln.comment=="stay-down link" for ln in job.program.lines)
-    assert sum(ln.feature=="plunge" and "Z" in ln.params for ln in job.program.lines)==len(job.layers)*len(paths)
+    assert len(entries(job.program))==len(job.layers)*len(paths)
 
 
 def test_stale_link_endpoint_metadata_forces_retract(libset):
@@ -82,5 +92,29 @@ def test_stale_link_endpoint_metadata_forces_retract(libset):
     target=job.layers[0].paths[1]
     target.stay_down_from=(999,999)
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
-    first=[ln for ln in job.program.lines if ln.layer==0 and ln.feature=="plunge" and "Z" in ln.params]
+    first=[ln for ln in entries(job.program) if ln.layer==0]
     assert len(first)>=2
+
+
+def test_later_depth_entries_start_just_above_the_previous_floor(libset):
+    from gcodeproducer.core.sim import simulate
+    mesh=stepped_part()
+    job,_=job_for(mesh,[floor_ref(mesh)],libset)
+    generate(job,StageContext())
+    CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
+    safe=float(job.m("safe_z",15)); clearance=1.0            # global "Short retract clearance" default
+    sim=simulate(job.program)
+    z_of={l.index:l.z for l in job.layers}
+    for i,ln in enumerate(job.program.lines):
+        if ln.layer<=0 or not sim.motion[i] or ln.feature=="retract":continue   # end-of-program park is expected
+        if ln.cmd=="G0":
+            assert sim.z[i]<safe-1e-6                       # no return to safe Z between depth passes
+        if ln.feature in ("plunge","lead_in") and sim.z[i]<sim.pz[i]:
+            # Feed descent never begins far above the floor left by the previous pass.
+            assert sim.pz[i]<=z_of[ln.layer-1]+clearance+1e-6
+    assert job.warnings==[]                                  # short rapids are clear of current material
+    job.preferences={"short_retracts":False}
+    CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
+    sim=simulate(job.program)
+    assert any(ln.cmd=="G0" and ln.layer>0 and ln.feature!="retract" and abs(sim.z[i]-safe)<1e-6
+               for i,ln in enumerate(job.program.lines))

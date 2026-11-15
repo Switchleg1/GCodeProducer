@@ -14,6 +14,9 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Setting | Default | Effect |
 |---|---|---|
 | Remove air cutting | On | CAM operations start at the first depth that still holds material (estimated from earlier operations in the same setup), pocket contours lying entirely in removed material are dropped, and operations/passes with nothing left to cut are skipped. Everything skipped is logged. |
+| Short retracts within cleared material | On | Retract between entries only to *Short retract clearance* above the current material along the travel, then rapid down to the ramp start, instead of safe Z + feeding down through air. Needs allocated stock (without it, safe Z is used). Fixtures and clamps are not modelled: turn this off if anything stands above the material. |
+| Short retract clearance | 1 mm | Height of short rapid travels above the highest current material under the cutter along the move. |
+| Lead-in start above material | 0.5 mm | Where a lead-in ramp begins above the current local material (also the rapid-down target). A plain plunge stops its rapid at the short retract clearance and feeds from there. |
 | Material grid resolution | 0.2 mm | Height-field cell size for current-material contact checks, lead entry heights and the Material display. |
 | Maximum grid cells | 2,000,000 | Memory guard. If `width × depth / resolution²` exceeds it the grid is coarsened and a warning is issued. |
 | Colour conflicts and collisions | On | Moves flagged by the planner/stock checks are recoloured as the **Conflict** and **Collision** features in Feature colour mode. |

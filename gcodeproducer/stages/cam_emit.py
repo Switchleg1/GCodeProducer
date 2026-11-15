@@ -77,6 +77,10 @@ class CAMEmit(SliceStage):
             raise ValueError("Machine max feed must be nonnegative and finite")
         capped = set()
         lead_kinds = {}
+        short_retracts = bool(pref(job,"short_retracts"))
+        lead_clearance = max(.05, float(pref(job,"lead_clearance")))
+        travel_clearance = max(.1, float(pref(job,"retract_clearance")))
+        short_count = [0]
         last_feed = None
         last_condition = None
 
@@ -188,10 +192,20 @@ class CAMEmit(SliceStage):
                     cut_move(start, path.link_condition, "stay-down link", force=True)
                 else:
                     lead=None
+                    clearance=max(.1,float(job.m("clearance_z",1)))
                     if config is not None and config.lead_in and len(pts)>1 and live is not None:
                         surface=live.height_at(start,active_radius)
-                        entry_z=min(safe_z,max(surface,layer.z)+max(.1,float(job.m("clearance_z",1))))
-                        lead,kind=ramp_entry(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
+                        for _ in range(3):
+                            # The rapid descent happens above the ramp *start*, which moves with the
+                            # ramp length; settle the entry plane over both points (usually one pass).
+                            # The ramp begins just above the material (lead clearance), not at the
+                            # rapid clearance plane, so it does not spend its length cutting air.
+                            entry_z=min(safe_z,max(surface,layer.z)+lead_clearance)
+                            lead,kind=ramp_entry(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
+                            if lead is None:break
+                            above=live.height_at(lead[0,:2],active_radius)
+                            if above<=surface+1e-6:break
+                            surface=above
                         if lead is None:
                             warning=f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
                             if warning not in job.warnings:job.warnings.append(warning)
@@ -199,16 +213,42 @@ class CAMEmit(SliceStage):
                         elif kind in ("helix","zigzag"):
                             lead_kinds[kind]=lead_kinds.get(kind,0)+1
                     approach=lead[0,:2] if lead is not None else start
+                    entry=lead[0,2] if lead is not None else layer.z
                     b.set_feature("rapid", comment=False)
-                    b.command(f"G0 Z{format_number(safe_z,3)}")
-                    position[2]=safe_z
+                    if live is not None and short_retracts:
+                        # Retract only as high as the CURRENT material along the XY travel needs
+                        # (plus clearance), not to safe Z: inside a cleared pocket the tool stays low.
+                        # Cutter radius, the same footprint the rapid-contact check uses; walls stand
+                        # outside it because contours keep the cutter radius from the retained part.
+                        margin=active_radius
+                        travel=min(safe_z,max(live.max_height_along(position[:2],approach,margin),
+                                              live.height_at(approach,margin))+travel_clearance)
+                        travel=max(travel,entry)
+                        if position[2]<travel-1e-9:
+                            b.command(f"G0 Z{format_number(travel,3)}")
+                            position[2]=travel
+                        else:
+                            travel=position[2]
+                        short_count[0]+=travel<safe_z-1e-9
+                    else:
+                        b.command(f"G0 Z{format_number(safe_z,3)}")
+                        position[2]=safe_z
                     b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
                     position[:2]=approach
-                    b.set_feature("plunge", comment=False)
-                    entry=lead[0,2] if lead is not None else layer.z
-                    b.command(f"G1 Z{format_number(entry,3)} F{feed_text(limited(float(plunge)))}")
-                    if live is not None:live.cut(position,np.r_[approach,entry],active_radius)
-                    position[2]=entry
+                    if live is not None and short_retracts:
+                        # Rapid down to the clearance plane above the local material, then feed.
+                        # Rapid straight to the ramp start (which already sits lead_clearance above the
+                        # local material), or to clearance above the material for a plain plunge.
+                        local=live.height_at(approach,active_radius)+(lead_clearance if lead is not None else travel_clearance)
+                        rapid_to=max(entry,min(position[2],local))
+                        if rapid_to<position[2]-1e-9:
+                            b.command(f"G0 Z{format_number(rapid_to,3)}")
+                            position[2]=rapid_to
+                    if entry<position[2]-1e-9:
+                        b.set_feature("plunge", comment=False)
+                        b.command(f"G1 Z{format_number(entry,3)} F{feed_text(limited(float(plunge)))}")
+                        if live is not None:live.cut(position,np.r_[approach,entry],active_radius)
+                        position[2]=entry
                     if lead is not None:
                         for q in lead[1:]:
                             rate=plunge*(float(job.m("slotting_feed",50))/100 if live.contact(position,q,active_radius) else 1)
@@ -245,6 +285,8 @@ class CAMEmit(SliceStage):
             if pref(job,"highlight_conflicts"):
                 flagged=mark_collisions(prog,stock_warnings)
                 if flagged:ctx.log(f"  {flagged} flagged moves recoloured as Collision")
+        if short_count[0]:
+            ctx.log(f"  {short_count[0]} entries used short retracts above current material instead of safe Z")
         for kind,count in sorted(lead_kinds.items()):
             what="circling the closed contour" if kind=="helix" else "back and forth along the open path"
             ctx.log(f"  {count} lead-in ramps longer than their path: {kind} ({what}) at <=10 degrees")

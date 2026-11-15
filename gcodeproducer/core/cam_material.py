@@ -111,6 +111,15 @@ class HeightStock:
         values=self.heights[region][distance<=radius*radius]
         return float(values.max()) if len(values) else float(self.heights[region].max())
 
+    def max_height_along(self,a,b,radius):
+        """Highest current material within ``radius`` of the XY segment a-b (blank bottom if none)."""
+        a=np.r_[np.asarray(a,float)[:2],0.];b=np.r_[np.asarray(b,float)[:2],0.]
+        patch=self._patch(a,b,radius)
+        if patch is None:return float(self.bottom)
+        region,distance,_=patch
+        values=self.heights[region][distance<=radius*radius]
+        return float(values.max()) if len(values) else float(self.bottom)
+
     def contact(self,a,b,radius):
         patch=self._patch(np.asarray(a),np.asarray(b),radius)
         if patch is None:return False

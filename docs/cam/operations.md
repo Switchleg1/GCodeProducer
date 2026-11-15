@@ -39,13 +39,17 @@ is not a safe default machining plan. For stepdown `s`, generation uses up to
 radius/stepdown, unsupported geometry and missing tools fail instead of
 silently switching to another strategy.
 
-The emitter begins each depth pass with a safe-Z XY position and vertical
-plunge. Wall-parallel pockets can then stay down between nearby contours when
-the full cutter-centre link is inside the permitted region. Other paths or
-blocked/disconnected links retract before re-entry. Enabled leads follow the
-selected contour while ramping in or exiting through calculated cleared stock.
-If a ramp cannot fit, a vertical fallback is explicitly warned. No helical
-macro or controller cutter-compensation cycle is inserted.
+Each depth pass begins with an entry: a short retract above the current
+material (or safe Z for the first entry after start-up/tool change), a rapid
+to the ramp start just above the material, and a ≤10° lead-in along the path
+(helix/zigzag when the path is short) or, with lead-in off, a plunge from the
+short clearance. Wall-parallel pockets can then stay down between nearby
+contours when the full cutter-centre link is inside the permitted region.
+Other paths or blocked/disconnected links retract before re-entry; exits
+follow the cut contour through calculated cleared stock. Only a zero-length
+path enters vertically with a warning. No G2/G3 helix macro or controller
+cutter-compensation cycle is inserted. See
+[material state and leads](material-state-and-leads.md#lead-in).
 
 Tool RPM/feed can be calculated from material SFM/chip load, with tool/machine
 RPM ceilings and independent operation unlocks. Cutting feed receives the

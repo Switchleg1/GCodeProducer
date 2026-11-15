@@ -17,6 +17,19 @@ SCHEMA = [
           help="Start each operation at the first depth that still holds material (estimated from earlier "
                "operations) and drop pocket contours that lie entirely in already-removed material. "
                "Off keeps every requested depth pass."),
+    Param("short_retracts", "bool", True, group="CAM toolpaths", label="Short retracts within cleared material",
+          help="Between entries, retract only to clearance above the CURRENT material along the travel (from the "
+               "material simulation) and rapid down to the entry plane, instead of returning to safe Z and feeding "
+               "down through air. Needs allocated stock. Fixtures/clamps are not modelled: turn off if they stand "
+               "above the material."),
+    Param("retract_clearance", "float", 1.0, min=.1, max=100, unit="mm", group="CAM toolpaths",
+          label="Short retract clearance",
+          help="With short retracts, rapid travels pass this far above the highest current material under the "
+               "cutter along the move (never above safe Z)."),
+    Param("lead_clearance", "float", .5, min=.05, max=50, unit="mm", group="CAM toolpaths",
+          label="Lead-in start above material",
+          help="A lead-in ramp starts this far above the current local material (the tool rapids down to "
+               "there). The machine clearance Z still sets the height of short rapid travels."),
     Param("stock_resolution", "float", .2, min=.02, max=5, unit="mm", group="Material simulation",
           label="Material grid resolution",
           help="Height-field cell size for current-material checks, lead entry heights and the Material display. "
