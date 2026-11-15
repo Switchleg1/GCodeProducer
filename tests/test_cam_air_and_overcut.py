@@ -15,6 +15,7 @@ from gcodeproducer.core.stock import Stock
 from gcodeproducer.stages.base import StageContext
 from gcodeproducer.stages.cam_emit import CAMEmit, mark_collisions
 from tests.test_pocket_bounds import floor_ref, job_for, stepped_part
+from tests.test_gui import win, app  # noqa: F401  (GUI fixtures)
 
 
 class Log:
@@ -197,3 +198,46 @@ def test_reach_check_uses_current_material_surface(libset):
     tool.values["length"] = 20
     generate(job, StageContext())
     assert not [w for w in job.warnings if "cutting length" in w]
+
+
+@pytest.mark.parametrize("limit", [0.0, -1.0, 1.0])
+@pytest.mark.parametrize("clearance", [0.0, 0.5])
+def test_material_limit_places_cutter_edge_relative_to_blank_edge(libset, limit, clearance):
+    mesh = stepped_part()
+    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    job.cam_setup.stock.margin = 2
+    job.cam_setup.stock.auto(mesh)
+    lo, hi = job.cam_setup.stock.bounds
+    centre = (lo[:2] + hi[:2]) / 2
+    half = (hi[0] - lo[0]) / 2
+    op.overcut, op.material_limit, op.stock = 10, limit, clearance
+    generate(job, StageContext())
+    radius = float(job.tools[0].get("diameter")) / 2
+    reach = max(np.abs(p.points - centre).max() for p in job.layers[-1].paths)   # Chebyshev: square blank
+    assert reach + radius == pytest.approx(half + limit, abs=.02)   # cutter edge at blank edge + limit
+    inner = min(np.linalg.norm(p.points - centre, axis=1).min() for p in job.layers[-1].paths)
+    assert inner >= 10 + radius + clearance - .03                   # boss wall still keeps the roughing clearance
+
+
+def test_material_limit_default_comes_from_global_settings(win):
+    win.preferences["default_material_limit"] = -1.5
+    win.preferences["default_overcut"] = 2.0
+    ed = win.cam_editor
+    ed.defaults = win.preferences
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    ed.set_tools(win.libset["tool"].all())
+    ed.add_tool()
+    ed.kind.setCurrentIndex(ed.kind.findData("pocket"))
+    ed.add_operation()
+    assert ed.operation().material_limit == -1.5 and ed.operation().overcut == 2.0
+    assert ed.material_limit.value() == -1.5
+    ed.kind.setCurrentIndex(ed.kind.findData("profile"))
+    ed.add_operation()
+    assert ed.operation().overcut == 0.0
+
+
+def test_messages_migration_and_validation(tmp_path):
+    (tmp_path / "settings.json").write_text(json.dumps({"warning_dialog": False}))
+    prefs = app_settings.load(tmp_path)
+    assert prefs["messages"]["cam_warnings"] is False and prefs["messages"]["slice_failed"] is True
+    assert set(app_settings.validated({"messages": {"junk": False}})["messages"]) == set(app_settings.MESSAGES)

@@ -27,10 +27,34 @@ SCHEMA = [
                "coarsened and a warning is issued."),
     Param("highlight_conflicts", "bool", True, group="Warnings", label="Colour conflicts and collisions",
           help="Recolour flagged moves as Conflict / Collision features in Feature colour mode."),
-    Param("warning_dialog", "bool", True, group="Warnings", label="Show warning dialog after generation",
-          help="Off still lists warnings in the log and blocks/confirms export as before."),
+    Param("default_material_limit", "float", 0.0, min=-1000, max=1000, unit="mm", group="Default operation settings",
+          label="Material boundary limit",
+          help="Initial value for new operations. Where a pocket region reaches the blank edge, the cutter's outer "
+               "edge may travel this far relative to that edge: 0 touches it, -1 leaves 1 mm of material, "
+               "+1 lets the tool pass 1 mm beyond it."),
+    Param("default_overcut", "float", 0.0, min=0, max=1000, unit="mm", group="Default operation settings",
+          label="Pocket overcut into void",
+          help="Initial overcut for new Pocket operations."),
 ]
+
+# Pop-up messages that offer "Don't show this again". Every message is still
+# recorded in the Messages panel when its pop-up is disabled.
+MESSAGES = {
+    "cam_warnings": "CAM material / engagement warnings after generation",
+    "cam_stale_export": "CAM export blocked: regenerate paths",
+    "cannot_slice": "Cannot slice / generate (setup error)",
+    "slice_failed": "Slicing / generation failed",
+    "auto_generate_failed": "Automatic support generation failed",
+    "import_failed": "Model import failed",
+    "no_model": "No model loaded",
+    "no_machine": "No machine for this workflow",
+    "outside_volume": "Model outside the build volume (continue without asking)",
+    "settings_save_failed": "Settings could not be saved",
+    "opengl": "OpenGL errors",
+}
+
 DEFAULTS = {p.name: p.default for p in SCHEMA}
+DEFAULTS["messages"] = {key: True for key in MESSAGES}
 
 
 def settings_path(root: Path | None = None) -> Path:
@@ -45,6 +69,8 @@ def load(root: Path | None = None) -> dict:
             stored = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(stored, dict):
                 data.update({k: v for k, v in stored.items() if k in DEFAULTS})
+                if stored.get("warning_dialog") is False:      # pre-'messages' preference
+                    data["messages"] = {**DEFAULTS["messages"], **dict(data.get("messages") or {}), "cam_warnings": False}
     except (OSError, ValueError):
         pass          # corrupt preferences must not prevent start-up; defaults apply
     return validated(data)
@@ -58,6 +84,8 @@ def save(data: dict, root: Path | None = None) -> None:
 
 def validated(data: dict) -> dict:
     out = dict(DEFAULTS)
+    stored = data.get("messages")
+    out["messages"] = {key: bool(stored.get(key, True)) if isinstance(stored, dict) else True for key in MESSAGES}
     for p in SCHEMA:
         v = data.get(p.name, p.default)
         if p.type == "bool":
@@ -83,3 +111,7 @@ def pref(job, key):
     """Preference lookup that is safe for jobs built without preferences (CLI/tests)."""
     prefs = getattr(job, "preferences", None) or {}
     return prefs.get(key, DEFAULTS[key])
+
+
+def message_enabled(prefs: dict, key: str) -> bool:
+    return bool((prefs.get("messages") or {}).get(key, True))

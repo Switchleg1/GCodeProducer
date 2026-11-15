@@ -78,8 +78,9 @@ def _preferences(args, root):
         if "=" not in item:
             raise SystemExit(f"--pref expects KEY=VALUE, got '{item}'")
         key, value = item.split("=", 1)
-        if key not in app_settings.DEFAULTS:
-            raise SystemExit(f"Unknown setting '{key}'. Known: {', '.join(app_settings.DEFAULTS)}")
+        known = [p.name for p in app_settings.SCHEMA]      # GUI pop-up switches are not CLI settings
+        if key not in known:
+            raise SystemExit(f"Unknown setting '{key}'. Known: {', '.join(known)}")
         prefs[key] = value.lower() in ("1", "true", "yes", "on") if isinstance(app_settings.DEFAULTS[key], bool) else value
     return app_settings.validated(prefs)
 

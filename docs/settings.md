@@ -17,11 +17,40 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Material grid resolution | 0.2 mm | Height-field cell size for current-material contact checks, lead entry heights and the Material display. |
 | Maximum grid cells | 2,000,000 | Memory guard. If `width × depth / resolution²` exceeds it the grid is coarsened and a warning is issued. |
 | Colour conflicts and collisions | On | Moves flagged by the planner/stock checks are recoloured as the **Conflict** and **Collision** features in Feature colour mode. |
-| Show warning dialog after generation | On | Off keeps warnings in the log and the export confirmation; it never suppresses them. |
+| Material boundary limit (Default operation settings) | 0 mm | Initial value for new operations' *Material boundary limit* (see [Pocket](cam/operations.md#overcut-into-void-material)). |
+| Pocket overcut into void (Default operation settings) | 0 mm | Initial overcut for new Pocket operations. Existing operations keep their saved values. |
+| Messages | all shown | Which pop-ups appear; see below. |
 
 Changing a setting marks an existing CAM result stale; regenerate before
 exporting. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
 or missing settings file silently falls back to defaults at start-up.
+
+## Messages and the Messages panel
+
+Every warning and error — pop-up or not — is recorded in the **Messages**
+panel, docked at the bottom of the window a few lines tall. Hide or show it
+with **View → Messages**; drag it elsewhere like any dock (the layout is
+remembered). Rows are coloured by level, hover for the full text, and
+**Clear** empties the list. CAM job warnings (stock, engagement, reach, tool,
+lead) are listed once per generation; pipeline log lines containing
+`WARNING:` are added too. The full detail remains in the **Log** dock.
+
+Each warning/error pop-up has a **Don't show this again** checkbox. Ticking
+it turns that message type off in **Settings → Messages** (saved
+immediately); **Show all** or **Restore Defaults** turns them back on. A
+suppressed message still appears in the Messages panel and briefly in the
+status bar, and the action it reports still happens or is still blocked —
+for example an out-of-date CAM export is still refused.
+
+For the *outside the build volume — slice anyway?* question, ticking the box
+together with **Yes** means "continue without asking"; a **No** answer is
+never remembered. Confirmations that protect output or data — exporting CAM
+with warnings, deleting profiles/processes, discarding unsaved changes — have
+no such checkbox and always ask. The previous *Show warning dialog after
+generation* setting migrates to the *CAM material / engagement warnings*
+message switch.
+
+![Messages panel](pictures/messages-panel.png)
 
 ## Air-cut removal: what it knows and does not know
 

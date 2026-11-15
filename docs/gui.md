@@ -23,6 +23,11 @@ the current controls.
 
 ## Setup and import
 
+The **Messages** dock along the bottom lists every warning and error with
+time and level; hide it from the **View** menu. Pop-ups offer *Don't show
+this again*, switchable back in Settings → Messages; see
+[messages](settings.md#messages-and-the-messages-panel).
+
 **File → Settings… (Ctrl+,)** holds [global preferences](settings.md) that
 affect generated output for every model: air-cut removal, material grid
 resolution and cell limit, conflict colouring and the warning dialog.

@@ -29,7 +29,8 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
 | Roughing clearance / stock to leave | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile; not axial depth allowance |
-| Pocket overcut into void | 0 mm | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
+| Pocket overcut into void | 0 mm (global default) | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
+| Material boundary limit | 0 mm (global default) | Pocket only: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
 
 Choose realistic end depths explicitly; an automatically created operation
 is not a safe default machining plan. For stepdown `s`, generation uses up to
@@ -155,9 +156,37 @@ set End to -5.8 if that is required.
 
 **Pocket overcut into void** grows the pocket region outward by the given
 distance, then removes every part cross-section sampled just above each pass
-depth (plus the roughing clearance) from the growth and clips it to the
-allocated blank. The result is: the pocket extends into stock that will be
-removed anyway, never into the model. On the annular flange example an
+depth from the growth and limits it at the allocated blank. The result is:
+the pocket extends into stock that will be removed anyway, never into the
+model. The grown region is cleared with the operation's own strategy
+(wall-parallel contours or raster, same stepover, direction, stay-down links
+and engagement planning) — there is no separate overcut path.
+
+Two different allowances apply at the two kinds of boundary:
+
+- **Part walls and islands** keep the *roughing clearance* (stock to leave):
+  the cutter edge stays that far from the model.
+- **The blank edge** uses the *Material boundary limit* instead. Roughing
+  clearance is not applied there, because there is no part to protect. With
+  limit 0 the cutter edge reaches exactly the blank edge; −1 mm leaves a 1 mm
+  skin of material; +1 mm lets the cutter pass 1 mm beyond the blank (useful
+  when the blank is slightly oversize or its edge must be cleaned up). For a
+  3 mm tool and limit 0 the outermost tool-centre contour is 1.5 mm inside the
+  blank edge.
+
+The limit is applied to the blank's XY rectangle, offset with sharp corners,
+so the region follows the blank corners rather than rounding them; the
+cutter radius still rounds the cut corner itself. Without an allocated blank
+there is no limit to apply. The limit also trims an ordinary (non-overcut)
+pocket whose selected region extends past the blank edge.
+
+![Overcut stopped by the material boundary limit](../pictures/cam-overcut-material-limit.png)
+
+Actual capture, top view of the deepest pass: flange-floor pocket, 3 mm tool,
+6 mm overcut, 0.3 mm roughing clearance, 4 mm blank margin, limit 0. The
+outer contours grow round the flange until they meet the blank, where they
+run straight along it with the cutter edge on the blank edge; the boss side
+keeps its 0.3 mm clearance. Yellow segments are Conflict highlights. On the annular flange example an
 overcut of 3 mm pushes the outer contours past the flange rim into the blank
 while the boss side is unchanged, so a following outside Profile does not
 meet a thin standing wall where the two operations abut. The added area is

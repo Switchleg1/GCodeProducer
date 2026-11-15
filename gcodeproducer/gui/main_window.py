@@ -47,6 +47,7 @@ from ..core.toolpath import SOLID_KINDS, format_duration
 from .camera import Camera
 from .library_dialog import LibraryDialog
 from .settings_dialog import SettingsDialog
+from .messages import MessagesPanel, show_message
 from .model_viewer import ModelViewer
 from .process_editor import PipelineDialog, ProcessEditor
 from .view_state import COLOR_MODES, ViewState
@@ -162,7 +163,7 @@ class MainWindow(QMainWindow):
         # ---- prepare page: build plate + model
         self.model_viewer = ModelViewer(self.camera)
         self.state.changed.connect(self._on_view_state)
-        self.model_viewer.glError.connect(lambda m: (self.log(m), QMessageBox.critical(self, "OpenGL", m)))
+        self.model_viewer.glError.connect(lambda m: self.notify("opengl", "error", "OpenGL", m))
         self.model_viewer.moved.connect(self._on_model_dragged)
         self.model_viewer.moveFinished.connect(self._save_placement)
         self.model_viewer.faceClicked.connect(self._on_face_clicked)
@@ -175,7 +176,7 @@ class MainWindow(QMainWindow):
 
         # ---- preview page: sliced tool path
         self.viewer = GCodeViewer(self.camera, self.state, "")
-        self.viewer.glError.connect(lambda m: (self.log(m), QMessageBox.critical(self, "OpenGL", m)))
+        self.viewer.glError.connect(lambda m: self.notify("opengl", "error", "OpenGL", m))
         self.viewer.lineSelected.connect(self._on_viewer_pick)
 
         self.layer_slider = QSlider(Qt.Orientation.Vertical)
@@ -315,6 +316,7 @@ class MainWindow(QMainWindow):
         pl.addWidget(proc, 1)
         from .cam_editor import CAMEditor
         self.cam_editor = CAMEditor()
+        self.cam_editor.defaults = self.preferences
         self.stock_editor.set_stock(self.cam_editor.setup.stock)
         self.cam_editor.setVisible(False)
         self.cam_editor.changed.connect(self._cam_changed)
@@ -416,6 +418,8 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.dock_text, self.dock_info)
         self.tabifyDockWidget(self.dock_info, self.dock_log)
         self.dock_text.raise_()
+        self.messages = MessagesPanel()
+        self.dock_messages = self._dock("Messages", self.messages, Qt.DockWidgetArea.BottomDockWidgetArea, "dock_messages")
 
     def _build_model_box(self) -> QGroupBox:
         """Model: file, placement (position / rotation / scale) and support."""
@@ -696,10 +700,11 @@ class MainWindow(QMainWindow):
             new = dlg.result_values()
             changed = new != self.preferences
             self.preferences = new
+            self.cam_editor.defaults = new
             try:
                 app_settings.save(new, self.libset.root)
             except OSError as exc:
-                QMessageBox.warning(self, "Settings", f"Could not save settings: {exc}")
+                self.notify("settings_save_failed", "error", "Settings", f"Could not save settings: {exc}")
             if changed and self.workflow == wf.CAM:
                 self._set_stale()      # generated output depends on CAM preferences
 
@@ -733,7 +738,7 @@ class MainWindow(QMainWindow):
         v.addAction(self.act_preview)
         v.addSeparator()
         for d in (self.dock_prepare, self.dock_process, self.dock_view, self.dock_text, self.dock_info,
-                  self.dock_log):
+                  self.dock_log, self.dock_messages):
             v.addAction(d.toggleViewAction())
         h = self.menuBar().addMenu("&Help")
         h.addAction(self._act("Controls", self._show_help))
@@ -750,6 +755,9 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(s.value("geometry"))
         if s.value("windowState") is not None:
             self.restoreState(s.value("windowState"))
+            if not s.value("messagesDockPlaced"):
+                # Saved layouts predating the Messages dock: keep it at the bottom, a few lines tall.
+                QTimer.singleShot(0, lambda: self.resizeDocks([self.dock_messages], [110], Qt.Orientation.Vertical))
         else:
             QTimer.singleShot(0, self._default_dock_sizes)
         for w in wf.ALL:
@@ -774,6 +782,7 @@ class MainWindow(QMainWindow):
         self._refresh_recent()
 
     def _default_dock_sizes(self):
+        self.resizeDocks([self.dock_messages], [110], Qt.Orientation.Vertical)   # a few lines only
         self.resizeDocks([self.dock_prepare, self.dock_view], [430, 330], Qt.Orientation.Horizontal)
         self.resizeDocks([self.dock_prepare, self.dock_process], [430, 520], Qt.Orientation.Vertical)
 
@@ -782,6 +791,7 @@ class MainWindow(QMainWindow):
         s = self.settings
         s.setValue("geometry", self.saveGeometry())
         s.setValue("windowState", self.saveState())
+        s.setValue("messagesDockPlaced", True)
         s.setValue("workflow", self.workflow)
         for w in wf.ALL:
             s.setValue(f"process/{w}", self.process_id[w] or "")
@@ -1062,7 +1072,7 @@ class MainWindow(QMainWindow):
         try:
             preset = ProcessPreset.import_file(path)
         except Exception as exc:
-            QMessageBox.warning(self, "Import failed", str(exc))
+            self.notify("import_failed", "error", "Import failed", str(exc))
             return
         if not self._confirm_discard():
             return
@@ -1109,7 +1119,7 @@ class MainWindow(QMainWindow):
             find_importer(path)
             mesh = load_mesh(path)
         except Exception as exc:
-            QMessageBox.warning(self, "Import failed", str(exc))
+            self.notify("import_failed", "error", "Import failed", str(exc))
             return
         self._reset_material_outputs()
         self.mesh, self.model_path = mesh, path
@@ -1531,7 +1541,7 @@ class MainWindow(QMainWindow):
     def generate_blocks(self, wait: bool = False):
         """Auto-generate: one block per island of automatic support, for the placed model."""
         if self.placed is None:
-            QMessageBox.information(self, "No model", "Import a model first.")
+            self.notify("no_model", "warning", "No model", "Import a model first.")
             return
         pipe = self.pipelines[self.workflow]
         sl = plugins.stages.get("fdm_slice").resolve(pipe.step("fdm_slice").params if pipe.step("fdm_slice")
@@ -1723,11 +1733,11 @@ class MainWindow(QMainWindow):
             self.cancel_slice()
             return
         if self.mesh is None:
-            QMessageBox.information(self, "No model", "Import a model first.")
+            self.notify("no_model", "warning", "No model", "Import a model first.")
             return
         machine = self._machine()
         if machine is None:
-            QMessageBox.information(self, "No machine", "Create a machine for this workflow (Libraries\u2026).")
+            self.notify("no_machine", "warning", "No machine", "Create a machine for this workflow (Libraries\u2026).")
             return
         kw = {}
         if self.workflow == wf.FDM:
@@ -1739,10 +1749,9 @@ class MainWindow(QMainWindow):
         mesh = Mesh(self.mesh.vertices.copy(), self.mesh.triangles)   # stages may move the mesh
         placed = self.placement.apply(mesh, self._auto_xy())
         if not fits(placed, bed_rect(machine, self.workflow)):
-            r = QMessageBox.question(self, "Outside the build volume",
-                                     "The model does not fit inside the machine's build volume.\n"
-                                     "Slice anyway?")
-            if r != QMessageBox.StandardButton.Yes:
+            if not self.notify("outside_volume", "warning", "Outside the build volume",
+                               "The model does not fit inside the machine's build volume.\nSlice anyway?",
+                               question=True):
                 return
         try:
             job = build_job(self.workflow, machine, mesh=mesh, model_path=self.model_path,
@@ -1751,7 +1760,7 @@ class MainWindow(QMainWindow):
                             support=copy.deepcopy(self.model_support) if self.workflow == wf.FDM else None,
                             preferences=dict(self.preferences), **kw)
         except ValueError as exc:
-            QMessageBox.warning(self, "Cannot slice", str(exc))
+            self.notify("cannot_slice", "error", "Cannot slice", str(exc))
             return
         pipe = (SlicePipeline.default(wf.CAM) if self.workflow == wf.CAM
                 else copy.deepcopy(self.pipelines[self.workflow]))
@@ -1817,7 +1826,7 @@ class MainWindow(QMainWindow):
             self._blocks_task = None
             self._update_blocks_busy()
             self.log(tb)
-            QMessageBox.critical(self, "Auto-generate failed", tb.strip().splitlines()[-1])
+            self.notify("auto_generate_failed", "error", "Auto-generate failed", tb.strip().splitlines()[-1])
 
     def _slice_done(self, out):
         self.progress.setVisible(False)
@@ -1858,10 +1867,13 @@ class MainWindow(QMainWindow):
                                      f"{len(self.program.lines):,} lines, "
                                      f"est. {format_duration(tp.stats.get('est_time_s', 0))}", 8000)
 
-        if self.cam_warnings and self.preferences.get("warning_dialog", True):
-            QMessageBox.warning(self, "CAM material / engagement warnings",
+        for warning in self.cam_warnings:
+            self.messages.add("warning", warning, "CAM")
+        if self.cam_warnings:
+            self.notify("cam_warnings", "warning", "CAM material / engagement warnings",
                                 "\n".join(self.cam_warnings[:15]) +
-                                "\n\nFlagged moves are coloured Conflict / Collision in Feature colour mode. Review the toolpath and full log before machining; these checks are approximate 2.5D, not a full collision simulation.")
+                                "\n\nFlagged moves are coloured Conflict / Collision in Feature colour mode. Review the toolpath and full log before machining; these checks are approximate 2.5D, not a full collision simulation.",
+                        record=False)
 
     def _slice_failed(self, tb):
         self.progress.setVisible(False)
@@ -1869,14 +1881,14 @@ class MainWindow(QMainWindow):
         self._update_enabled()
         self.log(tb)
         self._update_enabled()
-        QMessageBox.critical(self, "Slice failed", tb.strip().splitlines()[-1])
+        self.notify("slice_failed", "error", "Slice failed", tb.strip().splitlines()[-1])
 
     def save_gcode(self):
         if self.program is None:
             return
         if self.workflow == wf.CAM and self.stale:
-            QMessageBox.warning(self, "Regenerate CAM paths",
-                                "The model, material or setup has changed. Regenerate paths to run stock checks before exporting.")
+            self.notify("cam_stale_export", "warning", "Regenerate CAM paths",
+                        "The model, material or setup has changed. Regenerate paths to run stock checks before exporting.")
             return
         if self.workflow == wf.CAM and self.cam_warnings:
             if QMessageBox.question(self, "Export with CAM warnings?",
@@ -2057,6 +2069,31 @@ class MainWindow(QMainWindow):
     # ======================================================================
     def log(self, msg: str):
         self.log_view.appendPlainText(f"[{time.strftime('%H:%M:%S')}] {msg}")
+        text = str(msg)
+        # Pipeline/compute warnings arrive as log lines ("STOCK WARNING: ...", "LEAD WARNING: ...").
+        # CAM job warnings are added once from the result instead, so skip those prefixes here.
+        if "WARNING:" in text and hasattr(self, "messages"):
+            head, _, body = text.strip().partition("WARNING:")
+            if head.strip() not in ("STOCK", "ENGAGEMENT", "REACH", "TOOL", "LEAD"):
+                self.messages.add("warning", body.strip(), head.strip().title())
+
+    def notify(self, key, level, title, text, question=False, record=True):
+        """Record in Messages/log, then pop up unless disabled in Settings > Messages."""
+        if record:
+            self.messages.add(level, text, title)
+            self.log_view.appendPlainText(f"[{time.strftime('%H:%M:%S')}] {level.upper()}: {title}: {text}")
+        if not app_settings.message_enabled(self.preferences, key):
+            first = str(text).splitlines()[0] if text else ""
+            self.statusBar().showMessage(f"{title}: {first} (see Messages)", 8000)
+            return True
+        before = dict(self.preferences.get("messages") or {})
+        result = show_message(self, self.preferences, key, level, title, text, question=question)
+        if self.preferences.get("messages") != before:
+            try:
+                app_settings.save(self.preferences, self.libset.root)
+            except OSError as exc:
+                self.messages.add("error", f"Could not save settings: {exc}", "Settings")
+        return result
 
     def _show_help(self):
         QMessageBox.information(self, "Controls", (

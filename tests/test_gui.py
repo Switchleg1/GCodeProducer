@@ -620,3 +620,51 @@ def test_feature_list_has_hsm_and_conflict_tooltips(win):
     assert FEATURE_LABELS["hsm"] == "HSM" and "low horizontal" in FEATURE_TOOLTIPS["hsm"]
     assert "conflict" in FEATURE_TOOLTIPS and "collision" in FEATURE_TOOLTIPS
     assert "(low horizontal" not in win.cam_editor.feed_controls["low_engagement_feed"].specialValueText()
+
+
+def test_messages_dock_records_and_dont_show_again(win, monkeypatch):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QMessageBox
+    from gcodeproducer.core import app_settings
+    assert win.dockWidgetArea(win.dock_messages) == Qt.DockWidgetArea.BottomDockWidgetArea
+    assert win.dock_messages.toggleViewAction() in win.menuBar().actions()[2].menu().actions()
+    shown = []
+
+    def fake_exec(box):
+        shown.append(box.text())
+        box.checkBox().setChecked(True)            # user ticks "Don't show this again"
+        return QMessageBox.StandardButton.Ok
+    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
+    win.notify("slice_failed", "error", "Slice failed", "boom")
+    assert shown == ["boom"]
+    assert win.preferences["messages"]["slice_failed"] is False
+    assert app_settings.load(win.libset.root)["messages"]["slice_failed"] is False   # persisted
+    win.notify("slice_failed", "error", "Slice failed", "again")
+    assert shown == ["boom"]                                     # suppressed pop-up
+    assert any("again" in t for t in win.messages.texts())       # still recorded
+    assert win.messages.counts["error"] == 2
+    win.log("LEAD2 WARNING: something odd")
+    assert any("something odd" in t for t in win.messages.texts())
+
+
+def test_dont_ask_again_never_remembers_no(win, monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+
+    def fake_exec(box):
+        box.checkBox().setChecked(True)
+        return QMessageBox.StandardButton.No
+    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
+    assert win.notify("outside_volume", "warning", "Outside", "continue?", question=True) is False
+    assert win.preferences["messages"]["outside_volume"] is True
+
+
+def test_settings_dialog_messages_section(win):
+    from gcodeproducer.core import app_settings
+    from gcodeproducer.gui.settings_dialog import SettingsDialog
+    dlg = SettingsDialog(win.preferences, win)
+    assert set(dlg.message_checks) == set(app_settings.MESSAGES)
+    dlg.message_checks["cam_warnings"].setChecked(False)
+    assert dlg.result_values()["messages"]["cam_warnings"] is False
+    dlg._defaults()
+    assert dlg.result_values()["messages"]["cam_warnings"] is True
+    dlg.close()

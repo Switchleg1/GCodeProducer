@@ -82,6 +82,7 @@ class Operation:
     lead_out: bool = True
     lead_length: float = 0.0            # 0 = half tool diameter
     overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
+    material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
 
 
 @dataclass
@@ -353,6 +354,7 @@ def generate(job, ctx):
                             pocket_region, part_section, overcut_region)
     from .app_settings import pref
     from shapely.geometry import box as shapely_box
+    from shapely import BufferJoinStyle
     skip_air = bool(pref(job, "skip_air_cuts"))
     setup = job.cam_setup
     topo = cached_topology(job.mesh)
@@ -435,18 +437,32 @@ def generate(job, ctx):
                     raise ValueError("Pocket stepover must be between 0 and 100 percent")
                 if op.overcut < 0 or not math.isfinite(op.overcut):
                     raise ValueError(f"{op.name}: overcut must be zero or positive")
+                if not math.isfinite(op.material_limit):
+                    raise ValueError(f"{op.name}: material boundary limit must be finite")
                 region = pocket_region(loops)
+                limit = None
+                if setup.stock.allocated:
+                    # contour_pocket insets every boundary by radius + roughing clearance. At the blank
+                    # edge the clearance protects nothing, so add it back: the cutter's outer edge then
+                    # lands exactly at blank edge + material_limit (0 touches, -1 leaves 1 mm, +1 passes).
+                    lo_s, hi_s = setup.stock.bounds
+                    reach_out = op.material_limit + op.stock
+                    limit = shapely_box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+                    if abs(reach_out) > 1e-12:
+                        limit = limit.buffer(reach_out, join_style=BufferJoinStyle.mitre)
                 if op.overcut > 0:
                     depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
-                    protected = part_section(job.mesh, depths, op.stock)
-                    limit = None
-                    if setup.stock.allocated:
-                        lo_s, hi_s = setup.stock.bounds
-                        limit = shapely_box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+                    # No extra clearance here: the contour inset already leaves op.stock on part walls.
+                    protected = part_section(job.mesh, depths, 0.0)
                     grown = overcut_region(region, op.overcut, protected, limit)
                     ctx.log(f"  {op.name}: overcut {op.overcut:g} mm into void material adds "
-                            f"{grown.area - region.area:.1f} mm² (part sections protected)")
+                            f"{grown.area - region.area:.1f} mm² (part sections protected, "
+                            f"material limit {op.material_limit:+g} mm)")
                     region = grown
+                elif limit is not None and not limit.is_empty and not limit.covers(region):
+                    region = region.intersection(limit).buffer(0)
+                    if region.is_empty:
+                        raise ValueError(f"{op.name}: material boundary limit removes the whole pocket")
                 if op.strategy == "contour":
                     contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log, region=region)
                     linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
