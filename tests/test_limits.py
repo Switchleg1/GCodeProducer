@@ -101,7 +101,8 @@ def test_chamber(libset, cube_stl):
     prog, log = _run(libset, cube_stl, machine=m, material=abs_)
     text = prog.to_text()
     assert text.index("M141 S40") < text.index("M190")       # chamber first
-    assert "M191" not in text and text.rstrip().endswith("M141 S0 ;chamber off")
+    end = text[text.rindex(";LAYER:"):]
+    assert "M191" not in text and "M141 S0" in end                # chamber off in the end G-code
     m = _machine(heated_chamber=True, max_chamber_temp=60, wait_for_chamber=True)
     prog, _ = _run(libset, cube_stl, machine=m, material=abs_)
     assert "M141 S45" in prog.to_text() and "M191 S45" in prog.to_text()

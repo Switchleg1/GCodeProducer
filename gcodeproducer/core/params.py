@@ -12,7 +12,8 @@ ALL_ITEMS = "*"     # value of a 'multi' parameter selecting every item
 class Param:
     """Describes one module parameter.
 
-    type: 'float' | 'int' | 'bool' | 'choice' | 'str' | 'multi'
+    type: 'float' | 'int' | 'bool' | 'choice' | 'str' | 'multi' | 'gcode'
+        ('gcode' = a multi-line G-code template, see core.gcode_template)
     choices: for 'choice' a list of values or (value, label) tuples
     choices_from: for 'multi' the name of a list supplied by the application at
         edit time (e.g. "operations" = operation names of the loaded file).

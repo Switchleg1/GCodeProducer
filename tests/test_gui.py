@@ -415,3 +415,32 @@ def test_preview_uses_machine_plate_and_same_view(win, app):
     app.processEvents()
     assert win.model_viewer.size() == preview_size        # same area, same framing
     assert not win.layer_slider.isEnabled()
+
+
+def test_gcode_template_box(app):
+    from gcodeproducer.core import gcode_vars as gv
+    from gcodeproducer.core.profiles import schema
+    from gcodeproducer.gui.gcode_edit import GCodeTemplateEdit
+    from gcodeproducer.gui.widgets import ParamEditor
+    ed = ParamEditor(schema("machine", "fdm"), {"start_gcode": ""}, context={"workflow": "fdm"})
+    box = ed._widgets["start_gcode"]
+    assert isinstance(box, GCodeTemplateEdit)
+    assert box.text() == gv.DEFAULT_START["fdm"] and box.is_default() and not box.b_reset.isEnabled()
+    got = {}
+    ed.changed.connect(got.update)
+    box.set_text("M109 S{nozzle_temp}\n{if a}")
+    assert got["start_gcode"] == "M109 S{nozzle_temp}\n{if a}"
+    assert "unknown variable 'a'" in box.problems.text() and "without '{endif}'" in box.problems.text()
+    assert box.b_reset.isEnabled()
+    box.edit.moveCursor(box.edit.textCursor().MoveOperation.End)
+    box.insert_variable("bed_temp")
+    assert box.text().endswith("{bed_temp}")
+    box.reset()
+    assert box.text() == gv.DEFAULT_START["fdm"] and got["start_gcode"] == gv.DEFAULT_START["fdm"]
+    assert box.problems.text() == ""
+    assert "M109 S210 T0" in box.rendered_example()
+    # the CAM editor offers CAM variables and the CAM default
+    cam = ParamEditor(schema("machine", "cam"), {}, context={"workflow": "cam"})._widgets["end_gcode"]
+    assert cam.text() == gv.DEFAULT_END["cam"]
+    menu_text = " ".join(a.text() for m in cam.b_insert.menu().actions() if m.menu() for a in m.menu().actions())
+    assert "{spindle_rpm}" in menu_text and "{nozzle_temp}" not in menu_text

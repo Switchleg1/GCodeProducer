@@ -114,7 +114,7 @@ class FDMEmit(SliceStage):
             return spd * 60.0
 
         temps = self._temperatures(job, ctx)
-        self._start_gcode(b, job, temps, params)
+        self._start_gcode(b, job, temps, params, log=ctx.log)
         b.relative_e = rel_e
         b.reset_e()
 
@@ -142,7 +142,7 @@ class FDMEmit(SliceStage):
                                  retract_len, retract_spd, zhop)
             ctx.progress((li + 1) / n)
 
-        self._end_gcode(b, job, temps)
+        self._end_gcode(b, job, temps, log=ctx.log)
         for msg in caps.values():
             ctx.log(f"  speed capped: {msg}")
         job.program = b.program(path=None)
@@ -223,35 +223,15 @@ class FDMEmit(SliceStage):
         if layer.index == fan_off:
             b.command(f"M106 S{int(round(255 * fan / 100.0))}", "fan on")
 
-    def _start_gcode(self, b, job, t, params):
-        raw = (job.m("start_gcode") or "").strip()
-        subs = {"nozzle_temp": _i(t["nozzle_first"]), "bed_temp": _i(t["bed_first"]),
-                "nozzle_temp_layer": _i(t["nozzle"]), "bed_temp_layer": _i(t["bed"]),
-                "chamber_temp": _i(t["chamber"]),
-                "material": (job.material.name if job.material else ""),
-                "machine": job.machine.name}
+    def _start_gcode(self, b, job, t, params, log=None):
+        """The machine's start G-code template (or the default), filled from the job's variables."""
+        from ..core.gcode_vars import render_box
         b.comment(f"GCodeProducer FDM - {job.machine.name}")
-        if job.material:
-            b.comment(f"material: {job.material.name}  nozzle: {job.nozzle.name if job.nozzle else '?'}")
-        # chamber first (slowest to heat), unless the machine's start G-code handles it
-        if t["chamber"] > 0 and not any(c in raw.upper() for c in ("M141", "M191")):
-            b.command(f"M141 S{_i(t['chamber'])}", "set chamber")
-        if raw:
-            try:
-                raw = raw.format(**subs)
-            except Exception:
-                pass
-            b.raw(raw)
-        else:
-            b.command(f"M140 S{_i(t['bed_first'])}", "set bed")
-            b.command(f"M104 S{_i(t['nozzle_first'])}", "set nozzle")
-            b.command(f"M190 S{_i(t['bed_first'])}", "wait bed")
-            if t["chamber"] > 0 and t["wait_chamber"]:
-                b.command(f"M191 S{_i(t['chamber'])}", "wait chamber")
-            b.command(f"M109 S{_i(t['nozzle_first'])}", "wait nozzle")
-            b.command("G28", "home")
-            b.command("G21")
-            b.command("G90")
+        text = render_box(job, "start_gcode", temps=t, log=log)
+        if t["chamber"] > 0 and not any(k in text.upper() for k in ("M141", "M191")) and log:
+            log("  start G-code does not set the chamber (M141) although the material asks for "
+                f"{t['chamber']:g} \u00b0C - use {{chamber_temp}} in the machine's start G-code")
+        b.raw(text.rstrip("\n"))
         accel = params.get("acceleration", 0) or 0
         if accel > 0:
             max_acc = job.m("max_acceleration", 0) or 0
@@ -261,21 +241,13 @@ class FDMEmit(SliceStage):
                 b.command(f"M204 S{_i(accel)}", "acceleration")
         b.command("M83" if job.m("relative_e", True) else "M82")
 
-    def _end_gcode(self, b, job, t):
-        raw = (job.m("end_gcode") or "").strip()
+    def _end_gcode(self, b, job, t, log=None):
+        from ..core.gcode_vars import render_box
         b.set_feature("end", comment=False)
-        if raw:
-            b.raw(raw)
-        else:
-            b.command("M104 S0", "nozzle off")
-            b.command("M140 S0", "bed off")
-            b.command("M107", "fan off")
-            b.command("G91")
-            b.command("G1 Z10 F600", "lift")
-            b.command("G90")
-            b.command("M84", "motors off")
-        if t["chamber"] > 0 and "M141" not in raw.upper():
-            b.command("M141 S0", "chamber off")
+        last = job.layers[-1] if job.layers else None
+        extra = {"layer": len(job.layers), "layer_z": float(last.z), "current_layer_height": float(last.height)} \
+            if last is not None else None
+        b.raw(render_box(job, "end_gcode", temps=t, extra=extra, log=log).rstrip("\n"))
 
 
 def _i(v) -> int:

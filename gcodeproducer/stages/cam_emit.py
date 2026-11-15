@@ -37,7 +37,7 @@ class CAMEmit(SliceStage):
         rpm = tool.get("spindle_rpm", 18000) if tool else job.m("spindle_max", 18000)
         rapid_xy = job.m("rapid_xy", 3000)
 
-        self._start(b, job, tool, rpm, safe_z)
+        self._start(b, job, tool, rpm, safe_z, log=ctx.log)
         b.set_feature("rapid", comment=False)
 
         n = max(1, len(job.layers))
@@ -62,7 +62,7 @@ class CAMEmit(SliceStage):
                     first = False
             ctx.progress((li + 1) / n)
 
-        self._end(b, job, safe_z)
+        self._end(b, job, safe_z, log=ctx.log)
         prog = b.program()
         prog.machine = "cam"
         prog.layer_z = [l.z for l in job.layers]
@@ -70,29 +70,12 @@ class CAMEmit(SliceStage):
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
         return f"{len(prog.lines)} lines, {moves} moves, {len(job.layers)} depth passes"
 
-    def _start(self, b, job, tool, rpm, safe_z):
-        raw = (job.m("start_gcode") or "").strip()
+    def _start(self, b, job, tool, rpm, safe_z, log=None):
+        from ..core.gcode_vars import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
-        if tool:
-            b.comment(f"tool T{tool.get('tool_number',1)} {tool.get('type','')} "
-                      f"D{tool.get('diameter','?')}")
-        if raw:
-            b.raw(raw)
-        else:
-            b.command("G21")
-            b.command("G90")
-            if tool:
-                b.command(f"T{int(tool.get('tool_number',1))} M6", "tool change")
-            b.command(f"M3 S{int(round(rpm))}", "spindle on")
-            b.command(f"G0 Z{format_number(safe_z,3)}")
+        b.raw(render_box(job, "start_gcode", log=log).rstrip("\n"))
 
-    def _end(self, b, job, safe_z):
-        raw = (job.m("end_gcode") or "").strip()
+    def _end(self, b, job, safe_z, log=None):
+        from ..core.gcode_vars import render_box
         b.set_feature("retract", comment=False)
-        if raw:
-            b.raw(raw)
-        else:
-            b.command(f"G0 Z{format_number(safe_z,3)}")
-            b.command("M5", "spindle off")
-            b.command("G0 X0 Y0")
-            b.command("M30", "end")
+        b.raw(render_box(job, "end_gcode", log=log).rstrip("\n"))

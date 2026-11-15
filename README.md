@@ -284,6 +284,47 @@ cooling and retraction are set on the **material**. Diameter, line width and the
 flow limit are set on the **nozzle**.
 Edit them with *Libraries…* (toolbar) or the ✎ buttons.
 
+### Custom G-code (start / end, and future boxes)
+
+The machine's **Start G-code** and **End G-code** are multi-line template
+boxes. Each comes with the default template, **Reset to default**, **Insert
+variable ▾** (every variable, by category, with its description) and
+**Preview** (filled with example values). Problems such as an unknown variable
+or an unbalanced `{if}` are listed under the box as you type. An empty box
+means the default.
+
+Templates are filled from one dictionary of variables
+(`core/gcode_vars.py`). The values come from the job: machine, material,
+nozzle / tool, process and model.
+
+| Category | Variables |
+|---|---|
+| General | `machine`, `model`, `date`, `time`, `version` |
+| Machine | `bed_x`, `bed_y`, `max_height`, `bed_center_x/y`, `relative_e`, `heated_chamber`, `wait_for_chamber`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp` (CAM: `safe_z`) |
+| Temperatures | `nozzle_temp`, `nozzle_temp_first`, `bed_temp`, `bed_temp_first`, `chamber_temp` (capped at the machine limits; `chamber_temp` is 0 without a heated chamber) |
+| Tool / material | `tool`, `nozzle`, `nozzle_diameter`, `line_width`, `material`, `material_type`, `filament_diameter`, `flow`, `fan_speed`, `fan_speed_pwm`, `retract_length`, `retract_speed` (CAM: `tool_name`, `tool_diameter`, `spindle_rpm`, `feed`, `plunge_feed`) |
+| Layers | `layer_height`, `first_layer_height`, `current_layer_height`, `layer`, `layer_z`, `layer_count` |
+| Part | `print_min_x/y/z`, `print_max_x/y/z` |
+
+Syntax: `{name}`, `{name:.1f}` (format), `{nozzle_temp + 5}` (arithmetic,
+comparisons, `and` / `or` / `not`, `a if c else b`, `round int float min max
+abs str`), `{if expr}`…`{elif expr}`…`{else}`…`{endif}` (nestable,
+may span lines), and `{{` / `}}` for literal braces. Whole numbers print
+without `.0` and booleans as `1` / `0`. Expressions are evaluated safely: only
+these constructs are allowed. The default FDM start template, for example,
+sets the chamber only when there is one:
+
+```
+{if chamber_temp > 0}M141 S{chamber_temp} ; set chamber
+{endif}M140 S{bed_temp_first} ; set bed
+M104 S{nozzle_temp_first} T{tool} ; set nozzle
+```
+
+To add a variable, add it to `VARIABLES` and set it in `job_variables()`; a
+test checks that every registered variable has a value. A new box is a
+`Param(..., "gcode", default=...)` rendered with `render_box()`: it
+automatically gets the editor, the variables menu and the check.
+
 ## CLI
 
 ```bash

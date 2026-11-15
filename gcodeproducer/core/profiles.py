@@ -46,11 +46,14 @@ KIND_LABEL = {"machine": "Machine", "material": "Material", "nozzle": "Nozzle", 
 # --------------------------------------------------------------------------
 # Schemas
 def _machine_schema(workflow: str) -> list:
+    from .gcode_vars import DEFAULT_END, DEFAULT_START
+    w = wf.normalize(workflow)
     common_tail = [
-        Param("start_gcode", "text", default="", group="G-code",
-              help="Emitted before the job (supports {placeholders})."),
-        Param("end_gcode", "text", default="", group="G-code",
-              help="Emitted after the job."),
+        Param("start_gcode", "gcode", default=DEFAULT_START[w], label="Start G-code", group="G-code",
+              help="Written before the job. A template: {variables}, {if ...}{else}{endif}. "
+                   "Empty = the default."),
+        Param("end_gcode", "gcode", default=DEFAULT_END[w], label="End G-code", group="G-code",
+              help="Written after the job. A template like the start G-code. Empty = the default."),
     ]
     if workflow == wf.CAM:
         return [

@@ -76,6 +76,11 @@ class ParamEditor(QWidget):
                     lab.setWordWrap(True)
                     form.addRow(lab, h)
                 rows[p.row].addWidget(w, 1)
+            elif p.type == "gcode":
+                lab = QLabel(p.label)
+                lab.setToolTip(p.help)
+                form.addRow(lab)
+                form.addRow(w)
             else:
                 lab = QLabel(p.label + (f" [{p.unit}]" if p.unit else ""))
                 lab.setWordWrap(True)
@@ -176,6 +181,16 @@ class ParamEditor(QWidget):
             return co
         if p.type == "multi":
             return self._make_multi(p, v)
+        if p.type == "gcode":
+            from .gcode_edit import GCodeTemplateEdit
+            # an empty stored value means 'the default': show the default text to edit
+            ed = GCodeTemplateEdit(v if (v or "").strip() else (p.default or ""), p.default or "",
+                                   self.context.get("workflow", "fdm"))
+            ed.setToolTip(p.help)
+            ed.changed.connect(lambda text, n=p.name: self._set(n, text))
+            self._widgets[p.name] = ed
+            self._setters[p.name] = ed.set_text
+            return ed
         le = QLineEdit(str(v or ""))
         le.setToolTip(p.help)
         le.editingFinished.connect(lambda n=p.name, le=le: self._set(n, le.text()))

@@ -101,7 +101,7 @@ class LibraryDialog(QDialog):
         p = self._current()
         if p is None:
             return
-        ctx = {}
+        ctx = {"workflow": p.workflow}   # template boxes offer this workflow's variables
         if p.kind == "machine":       # allowed_* multiselects list the consumable libraries
             for k in ("material", "nozzle", "tool"):
                 ctx[k] = [q.id for q in self.libset[k].all()]
