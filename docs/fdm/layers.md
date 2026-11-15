@@ -1,0 +1,65 @@
+[Documentation](../README.md) / [FDM](README.md)
+
+# Layers
+
+**Where:** Process → Layers. **Stage:** `fdm_slice` (core).
+**Input:** placed STL mesh. **Output:** ordered layers, original outline loops
+and working contours for later stages.
+
+## Settings
+
+| Setting | Default | Meaning |
+|---|---|---|
+| Layer height | 0.2 mm | Height of every layer after the first |
+| First layer height | `auto` | Explicit first height, or the normal height when auto |
+
+Both explicit heights accept 0.01–2.0 mm in the stage schema. That range is a
+software input range, not a nozzle recommendation. Nozzle min/max layer
+heights are not automatically enforced here. Start with values suitable for
+your nozzle, material, printer and desired resolution.
+
+CLI `--layer-height` is a per-job override and wins over the process's normal
+height. The first-layer setting still resolves separately: `auto` follows the
+resolved normal height; an explicit first height stays explicit.
+
+## Geometry and placement
+
+The model is placed before slicing. FDM places its bottom at the Z field,
+normally zero. Z > 0 retains **empty layers under the model** rather than
+shifting the first model contour back to the plate. This lets support begin at
+the bed and grow up to a lifted part.
+
+For example, a model lifted 3 mm with 0.2 mm layers has many layers without
+part outlines before the part begins. Support or skirt may still occupy those
+layers. Turning support off will not lower the part or remove the need to
+support it physically.
+
+The process never controls centring, rotation or scale. Older references to a
+Layers “centre on bed” option are obsolete; use Model → Position/Center.
+
+## Effects and inspection
+
+Smaller layers generally create more contours, more G-code and longer
+computation. They also change shell thickness in millimetres and the physical
+size of support gaps defined in layer counts. Check:
+
+- the first material-bearing layer and its height;
+- empty layers below lifted models;
+- features near the STL's top and thin horizontal surfaces;
+- requested support gap distances after changing layer height;
+- actual extruded line widths and flow caps in output.
+
+A four-layer top shell at 0.2 mm is nominally 0.8 mm; changing to 0.1 mm halves
+that thickness unless you increase the count. A one-layer support gap changes
+similarly. Unequal first-layer height means the first physical interval may
+not match a simple count × normal-height calculation.
+
+## Troubleshooting
+
+“No mesh loaded” means import failed or a job was built without geometry.
+Unexpected empty lower layers usually mean the model is lifted. Missing
+contours may indicate an open/degenerate mesh or features smaller than the
+geometry kernel can preserve. Do not compensate for missing geometry solely
+by reducing height; verify the STL and inspect [walls](walls.md) too.
+
+[Exact parameter reference](../reference/stage-settings.md#fdm_slice)

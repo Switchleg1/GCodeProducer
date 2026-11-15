@@ -1,0 +1,153 @@
+[Documentation](../README.md) / [CAM](README.md)
+
+# Pocket, Profile, Drill and Engrave
+
+These are tree operations (`core.cam.Operation`), not independent pipeline
+stage presets. They share a tool group, selection system, start/end depth
+sources and execution order. Geometry is generated from the placed STL;
+cutting faces must be horizontal and selected edge chains constant-Z.
+
+## Shared fields and defaults
+
+| Field | New-operation behaviour | Meaning |
+|---|---|---|
+| Kind | Chosen in Add operation menu | Pocket, Profile, Drill or Engrave |
+| Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
+| Enabled | On | Off skips the operation |
+| Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
+| Start | Model top + 0 | Depth reference, not safe approach height |
+| End | Model bottom + 0 | Default for Pocket/Profile/Drill; **Engrave defaults to Model top - 0.2 mm** |
+| Stepdown | Tool max DOC when added, otherwise 1 mm | Requested vertical increment; capped at positive tool max DOC during generation |
+| Pocket stepover | 40% | Raster spacing as percentage of cutter diameter; independent of stored tool stepover |
+| Profile side | Outside | Outside, Inside or On |
+| Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
+
+Choose realistic end depths explicitly; an automatically created operation
+is not a safe default machining plan. For stepdown `s`, generation uses up to
+`ceil((start-end)/s)` passes, shortening the last one to reach End. More than
+10,000 passes is rejected. Empty paths, invalid depths, nonpositive tool
+radius/stepdown, unsupported geometry and missing tools fail instead of
+silently switching to another strategy.
+
+Before each generated path, the emitter retracts to machine safe Z, rapids XY,
+then plunges vertically to the current pass depth. No ramp, helix, lead-in,
+lead-out or cutter-compensation cycle is inserted. Avoid geometry/tooling
+that cannot tolerate that entry. Tool feed/plunge feed and RPM are used as
+stored; there is no general CAM machine-capability capping equivalent to FDM.
+
+## Pocket
+
+**Purpose:** clear a selected closed XY region to an end depth.
+
+Select a horizontal face boundary or a closed set of feature edges. Include
+island/hole boundaries when they should remain excluded from clearing; the
+kernel determines nesting from the supplied loops, not from an unselected
+whole CAD solid.
+
+The cutter-centre region is inset by **radius + Stock to leave**. Horizontal
+raster lines clear the inset region at a spacing of
+`diameter × stepover / 100`, followed by boundary passes. For a 6 mm tool at
+40% stepover, nominal raster spacing is 2.4 mm. Smaller stepover creates more
+paths; it is not a chip-thickness or constant-engagement controller.
+
+Restrictions and checks:
+
+- All required boundaries must be closed; open chains are rejected.
+- Insetting that leaves no region produces a “pocket too small” error.
+- Stepover must be >0 and ≤100% (the GUI offers 1–100%).
+- Thin channels, close islands, concave offsets or intersecting loops can
+  expose limitations of the minimal offset kernel. Inspect generated paths.
+- An offset region existing does not prove the cutter can access it with safe
+  entry or that the retained material/fixtures are collision-free.
+
+**Example:** Start 0, End -6, stepdown 1.5, radial stock 0.2 with a 6 mm tool
+leaves the cutter centre 3.2 mm from the selected retained boundaries and
+uses four depth passes. It does not reserve an axial 0.2 mm floor allowance;
+set End to -5.8 if that is required.
+
+Not implemented: adaptive clearing, trochoidal motion, rest machining,
+automatic rough/finish stock tracking, helical entry or machining from a full
+3D stock-removal simulation.
+
+## Profile
+
+**Purpose:** follow closed boundaries with optional radial cutter compensation.
+
+| Side | Centreline behaviour |
+|---|---|
+| Outside | Away from material by radius + radial stock; outer boundaries grow, holes shrink |
+| Inside | Into material by radius + radial stock; outer boundaries shrink, holes grow |
+| On | Follow selected line directly; radial stock is not applied |
+
+The outside/inside meaning is based on loop nesting/material, not merely
+clockwise versus counterclockwise input. Multiple selected cube edges can
+join into a closed contour. A single open edge does not become a complete
+outside profile automatically; use constant-Z Engrave when following an open
+line is appropriate.
+
+The generator copies the compensated XY path to each depth pass. It does not
+derive a new wall surface at every Z from a general 3D part. Thus tapered,
+undercut or changing-width geometry is not a general supported profiling case.
+
+**Example:** an outside square boundary and 6 mm endmill use a centreline about
+3 mm outside each retained straight wall at zero stock allowance. A 0.3 mm
+allowance increases that offset to 3.3 mm. That can still place the cutter
+inside the allocated raw blank: the vertical entry must be evaluated, not
+assumed to be in air.
+
+Not implemented: holding tabs, bridges, lead-ins/outs, automatic climb versus
+conventional direction strategy, controller G41/G42 compensation, and
+fixture-aware routing. Breaking through the bottom may release the part;
+workholding is your responsibility.
+
+## Drill
+
+**Purpose:** drill at the centres of selected circular horizontal rims.
+
+Each selected loop is fit to a circle in XY. It must contain at least eight
+points. The radial spread tolerance is the greater of 0.01 mm and roughly
+1% of mean radius. A rectangular face is not a hole just because it has a
+centroid. The cutter diameter may not exceed the selected hole diameter by
+more than the small numeric tolerance; a smaller pilot drill is allowed.
+
+At each depth step, output rapids to safe Z, positions XY and plunges at the
+tool plunge feed. Subsequent steps repeat with safe-height retracts. These
+are explicit straight moves, not `G81/G83` canned cycles. With multiple holes,
+execution is pass-major: holes at the current depth are visited before the
+next depth step.
+
+Check that the tool is truly suitable for drilling. A stored type label alone
+does not validate centre-cutting capability, runout, flute length or material
+parameters. A coarse or irregular STL circle may fail fitting; repair/refine
+the source rather than bypassing the shape check.
+
+Not implemented: helical boring, tapping, automatic spot drilling, dwell,
+controller-specific peck cycles or exact analytic hole selection from STEP.
+
+## Engrave
+
+**Purpose:** follow open/closed constant-Z edge chains or horizontal face
+boundaries at user-defined cutting depths.
+
+Engrave follows the selected XY line without radial compensation. A V-bit
+label and V angle do not automatically calculate carving depth or width;
+this is line-following engraving, not variable-depth V-carving. Selection
+must have constant Z, but depth sources/offsets determine where the copied
+XY line is actually cut.
+
+New Engrave operations default to a shallow **-0.2 mm relative to model top**.
+Verify this for your cutter/material. Deeper End values can create multiple
+stepdown passes. To trace only a single open edge, select that feature chain;
+selecting a whole face engraves all its boundary loops.
+
+Not implemented: text/font import, projected curves over 3D surfaces,
+variable-Z engraving, ballnose surface following or collision-aware linking.
+
+## Output and safety checklist
+
+For every operation, verify geometry, side, actual tool diameter, resolved
+start/end Z, entry depth, max DOC, feeds/RPM, safe height, retained material,
+and whether through-cutting releases the part. Toolpath generation is not a
+substitute for independent machine-aware simulation and an air cut.
+
+[Depth selection](selection-and-depths.md) · [Stock checks](stock-and-safety.md)
