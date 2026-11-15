@@ -138,6 +138,10 @@ class CAMEditor(QWidget):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
+        self.stay_down = QCheckBox("Stay down between contours")
+        self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
+        self.stay_down.toggled.connect(self._edit)
+        form.addRow(self.stay_down)
         layout.addWidget(self.details)
         warning = QLabel("2.5D CAM • Conservative original-stock checks only; no stock-removal, "
                          "holder or fixture simulation. Verify clearance and air-cut before machining.")
@@ -268,6 +272,8 @@ class CAMEditor(QWidget):
             self.stock.setValue(op.stock)
             self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
+            self.stay_down.setChecked(op.stay_down)
+            self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
             self.strategy.setEnabled(op.kind == "pocket")
             self.direction.setEnabled(op.kind in ("pocket", "profile"))
             self.stepover.setEnabled(op.kind == "pocket")
@@ -288,6 +294,8 @@ class CAMEditor(QWidget):
         op.stepdown, op.stepover = self.stepdown.value(), self.stepover.value()
         op.side, op.stock = self.side.currentData(), self.stock.value()
         op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
+        op.stay_down = self.stay_down.isChecked()
+        self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
         item = self.tree.currentItem()
         item.setText(0, f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else ""))
         self.changed.emit()

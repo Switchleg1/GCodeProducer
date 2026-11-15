@@ -48,7 +48,11 @@ arbitrary custom stage order is valid.
 
 FDM paths are XY polylines plus layer Z, width, feature and optional speed.
 CAM currently copies XY paths across depth passes and tags passes with tool,
-group and operation metadata. The emitter marks program lines with layer and
+group and operation metadata. Wall-parallel pocket paths can carry `stay_down`
+permission and an expected preceding XY endpoint. The planner validates each
+straight connector against the cutter-centre region; the emitter checks the
+endpoint and resets permission at every layer/operation/tool boundary. Do not
+infer safe linking from proximity alone or carry this permission across Z changes. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
 ## Ownership invariants

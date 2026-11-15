@@ -68,8 +68,11 @@ setups without enabled operations fail generation.
 ## Output order
 
 `cam_profile` generates the ordered paths for a setup, and `cam_emit` emits
-motion. For each path it retracts vertically to safe Z, rapids XY, plunges at
-tool plunge feed, and cuts at tool feed. This is not ramp/helical entry.
+motion. It enters each depth pass from safe Z with XY positioning and a plunge
+at tool plunge feed. Wall-parallel pockets can then follow nearby contours
+using clearance-checked same-depth feed links. Blocked/disconnected links and
+other path strategies retain retract/position/plunge handling. Cuts and links
+use tool cutting feed. This is not ramp/helical entry.
 
 Between tool groups, output retracts to safe Z, stops the spindle (`M5`),
 issues `T… M6`, and restarts the spindle (`M3 S…`). A real controller may need

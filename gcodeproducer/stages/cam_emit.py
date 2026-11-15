@@ -62,24 +62,33 @@ class CAMEmit(SliceStage):
             plunge = tool.get("plunge_feed", 300) if tool else plunge
             if hasattr(layer, "cam_operation"):
                 b.comment(f"Operation: {layer.cam_operation}")
+            previous_end = None   # never carry stay-down permission across depth/operation/tool boundaries
             for path in layer.paths:
                 pts = np.asarray(path.points, float)
                 if len(pts) < (1 if path.feature == "drill" else 2):
                     continue
                 loop = np.vstack([pts, pts[0]]) if path.closed else pts
                 start = loop[0]
-                b.set_feature("rapid", comment=False)
-                b.command(f"G0 Z{format_number(safe_z,3)}")
-                b.command(f"G0 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
-                          f"F{format_number(rapid_xy,1)}")
-                b.set_feature("plunge", comment=False)
-                b.command(f"G1 Z{format_number(layer.z,3)} F{format_number(plunge,1)}")
+                linked = (path.stay_down and previous_end is not None and path.stay_down_from is not None
+                          and np.allclose(previous_end, path.stay_down_from, atol=1e-7, rtol=0))
+                if linked:
+                    b.set_feature("cut", comment=False)
+                    b.command(f"G1 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
+                              f"F{format_number(feed,1)}", "stay-down link")
+                else:
+                    b.set_feature("rapid", comment=False)
+                    b.command(f"G0 Z{format_number(safe_z,3)}")
+                    b.command(f"G0 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
+                              f"F{format_number(rapid_xy,1)}")
+                    b.set_feature("plunge", comment=False)
+                    b.command(f"G1 Z{format_number(layer.z,3)} F{format_number(plunge,1)}")
                 b.set_feature("cut", comment=False)
                 first = True
                 for q in loop[1:]:
                     f = f" F{format_number(feed,1)}" if first else ""
                     b.command(f"G1 X{format_number(q[0],3)} Y{format_number(q[1],3)}{f}")
                     first = False
+                previous_end = loop[-1][:2]
             ctx.progress((li + 1) / n)
 
         self._end(b, job, safe_z, tool=tool, log=ctx.log)

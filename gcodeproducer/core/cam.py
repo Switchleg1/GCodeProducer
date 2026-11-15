@@ -66,6 +66,7 @@ class Operation:
     enabled: bool = True
     strategy: str = "contour"          # pocket: contour-parallel or legacy raster
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
+    stay_down: bool = True             # pocket contours: region-validated same-depth feed links
 
 
 @dataclass
@@ -298,7 +299,7 @@ def generate(job, ctx):
     """Generate ordered 2.5D operations. Fail rather than silently machining wrong geometry."""
     from .job import Layer, Path
     from .infill_gen import scan_fill
-    from .cam_paths import contour_pocket, direction_for, orient_contour
+    from .cam_paths import contour_pocket, direction_for, orient_contour, link_contours
     setup = job.cam_setup
     topo = cached_topology(job.mesh)
     tools = {t.id: t for t in job.tools}
@@ -357,7 +358,12 @@ def generate(job, ctx):
                     raise ValueError("Pocket stepover must be between 0 and 100 percent")
                 if op.strategy == "contour":
                     contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log)
-                    paths = [Path("cut", p, closed=True, width=diameter) for p in contours]
+                    linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down)
+                    paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
+                                  stay_down_from=tuple(linked[i-1][0][0]) if link else None)
+                             for i, (p, link) in enumerate(linked)]
+                    ctx.log(f"  {op.name}: {sum(p.stay_down for p in paths)} stay-down links, "
+                            f"{sum(not p.stay_down for p in paths)} safe-height entries per depth pass")
                 elif op.strategy == "raster":
                     from .cam_paths import pocket_region, boundary_paths
                     region = pocket_region(loops).buffer(-(diameter/2+op.stock))

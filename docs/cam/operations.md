@@ -21,6 +21,7 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
 | Cutting direction | Machine default | Inherit Climb/Conventional/Meander, or override per operation |
+| Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | Profile side | Outside | Outside, Inside or On |
 | Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
 
@@ -31,8 +32,11 @@ is not a safe default machining plan. For stepdown `s`, generation uses up to
 radius/stepdown, unsupported geometry and missing tools fail instead of
 silently switching to another strategy.
 
-Before each generated path, the emitter retracts to machine safe Z, rapids XY,
-then plunges vertically to the current pass depth. No ramp, helix, lead-in,
+The emitter begins each depth pass with a safe-Z XY position and vertical
+plunge. Wall-parallel pockets can then stay down between nearby contours when
+the full cutter-centre link is inside the permitted region. Other paths or
+blocked/disconnected links retract before positioning and plunging. No ramp,
+helix, lead-in,
 lead-out or cutter-compensation cycle is inserted. Avoid geometry/tooling
 that cannot tolerate that entry. Tool feed/plunge feed and RPM are used as
 stored; there is no general CAM machine-capability capping equivalent to FDM.
@@ -105,8 +109,11 @@ changing topology, not allowed to continue blindly through the island.
 Nominal spacing is `diameter × stepover / 100`: a 6 mm tool at 40% uses 2.4 mm.
 Contour spacing is capped at 50% diameter (with a log message) so two advancing
 fronts cannot leave a wide uncut strip when they disappear between offsets.
-Each depth repeats the XY contours. Linking still retracts to safe Z; these
-are not one continuous spiral or fitted `G2/G3` controller arcs.
+Each depth repeats the XY contours. Nearby loops are ordered together and
+connected at cutting feed when Stay down is enabled and the complete link
+passes clearance checks. Depth/operation/tool changes and blocked/disconnected
+links retain safe-Z entries. These are not a continuous spiral or fitted
+`G2/G3` controller arcs.
 
 **Raster lines** retains straight-line clearing plus wall boundary passes.
 It honours its full stepover range. Climb/conventional raster requests select

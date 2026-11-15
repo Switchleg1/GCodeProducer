@@ -23,6 +23,8 @@ class Path:
     closed: bool = False
     width: float = 0.0                 # extrusion width (FDM) or 0
     speed: Optional[float] = None      # mm/s (FDM) or mm/min (CAM); None = stage default
+    stay_down: bool = False             # CAM: validated cutting-depth link from preceding path in same pass
+    stay_down_from: Optional[tuple] = None  # expected preceding XY endpoint; stale metadata forces retract
 
 
 @dataclass

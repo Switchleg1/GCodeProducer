@@ -8,7 +8,8 @@ Output remains polygonal G1 paths from STL, not fitted controller arcs.
 from __future__ import annotations
 
 import numpy as np
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString, Point
+from shapely.prepared import prep
 from shapely import BufferJoinStyle
 
 from .geometry import signed_orient
@@ -79,6 +80,68 @@ def boundary_paths(region, direction, start_index=0):
             points = orient_contour(points, direction, material_inside=island,
                                     index=start_index+len(result))
             result.append((points, island))
+    return result
+
+
+def _nearest_seam(points, position):
+    """Rotate/insert a seam at the nearest point on a closed loop, preserving winding."""
+    p = np.asarray(points, float)
+    delta = np.roll(p, -1, axis=0)-p
+    length2 = (delta*delta).sum(axis=1)
+    u = np.clip(((position-p)*delta).sum(axis=1)/np.maximum(length2, 1e-20), 0, 1)
+    nearest = p+u[:, None]*delta
+    distance2 = ((nearest-position)**2).sum(axis=1)
+    i = int(np.argmin(distance2))
+    if u[i] < 1e-9:
+        phased = np.roll(p, -i, axis=0)
+    elif u[i] > 1-1e-9:
+        phased = np.roll(p, -(i+1), axis=0)
+    else:
+        phased = np.vstack((nearest[i], p[i+1:], p[:i+1]))
+    return float(distance2[i]), phased
+
+
+def link_contours(contours, loops, radius, allowance, direction, enabled=True):
+    """Nearby loops with short, region-checked same-Z cutting links.
+
+    The caller must reset links at every depth/operation/tool boundary. A link
+    stays in the complete cutter-centre region (including radial allowance),
+    not merely the XY box. If no direct visible link exists, retract instead
+    of crossing an island, wall or disconnected gap. This is not cleared-stock
+    routing: a feed link may intentionally cut remaining material.
+    """
+    if not contours:
+        return []
+    centre = pocket_region(loops).buffer(-(radius+allowance), join_style=BufferJoinStyle.round)
+    # Only a sub-micron tolerance for GEOS boundary roundoff, not extra clearance.
+    valid = prep(centre.buffer(1e-7))
+    remaining = [np.asarray(p, float) for p in contours]
+    first = remaining.pop(0)
+    result = [(first, False)]
+    position = first[0]     # completed closed loop returns to its seam
+    while remaining:
+        candidates = []
+        for i, p in enumerate(remaining):
+            distance, phased = _nearest_seam(p, position)
+            candidates.append((distance, i, phased))
+        candidates.sort(key=lambda c: (c[0], c[1]))
+        chosen = candidates[0]
+        permitted = False
+        if enabled:
+            for candidate in candidates:
+                endpoint = candidate[2][0]
+                segment = (Point(endpoint) if candidate[0] < 1e-18
+                           else LineString((position, endpoint)))
+                if valid.covers(segment):
+                    chosen, permitted = candidate, True
+                    break
+        _, index, phased = chosen
+        remaining.pop(index)
+        if direction == "meander":
+            phased = signed_orient(phased, ccw=len(result) % 2 == 0)
+            _, phased = _nearest_seam(phased, position)
+        result.append((phased, permitted))
+        position = phased[0]
     return result
 
 

@@ -21,19 +21,25 @@ islands. The generator:
 4. Handles fronts touching, splitting into disconnected regions or vanishing
    using Shapely/GEOS polygon topology. It does not keep shrinking an isolated
    outer polygon after it has crossed an island.
-5. Repeats the resulting XY paths at each requested depth pass, with safe-height
-   retract/position/plunge between separate paths.
+5. Orders nearby loops together and moves each closed loop's seam to the
+   nearest point without changing its cutting direction. Short same-depth
+   links are checked against the complete cutter-clearance region.
+6. With **Stay down between contours** enabled (default), traverses valid links
+   at cutting feed rather than retracting/replunging for each loop. Each new
+   depth/operation/tool still begins with a safe-height entry.
 
 For the flange and cylindrical boss, every cutting contour is a circular-style
 loop, concentric with the walls:
 
-![Wall-parallel annular pocket pass](../pictures/cam-pocket-generated-pass.png)
+![Connected wall-parallel pocket loops with short feed links](../pictures/cam-pocket-stay-down.png)
 
 The paths follow the tessellated STL wall shape. Output uses closed sequences
 of `G1` line segments, **not** analytic circles emitted as `G2/G3`. On straight
 walls they are straight segments; circular walls produce polygonal approximations
-at source/offset resolution. No automatic spiral, helix or stay-down linking
-is implied. The screenshot hides linking/entry motion to show cutting contours.
+at source/offset resolution. The screenshot shows short green cutting-feed
+connections between adjacent loops; initial entry and safe-height rapid moves
+are hidden for clarity. This is connected contour clearing, not a mathematically
+continuous spiral, helix or ramp.
 
 ### Square boundary and circular island
 
@@ -45,6 +51,39 @@ the opposing wall, they join/split into corner-region contours combining
 straight walls with curved island offsets. This is the required transition
 between shapes—not an assumption that the whole pocket must be circular or
 square. Disconnected remaining regions are handled independently.
+
+### Stay-down ordering and link checks
+
+The old offset-generation order alternated outer and inner boundary fronts.
+Execution now chooses nearby loops instead of jumping across the pocket width.
+Seams may be inserted along a contour segment to minimize the connection distance;
+closed-loop shape and requested climb/conventional winding are retained. Meander
+is reoriented in execution order so adjacent traversed loops still alternate.
+
+Every permitted connector is a straight **G1 at the tool's cutting feed**, not
+a rapid at cutting depth. Its entire centreline must lie inside the removal
+region offset by cutter radius plus stock allowance, including all islands.
+This is stronger than checking only endpoints or a rectangular bounding box.
+If no direct admissible next-loop connection exists, the emitter retracts to
+safe Z, positions and plunges as before. Disconnected pockets never acquire a
+cutting bridge through the material between them. This is direct-link routing,
+not a search for a curved path around every obstruction.
+
+Permissions are limited to one depth pass. The emitter also verifies the
+expected preceding XY endpoint, falling back to a retract if path edits have
+made that link metadata stale. No permission carries into another depth pass,
+operation or tool change. Profiles, Raster, Drill and Engrave retain their own
+entry/retract behaviour; this option currently applies to wall-parallel pockets.
+
+Disable **Stay down between contours** to force a safe-height entry for every
+loop; proximity ordering still reduces unnecessary XY travel. The setting is
+saved on the operation. Older operations without this field default to enabled.
+The log reports stay-down links and required safe-height entries per depth pass.
+
+A feed connector may intentionally cut remaining pocket material. This does
+not simulate previously removed stock, tool engagement, holders or fixtures,
+and does not guarantee pure climb engagement during a connection. Verify
+entries, links and all warnings before machining.
 
 ### Stepover and limits
 
