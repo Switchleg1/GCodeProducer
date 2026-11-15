@@ -97,6 +97,8 @@ class _TriMesh:
 
 
 class ModelViewer(QOpenGLWidget):
+    camPickRequested = pyqtSignal(object)
+    camSelectionExited = pyqtSignal()
     moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
     moveFinished = pyqtSignal()
     faceClicked = pyqtSignal(object)          # world-space normal of the clicked face
@@ -119,6 +121,10 @@ class ModelViewer(QOpenGLWidget):
         self.overhang_angle = None            # None = do not show overhangs
         self.inside = True
         self.center_xy = (0.0, 0.0)
+        self.cam_pick_mode = ""
+        self.cam_faces = []
+        self.cam_edges = np.empty((0, 3))
+        self._cam_dirty = True
         self.place_on_face = False
         self.blocks = []                      # core.support.SupportBlock
         self.sel_block = -1
@@ -158,6 +164,18 @@ class ModelViewer(QOpenGLWidget):
         self._update_info()
         self.update()
 
+    def set_cam_mode(self, mode):
+        self.cam_pick_mode = mode
+        self._tool_cursor()
+        self._update_info()
+
+    def set_cam_selection(self, faces=(), edges=()):
+        self.cam_faces = list(faces)
+        self.cam_edges = np.asarray(edges, dtype=float).reshape(-1, 3)
+        self._cam_dirty = True
+        self._dirty = True
+        self.update()
+
     def set_blocks(self, blocks, selected: int = -1, visible: bool = True):
         self.blocks = list(blocks)
         self.sel_block = selected
@@ -173,7 +191,7 @@ class ModelViewer(QOpenGLWidget):
         self._update_info()
 
     def _tool_cursor(self):
-        tool = self.place_on_face or self.place_block or self.remove_block
+        tool = self.cam_pick_mode or self.place_on_face or self.place_block or self.remove_block
         self.setCursor(Qt.CursorShape.CrossCursor if tool else Qt.CursorShape.ArrowCursor)
 
     def set_place_block(self, on: bool):
@@ -203,6 +221,8 @@ class ModelViewer(QOpenGLWidget):
     def _update_info(self):
         if self.vertices is None:
             txt = "Import a model (Ctrl+O) or drop an STL here"
+        elif self.cam_pick_mode:
+            txt = f"CAM: select {self.cam_pick_mode}s • Shift-drag to pan, drag to orbit • Esc = navigate"
         elif self.place_on_face:
             txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
         elif self.place_block:
@@ -228,6 +248,7 @@ class ModelViewer(QOpenGLWidget):
             self.glError.emit(f"OpenGL shader error: {exc}")
             return
         self.m_model = _TriMesh()
+        self.m_cam_edges = _Mesh(False)
         self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
         self.m_bedges = _Mesh(False)
@@ -257,6 +278,9 @@ class ModelViewer(QOpenGLWidget):
         col[:, 3] = 1.0
         if self.overhang_angle is not None:
             col[overhang_faces(self.vertices, self.triangles, self.overhang_angle), :3] = OVERHANG_COLOR
+        if self.cam_faces:
+            indices = [i for i in self.cam_faces if 0 <= i < m]
+            col[indices, :3] = (1.0, 0.78, 0.15)
         return np.repeat(col, 3, axis=0)
 
     def paintGL(self):
@@ -294,6 +318,16 @@ class ModelViewer(QOpenGLWidget):
             self._draw_bed(mvp, 0.45)
         if self.show_blocks and self.blocks:
             self._draw_blocks(mvp)
+        if len(self.cam_edges):
+            if self._cam_dirty:
+                self.m_cam_edges.upload(self.cam_edges)
+                self._cam_dirty = False
+            GL.glUseProgram(self.p_flat)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), 1.0, 0.78, 0.15, 1.0)
+            GL.glDisable(GL.GL_DEPTH_TEST)
+            self.m_cam_edges.draw(GL.GL_LINES)
+            GL.glEnable(GL.GL_DEPTH_TEST)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)
@@ -404,6 +438,9 @@ class ModelViewer(QOpenGLWidget):
         if ev.button() != Qt.MouseButton.LeftButton or ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
         mx, my = ev.position().x(), ev.position().y()
+        if self.cam_pick_mode:
+            self._cam_press = (mx, my)
+            return
         if self.remove_block:
             bi = self.pick_block(mx, my)[0]
             if bi >= 0:
@@ -472,11 +509,21 @@ class ModelViewer(QOpenGLWidget):
             over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
             if over != self._highlight:
                 self._highlight = over
-                if not (self.place_on_face or self.place_block):
+                if not (self.cam_pick_mode or self.place_on_face or self.place_block):
                     self.setCursor(Qt.CursorShape.OpenHandCursor if over else Qt.CursorShape.ArrowCursor)
                 self.update()
 
     def mouseReleaseEvent(self, ev):
+        if self.cam_pick_mode and ev.button() == Qt.MouseButton.LeftButton:
+            xy = (ev.position().x(), ev.position().y())
+            start = getattr(self, "_cam_press", None)
+            self._cam_press = None
+            if start is not None and np.linalg.norm(np.subtract(xy, start)) < 4:
+                origin, direction = self.ray(*xy)
+                mvp = self.camera.proj_matrix(self.width() / max(1, self.height())) @ self.camera.view_matrix()
+                self.camPickRequested.emit((self.cam_pick_mode, origin, direction, mvp,
+                                            (self.width(), self.height()), xy))
+            return
         if self._bdrag is not None:
             bi = self._bdrag[0]
             self._bdrag = None
@@ -498,6 +545,9 @@ class ModelViewer(QOpenGLWidget):
             self.fit()
         elif k in views:
             self.camera.set_view(views[k])
+        elif k == Qt.Key.Key_Escape and self.cam_pick_mode:
+            self.set_cam_mode("")
+            self.camSelectionExited.emit()
         elif k == Qt.Key.Key_Escape and self.place_on_face:
             self.faceClicked.emit(None)
         elif k == Qt.Key.Key_Escape and (self.place_block or self.remove_block):

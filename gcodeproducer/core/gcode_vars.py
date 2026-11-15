@@ -124,9 +124,9 @@ G28 ; home all axes
 ; {machine} - {tool_name} (T{tool}, {tool_diameter} mm)
 G21 ; millimetres
 G90 ; absolute positioning
+G0 Z{safe_z} ; safe height
 T{tool} M6 ; tool change
 M3 S{spindle_rpm} ; spindle on
-G0 Z{safe_z} ; safe height
 """,
 }
 

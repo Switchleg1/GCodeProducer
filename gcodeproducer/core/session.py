@@ -24,14 +24,14 @@ def load_mesh(path: str):
 def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = None,
               nozzle: Optional[Profile] = None, tools: Optional[list] = None,
               mesh=None, model_path: Optional[str] = None, settings: Optional[dict] = None,
-              placement=None, support_blocks=None, support=None) -> Job:
+              placement=None, support_blocks=None, support=None, cam_setup=None) -> Job:
     workflow = wf.normalize(workflow)
     if machine.workflow != workflow:
         raise ValueError(f"machine '{machine.name}' is a {machine.workflow} machine, not {workflow}")
     return Job(workflow=workflow, machine=machine, material=material, nozzle=nozzle,
                tools=list(tools or []), mesh=mesh, model_path=model_path,
                settings=dict(settings or {}), placement=placement,
-               support_blocks=list(support_blocks or []), support=support)
+               support_blocks=list(support_blocks or []), support=support, cam_setup=cam_setup)
 
 
 def place_mesh(job: Job) -> None:
@@ -49,5 +49,9 @@ def slice_job(job: Job, pipeline: Optional[SlicePipeline] = None,
               log: Optional[Callable[[str], None]] = None,
               progress: Optional[Callable[[float], None]] = None) -> PipelineResult:
     pipeline = pipeline or SlicePipeline.default(job.workflow)
+    if job.cam_setup is not None and job.cam_setup.fingerprint:
+        from .cam import fingerprint
+        if job.mesh is None or fingerprint(job.mesh) != job.cam_setup.fingerprint:
+            raise ValueError("CAM model geometry changed; reselect operation geometry")
     place_mesh(job)
     return pipeline.run(job, log=log, progress=progress)

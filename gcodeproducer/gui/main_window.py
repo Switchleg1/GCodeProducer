@@ -86,6 +86,9 @@ class MainWindow(QMainWindow):
         self._fitted_for = None
         self._loading = False
         self._worker = None             # id of the running slice task (None = idle)
+        self._cam_pick_task = None
+        self._cam_highlight_task = None
+        self._cam_pick_operation = None
         self._blocks_task = None        # id of the running Auto-generate task
         self._filament_mm = 0.0
         self.compute = ComputeService(self)  # slicing etc. run in a separate process
@@ -94,6 +97,10 @@ class MainWindow(QMainWindow):
         self.compute.done.connect(self._on_compute_done)
         self.compute.failed.connect(self._on_compute_failed)
 
+        self._cam_highlight_timer = QTimer(self)
+        self._cam_highlight_timer.setSingleShot(True)
+        self._cam_highlight_timer.setInterval(180)
+        self._cam_highlight_timer.timeout.connect(self._submit_cam_highlight)
         self.camera = Camera()
         self.state = ViewState()
         self._build_central()
@@ -252,6 +259,7 @@ class MainWindow(QMainWindow):
         pw = QWidget()
         pl = QVBoxLayout(pw)
         proc = QGroupBox("Process")
+        self.fdm_process_box = proc
         prl = QVBoxLayout(proc)
         r1 = QHBoxLayout()
         self.cb_process = QComboBox()
@@ -292,6 +300,19 @@ class MainWindow(QMainWindow):
         self.process_editor.changed.connect(self._mark_dirty)
         prl.addWidget(self.process_editor, 1)
         pl.addWidget(proc, 1)
+        from .cam_editor import CAMEditor
+        self.cam_editor = CAMEditor()
+        self.cam_editor.setVisible(False)
+        self.cam_editor.changed.connect(self._cam_changed)
+        self.cam_editor.selectionChanged.connect(self._cam_highlight)
+        self.cam_editor.pickModeChanged.connect(self._cam_pick_mode)
+        self.model_viewer.camPickRequested.connect(self._cam_pick)
+        self.model_viewer.camSelectionExited.connect(lambda: self.cam_editor.pick.setCurrentIndex(0))
+        self.cam_scroll = QScrollArea()
+        self.cam_scroll.setWidgetResizable(True)
+        self.cam_scroll.setWidget(self.cam_editor)
+        self.cam_scroll.setVisible(False)
+        pl.addWidget(self.cam_scroll, 1)
 
         self.slice_btn = QPushButton("\u25b6  Slice")
         self.slice_btn.setMinimumHeight(34)
@@ -651,13 +672,16 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction(self.act_save)
         m.addSeparator()
-        m.addAction(self._act("Import process\u2026", self.process_import))
-        m.addAction(self._act("Export process\u2026", self.process_export))
+        self.act_process_import = self._act("Import process\u2026", self.process_import)
+        self.act_process_export = self._act("Export process\u2026", self.process_export)
+        m.addAction(self.act_process_import)
+        m.addAction(self.act_process_export)
         m.addSeparator()
         m.addAction(self.act_libs)
         m.addSeparator()
         m.addAction(self._act("Exit", self.close, "Ctrl+Q"))
         p = self.menuBar().addMenu("&Process")
+        self.process_menu = p
         p.addAction(self._act("Save", lambda: self.process_save()))
         p.addAction(self._act("Save as\u2026", lambda: self.process_save_as()))
         p.addAction(self._act("Revert", self.process_revert))
@@ -715,6 +739,7 @@ class MainWindow(QMainWindow):
         self.resizeDocks([self.dock_prepare, self.dock_process], [430, 520], Qt.Orientation.Vertical)
 
     def closeEvent(self, ev):
+        self._cam_highlight_timer.stop()
         s = self.settings
         s.setValue("geometry", self.saveGeometry())
         s.setValue("windowState", self.saveState())
@@ -762,6 +787,14 @@ class MainWindow(QMainWindow):
         if self._loading:
             return
         self.workflow = self.cb_workflow.currentData()
+        self.fdm_process_box.setVisible(self.workflow == wf.FDM)
+        self.cam_editor.setVisible(self.workflow == wf.CAM)
+        self.cam_scroll.setVisible(self.workflow == wf.CAM)
+        self._cam_pick_mode("")
+        self.process_menu.setEnabled(self.workflow == wf.FDM)
+        self.act_process_import.setEnabled(self.workflow == wf.FDM)
+        self.act_process_export.setEnabled(self.workflow == wf.FDM)
+        self.dock_process.setWindowTitle("CAM setup" if self.workflow == wf.CAM else "Process")
         self._reload_machines()
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
@@ -789,7 +822,7 @@ class MainWindow(QMainWindow):
         kinds = [k for k in wf.LIBRARIES[self.workflow] if k != "machine"]
         self._loading = True
         for kind, (lab, row, cb) in self.cons_rows.items():
-            show = kind in kinds
+            show = kind in kinds and kind != "tool"   # CAM tools belong to the tool-change tree
             self.setup_form.setRowVisible(row, show)
             cb.clear()
             if not show or machine is None:
@@ -802,6 +835,8 @@ class MainWindow(QMainWindow):
             i = cb.findData(last) if last else -1
             cb.setCurrentIndex(max(0, i))
         self._loading = False
+        self.cam_editor.set_tools(self.libset.consumables_for(machine, "tool")
+                                  if machine is not None and self.workflow == wf.CAM else [])
         self._save_selection()
         self._update_scene()
         self._set_stale()
@@ -1026,6 +1061,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Import failed", str(exc))
             return
         self.mesh, self.model_path = mesh, path
+        from ..core.cam import CAMSetup, fingerprint
+        raw = self.settings.value(self._model_key("cam", path))
+        try:
+            setup = CAMSetup.from_dict(json.loads(raw)) if raw else CAMSetup()
+        except (ValueError, KeyError, TypeError):
+            setup = CAMSetup()
+        current = fingerprint(mesh)
+        if setup.fingerprint and setup.fingerprint != current:
+            self.log("CAM geometry changed: cleared old operations to avoid stale geometry references")
+            setup = CAMSetup()
+        setup.fingerprint = current
+        self.cam_editor.set_setup(setup)
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
         self.placement, self.blocks, self.model_support = self._load_model_state(path)
@@ -1184,6 +1231,7 @@ class MainWindow(QMainWindow):
         if on and self.mode != "prepare":
             self.set_mode("prepare")
         if on:
+            self.cam_editor.pick.setCurrentIndex(0)
             self._end_block_tools()
         self.model_viewer.set_place_on_face(on)
 
@@ -1223,6 +1271,45 @@ class MainWindow(QMainWindow):
         if self.workflow == wf.FDM and self.cb_show_over.isChecked():
             angle = self.model_support.overhang_angle
         self.model_viewer.set_scene(self.placed, rect, (self.placement.x, self.placement.y), angle, inside)
+        self._cam_pick_task = None
+        self._cam_highlight()
+
+    # --------------------------------------------------------------- CAM
+    def _cam_changed(self):
+        self._cam_highlight()
+        if self.model_path:
+            self.settings.setValue(self._model_key("cam", self.model_path),
+                                   json.dumps(self.cam_editor.setup.to_dict()))
+        self._set_stale()
+
+    def _cam_pick_mode(self, mode):
+        self._cam_pick_task = None
+        if mode and self.workflow == wf.CAM:
+            self.b_face.setChecked(False)
+            self.b_place_block.setChecked(False)
+            self.b_remove_block.setChecked(False)
+            self.set_mode("prepare")
+        self.model_viewer.set_cam_mode(mode if self.workflow == wf.CAM else "")
+
+    def _cam_pick(self, payload):
+        if self.workflow != wf.CAM or self.placed is None or self._worker is not None:
+            return
+        self._cam_pick_operation = self.cam_editor.operation()
+        self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload))
+
+    def _cam_highlight(self):
+        self._cam_highlight_task = None
+        self._cam_highlight_timer.stop()
+        self.model_viewer.set_cam_selection()
+        if self.workflow == wf.CAM and self.placed is not None:
+            self._cam_highlight_timer.start()
+
+    def _submit_cam_highlight(self):
+        if self.workflow != wf.CAM or self.placed is None or self._worker is not None:
+            return
+        op = self.cam_editor.operation()
+        if op:
+            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op)))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
@@ -1481,9 +1568,11 @@ class MainWindow(QMainWindow):
         ok = self.mesh is not None and self._machine() is not None
         # while slicing the Slice button cancels
         self.slice_btn.setEnabled(ok or busy)
-        self.slice_btn.setText("\u25a0  Cancel" if busy else "\u25b6  Slice")
-        self.slice_btn.setToolTip("Stop slicing" if busy else "Slice (Ctrl+R)")
+        self.slice_btn.setText("\u25a0  Cancel" if busy else
+                               ("\u25b6  Generate paths" if self.workflow == wf.CAM else "\u25b6  Slice"))
+        self.slice_btn.setToolTip("Stop generation" if busy else "Generate toolpaths (Ctrl+R)")
         self.act_slice.setEnabled(ok and not busy)
+        self.cam_editor.setEnabled(not busy)
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
         self.act_preview.setEnabled(self.program is not None)
@@ -1505,8 +1594,8 @@ class MainWindow(QMainWindow):
             kw["material"] = self._consumable("material")
             kw["nozzle"] = self._consumable("nozzle")
         else:
-            t = self._consumable("tool")
-            kw["tools"] = [t] if t else []
+            kw["tools"] = self.libset.consumables_for(machine, "tool")
+            kw["cam_setup"] = copy.deepcopy(self.cam_editor.setup)
         mesh = Mesh(self.mesh.vertices.copy(), self.mesh.triangles)   # stages may move the mesh
         placed = self.placement.apply(mesh, self._auto_xy())
         if not fits(placed, bed_rect(machine, self.workflow)):
@@ -1524,9 +1613,11 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.warning(self, "Cannot slice", str(exc))
             return
-        pipe = copy.deepcopy(self.pipelines[self.workflow])
-        self.log(f"Slicing {Path(self.model_path).name} ({wf.short(self.workflow)}, {machine.name}, "
-                 f"process '{self.cb_process.currentText()}'{' *modified*' if self.dirty[self.workflow] else ''})")
+        pipe = (SlicePipeline.default(wf.CAM) if self.workflow == wf.CAM
+                else copy.deepcopy(self.pipelines[self.workflow]))
+        detail = (f"{len(self.cam_editor.setup.groups)} tool-change groups" if self.workflow == wf.CAM
+                  else f"process '{self.cb_process.currentText()}'{' *modified*' if self.dirty[self.workflow] else ''}")
+        self.log(f"Slicing {Path(self.model_path).name} ({wf.short(self.workflow)}, {machine.name}, {detail})")
         self._t0 = time.perf_counter()
         self._worker = self.compute.submit("slice", (job, pipe))
         self.progress.setValue(0)
@@ -1556,12 +1647,28 @@ class MainWindow(QMainWindow):
             self.progress.setValue(int(f * 100))
 
     def _on_compute_done(self, tid, result):
+        if tid == self._cam_pick_task:
+            self._cam_pick_task = None
+            if self.workflow == wf.CAM and self.cam_editor.operation() is self._cam_pick_operation:
+                self.cam_editor.accept_pick(result)
+            return
+        if tid == self._cam_highlight_task:
+            self._cam_highlight_task = None
+            if self.workflow == wf.CAM:
+                self.model_viewer.set_cam_selection(result['faces'], result['edges'])
+                self.cam_editor.depth_summary.setText(result['depths'])
+            return
         if tid == self._worker:
             self._slice_done(result)
         elif tid == self._blocks_task:
             self._blocks_done(result)
 
     def _on_compute_failed(self, tid, tb):
+        if tid in (self._cam_pick_task, self._cam_highlight_task):
+            self._cam_pick_task = self._cam_highlight_task = None
+            self.log(tb)
+            self.statusBar().showMessage("CAM selection failed; see log", 5000)
+            return
         if tid == self._worker:
             self._slice_failed(tb)
         elif tid == self._blocks_task:
@@ -1750,7 +1857,10 @@ class MainWindow(QMainWindow):
         st = tp.stats
         rows = [("Workflow", wf.label(self.workflow)),
                 ("Machine", self.cb_machine.currentText()),
-                ("Process", self.cb_process.currentText() + (" (modified)" if self.dirty[self.workflow] else "")),
+                (("CAM setup", f"{len(self.cam_editor.setup.groups)} tool changes, "
+                  f"{sum(len(g.operations) for g in self.cam_editor.setup.groups)} operations")
+                 if self.workflow == wf.CAM else
+                 ("Process", self.cb_process.currentText() + (" (modified)" if self.dirty[self.workflow] else ""))),
                 ("Layers", str(st.get("layers", prog.num_layers))),
                 ("Lines", f"{st.get('lines', len(prog.lines)):,}"),
                 ("Est. time (no accel.)", format_duration(st.get("est_time_s", 0)))]

@@ -34,6 +34,9 @@ class CAMProfile(SliceStage):
             raise ValueError("no mesh loaded")
         if not job.tools:
             raise ValueError("no tool selected (CAM jobs need a tool from the tool library)")
+        if job.cam_setup is not None:
+            from ..core.cam import generate
+            return generate(job, ctx)
         tool = job.tools[0]
         radius = (tool.get("diameter", 6.0) or 6.0) / 2.0
 

@@ -50,7 +50,19 @@ def run_blocks(kwargs: dict) -> list:
     return generate_blocks(**kwargs)
 
 
+def run_cam_pick(payload):
+    from .cam import pick_geometry
+    return pick_geometry(payload)
+
+
+def run_cam_highlight(payload):
+    from .cam import highlight_geometry
+    return highlight_geometry(payload)
+
+
 TASKS = {
+    "cam_pick": lambda payload, log, progress: run_cam_pick(payload),
+    "cam_highlight": lambda payload, log, progress: run_cam_highlight(payload),
     "slice": lambda payload, log, progress: run_slice(*payload, log=log, progress=progress),
     "blocks": lambda payload, log, progress: run_blocks(payload),
     "ping": lambda payload, log, progress: payload,

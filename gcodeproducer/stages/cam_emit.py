@@ -30,7 +30,9 @@ class CAMEmit(SliceStage):
     def run(self, job, params, ctx):
         b = GCodeBuilder(relative_e=False)
         b.e = 0.0
-        tool = job.tools[0] if job.tools else None
+        tool_map = {t.id: t for t in job.tools}
+        first_id = getattr(job.layers[0], "cam_tool_id", None) if job.layers else None
+        tool = tool_map.get(first_id) or (job.tools[0] if job.tools else None)
         safe_z = job.m("safe_z", 15.0)
         feed = tool.get("feed", 800) if tool else job.m("max_feed", 800)
         plunge = tool.get("plunge_feed", 300) if tool else 300
@@ -41,10 +43,28 @@ class CAMEmit(SliceStage):
         b.set_feature("rapid", comment=False)
 
         n = max(1, len(job.layers))
+        previous_group = getattr(job.layers[0], "cam_group", None) if job.layers else None
         for li, layer in enumerate(job.layers):
+            b.layer = li
+            b.op = getattr(layer, "cam_operation", None)
+            b.comment(f"LAYER:{li}")
+            group = getattr(layer, "cam_group", None)
+            next_tool = tool_map.get(getattr(layer, "cam_tool_id", None), tool)
+            if group != previous_group:
+                b.set_feature("rapid", comment=False)
+                b.command(f"G0 Z{format_number(safe_z,3)}")
+                b.command("M5", "spindle off before tool change")
+                b.command(f"T{int(next_tool.get('tool_number', 1))} M6")
+                b.command(f"M3 S{format_number(next_tool.get('spindle_rpm', 18000),0)}")
+                previous_group = group
+            tool = next_tool
+            feed = tool.get("feed", 800) if tool else feed
+            plunge = tool.get("plunge_feed", 300) if tool else plunge
+            if hasattr(layer, "cam_operation"):
+                b.comment(f"Operation: {layer.cam_operation}")
             for path in layer.paths:
                 pts = np.asarray(path.points, float)
-                if len(pts) < 2:
+                if len(pts) < (1 if path.feature == "drill" else 2):
                     continue
                 loop = np.vstack([pts, pts[0]]) if path.closed else pts
                 start = loop[0]
@@ -62,7 +82,7 @@ class CAMEmit(SliceStage):
                     first = False
             ctx.progress((li + 1) / n)
 
-        self._end(b, job, safe_z, log=ctx.log)
+        self._end(b, job, safe_z, tool=tool, log=ctx.log)
         prog = b.program()
         prog.machine = "cam"
         prog.layer_z = [l.z for l in job.layers]
@@ -73,9 +93,21 @@ class CAMEmit(SliceStage):
     def _start(self, b, job, tool, rpm, safe_z, log=None):
         from ..core.gcode_vars import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
-        b.raw(render_box(job, "start_gcode", log=log).rstrip("\n"))
+        b.raw(render_box(job, "start_gcode", extra=_tool_variables(tool), log=log).rstrip("\n"))
 
-    def _end(self, b, job, safe_z, log=None):
+    def _end(self, b, job, safe_z, tool=None, log=None):
         from ..core.gcode_vars import render_box
         b.set_feature("retract", comment=False)
-        b.raw(render_box(job, "end_gcode", log=log).rstrip("\n"))
+        last = job.layers[-1] if job.layers else None
+        extra = _tool_variables(tool)
+        if last is not None:
+            extra.update(layer=len(job.layers), layer_z=last.z)
+        b.raw(render_box(job, "end_gcode", extra=extra, log=log).rstrip("\n"))
+
+
+def _tool_variables(tool):
+    if tool is None:
+        return {}
+    return {"tool": int(tool.get("tool_number", 1)), "tool_name": tool.name,
+            "tool_diameter": tool.get("diameter", 0), "spindle_rpm": tool.get("spindle_rpm", 18000),
+            "feed": tool.get("feed", 800), "plunge_feed": tool.get("plunge_feed", 300)}

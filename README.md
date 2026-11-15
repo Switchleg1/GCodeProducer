@@ -52,7 +52,7 @@ Libraries live under `~/.gcodeproducer/` by default (override with the
   processes/*.json     process presets (saveable workflow options)
 ```
 
-### Process presets (workflow options)
+### FDM process presets (workflow options)
 
 A **process preset** bundles a whole slice pipeline — which stages run, in what
 order, with which parameters (layer height, perimeters, top/bottom layers,
@@ -61,6 +61,68 @@ independently of the machine and consumables, so you can keep e.g. *0.20 mm
 Standard*, *0.30 mm Draft*, *0.12 mm Fine* and *Strong (cubic 40%)* and switch
 between them. In the GUI the **Process** box has Save / Save As / Delete /
 Reset; on the CLI use `--process NAME` (and `gcodeproducer processes` to list).
+
+### CAM: tool changes and operations
+
+CAM uses a **model-specific setup**, not the FDM preset editor:
+
+```
+T1 — roughing endmill
+  Pocket
+  Outside profile
+T2 — small endmill
+  Finish profile
+  Engrave
+T3 — drill
+  Drill holes
+```
+
+1. Switch to **CAM**, choose the machine, and import the STL.
+2. **Add tool change** using a tool allowed by that machine. Select its tree
+   node, choose Pocket / Profile / Drill / Engrave, and **Add operation**.
+3. Select an operation, then **Select faces** or **Select edges** and click
+   the model. Click again to remove that selection. Selected faces and edges
+   are yellow. Drag to orbit, Shift-drag/right-drag to pan; Esc exits picking.
+   Faces are connected coplanar triangles; edges are reconstructed feature
+   chains (30-degree crease threshold), not STL triangle seams.
+4. Set **Start Z / End Z**: model top/bottom plus offset, absolute Z, or a
+   picked face/edge's maximum/minimum Z plus offset. **Use last pick** binds
+   the chosen geometry to that depth field. Choose **Pick height reference
+   only** to avoid adding a height reference to the cutting geometry. The
+   resolved start/end Z is displayed and updates after model placement changes.
+5. Set stepdown and operation options. Up/down arrows reorder operations
+   within a tool group, or reorder whole tool groups. Disabled operations are
+   skipped. **Generate paths**, inspect Preview, then save G-code.
+
+The setup (including selections and depth references) is automatically saved
+per model path, separately from FDM presets. References use mesh indices and
+are reevaluated on the placed model; changed source geometry invalidates the
+saved setup. Topology, picking, highlights, and path generation run in the
+compute process, with debounced highlight requests during model movement.
+
+Implemented operations are **initial 2.5D**:
+- **Pocket:** raster clearing and a boundary pass, inset by cutter radius and
+  stock allowance. Select closed boundaries / horizontal faces (including
+  island boundaries).
+- **Profile:** closed contours, outside/inside/on-line, with stock allowance.
+  Separate selected edges can join into a closed contour.
+- **Drill:** circular horizontal rims (at least 8 STL segments, within 1%
+  radial tolerance); straight plunges with safe-Z retract between depth steps.
+  Arbitrary face centroids are not treated as holes.
+- **Engrave:** constant-Z open/closed edge chains or face boundaries.
+
+Tools execute in tree order with their own feeds, spindle speeds, and T numbers.
+Between groups, retract to safe Z, stop the spindle, issue `T… M6`, and restart
+it. Start/end templates see the first/last **active** tool respectively. Set
+machine **safe Z above the entire part and operation start heights**; unsupported
+geometry, empty selections, missing tools, and unsafe clearance are errors.
+
+**Not production-ready CAM:** the minimal offset kernel is not robust for
+complex intersecting contours. No stock/fixture collision checking, entry
+ramps, helical bores, adaptive clearing, 3D surface machining, or CAD/STEP
+selection yet. Verify all output in a machine-aware simulator and air-cut
+before machining. The CLI retains its older single-tool silhouette profile
+workflow when no `CAMSetup` is supplied programmatically.
 
 ## The slice pipeline
 
@@ -132,9 +194,10 @@ versa.
   infill generator. Sparse infill never overlaps the solid shells.
 - **`fdm_emit`** — walks the toolpaths into G-code with travels, retraction,
   temperatures (from the material), cooling and start/end blocks.
-- **`cam_profile`** — 2.5D contour/profile cut around the part silhouette,
-  offset by the tool radius, stepping down by the tool's depth of cut.
-- **`cam_emit`** — rapids at safe Z, plunges and cuts with spindle control.
+- **`cam_profile`** — executes the CAM setup's ordered geometry-selected
+  operations; without a setup, retains the legacy single-tool silhouette profile.
+- **`cam_emit`** — rapids at safe Z, plunges and cuts with spindle control,
+  ordered tool changes, operation labels, and depth-pass preview metadata.
 
 ## Install
 

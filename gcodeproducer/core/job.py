@@ -47,6 +47,7 @@ class Job:
     placement: object = None                         # core.placement.Placement (None = default)
     support_blocks: list = field(default_factory=list)  # core.support.SupportBlock (manual support)
     support: object = None                           # core.support.ModelSupport (None = no support)
+    cam_setup: object = None                       # core.cam.CAMSetup (None = legacy CLI profile)
     model_path: Optional[str] = None
     settings: dict = field(default_factory=dict)    # resolved per-job overrides
     layers: list = field(default_factory=list)      # list[Layer]

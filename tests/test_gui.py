@@ -38,8 +38,10 @@ def test_sections_and_setup(win):
     assert rows == {"material": True, "nozzle": True, "tool": False}
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     rows = {k: win.setup_form.isRowVisible(r) for k, (_l, r, _c) in win.cons_rows.items()}
-    assert rows == {"material": False, "nozzle": False, "tool": True}
-    assert [s._title for s in win.process_editor.sections] == ["Profile", "Output"]
+    assert rows == {"material": False, "nozzle": False, "tool": False}
+    assert win.fdm_process_box.isHidden()
+    assert not win.cam_scroll.isHidden()
+    assert win.cam_editor.tool_combo.count() > 0
 
 
 def test_edit_save_revert_process(win):
@@ -444,3 +446,47 @@ def test_gcode_template_box(app):
     assert cam.text() == gv.DEFAULT_END["cam"]
     menu_text = " ".join(a.text() for m in cam.b_insert.menu().actions() if m.menu() for a in m.menu().actions())
     assert "{spindle_rpm}" in menu_text and "{nozzle_temp}" not in menu_text
+
+
+def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
+    from gcodeproducer.core.cam import Reference
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    ed = win.cam_editor
+    ed.add_tool()
+    ed.add_operation()
+    op = ed.operation()
+    assert op.kind == "pocket"
+    ed.pick.setCurrentIndex(ed.pick.findData("face"))
+    assert win.model_viewer.cam_pick_mode == "face"
+    lo, hi = win.placed.bounds
+    xy = (lo[:2] + hi[:2]) / 2
+    origin = np.array([*xy, hi[2] + 30])
+    win._cam_pick(("face", origin, np.array([0, 0, -1]), np.eye(4), (200, 200), (100, 100)))
+    deadline = time.monotonic() + 15
+    while win._cam_pick_task is not None and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    assert win._cam_pick_task is None and len(op.geometry) == 1
+    ed.use_depth("start")
+    assert op.start.source == "geometry" and op.start.reference == op.geometry[0]
+    ed.target.setCurrentIndex(ed.target.findData("height"))
+    ed.accept_pick({"reference": Reference("face", [0]), "z_min": 0, "z_max": 0})
+    assert len(op.geometry) == 1   # a height-only pick must not change machining geometry
+    ed.use_depth("end")
+    assert op.end.source == "geometry" and op.end.reference == Reference("face", [0])
+    saved = ed.setup.to_dict()
+    win.open_model(cube_stl)
+    assert ed.setup.to_dict() == saved
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
+    win.select_process("0-20-mm-standard")
+    assert ed.setup.to_dict() == saved
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    ed.rebuild((0, 0))
+    ed.kind.setCurrentIndex(ed.kind.findData("profile"))
+    ed.add_operation()
+    assert [o.kind for o in ed.setup.groups[0].operations] == ["pocket", "profile"]
+    ed.move(-1)
+    assert [o.kind for o in ed.setup.groups[0].operations] == ["profile", "pocket"]
+    ed.delete()
+    assert [o.kind for o in ed.setup.groups[0].operations] == ["pocket"]
