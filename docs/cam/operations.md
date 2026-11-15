@@ -20,7 +20,7 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Tool/material axial depth default | On for new GUI operations | Material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; configurable per tool and capped by max depth/pass |
 | Stepdown | Explicit value when automatic depth is off | Existing operations retain saved explicit depths |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
-| Lead-in / lead-out | On | Contour-constrained ramp/cleared exit; checked against current material |
+| Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
 | Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
@@ -225,8 +225,9 @@ undercut or changing-width geometry is not a general supported profiling case.
 **Example:** an outside square boundary and 6 mm endmill use a centreline about
 3 mm outside each retained straight wall at zero stock allowance. A 0.3 mm
 allowance increases that offset to 3.3 mm. That can still place the cutter
-inside the allocated raw blank: the vertical entry must be evaluated, not
-assumed to be in air.
+inside the allocated raw blank: with lead-in on, the entry ramps along the
+profile contour at ≤10°; with lead-in off the vertical entry must be
+evaluated, not assumed to be in air.
 
 Climb/conventional/meander requests follow the machine default or operation
 override; actual clearing hand is chosen from estimated remaining material.

@@ -9,6 +9,10 @@ from shapely.geometry import box, LineString, Point
 from shapely.ops import unary_union
 
 
+RAMP_ANGLE=10.0                       # matches the lead-in planner (core.cam_leads)
+RAMP_TAN=math.tan(math.radians(RAMP_ANGLE))
+
+
 class PlanarStock:
     def __init__(self, stock):
         lo,hi=stock.bounds
@@ -211,10 +215,18 @@ def simulate_material(job,program,log=None):
                 warn(f"{label}: unclassified feed contacts current material.")
             if not spindle:warn(f"{label}: material contact with spindle stopped.")
         if contact and line.feature in ("plunge","lead_in") and b[2]<a[2]:
-            doc=float(tool.get("max_doc",0) or 0)
-            uncleared=state.height_at(b[:2],radius)-b[2]
-            if doc>0 and uncleared>doc+state.resolution:
-                warn(f"{label}: estimated uncleared entry depth {uncleared:g} mm exceeds tool depth/pass {doc:g}; verify prior clearing.")
+            horizontal=float(np.linalg.norm(b[:2]-a[:2]))
+            drop=float(a[2]-b[2])
+            if horizontal>1e-6 and drop<=horizontal*RAMP_TAN+1e-6:
+                pass  # ramped entry within the ramp angle: the tool tip descends gradually; walls beside it are side cutting
+            else:
+                # Plunge (or over-steep ramp): material under the tool that this move itself descends
+                # through. Material above the move's start height is side contact, not axial entry.
+                doc=float(tool.get("max_doc",0) or 0)
+                uncleared=min(state.height_at(b[:2],radius),float(a[2]))-b[2]
+                if doc>0 and uncleared>doc+state.resolution:
+                    kind="plunge" if horizontal<=1e-6 else f"ramp steeper than {RAMP_ANGLE:g}°"
+                    warn(f"{label}: estimated uncleared entry depth {uncleared:g} mm ({kind}) exceeds tool depth/pass {doc:g}; verify prior clearing.")
         if sim.motion_cmd[i]=="G1" and spindle and line.feature in intended and line.op:
             state.cut(a,b,radius)
     if last_op is not None:snapshot(last_op)

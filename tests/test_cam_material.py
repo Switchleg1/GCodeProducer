@@ -76,7 +76,39 @@ def test_leads_stay_on_contour_and_limit_ramp_slope():
     slope=np.abs(np.diff(lead[:,2]))/distance
     assert slope.max()<=np.tan(np.deg2rad(10))+1e-9
     assert walk(square,True,10000,True) is None
-    assert ramp(np.array([[0.,0.],[1.,0.]]),False,-5,5,1) is None
+    assert ramp(np.array([[0.,0.]]),False,-5,5,1) is None          # only a single point cannot ramp
+
+
+def _on_segments(xy,path,closed):
+    """Every ramp vertex lies on the original path (within numerical tolerance)."""
+    from shapely.geometry import LineString,Point
+    line=LineString(np.vstack((path,path[0])) if closed else path)
+    return all(line.distance(Point(q))<1e-6 for q in xy)
+
+
+def test_short_closed_contour_helixes_along_itself():
+    from gcodeproducer.core.cam_leads import ramp_entry
+    circle=np.column_stack((2*np.cos(np.linspace(0,2*np.pi,24,endpoint=False)),2*np.sin(np.linspace(0,2*np.pi,24,endpoint=False))))
+    lead,kind=ramp_entry(circle,True,-6,1,0)                     # 7 mm drop needs ~39.7 mm; perimeter ~12.5 mm
+    assert kind=="helix" and np.allclose(lead[-1],[circle[0][0],circle[0][1],-6]) and lead[0,2]==1
+    distance=np.linalg.norm(np.diff(lead[:,:2],axis=0),axis=1)
+    assert (np.abs(np.diff(lead[:,2]))<=np.tan(np.deg2rad(10))*distance+1e-9).all()
+    assert distance.sum()>3*11.9 and _on_segments(lead[:,:2],circle,True)
+    # Direction: arriving at the seam the ramp moves the same way the cut will start.
+    assert np.dot(lead[-1,:2]-lead[-2,:2],circle[1]-circle[0])>0
+
+
+def test_short_open_path_zigzags_along_itself():
+    from gcodeproducer.core.cam_leads import ramp_entry
+    slot=np.array([[0.,0.],[3.,0.],[5.,1.]])
+    lead,kind=ramp_entry(slot,False,-4,1,0)
+    assert kind=="zigzag" and np.allclose(lead[-1],[0,0,-4])
+    distance=np.linalg.norm(np.diff(lead[:,:2],axis=0),axis=1)
+    assert (np.abs(np.diff(lead[:,2]))<=np.tan(np.deg2rad(10))*distance+1e-9).all()
+    assert _on_segments(lead[:,:2],slot,False)
+    assert lead[:,0].max()>4.9                                    # uses the whole path length per leg
+    long_enough,kind=ramp_entry(np.array([[0.,0.],[100.,0.]]),False,-1,1,0)
+    assert kind=="linear" and long_enough[:,0].max()<12
 
 
 def test_emitted_leads_and_calculated_process_surfaces(libset):
@@ -108,3 +140,34 @@ def test_later_operation_uses_prior_removal_in_engagement(libset):
     conditions=[c for p in later[0].paths for c in p.cut_conditions]
     assert all(c.regime not in ("slot","high") for c in conditions)
     assert np.mean([c.engagement for c in conditions])<.1
+
+
+def test_ramp_length_is_exactly_what_the_slope_needs():
+    from gcodeproducer.core.cam_leads import ramp_entry
+    square=np.array([[0.,0.],[2.,0.],[2.,2.],[0.,2.]])
+    lead,_=ramp_entry(square,True,-3,0,0)
+    needed=3/np.tan(np.deg2rad(10))
+    assert np.linalg.norm(np.diff(lead[:,:2],axis=0),axis=1).sum()==pytest.approx(needed,rel=1e-9)
+
+
+def test_entry_depth_check_distinguishes_helix_ramp_from_plunge():
+    """A <=10 degree helix beside an uncut wall is side contact, not an uncleared plunge."""
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.core.cam_leads import ramp_entry
+    stock=Stock(x=-10,y=-10,width=20,depth=20,height=10)
+    tool=Profile("tool","3mm",values={"diameter":3,"max_doc":1})
+    job=Job("cam",Profile("machine","mill",workflow="cam"),tools=[tool],cam_setup=CAMSetup(stock=stock))
+    circle=np.column_stack((2*np.cos(np.linspace(0,2*np.pi,32,endpoint=False)),2*np.sin(np.linspace(0,2*np.pi,32,endpoint=False))))
+    lead,kind=ramp_entry(circle,True,-5,1,0)
+    assert kind=="helix"
+    b=GCodeBuilder();b.raw(f"G0 Z10\nT1 M6\nM3 S12000\nG0 X{lead[0,0]:.4f} Y{lead[0,1]:.4f}\nG0 Z1")
+    b.op="1 pocket";b.set_feature("lead_in")
+    for q in lead[1:]:b.command(f"G1 X{q[0]:.4f} Y{q[1]:.4f} Z{q[2]:.4f} F200")
+    b.set_feature("rapid");b.command("G0 Z10");b.command("G0 X6 Y6")
+    b.set_feature("plunge");plunge=b.command("G1 Z-4 F100")
+    program=b.program()
+    warnings,_=simulate_material(job,program)
+    entry=[w for w in warnings if "entry depth" in w]
+    plunge_line=program.lines.index(plunge)+1
+    assert entry==[w for w in entry if w.startswith(f"Line {plunge_line}:")] and entry   # only the plunge
+    assert "plunge" in entry[0]

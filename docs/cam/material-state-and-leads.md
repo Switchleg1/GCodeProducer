@@ -96,23 +96,36 @@ For an entry with enough selected-path length, the emitter:
 1. Retracts to safe Z and positions above the lead start.
 2. Feeds to an entry plane above the *current* local material, respecting
    machine clearance and the configured safe plane.
-3. Follows a portion of the selected contour while ramping down to cutting Z.
-   A closed loop uses its closing section leading into the seam; an open line
-   uses a reversed portion of that line into its start.
+3. Follows the selected path itself while ramping down to cutting Z, at no
+   more than about 10°. A closed loop is followed backwards from its seam so
+   the ramp arrives moving in the cut direction; an open line is followed
+   from its start.
 4. Executes the normal path and eligible stay-down links.
 
-The lead is a segmented linear ramp, not an arbitrary circular/helical macro.
-Its XY centre follows the existing validated cut geometry, avoiding an
-unverified tangent extension into a retained wall. Automatic length respects
-an approximately 10° maximum ramp slope when the contour has enough length.
-The lead feed is independently calculated/unlocked; contacting entry segments
-also receive the machine Slot feed modifier.
+The ramp is never skipped for lack of length. When the path is shorter than
+the 10° ramp needs, the entry keeps following the same path:
 
-If a lead cannot fit, generation reports a **LEAD WARNING** and falls back to
-vertical entry. That warning requires review: the program cannot certify that
-the physical tool can plunge. Use different geometry/entry settings or tooling
-instead of blindly accepting the fallback. A typed length does not permit
-leaving the selected contour or inventing extra clearance.
+- **Closed contour — helix along the contour.** The ramp circles the loop
+  as many times as needed, descending continuously. A 4 mm counterbore
+  contour (≈12.5 mm around) needing ≈40 mm of ramp for a 7 mm drop circles it
+  a little over three times.
+- **Open path — zigzag.** The ramp goes to the end of the path and back,
+  repeatedly, descending on every leg, and finishes at the path start.
+
+Either way every XY point lies on the operation's own validated cut path:
+the ramp never leaves the region the operation cuts and never invents a
+tangent extension into a retained wall. It is a sequence of linear G1
+segments, not a G2/G3 helix macro. Generation logs how many ramps needed a
+helix or zigzag. The lead feed is independently calculated/unlocked;
+contacting entry segments also receive the machine Slot feed modifier, and
+every segment is checked against the current material.
+
+Only a path with no length (a single point) cannot ramp; it reports a
+**LEAD WARNING** and enters vertically. That warning still requires review:
+the program cannot certify that the physical tool can plunge. Drill
+operations plunge by design. A typed lead length longer than the slope needs
+simply lengthens the ramp (more laps or legs); it never permits leaving the
+selected path.
 
 ## Lead-out
 
@@ -135,7 +148,10 @@ remaining height-field material:
   no longer automatically flagged merely because it crossed the original blank.
 - A rapid into remaining material is reported with the program line number.
 - Unexpected/unclassified feed contact, spindle-off contact, below-bottom
-  motion and excessive uncleared entry depth are reported.
+  motion and excessive uncleared entry depth are reported. Entry depth is
+  measured for vertical plunges and over-steep ramps only, counting material
+  the move itself descends through; a ≤10° helix or zigzag beside an uncut
+  wall is side cutting, not an axial plunge.
 - Intended G1 cuts, plunges and leads remove material only while the spindle
   is on. A rapid never removes material in the model.
 - Upward vertical withdrawals are treated as retracts, as previously; the

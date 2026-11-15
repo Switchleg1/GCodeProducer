@@ -83,7 +83,7 @@ be checked; otherwise a warning states that checking could not run.
 | Unclassified/custom feed into stock | Contact is not tagged as an intended generated cut/plunge |
 | Feed contact with spindle stopped | Spindle state inferred from program commands is off at contact |
 | Motion below blank bottom | Possible table/spoilboard contact, including moves outside the blank XY region |
-| Excessive uncleared entry depth | Vertical feed entry estimate exceeds active tool max DOC |
+| Excessive uncleared entry depth | A vertical plunge, or a ramp steeper than 10°, descends through more current material than the active tool max DOC. Material above the move's start height (a wall beside a helix) is side contact and does not count; ramps within 10° are not flagged |
 | Tool change at/below material | A tool change is requested without sufficient Z clearance |
 | Unknown controller effects | Offsets, compensation, cycles or unsupported G commands cannot be fully checked |
 | Custom arcs/multiple G commands | Arc clearance or combined-block semantics are not fully simulated |

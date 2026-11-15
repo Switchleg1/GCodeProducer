@@ -55,7 +55,7 @@ class CAMEmit(SliceStage):
         from ..core.cam_cutting import resolve_cutting
         from ..core.cam_material import height_stock_for, simulate_material
         from ..core.app_settings import pref
-        from ..core.cam_leads import ramp, walk
+        from ..core.cam_leads import ramp_entry, walk
         stock = getattr(job.cam_setup,"stock",None)
         if stock is None and job.settings.get("machining_material"):
             from ..core.stock import Stock
@@ -76,6 +76,7 @@ class CAMEmit(SliceStage):
         if not math.isfinite(max_feed) or max_feed < 0:
             raise ValueError("Machine max feed must be nonnegative and finite")
         capped = set()
+        lead_kinds = {}
         last_feed = None
         last_condition = None
 
@@ -190,11 +191,13 @@ class CAMEmit(SliceStage):
                     if config is not None and config.lead_in and len(pts)>1 and live is not None:
                         surface=live.height_at(start,active_radius)
                         entry_z=min(safe_z,max(surface,layer.z)+max(.1,float(job.m("clearance_z",1))))
-                        lead=ramp(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
+                        lead,kind=ramp_entry(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
                         if lead is None:
-                            warning=f"{name}: insufficient contour length for 10-degree lead-in; vertical entry used. Confirm the tool can plunge."
+                            warning=f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
                             if warning not in job.warnings:job.warnings.append(warning)
                             ctx.log("LEAD WARNING: "+warning)
+                        elif kind in ("helix","zigzag"):
+                            lead_kinds[kind]=lead_kinds.get(kind,0)+1
                     approach=lead[0,:2] if lead is not None else start
                     b.set_feature("rapid", comment=False)
                     b.command(f"G0 Z{format_number(safe_z,3)}")
@@ -242,6 +245,9 @@ class CAMEmit(SliceStage):
             if pref(job,"highlight_conflicts"):
                 flagged=mark_collisions(prog,stock_warnings)
                 if flagged:ctx.log(f"  {flagged} flagged moves recoloured as Collision")
+        for kind,count in sorted(lead_kinds.items()):
+            what="circling the closed contour" if kind=="helix" else "back and forth along the open path"
+            ctx.log(f"  {count} lead-in ramps longer than their path: {kind} ({what}) at <=10 degrees")
         for request, cap in sorted(capped):
             ctx.log(f"  CAM feed capped: {request:g} -> {cap:g} mm/min (machine max_feed)")
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
