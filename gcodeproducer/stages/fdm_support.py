@@ -31,10 +31,10 @@ class FDMSupport(SliceStage):
     workflows = (FDM,)
     category = "Support"
     params = [
-        Param("placement", "choice", "buildplate", label="Support placement", group="Support",
+        Param("placement", "choice", "buildplate", label="Support placement", group="Support", hidden=True,
               choices=[("buildplate", "Touching build plate"), ("everywhere", "Everywhere"),
                        ("blocks", "Manual blocks")],
-              help="Manual blocks: support only inside the support blocks placed on the model."),
+              help="Set in Model > Support. Manual blocks: support only inside the support blocks."),
         Param("overhang_angle", "float", 50.0, unit="\u00b0", min=0, max=89, decimals=1, group="Support",
               help="Overhangs steeper than this (measured from vertical) get support."),
         Param("density", "float", 15.0, unit="%", min=1, max=100, decimals=1, group="Pattern"),
@@ -44,8 +44,15 @@ class FDMSupport(SliceStage):
               help="Horizontal gap between support and the model."),
         Param("z_gap_layers", "int", 1, label="Top Z gap (layers)", min=0, max=10, group="Distances",
               help="Empty layers between the top of the support and the overhang."),
-        Param("interface_layers", "int", 2, min=0, max=20, group="Interface",
-              help="Dense layers at the top of the support (0 = off)."),
+        Param("bottom_z_gap_layers", "int", 1, label="Bottom Z gap (layers)", min=0, max=10, group="Distances",
+              help="Empty layers between the model and support standing on it (Everywhere / manual "
+                   "blocks). Support on the bed starts on the first layer."),
+        Param("interface_layers", "int", 2, label="Top interface layers", min=0, max=20, group="Interface",
+              help="Dense layers at the top of the support, under the overhang (0 = off)."),
+        Param("bottom_interface_layers", "int", 2, label="Bottom interface layers", min=0, max=20,
+              group="Interface",
+              help="Dense layers at the bottom of support standing on the model (0 = off). Support on the "
+                   "bed has none."),
         Param("interface_density", "float", 70.0, unit="%", min=5, max=100, decimals=1, group="Interface"),
         Param("min_area", "float", 1.0, unit="mm\u00b2", min=0, decimals=2, group="Distances",
               help="Ignore overhang specks smaller than this."),
@@ -77,22 +84,25 @@ class FDMSupport(SliceStage):
         ctx.progress(0.2)
         mode = params["placement"]
         gap = params["z_gap_layers"]
+        bgap = params["bottom_z_gap_layers"]
         if mode == "blocks":
             blocks = list(job.support_blocks or [])
             if not blocks:
                 return "manual support: no support blocks"
             over = None
-            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw)
+            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw,
+                                        bgap)
         else:
             over = support.overhangs(masks, layers, base.res, params["overhang_angle"], params["min_area"])
             ctx.progress(0.4)
             sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
-                                       mode == "everywhere", margin, lw)
+                                       mode == "everywhere", margin, lw, bgap)
         everywhere = mode == "everywhere"
         ctx.progress(0.6)
 
         # ---- toolpaths
         ni = params["interface_layers"]
+        nb = params["bottom_interface_layers"]
         body_spacing = lw / (params["density"] / 100.0)
         roof_spacing = lw / (params["interface_density"] / 100.0)
         n_body = n_roof = 0
@@ -106,6 +116,13 @@ class FDMSupport(SliceStage):
             for k in range(1, ni + 1):
                 above &= sup[i + k] if i + k < n else np.zeros_like(s)
             roof = s & ~above if ni > 0 else np.zeros_like(s)
+            if nb > 0:
+                # floor: where the column started within nb layers - on the model, not the bed
+                below = np.ones_like(s)
+                for k in range(1, nb + 1):
+                    if i - k >= 0:
+                        below &= sup[i - k]  # (layers below the bed count as supported)
+                roof |= s & ~below
             body = s & ~roof
             segs_body = []
             if body.any():

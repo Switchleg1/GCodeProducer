@@ -328,3 +328,24 @@ def test_fill_holes_control(win):
     assert win.sp_fill_holes.value() == 0 and win.sp_fill_holes.text() == "off"
     win.sp_fill_holes.setValue(150)
     assert step.params["fill_holes"] == 150 and win.dirty["fdm"]
+
+
+def test_support_placement_hidden_in_process_editor(win):
+    from gcodeproducer.gui.process_editor import ProcessEditor
+    from gcodeproducer.gui.widgets import ParamEditor
+    from gcodeproducer.stages.fdm_support import FDMSupport
+    params = FDMSupport.parameters()
+    ed = ParamEditor(params, {**FDMSupport.defaults(), "placement": "everywhere"})
+    assert "placement" not in ed._widgets and "overhang_angle" in {p.name for p in params}
+    labels = [w.text() for w in ed.findChildren(QtWidgets.QLabel)]
+    assert not any("placement" in t.lower() for t in labels)
+    assert any("Bottom interface" in t for t in labels) and any("Bottom Z gap" in t for t in labels)
+    # editing another value keeps the hidden placement
+    got = {}
+    ed.changed.connect(got.update)
+    ed._set("density", 25.0)
+    assert got["placement"] == "everywhere" and got["density"] == 25.0
+    # and in the main window: the Model > Support combo still drives it
+    win.cb_support.setCurrentIndex(win.cb_support.findData("everywhere"))
+    step = win.pipelines["fdm"].step("fdm_support")
+    assert step.params["placement"] == "everywhere"

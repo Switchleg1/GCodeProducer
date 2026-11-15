@@ -57,6 +57,8 @@ class ParamEditor(QWidget):
         groups: dict = {}
         rows: dict = {}
         for p in params:
+            if getattr(p, "hidden", False):
+                continue                   # value kept in self.values, edited elsewhere
             if p.group not in groups:
                 box = QGroupBox(p.group)
                 form = QFormLayout(box)

@@ -225,3 +225,72 @@ def test_fill_holes_option_still_fills(libset, tmp_path):
 def test_fill_holes_default_off():
     from gcodeproducer.stages.fdm_support import FDMSupport
     assert FDMSupport.defaults()["fill_holes"] == 0.0
+
+
+# ------------------------------------------------------------------ gaps & interfaces
+SHELF_EVERYWHERE = [(0, 0, 0, 30, 30, 4), (0, 0, 4, 10, 10, 20), (0, 0, 20, 30, 30, 22)]
+
+
+def _layers(libset, tmp_path, boxes, mode, **params):
+    from gcodeproducer.core import sim
+    path = write_boxes(tmp_path / "m.stl", boxes)
+    pipe = SlicePipeline.default(wf.FDM)
+    st = pipe.step("fdm_support")
+    st.enabled = True
+    st.params.update({"placement": mode, **params})
+    job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path))
+    p = slice_job(job, pipe).program
+    s = sim.simulate(p)
+    feat = np.array([ln.feature for ln in p.lines])
+    lay = np.array([ln.layer for ln in p.lines])
+    z = np.array(p.layer_z)
+    sup = np.isin(feat, ["support", "support_interface"]) & s.extruding
+    iface = (feat == "support_interface") & s.extruding
+    return [round(float(v), 2) for v in z[np.unique(lay[sup])]], [round(float(v), 2) for v in z[np.unique(lay[iface])]]
+
+
+@pytest.mark.parametrize("bgap,first", [(0, 4.2), (1, 4.4), (3, 4.8)])
+def test_bottom_z_gap(libset, tmp_path, bgap, first):
+    sup, _ = _layers(libset, tmp_path, SHELF_EVERYWHERE, "everywhere", bottom_z_gap_layers=bgap)
+    assert sup[0] == pytest.approx(first)                   # base top is Z4.0
+    assert sup[-1] == pytest.approx(19.8)                   # top gap unchanged
+
+
+@pytest.mark.parametrize("tgap,last", [(0, 20.0), (1, 19.8), (3, 19.4)])
+def test_top_z_gap_independent(libset, tmp_path, tgap, last):
+    sup, _ = _layers(libset, tmp_path, SHELF_EVERYWHERE, "everywhere", z_gap_layers=tgap)
+    assert sup[-1] == pytest.approx(last)                   # plate bottom is Z20.0
+    assert sup[0] == pytest.approx(4.4)                     # bottom gap unchanged
+
+
+def test_bottom_interface_layers(libset, tmp_path):
+    _, iface = _layers(libset, tmp_path, SHELF_EVERYWHERE, "everywhere")
+    assert iface == pytest.approx([4.4, 4.6, 19.6, 19.8])   # 2 floor + 2 roof by default
+    _, iface = _layers(libset, tmp_path, SHELF_EVERYWHERE, "everywhere", bottom_interface_layers=4,
+                       interface_layers=0)
+    assert iface == pytest.approx([4.4, 4.6, 4.8, 5.0])
+    _, iface = _layers(libset, tmp_path, SHELF_EVERYWHERE, "everywhere", bottom_interface_layers=0)
+    assert iface == pytest.approx([19.6, 19.8])
+
+
+def test_no_bottom_interface_on_the_bed(libset, tmp_path):
+    _, iface = _layers(libset, tmp_path, T_SHAPE, "buildplate", bottom_interface_layers=3)
+    assert iface == pytest.approx([14.6, 14.8])            # roof only
+
+
+def test_bottom_gap_in_block_mode(libset, tmp_path):
+    from gcodeproducer.core.support import SupportBlock
+    path = write_boxes(tmp_path / "s.stl", SHELF_EVERYWHERE)
+    pipe = SlicePipeline.default(wf.FDM)
+    st = pipe.step("fdm_support")
+    st.enabled = True
+    st.params.update({"placement": "blocks", "bottom_z_gap_layers": 2})
+    job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path),
+                    support_blocks=[SupportBlock(110, 110, 0, 125, 125, 25)])
+    p = slice_job(job, pipe).program
+    zs = [p.layer_z[ln.layer] for ln in p.lines if ln.feature.startswith("support") and ln.cmd == "G1"
+          and ("X" in ln.params or "Y" in ln.params)]
+    assert min(zs) == pytest.approx(4.6)                    # base top Z4.0 + 2 empty layers, also beside
+                                                            # the base edge (within the XY distance)

@@ -20,6 +20,8 @@ class Param:
         accepts a comma separated string (wildcards allowed)
     links: for 'choice' {choice_value: {other_param: value}} - values the GUI
         puts into other parameters when that choice is selected
+    hidden: not shown in GUI forms (the value is still stored / resolved, and the
+        CLI accepts it) - for settings edited somewhere else in the UI
     allow_auto: the value may be the string "auto" (module decides itself)
     group: GUI group box title
     row / row_label: params sharing a ``row`` key are laid out on one line
@@ -42,6 +44,7 @@ class Param:
     hint: Optional[float] = None   # GUI: value offered when 'auto' is switched off
     choices_from: Optional[str] = None
     links: Optional[dict] = None
+    hidden: bool = False           # GUI: not shown in the generated form (set elsewhere in the UI)
 
     def __post_init__(self):
         if not self.label:

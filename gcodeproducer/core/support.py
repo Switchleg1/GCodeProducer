@@ -162,8 +162,19 @@ def _with_margin(core, reach, grow, masks, i, xy, gap):
     return _gap_free(s, masks, i, gap, grow) | core
 
 
+def _bottom_gap(s, masks, i, bottom_gap, xy=0):
+    """Keep ``bottom_gap`` empty layers between the model below and support standing on it.
+
+    Applies within the XY distance of the model too, so a column next to the
+    model's edge does not start early in the air beside it."""
+    for k in range(1, bottom_gap + 1):
+        if i - k >= 0 and masks[i - k].any():
+            s &= ~(geometry.dilate(masks[i - k], xy) if xy else masks[i - k])
+    return s
+
+
 def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhere: bool,
-                 edge_margin: float = 0.0, line_width: float = 0.45) -> list:
+                 edge_margin: float = 0.0, line_width: float = 0.45, bottom_gap: int = 1) -> list:
     """Columns grown down from the overhangs.  ``edge_margin`` (mm) widens the
     support past the overhang's edges so its perimeters sit fully on support."""
     n = len(masks)
@@ -181,15 +192,13 @@ def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhe
         acc &= ~masks[i]                     # a column stops where it meets the model
         s = acc & ~geometry.dilate(masks[i], xy)
         if everywhere:
-            if i > 0:
-                s &= ~masks[i - 1]           # one layer gap on top of the model
+            s = _bottom_gap(s, masks, i, bottom_gap, xy)    # gap on top of the model
         else:
             s &= ~below_any[i]               # build plate only: nothing of the model underneath
         if grow and s.any():
             s = _with_margin(s, acc, grow, masks, i, xy, gap)
             if everywhere:
-                if i > 0:
-                    s &= ~masks[i - 1]
+                s = _bottom_gap(s, masks, i, bottom_gap, xy)
             else:
                 s &= ~below_any[i]
         sup[i] = s
@@ -212,7 +221,7 @@ def block_cells(base: geometry.RegionMask, blocks, z: float) -> np.ndarray:
 
 
 def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
-                  edge_margin: float = 0.0, line_width: float = 0.45) -> list:
+                  edge_margin: float = 0.0, line_width: float = 0.45, bottom_gap: int = 1) -> list:
     """Support inside the block volumes wherever there is model above (with a Z gap).
 
     ``edge_margin`` (mm) widens that support past the model's edges (also into
@@ -232,9 +241,7 @@ def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
         s = _gap_free(s, masks, i, gap, 0)
         if grow and s.any():
             s = _with_margin(s, above, grow, masks, i, xy, gap)
-        if i > 0:
-            s &= ~masks[i - 1]               # one layer gap on top of the model
-        sup[i] = s
+        sup[i] = _bottom_gap(s, masks, i, bottom_gap, xy)  # gap on top of the model
     return sup
 
 
@@ -379,7 +386,7 @@ def slice_layers(mesh, layer_height: float, first_layer_height: float | None = N
 
 
 def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, angle: float = 50.0,
-                    everywhere: bool = False, xy_distance: float = 0.8, gap: int = 1,
+                    everywhere: bool = False, xy_distance: float = 0.8, gap: int = 1, bottom_gap: int = 1,
                     min_area: float = 1.0, first_layer_height: float | None = None,
                     block_size: float | None = None, fill_holes: float = 0.0,
                     edge_margin: float = 0.0) -> list:
@@ -395,7 +402,8 @@ def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, a
     base = make_grid(lo, hi, line_width, edge_margin)
     masks = model_masks(layers, base, fill_holes)
     over = overhangs(masks, layers, base.res, angle, min_area)
-    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere, edge_margin, line_width)
+    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere, edge_margin, line_width,
+                       bottom_gap)
     if block_size:
         return tiled_blocks_from_columns(sup, layers, base, float(block_size), gap)
     return blocks_from_columns(sup, layers, base, gap)
