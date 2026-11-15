@@ -53,10 +53,11 @@ class FDMSupport(SliceStage):
               decimals=1, group="Holes & edges",
               help="Holes in the model up to this area count as solid: the support runs on under them "
                    "so their perimeters are supported (0 = off). Larger openings are supported as overhangs."),
-        Param("edge_margin", "float", AUTO, label="Edge margin", unit="mm", min=0, max=10, decimals=2,
-              allow_auto=True, hint=0.45, group="Holes & edges",
-              help="Extend the support this far past the model's edges (and into larger holes) so the "
-                   "perimeters along every edge sit on support. auto = one line width."),
+        Param("edge_margin", "float", 1.0, label="Extend past model edge", unit="mm", min=0, max=20,
+              decimals=2, step=0.1, allow_auto=True, hint=1.0, group="Holes & edges",
+              help="How far the support reaches past the model's edges (and into holes too large to fill) "
+                   "so the perimeters along every edge sit on support. 0 = stop at the edge; "
+                   "auto = one line width. Rounded to the support grid (about \u00b10.2 mm)."),
         Param("line_width", "float", AUTO, unit="mm", min=0.05, max=3, allow_auto=True, hint=0.45,
               group="Pattern", help="auto = nozzle line width."),
     ]
@@ -68,24 +69,24 @@ class FDMSupport(SliceStage):
         lw = params["line_width"]
         lw = job.line_width if lw in (0, AUTO) else float(lw)
         lo, hi = job.mesh.bounds
-        base = support.make_grid(lo, hi, lw)
+        margin = lw if params["edge_margin"] == AUTO else float(params["edge_margin"])
+        base = support.make_grid(lo, hi, lw, margin)
         n = len(layers)
         masks = support.model_masks(layers, base, params["fill_holes"])
         ctx.progress(0.2)
         mode = params["placement"]
         gap = params["z_gap_layers"]
-        margin = lw if params["edge_margin"] == AUTO else float(params["edge_margin"])
         if mode == "blocks":
             blocks = list(job.support_blocks or [])
             if not blocks:
                 return "manual support: no support blocks"
             over = None
-            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin)
+            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw)
         else:
             over = support.overhangs(masks, layers, base.res, params["overhang_angle"], params["min_area"])
             ctx.progress(0.4)
             sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
-                                       mode == "everywhere", margin)
+                                       mode == "everywhere", margin, lw)
         everywhere = mode == "everywhere"
         ctx.progress(0.6)
 

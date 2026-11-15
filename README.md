@@ -88,10 +88,13 @@ versa.
     perimeters are supported, and it never climbs up inside the hole. Larger
     openings (e.g. a pocket opening downward) stay open and are supported as
     overhangs.
-  - *Edge margin* (default one line width) widens existing support past the
-    model's edges and into holes too large to fill, so the perimeters along
-    every edge sit fully on support. It keeps the XY distance, the Z gap and
-    the build-plate rule, and it never creates support on its own.
+  - *Extend past model edge* (default **1.0 mm**, also in the Model dock's
+    Support box) sets how far the support reaches past the model's edges and
+    into holes too large to fill, so the perimeters along every edge sit fully
+    on support. It is measured to the outside of the printed support and
+    rounded to the support grid (about ±0.3 mm). 0 stops the support at the
+    edge. It keeps the XY distance, the Z gap and the build-plate rule, and it
+    never creates support on its own.
 
   *Manual blocks* uses the job's support blocks instead
   (`core/support.py`; `--support-blocks` on the CLI). The top
@@ -175,7 +178,8 @@ consumables, process and recent models are remembered.
 
    **Support** (its own box below Model): *None*, *Touching build plate*,
    *Everywhere* or **Manual blocks**, plus the overhang angle (*Show* tints
-   overhangs red). The mode is the same setting as the process's *Support*
+   overhangs red) and **Extend past edge** (how far the support reaches past
+   the model's edges, default 1 mm). The mode is the same setting as the process's *Support*
    section, so it is saved with the process.
 
    ![Support panel](docs/support_panel.jpg)
@@ -219,7 +223,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
-   | Support             | build plate / everywhere / manual blocks, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area, support under holes up to (mm²), edge margin |
+   | Support             | build plate / everywhere / manual blocks, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area, support under holes up to (mm²), extend past model edge (mm) |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |

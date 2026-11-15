@@ -483,6 +483,21 @@ class MainWindow(QMainWindow):
         self.cb_show_over.toggled.connect(lambda _v: self._update_scene())
         row.addWidget(self.cb_show_over)
         v.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Extend past edge"))
+        self.sp_extend = QDoubleSpinBox()
+        self.sp_extend.setRange(0, 20)
+        self.sp_extend.setDecimals(2)
+        self.sp_extend.setSingleStep(0.1)
+        self.sp_extend.setSuffix(" mm")
+        self.sp_extend.setKeyboardTracking(False)
+        self.sp_extend.setToolTip("How far the support reaches past the model's edges (and into holes too large "
+                                  "to fill) so the perimeters along every edge sit on support. 0 = stop at the "
+                                  "edge. Process setting (Support section).")
+        self.sp_extend.valueChanged.connect(self._on_extend_spin)
+        row.addWidget(self.sp_extend)
+        row.addStretch(1)
+        v.addLayout(row)
 
         # ---- manual support blocks
         self.blocks_box = QWidget()
@@ -1186,7 +1201,7 @@ class MainWindow(QMainWindow):
     def _sync_support_controls(self):
         step = self._support_step()
         self.support_box.setVisible(self.workflow == wf.FDM)
-        for w in (self.cb_support, self.sp_overhang):
+        for w in (self.cb_support, self.sp_overhang, self.sp_extend):
             w.blockSignals(True)
         if step is None:
             self.cb_support.setCurrentIndex(0)
@@ -1197,7 +1212,12 @@ class MainWindow(QMainWindow):
             mode = p["placement"] if step.enabled else "none"
             self.cb_support.setCurrentIndex(max(0, self.cb_support.findData(mode)))
             self.sp_overhang.setValue(p["overhang_angle"])
-        for w in (self.cb_support, self.sp_overhang):
+            ext = p["edge_margin"]
+            if ext == "auto":
+                noz = self._consumable("nozzle")
+                ext = (noz.get("line_width", 0.45) if noz else 0.45) or 0.45
+            self.sp_extend.setValue(float(ext))
+        for w in (self.cb_support, self.sp_overhang, self.sp_extend):
             w.blockSignals(False)
         self.blocks_box.setVisible(self._support_mode() == "blocks")
         if self._support_mode() != "blocks":
@@ -1212,6 +1232,14 @@ class MainWindow(QMainWindow):
         step.enabled = mode != "none"
         if mode != "none":
             step.params = {**step.params, "placement": mode}
+        self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._mark_dirty()
+
+    def _on_extend_spin(self, v):
+        step = self._support_step()
+        if step is None:
+            return
+        step.params = {**step.params, "edge_margin": float(v)}
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._mark_dirty()
 

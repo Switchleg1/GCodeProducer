@@ -150,3 +150,30 @@ def test_support_polys_fill_holes():
     assert len(kept) == 3 and not any(abs(abs(float(np.ptp(k[:, 0]))) - 4) < 1e-9 for k in kept)
     kept = support_polys(layer, 1000)                        # both holes filled; the island goes with its hole
     assert len(kept) == 1
+
+
+@pytest.mark.parametrize("mode", ["buildplate", "blocks"])
+@pytest.mark.parametrize("margin", [0.0, 1.0, 2.0, 3.0, 5.0])
+def test_extend_past_model_edge(libset, tmp_path, mode, margin):
+    """The support bead reaches the requested distance past the plate's edge (within the grid)."""
+    from gcodeproducer.core import sim
+    from gcodeproducer.core.support import SupportBlock
+    path = write_boxes(tmp_path / "t.stl", T_SHAPE)          # plate spans 95..125 on the bed
+    pipe = SlicePipeline.default(wf.FDM)
+    st = pipe.step("fdm_support")
+    st.enabled = True
+    st.params.update({"placement": mode, "edge_margin": margin})
+    job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path),
+                    support_blocks=[SupportBlock(80, 80, 0, 140, 140, 15)])
+    p = slice_job(job, pipe).program
+    s = sim.simulate(p)
+    sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
+    xs = np.concatenate([s.x[sel], s.px[sel]])
+    reach = max(xs.max() - 125, 95 - xs.min()) + 0.45 / 2        # bead edge past the model edge
+    assert reach == pytest.approx(max(margin, 0.15), abs=0.3)
+
+
+def test_extend_default_is_one_mm():
+    from gcodeproducer.stages.fdm_support import FDMSupport
+    assert FDMSupport.defaults()["edge_margin"] == 1.0

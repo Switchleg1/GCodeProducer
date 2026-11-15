@@ -300,10 +300,10 @@ class RegionMask:
     to allow boolean operations between layers (top / bottom shell detection).
     """
 
-    def __init__(self, lo, hi, res: float = 0.3, grid=None):
+    def __init__(self, lo, hi, res: float = 0.3, grid=None, pad: float = 2.0):
         self.res = res
-        self.lo = np.asarray(lo, float) - 2.0
-        hi = np.asarray(hi, float) + 2.0
+        self.lo = np.asarray(lo, float) - pad
+        hi = np.asarray(hi, float) + pad
         self.nx = max(1, int(math.ceil((hi[0] - self.lo[0]) / res)))
         self.ny = max(1, int(math.ceil((hi[1] - self.lo[1]) / res)))
         self.grid = np.zeros((self.ny, self.nx), bool) if grid is None else grid

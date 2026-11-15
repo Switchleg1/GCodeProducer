@@ -308,3 +308,16 @@ def test_remove_blocks_by_clicking(win, app, tmp_path):
     assert win.blocks == [] and win.lst_blocks.count() == 0
     QTest.keyClick(win.model_viewer, Qt.Key.Key_Escape)
     assert not win.b_remove_block.isChecked() and not win.model_viewer.remove_block
+
+
+def test_extend_past_edge_control(win):
+    step = win.pipelines["fdm"].step("fdm_support")
+    assert win.sp_extend.value() == pytest.approx(1.0)
+    win.sp_extend.setValue(2.5)
+    assert step.params["edge_margin"] == 2.5 and win.dirty["fdm"]
+    step.params["edge_margin"] = 0.6                     # edited in the process editor -> panel follows
+    win.process_editor.changed.emit()
+    assert win.sp_extend.value() == pytest.approx(0.6)
+    from gcodeproducer.gui.process_editor import summary
+    step.enabled = True
+    assert "+0.6 mm" in summary(step)

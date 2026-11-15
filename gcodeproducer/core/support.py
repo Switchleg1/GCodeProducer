@@ -77,9 +77,12 @@ class SupportBlock:
 
 
 # --------------------------------------------------------------------------
-def make_grid(lo, hi, line_width: float) -> geometry.RegionMask:
+def make_grid(lo, hi, line_width: float, margin: float = 0.0) -> geometry.RegionMask:
+    """Shared support raster; padded so support can extend ``margin`` past the model."""
     res = max(0.2, min(0.5, line_width * 0.75))
-    return geometry.RegionMask(lo[:2], hi[:2], res)
+    # whole cells of padding: the grid stays aligned the same way whatever the margin
+    pad = math.ceil((2.0 + max(0.0, margin)) / res) * res
+    return geometry.RegionMask(lo[:2], hi[:2], res, pad=pad)
 
 
 def support_polys(layer, fill_holes: float = 0.0) -> list:
@@ -112,8 +115,17 @@ def model_masks(layers, base: geometry.RegionMask, fill_holes: float = 0.0) -> l
     return out
 
 
-def margin_cells(edge_margin: float, res: float) -> int:
-    return max(0, int(math.ceil(edge_margin / res - 1e-9)))
+def margin_cells(edge_margin: float, res: float, line_width: float = 0.45) -> int:
+    """Cells to grow the support by so the printed support ends ``edge_margin`` mm past
+    the model's edge.
+
+    With no growth the support bead already reaches about a quarter line width
+    past the edge (support lines stop a quarter width inside their cells, the
+    bead adds half a width), so that is subtracted; the result is accurate to
+    half a raster cell (~0.17 mm for a 0.45 mm line)."""
+    if edge_margin <= 0:
+        return 0
+    return max(0, int(round((edge_margin - line_width * 0.25) / res)))
 
 
 def overhangs(masks, layers, res: float, angle_deg: float, min_area: float) -> list:
@@ -151,12 +163,12 @@ def _with_margin(core, reach, grow, masks, i, xy, gap):
 
 
 def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhere: bool,
-                 edge_margin: float = 0.0) -> list:
+                 edge_margin: float = 0.0, line_width: float = 0.45) -> list:
     """Columns grown down from the overhangs.  ``edge_margin`` (mm) widens the
     support past the overhang's edges so its perimeters sit fully on support."""
     n = len(masks)
     xy = max(1, int(math.ceil(xy_distance / res)))
-    grow = margin_cells(edge_margin, res)
+    grow = margin_cells(edge_margin, res, line_width)
     below_any = [np.zeros_like(masks[0])]
     for i in range(1, n):
         below_any.append(below_any[-1] | masks[i - 1])
@@ -200,7 +212,7 @@ def block_cells(base: geometry.RegionMask, blocks, z: float) -> np.ndarray:
 
 
 def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
-                  edge_margin: float = 0.0) -> list:
+                  edge_margin: float = 0.0, line_width: float = 0.45) -> list:
     """Support inside the block volumes wherever there is model above (with a Z gap).
 
     ``edge_margin`` (mm) widens that support past the model's edges (also into
@@ -208,7 +220,7 @@ def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
     """
     n = len(masks)
     xy = max(1, int(math.ceil(xy_distance / base.res)))
-    grow = margin_cells(edge_margin, base.res)
+    grow = margin_cells(edge_margin, base.res, line_width)
     above = np.zeros_like(masks[0])
     sup = [None] * n
     for i in range(n - 1, -1, -1):
@@ -380,10 +392,10 @@ def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, a
     if len(layers) < 2:
         return []
     lo, hi = mesh.bounds
-    base = make_grid(lo, hi, line_width)
+    base = make_grid(lo, hi, line_width, edge_margin)
     masks = model_masks(layers, base, fill_holes)
     over = overhangs(masks, layers, base.res, angle, min_area)
-    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere, edge_margin)
+    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere, edge_margin, line_width)
     if block_size:
         return tiled_blocks_from_columns(sup, layers, base, float(block_size), gap)
     return blocks_from_columns(sup, layers, base, gap)
