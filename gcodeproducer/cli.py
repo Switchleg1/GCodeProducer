@@ -89,9 +89,17 @@ def cmd_slice(args):
     else:
         tools = [_pick(ls["tool"], args.tool, "tool")]
 
+    from .core.placement import Placement
     mesh = load_mesh(args.input)
+    placement = Placement(x=args.x, y=args.y, scale=args.scale)
+    for axis in ("x", "y", "z"):
+        deg = getattr(args, f"rotate_{axis}")
+        if deg:
+            placement.rotate_by(axis, deg)
+    if args.lay_flat:
+        placement.lay_flat(mesh)
     job = build_job(workflow, machine, material=material, nozzle=nozzle, tools=tools,
-                    mesh=mesh, model_path=args.input,
+                    mesh=mesh, model_path=args.input, placement=placement,
                     settings={"layer_height": args.layer_height} if args.layer_height else {})
 
     if args.config:
@@ -110,10 +118,14 @@ def cmd_slice(args):
         pipeline = SlicePipeline.default(workflow)
     for spec in args.stage_param or []:
         step = parse_stage_spec(spec)
-        for s in pipeline.steps:
-            if s.stage == step.stage:
-                s.params.update(step.params)
-                break
+        target = pipeline.step(step.stage)
+        if target is None:
+            raise SystemExit(f"stage '{step.stage}' is not in this process "
+                             f"(have: {', '.join(s.stage for s in pipeline.steps)})")
+        merged = {**target.params, **step.params}
+        plugins.stages.get(step.stage).resolve(merged, strict=True)   # report typos
+        target.params = merged
+        target.enabled = True            # overriding a stage switches it on (e.g. supports)
 
     log = (lambda m: print(m, file=sys.stderr)) if not args.quiet else None
     result = slice_job(job, pipeline, log=log)
@@ -153,6 +165,14 @@ def build_parser():
     s.add_argument("--machine"); s.add_argument("--material")
     s.add_argument("--nozzle"); s.add_argument("--tool")
     s.add_argument("--layer-height", type=float)
+    g = s.add_argument_group("placement")
+    g.add_argument("--x", type=float, help="model centre X on the bed (default: bed centre)")
+    g.add_argument("--y", type=float, help="model centre Y on the bed (default: bed centre)")
+    g.add_argument("--rotate-x", type=float, default=0.0, metavar="DEG")
+    g.add_argument("--rotate-y", type=float, default=0.0, metavar="DEG")
+    g.add_argument("--rotate-z", type=float, default=0.0, metavar="DEG")
+    g.add_argument("--scale", type=float, default=100.0, metavar="PCT")
+    g.add_argument("--lay-flat", action="store_true", help="rest the largest flat face on the bed")
     s.add_argument("-m", "--stage-param", action="append",
                    help="stage_id:key=value,... override")
     s.add_argument("--process", help="named process preset (workflow options)")

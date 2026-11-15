@@ -2,6 +2,8 @@
 import os
 import time
 
+import numpy as np
+
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -29,7 +31,8 @@ def win(app, tmp_path, monkeypatch):
 
 def test_sections_and_setup(win):
     titles = [s._title for s in win.process_editor.sections]
-    assert titles == ["Layers", "Skirt / brim", "Walls", "Top / bottom shells", "Infill", "Travel & output"]
+    assert titles == ["Layers", "Skirt / brim", "Support", "Walls", "Top / bottom shells", "Infill",
+                      "Travel & output"]
     rows = {k: win.setup_form.isRowVisible(r) for k, (_l, r, _c) in win.cons_rows.items()}
     assert rows == {"material": True, "nozzle": True, "tool": False}
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
@@ -81,3 +84,76 @@ def test_slice_in_gui(win, app):
     assert win.feature_list.count() >= 4
     win.step_layer(-5)
     assert win.state.layer_max == win.program.num_layers - 6
+
+
+def _bracket(tmp_path):
+    from conftest import write_boxes
+    return write_boxes(tmp_path / "bracket.stl", [(10, 10, 0, 20, 20, 15), (0, 0, 15, 30, 30, 18)])
+
+
+def _wait(win, app):
+    t = time.time()
+    while win._worker is not None and time.time() - t < 60:
+        app.processEvents()
+        time.sleep(0.02)
+
+
+def test_prepare_preview_modes(win, app, tmp_path):
+    assert win.mode == "prepare" and not win.act_preview.isEnabled()
+    win.open_model(_bracket(tmp_path))
+    assert win.stack.currentIndex() == 0 and win.placed is not None
+    win.set_mode("preview")                       # nothing sliced yet -> stays in prepare
+    assert win.mode == "prepare"
+    win.run_slice()
+    _wait(win, app)
+    assert win.mode == "preview" and win.stack.currentIndex() == 1 and not win.stale
+    win.set_mode("prepare")
+    win.set_mode("preview")
+    assert win.mode == "preview"
+    # editing the placement goes back to prepare and marks the preview stale
+    win.sp_x.setValue(win.sp_x.value() + 15)
+    assert win.mode == "prepare" and win.stale and "out of date" in win.stale_lbl.text()
+    # editing the process marks it stale too (after a fresh slice)
+    win.run_slice()
+    _wait(win, app)
+    win.pipelines["fdm"].step("fdm_infill").params["density"] = 30.0
+    win.process_editor.changed.emit()
+    assert win.stale
+
+
+def test_placement_controls(win, tmp_path):
+    win.open_model(_bracket(tmp_path))
+    assert win.sp_x.value() == 110 and win.sp_y.value() == 110          # bed centre
+    win.rotate_model("x", 90)
+    assert win.sp_rot["x"].value() == 90
+    lo, hi = win.placed.bounds
+    assert hi[2] - lo[2] == 30                                         # was 30 deep, now 30 tall
+    win.reset_placement()
+    assert win.sp_rot["x"].value() == 0
+    win.sp_scale.setValue(200)
+    lo, hi = win.placed.bounds
+    assert hi[2] - lo[2] == 36
+    win._on_model_dragged(80.0, 90.0)
+    win.model_viewer.moveFinished.emit()                               # end of the drag saves it
+    assert (win.sp_x.value(), win.sp_y.value()) == (80, 90)
+    # placement is remembered per model
+    path = win.model_path
+    win.open_model(path)
+    assert (win.placement.x, win.placement.scale) == (80, 200)
+    win._on_face_clicked(np.array([0.0, 0.0, 1.0]))                  # top face down = upside down
+    assert abs(win.placement.rx) == 180 or abs(win.placement.ry) == 180
+
+
+def test_support_controls_follow_process(win):
+    step = win.pipelines["fdm"].step("fdm_support")
+    assert win.cb_support.currentData() == "none" and not step.enabled
+    win.cb_support.setCurrentIndex(win.cb_support.findData("everywhere"))
+    assert step.enabled and step.params["placement"] == "everywhere" and win.dirty["fdm"]
+    win.sp_overhang.setValue(40)
+    assert step.params["overhang_angle"] == 40
+    # and the other way: the process editor's switch drives the combo
+    step.enabled = False
+    win.process_editor.changed.emit()
+    assert win.cb_support.currentData() == "none"
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    assert not win.support_box.isVisibleTo(win) or not win.support_box.isEnabled()

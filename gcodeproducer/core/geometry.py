@@ -76,9 +76,19 @@ def _load_ascii_stl(text: str) -> Mesh:
 def _weld(verts: np.ndarray, tris: np.ndarray, tol: float = 1e-6) -> Mesh:
     keys = np.round(verts / tol).astype(np.int64)
     uniq, inv = np.unique(keys, axis=0, return_inverse=True)
+    inv = inv.ravel()
     out_v = np.zeros((len(uniq), 3))
     out_v[inv] = verts
-    return Mesh(out_v, inv[tris].astype(np.int64))
+    mesh = Mesh(out_v, inv[tris].astype(np.int64))
+    if signed_volume(mesh) < 0:          # inside-out file: make the normals point outward
+        mesh.triangles = mesh.triangles[:, ::-1].copy()
+    return mesh
+
+
+def signed_volume(mesh: Mesh) -> float:
+    """Volume enclosed by the mesh; negative when the triangles are wound inward."""
+    t = mesh.vertices[mesh.triangles]
+    return float(np.einsum("ij,ij->i", t[:, 0], np.cross(t[:, 1], t[:, 2])).sum() / 6.0)
 
 
 # --------------------------------------------------------------- slicing
@@ -315,6 +325,71 @@ class RegionMask:
         res = np.zeros(len(ij), bool)
         res[ok] = self.grid[ij[ok, 1], ij[ok, 0]]
         return res
+
+
+def dilate(grid: np.ndarray, r: int) -> np.ndarray:
+    """Binary dilation by a (2r+1) square, separable (fast for any r)."""
+    if r <= 0:
+        return grid.copy()
+    out = grid.copy()
+    for axis in (0, 1):
+        acc = out.copy()
+        n = out.shape[axis]
+        for k in range(1, min(r, n - 1) + 1):
+            if axis == 0:
+                acc[k:, :] |= out[:-k, :]
+                acc[:-k, :] |= out[k:, :]
+            else:
+                acc[:, k:] |= out[:, :-k]
+                acc[:, :-k] |= out[:, k:]
+        out = acc
+    return out
+
+
+def erode(grid: np.ndarray, r: int) -> np.ndarray:
+    return ~dilate(~grid, r)
+
+
+def raster_lines(mask: "RegionMask", spacing: float, horizontal: bool, offset: float = 0.0,
+                 min_length: float = 0.0, inset: float = 0.0) -> np.ndarray:
+    """Parallel lines (along X if ``horizontal`` else along Y) covering the True cells.
+
+    Returns segments (n, 2, 2).  Lines are ``spacing`` apart, shifted by ``offset``.
+    """
+    g = mask.grid
+    res = mask.res
+    lo = mask.lo
+    if not g.any() or spacing <= 0:
+        return np.zeros((0, 2, 2))
+    if not horizontal:
+        g = g.T
+    n_rows = g.shape[0]
+    a0 = lo[1] if horizontal else lo[0]          # coordinate across the lines
+    b0 = lo[0] if horizontal else lo[1]          # coordinate along the lines
+    start = a0 + ((offset - a0) % spacing)
+    out = []
+    pos = start
+    a_max = a0 + n_rows * res
+    while pos < a_max:
+        j = int((pos - a0) / res)
+        if 0 <= j < n_rows:
+            row = g[j]
+            if row.any():
+                d = np.diff(np.concatenate([[0], row.view(np.int8), [0]]))
+                s_idx = np.nonzero(d == 1)[0]
+                e_idx = np.nonzero(d == -1)[0]
+                for s, e in zip(s_idx, e_idx):
+                    b_s = b0 + s * res + inset
+                    b_e = b0 + e * res - inset
+                    if b_e - b_s > max(min_length, 1e-6):
+                        if horizontal:
+                            out.append(((b_s, pos), (b_e, pos)))
+                        else:
+                            out.append(((pos, b_s), (pos, b_e)))
+        pos += spacing
+    if not out:
+        return np.zeros((0, 2, 2))
+    return np.array(out, float)
 
 
 def _norm_left(edge):

@@ -23,17 +23,30 @@ def load_mesh(path: str):
 
 def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = None,
               nozzle: Optional[Profile] = None, tools: Optional[list] = None,
-              mesh=None, model_path: Optional[str] = None, settings: Optional[dict] = None) -> Job:
+              mesh=None, model_path: Optional[str] = None, settings: Optional[dict] = None,
+              placement=None) -> Job:
     workflow = wf.normalize(workflow)
     if machine.workflow != workflow:
         raise ValueError(f"machine '{machine.name}' is a {machine.workflow} machine, not {workflow}")
     return Job(workflow=workflow, machine=machine, material=material, nozzle=nozzle,
                tools=list(tools or []), mesh=mesh, model_path=model_path,
-               settings=dict(settings or {}))
+               settings=dict(settings or {}), placement=placement)
+
+
+def place_mesh(job: Job) -> None:
+    """Apply the job's placement to its mesh (default: centred on the bed for FDM,
+    original XY for CAM; always dropped onto Z0)."""
+    from .placement import Placement, bed_xy
+    if job.mesh is None:
+        return
+    pl = job.placement or Placement()
+    auto = bed_xy(job.machine, job.workflow) if job.workflow == wf.FDM else None
+    job.mesh = pl.apply(job.mesh, auto_xy=auto)
 
 
 def slice_job(job: Job, pipeline: Optional[SlicePipeline] = None,
               log: Optional[Callable[[str], None]] = None,
               progress: Optional[Callable[[float], None]] = None) -> PipelineResult:
     pipeline = pipeline or SlicePipeline.default(job.workflow)
+    place_mesh(job)
     return pipeline.run(job, log=log, progress=progress)

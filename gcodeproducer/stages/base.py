@@ -71,7 +71,13 @@ class SliceStage:
         return {p.name: p.default for p in cls.parameters()}
 
     @classmethod
-    def resolve(cls, values: Optional[dict]) -> dict:
+    def resolve(cls, values: Optional[dict], strict: bool = False) -> dict:
+        """Fill defaults / coerce.  Unknown keys (e.g. settings removed from a stage but
+        still present in an older saved process) are ignored unless ``strict``."""
+        values = dict(values or {})
+        if not strict:
+            known = {p.name for p in cls.parameters()}
+            values = {k: v for k, v in values.items() if k in known}
         return resolve_params(cls.parameters(), values)
 
     @classmethod

@@ -60,7 +60,9 @@ def test_old_pipeline_upgraded_with_disabled_stage():
                                         ("fdm_slice", "fdm_perimeters", "fdm_infill", "fdm_emit")]}
     p = SlicePipeline.from_dict(old).ensure_defaults()
     ids = [s.stage for s in p.steps]
-    assert ids == ["fdm_slice", "fdm_skirt_brim", "fdm_perimeters", "fdm_top_bottom", "fdm_infill", "fdm_emit"]
+    assert ids == ["fdm_slice", "fdm_skirt_brim", "fdm_support", "fdm_perimeters", "fdm_top_bottom",
+                   "fdm_infill", "fdm_emit"]
+    assert not p.step("fdm_support").enabled
     assert not p.step("fdm_skirt_brim").enabled
     assert p.step("fdm_slice").enabled
 

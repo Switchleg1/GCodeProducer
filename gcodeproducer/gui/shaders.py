@@ -153,3 +153,47 @@ uniform vec4 uColor;
 out vec4 frag;
 void main() { frag = uColor; }
 """
+
+# ---------------------------------------------------------------- model (placement view)
+MESH_VS = """
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aColor;
+uniform mat4 uMVP;
+out vec3 vWorld;
+out vec3 vNormal;
+out vec4 vColor;
+void main() {
+    vWorld = aPos;
+    vNormal = aNormal;
+    vColor = aColor;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+"""
+
+MESH_FS = """
+#version 330 core
+in vec3 vWorld;
+in vec3 vNormal;
+in vec4 vColor;
+uniform vec3 uEye;
+uniform vec3 uViewDir;
+uniform int uOrtho;
+uniform float uHighlight;
+uniform vec3 uKey;          // key light direction (towards the light), camera relative
+out vec4 frag;
+void main() {
+    vec3 n = normalize(vNormal);
+    vec3 V = (uOrtho == 1) ? -uViewDir : normalize(uEye - vWorld);
+    if (dot(n, V) < 0.0) n = -n;                 // two sided
+    float key = max(dot(n, uKey), 0.0);
+    float fill = max(dot(n, V), 0.0);
+    float diff = 0.18 + 0.55 * key + 0.27 * fill;
+    vec3 h = normalize(uKey + V);
+    float spec = pow(max(dot(n, h), 0.0), 48.0) * 0.20;
+    vec3 c = vColor.rgb * diff + vec3(spec);
+    c = mix(c, vec3(1.0), uHighlight);
+    frag = vec4(c, vColor.a);
+}
+"""

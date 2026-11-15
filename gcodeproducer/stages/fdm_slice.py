@@ -9,7 +9,7 @@ from .base import AUTO, FDM, Param, SliceStage
 class FDMSlice(SliceStage):
     id = "fdm_slice"
     name = "Layers"
-    description = "Layer height and part placement; slices the mesh into layer contours."
+    description = "Layer height; slices the placed model into layer contours."
     workflows = (FDM,)
     optional = False
     category = "Layers"
@@ -19,8 +19,6 @@ class FDMSlice(SliceStage):
         Param("first_layer_height", "float", AUTO, unit="mm", min=0.01, max=2.0, step=0.02,
               allow_auto=True, hint=0.25, group="Layer height",
               help="auto = same as the layer height."),
-        Param("center_on_bed", "bool", True, group="Placement",
-              help="Centre the part on the bed and drop it to Z0."),
     ]
 
     def run(self, job, params, ctx):
@@ -34,13 +32,6 @@ class FDMSlice(SliceStage):
         flh = lh if flh == AUTO else float(flh)
         job.settings["layer_height"] = lh
         job.settings["first_layer_height"] = flh
-
-        if params["center_on_bed"]:
-            if job.m("origin_center"):
-                cx = cy = 0.0
-            else:
-                cx, cy = job.m("bed_x", 220) / 2, job.m("bed_y", 220) / 2
-            mesh.center_xy_on(cx, cy)
 
         lo, hi = mesh.bounds
         top = float(hi[2])

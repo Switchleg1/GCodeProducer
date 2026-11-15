@@ -66,14 +66,24 @@ versa.
 
 | Workflow | Default stages                                                                     |
 |----------|------------------------------------------------------------------------------------|
-| FDM      | `fdm_slice` → `fdm_skirt_brim` → `fdm_perimeters` → `fdm_top_bottom` → `fdm_infill` → `fdm_emit` |
+| FDM      | `fdm_slice` → `fdm_skirt_brim` → `fdm_support` (off by default) → `fdm_perimeters` → `fdm_top_bottom` → `fdm_infill` → `fdm_emit` |
 | CAM      | `cam_profile` → `cam_emit`                                                          |
 
-- **`fdm_slice`** — positions the mesh on the bed and intersects it into
-  per-layer closed contours.
+- **`fdm_slice`**: slices the *placed* mesh into per-layer closed contours.
+  Placement (position, rotation, scale, drop to bed) belongs to the model, not
+  the process. It is applied just before the pipeline runs (the CLI default
+  is the bed centre).
 - **`fdm_skirt_brim`**: skirt around the first-layer convex hull (distance,
   loops, number of layers) and / or a brim attached to the part outline (width,
   gap). Holes are not brimmed.
+- **`fdm_support`**: automatic support. On a raster shared by all layers,
+  a cell of layer *i* is an overhang when it lies more than
+  `layer_height × tan(overhang_angle)` beyond layer *i-1*. Columns grow
+  down from the overhangs, leave a Z gap under the part, and stay
+  `xy_distance` away from the model. *Touching build plate* keeps only columns
+  with no model underneath. *Everywhere* lets them stand on the model (with a
+  one-layer gap). The top `interface_layers` are printed denser as
+  `support_interface`.
 - **`fdm_perimeters`** — offsets each contour inward into wall loops
   (outer + inner). The innermost loop bounds the infill region.
 - **`fdm_top_bottom`** — top / bottom **solid** surfaces. A cell is sparse only
@@ -101,7 +111,9 @@ pip install -e .
 
 ## GUI
 
-![GCodeProducer](docs/screenshot.jpg)
+| Prepare: place the model | Preview: the sliced tool path |
+|---|---|
+| ![Prepare](docs/prepare.jpg) | ![Preview](docs/preview.jpg) |
 
 ```bash
 python -m gcodeproducer gui                    # start the GUI
@@ -109,8 +121,21 @@ python -m gcodeproducer gui part.stl           # start and import a model
 ```
 
 On Windows you can double-click `GCodeProducer.bat`. The layout follows
-GCodeTools: a toolbar, a **Prepare** dock on the left, the 3D viewer in the
-centre, and **View / G-code / Statistics / Log** docks on the right. Docks can
+GCodeTools: a toolbar, a **Prepare** dock on the left, the 3D area in the
+centre, and **View / G-code / Statistics / Log** docks on the right.
+
+The 3D area has **two views** (switch with the buttons above it, the toolbar,
+or Ctrl+1 / Ctrl+2). Both use the same camera:
+
+- **Prepare** shows the build plate and the model. Drag the model to move it
+  across the bed. Drag elsewhere to orbit, right-drag to pan and use the wheel
+  to zoom. Overhangs that need support are tinted red. A model outside the
+  build volume turns orange and a warning appears. Seen from below, the bed
+  turns see-through so you can inspect the underside.
+- **Preview** shows the sliced tool path. Slicing switches to it automatically.
+  Changing the model, its placement, the process, the machine or the
+  consumables marks the preview *out of date* until you slice again. Editing
+  the placement switches back to Prepare. Docks can
 be moved, floated and hidden (View menu); the layout, last machine,
 consumables, process and recent models are remembered.
 
@@ -120,7 +145,21 @@ consumables, process and recent models are remembered.
    allows (material + nozzle, or tool). The ✎ buttons open the library
    editor on that profile.
 2. **Model**: import an STL (or drop it on the window). Recent models are under
-   *File → Recent models*.
+   *File → Recent models*. Placement:
+   - **Position X / Y**: the centre of the model on the bed (*Center* puts it
+     back in the middle). You can also drag the model in the Prepare view.
+   - **Rotate X / Y / Z**: type an angle, or use ↺ 90 / ↻ 90 to turn it about a
+     world axis.
+   - **Scale** in %, with the resulting size shown next to it.
+   - **Lay flat** rests the largest flat face on the bed. **Place on face**:
+     click it, then click any face of the model and that face goes down.
+     **Reset** clears rotation and scale and re-centres the model.
+   - **Support**: *None*, *Touching build plate* or *Everywhere*, plus the
+     overhang angle; *Show* tints overhangs red. This is the same setting as
+     the process's *Support* section, so it is saved with the process.
+
+   The model always rests on the bed (Z0). Each model's placement is
+   remembered, so re-opening the file restores it.
 3. **Process**: the *workflow options*, i.e. everything that is **not** machine,
    material or nozzle specific. Pick a saved process from the list and edit it
    in collapsible sections, each showing a summary when closed:
@@ -129,6 +168,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
+   | Support             | build plate / everywhere, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |
@@ -175,6 +215,10 @@ python -m gcodeproducer slice part.stl -w fdm -o part.gcode \
     -m "fdm_top_bottom:top_layers=5,bottom_layers=4" \
     -m "fdm_infill:density=25,pattern=cubic"
 
+# placement and support from the command line (-m on a stage also switches it on)
+python -m gcodeproducer slice bracket.stl -o bracket.gcode --rotate-x 90 --x 80 --y 100 \
+    --lay-flat -m "fdm_support:placement=everywhere,overhang_angle=45"
+
 # machining
 python -m gcodeproducer slice part.stl -w cam -o part.nc \
     --machine "Generic 300 Router" --tool "6 mm flat endmill" \
@@ -208,15 +252,17 @@ class Brim(SliceStage):
 ```
 gcodeproducer/
   core/        gcode model + emitter (builder.py), geometry kernel (slicing,
-               polygon offset, RegionMask), state simulation, toolpath/features
+               polygon offset, RegionMask, raster helpers), model placement
+               (placement.py), state simulation, toolpath/features
                (shared with GCodeTools), the profile/library system
                (profiles.py), process presets (process.py), job model, stage
                pipeline, plugin discovery, session driver, starter profiles
   importers/   geometry importers (stl)
-  stages/      slice stages (fdm_slice/perimeters/top_bottom/infill/emit,
-               cam_profile/emit)
-  gui/         Qt6 main window, process editor (process_editor.py), library
-               editor (library_dialog.py), OpenGL viewer, widgets
+  stages/      slice stages (fdm_slice/skirt_brim/support/perimeters/top_bottom/
+               infill/emit, cam_profile/emit)
+  gui/         Qt6 main window, Prepare view (model_viewer.py), Preview view
+               (viewer.py), process editor (process_editor.py), library editor
+               (library_dialog.py), widgets
   cli.py       command-line interface
 plugins/       drop-in user stages / importers
 examples/      sample model (cube20.stl)

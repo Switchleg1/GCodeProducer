@@ -20,6 +20,8 @@ _FEATURE_SPEED = {
     "infill": "infill_speed",
     "solid_infill": "solid_infill_speed",
     "top_infill": "solid_infill_speed",
+    "support": "support_speed",
+    "support_interface": "support_speed",
 }
 
 

@@ -1,0 +1,393 @@
+"""Placement view: the build plate with the (placed) model on it.
+
+* left-drag on the model moves it across the bed (the GUI updates the placement)
+* *place on face* mode: click a face and it is rotated onto the bed
+* left-drag elsewhere orbits, right / middle drag pans, wheel zooms (same camera
+  as the sliced preview, so switching views keeps the viewpoint)
+* overhangs that need support are tinted red, a model outside the build volume
+  is tinted orange
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+from OpenGL import GL
+from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtGui import QCursor
+from PyQt6.QtOpenGLWidgets import QOpenGLWidget
+from PyQt6.QtWidgets import QLabel
+
+from ..core.placement import face_normals, overhang_faces
+from . import shaders
+from .camera import Camera, perspective
+from .viewer import _compile, _Mesh, default_surface_format
+
+MODEL_COLOR = (0.30, 0.58, 0.92)
+OVERHANG_COLOR = (0.92, 0.30, 0.26)
+OUTSIDE_COLOR = (0.95, 0.62, 0.20)
+
+
+class _TriMesh:
+    """VAO with position(3) + normal(3) + colour(4)."""
+
+    def __init__(self):
+        import ctypes
+        self.vao = GL.glGenVertexArrays(1)
+        self.vbos = list(np.atleast_1d(GL.glGenBuffers(3)))
+        self.count = 0
+        GL.glBindVertexArray(self.vao)
+        for loc, (vbo, size) in enumerate(zip(self.vbos, (3, 3, 4))):
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, 16, None, GL.GL_STATIC_DRAW)
+            GL.glEnableVertexAttribArray(loc)
+            GL.glVertexAttribPointer(loc, size, GL.GL_FLOAT, GL.GL_FALSE, 0, ctypes.c_void_p(0))
+        GL.glBindVertexArray(0)
+
+    def upload(self, pos, normal, color):
+        self.count = len(pos)
+        for vbo, arr in zip(self.vbos, (pos, normal, color)):
+            arr = np.ascontiguousarray(arr, np.float32)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, max(arr.nbytes, 16), arr if arr.nbytes else None,
+                            GL.GL_DYNAMIC_DRAW)
+
+    def upload_color(self, color):
+        arr = np.ascontiguousarray(color, np.float32)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbos[2])
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, max(arr.nbytes, 16), arr if arr.nbytes else None, GL.GL_DYNAMIC_DRAW)
+
+    def draw(self):
+        if self.count:
+            GL.glBindVertexArray(self.vao)
+            GL.glDrawArrays(GL.GL_TRIANGLES, 0, self.count)
+
+
+def ray_triangles(origin, direction, tris: np.ndarray):
+    """Möller-Trumbore against all triangles (m,3,3). Returns (t, index) of the nearest hit or (inf, -1)."""
+    if tris is None or len(tris) == 0:
+        return math.inf, -1
+    v0, v1, v2 = tris[:, 0], tris[:, 1], tris[:, 2]
+    e1, e2 = v1 - v0, v2 - v0
+    p = np.cross(direction, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+    s = origin - v0
+    u = np.einsum("ij,ij->i", s, p) * inv
+    q = np.cross(s, e1)
+    v = (q @ direction) * inv
+    t = np.einsum("ij,ij->i", e2, q) * inv
+    hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-6)
+    if not hit.any():
+        return math.inf, -1
+    t = np.where(hit, t, np.inf)
+    i = int(np.argmin(t))
+    return float(t[i]), i
+
+
+class ModelViewer(QOpenGLWidget):
+    moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
+    moveFinished = pyqtSignal()
+    faceClicked = pyqtSignal(object)          # world-space normal of the clicked face
+    glError = pyqtSignal(str)
+
+    def __init__(self, camera: Camera, parent=None):
+        super().__init__(parent)
+        self.setFormat(default_surface_format())
+        self.camera = camera
+        self.vertices = None                  # placed mesh
+        self.triangles = None
+        self.tris = None                      # (m,3,3) for picking
+        self.rect = (0.0, 0.0, 220.0, 220.0, 250.0)
+        self.overhang_angle = None            # None = do not show overhangs
+        self.inside = True
+        self.center_xy = (0.0, 0.0)
+        self.place_on_face = False
+        self._ready = False
+        self._dirty = True
+        self._drag = None                     # (plane z, start point, start centre)
+        self._last = QPoint()
+        self._buttons = Qt.MouseButton.NoButton
+        self._highlight = False
+        self.setMinimumSize(200, 150)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
+        self.info = QLabel("", self)
+        self.info.setStyleSheet("color:#ddd;background:rgba(0,0,0,120);padding:3px 8px;border-radius:3px;")
+        self.info.move(8, 8)
+        self.warn = QLabel("", self)
+        self.warn.setStyleSheet("color:#111;background:rgba(245,160,50,230);padding:3px 8px;border-radius:3px;")
+        self.warn.setVisible(False)
+        camera.changed.connect(self.update)
+        self._update_info()
+
+    # ----------------------------------------------------------------- API
+    def set_scene(self, mesh, rect, center_xy, overhang_angle=None, inside=True):
+        self.vertices = None if mesh is None else np.asarray(mesh.vertices, np.float64)
+        self.triangles = None if mesh is None else np.asarray(mesh.triangles)
+        self.tris = None if mesh is None else self.vertices[self.triangles]
+        self.rect = rect
+        self.center_xy = center_xy
+        self.overhang_angle = overhang_angle
+        self.inside = inside
+        self._dirty = True
+        self._update_info()
+        self.update()
+
+    def set_place_on_face(self, on: bool):
+        self.place_on_face = on
+        self.setCursor(Qt.CursorShape.CrossCursor if on else Qt.CursorShape.ArrowCursor)
+        self._update_info()
+
+    def fit(self, whole_bed: bool = False):
+        """Frame the model with some bed around it (or the whole bed)."""
+        x0, y0, x1, y1, h = self.rect
+        if self.vertices is not None and len(self.vertices) and not whole_bed:
+            lo, hi = self.vertices.min(axis=0), self.vertices.max(axis=0)
+            pad = max(float(np.max(hi - lo)) * 0.6, 25.0)
+            lo = np.array([lo[0] - pad, lo[1] - pad, 0.0])
+            hi = np.array([hi[0] + pad, hi[1] + pad, hi[2]])
+        else:
+            lo, hi = np.array([x0, y0, 0.0]), np.array([x1, y1, min(h, 50.0)])
+        self.camera.fit(lo, hi)
+
+    def _update_info(self):
+        if self.vertices is None:
+            txt = "Import a model (Ctrl+O) or drop an STL here"
+        elif self.place_on_face:
+            txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
+        else:
+            txt = "Drag the model to move it  \u2022  drag elsewhere to orbit, right-drag to pan"
+        self.info.setText(txt)
+        self.info.adjustSize()
+        out = self.vertices is not None and not self.inside
+        self.warn.setText("Model is outside the build volume")
+        self.warn.adjustSize()
+        self.warn.move(8, 8 + self.info.height() + 6)
+        self.warn.setVisible(out)
+
+    # ---------------------------------------------------------------- GL
+    def initializeGL(self):
+        try:
+            self.p_mesh = _compile({GL.GL_VERTEX_SHADER: shaders.MESH_VS, GL.GL_FRAGMENT_SHADER: shaders.MESH_FS})
+            self.p_flat = _compile({GL.GL_VERTEX_SHADER: shaders.FLAT_VS, GL.GL_FRAGMENT_SHADER: shaders.FLAT_FS})
+        except Exception as exc:  # pragma: no cover
+            self.glError.emit(f"OpenGL shader error: {exc}")
+            return
+        self.m_model = _TriMesh()
+        self.m_bed = _Mesh(False)
+        self.m_grid = _Mesh(False)
+        self.m_outline = _Mesh(False)
+        self.m_volume = _Mesh(False)
+        self.m_axes = _Mesh(False)
+        self.m_axes.upload(np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]], np.float32))
+        GL.glEnable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_MULTISAMPLE)
+        self._ready = True
+        self._dirty = True
+
+    def _upload(self):
+        self._dirty = False
+        x0, y0, x1, y1, h = self.rect
+        self.m_bed.upload(np.array([[x0, y0, -0.02], [x1, y0, -0.02], [x1, y1, -0.02], [x0, y1, -0.02]], np.float32))
+        self.m_outline.upload(np.array([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]], np.float32))
+        step = 10.0 if max(x1 - x0, y1 - y0) <= 600 else 50.0
+        pts = []
+        for x in np.arange(math.ceil(x0 / step) * step, x1 + 1e-6, step):
+            pts += [(x, y0, 0), (x, y1, 0)]
+        for y in np.arange(math.ceil(y0 / step) * step, y1 + 1e-6, step):
+            pts += [(x0, y, 0), (x1, y, 0)]
+        self.m_grid.upload(np.array(pts, np.float32))
+        c = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        vol = []
+        for i in range(4):
+            a, b = c[i], c[(i + 1) % 4]
+            vol += [(a[0], a[1], h), (b[0], b[1], h), (a[0], a[1], 0), (a[0], a[1], h)]
+        self.m_volume.upload(np.array(vol, np.float32))
+        if self.vertices is None:
+            self.m_model.count = 0
+            return
+        n, _ = face_normals(self.vertices, self.triangles)
+        pos = self.tris.reshape(-1, 3)
+        nrm = np.repeat(n, 3, axis=0)
+        self.m_model.upload(pos, nrm, self._colors())
+
+    def _colors(self):
+        m = len(self.triangles)
+        col = np.empty((m, 4), np.float32)
+        col[:, :3] = MODEL_COLOR if self.inside else OUTSIDE_COLOR
+        col[:, 3] = 1.0
+        if self.overhang_angle is not None:
+            col[overhang_faces(self.vertices, self.triangles, self.overhang_angle), :3] = OVERHANG_COLOR
+        return np.repeat(col, 3, axis=0)
+
+    def paintGL(self):
+        GL.glClearColor(0.13, 0.14, 0.16, 1.0)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        if not self._ready:
+            return
+        if self._dirty:
+            self._upload()
+        dpr = self.devicePixelRatioF()
+        w, h = int(self.width() * dpr), int(self.height() * dpr)
+        GL.glViewport(0, 0, w, h)
+        cam = self.camera
+        mvp = (cam.proj_matrix(w / max(h, 1)) @ cam.view_matrix()).astype(np.float32)
+
+        below = cam.eye()[2] < 0.0          # looking from under the bed: make it see-through
+        if not below:
+            self._draw_bed(mvp, 1.0)
+        self._draw_lines(mvp)
+        if self.m_model.count:
+            p = self.p_mesh
+            GL.glUseProgram(p)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(p, "uMVP"), 1, GL.GL_TRUE, mvp)
+            GL.glUniform3fv(GL.glGetUniformLocation(p, "uEye"), 1, cam.eye().astype(np.float32))
+            GL.glUniform3fv(GL.glGetUniformLocation(p, "uViewDir"), 1, cam.view_dir().astype(np.float32))
+            GL.glUniform1i(GL.glGetUniformLocation(p, "uOrtho"), int(cam.ortho))
+            GL.glUniform1f(GL.glGetUniformLocation(p, "uHighlight"), 0.12 if self._highlight else 0.0)
+            vm = cam.view_matrix()
+            right, up, back = vm[0, :3], vm[1, :3], vm[2, :3]
+            key = -0.45 * right + 0.75 * up + 0.50 * back      # upper left, in front
+            key = (key / np.linalg.norm(key)).astype(np.float32)
+            GL.glUniform3fv(GL.glGetUniformLocation(p, "uKey"), 1, key)
+            self.m_model.draw()
+        if below:
+            self._draw_bed(mvp, 0.45)
+        self._draw_axes(w, h)
+        GL.glBindVertexArray(0)
+        GL.glUseProgram(0)
+
+    def _draw_bed(self, mvp, alpha):
+        GL.glUseProgram(self.p_flat)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+        ucol = GL.glGetUniformLocation(self.p_flat, "uColor")
+        if alpha < 1.0:
+            GL.glEnable(GL.GL_BLEND)
+            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+            GL.glDepthMask(GL.GL_FALSE)
+        GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
+        GL.glPolygonOffset(1.0, 1.0)
+        GL.glUniform4f(ucol, 0.19, 0.20, 0.23, alpha)
+        self.m_bed.draw(GL.GL_TRIANGLE_FAN)
+        GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glDisable(GL.GL_BLEND)
+
+    def _draw_lines(self, mvp):
+        GL.glUseProgram(self.p_flat)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+        ucol = GL.glGetUniformLocation(self.p_flat, "uColor")
+        GL.glUniform4f(ucol, 0.29, 0.30, 0.34, 1.0)
+        self.m_grid.draw(GL.GL_LINES)
+        GL.glUniform4f(ucol, 0.55, 0.57, 0.62, 1.0)
+        self.m_outline.draw(GL.GL_LINE_LOOP)
+        GL.glUniform4f(ucol, 0.33, 0.35, 0.40, 1.0)
+        self.m_volume.draw(GL.GL_LINES)
+
+    def _draw_axes(self, w, h):
+        size = int(90 * self.devicePixelRatioF())
+        GL.glViewport(0, 0, size, size)
+        GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
+        v = self.camera.view_matrix().copy()
+        v[:3, 3] = (0, 0, -3.0)
+        mvp = (perspective(30, 1.0, 0.1, 10) @ v).astype(np.float32)
+        GL.glUseProgram(self.p_flat)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+        GL.glBindVertexArray(self.m_axes.vao)
+        for k, col in enumerate(((1, 0.3, 0.3), (0.3, 1, 0.3), (0.4, 0.5, 1))):
+            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *col, 1.0)
+            GL.glDrawArrays(GL.GL_LINES, k * 2, 2)
+        GL.glViewport(0, 0, w, h)
+
+    # ------------------------------------------------------------- picking
+    def ray(self, mx: float, my: float):
+        w, h = max(1, self.width()), max(1, self.height())
+        m = (self.camera.proj_matrix(w / h) @ self.camera.view_matrix()).astype(np.float64)
+        inv = np.linalg.inv(m)
+        x, y = 2.0 * mx / w - 1.0, 1.0 - 2.0 * my / h
+        a = inv @ np.array([x, y, -1.0, 1.0])
+        b = inv @ np.array([x, y, 1.0, 1.0])
+        a, b = a[:3] / a[3], b[:3] / b[3]
+        d = b - a
+        return a, d / np.linalg.norm(d)
+
+    def pick(self, mx, my):
+        """(point, triangle index) of the model under the mouse, or (None, -1)."""
+        if self.tris is None:
+            return None, -1
+        o, d = self.ray(mx, my)
+        t, i = ray_triangles(o, d, self.tris)
+        if i < 0:
+            return None, -1
+        return o + d * t, i
+
+    def _plane_point(self, mx, my, z):
+        o, d = self.ray(mx, my)
+        if abs(d[2]) < 1e-9:
+            return None
+        t = (z - o[2]) / d[2]
+        return None if t < 0 else o + d * t
+
+    # --------------------------------------------------------------- mouse
+    def mousePressEvent(self, ev):
+        self._last = ev.position().toPoint()
+        self._buttons = ev.buttons()
+        if ev.button() != Qt.MouseButton.LeftButton or ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            return
+        pt, tri = self.pick(ev.position().x(), ev.position().y())
+        if tri < 0:
+            return
+        if self.place_on_face:
+            n, _ = face_normals(self.vertices, self.triangles[tri:tri + 1])
+            self.faceClicked.emit(n[0])
+            return
+        self._drag = (float(pt[2]), pt, tuple(self.center_xy))
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def mouseMoveEvent(self, ev):
+        pos = ev.position().toPoint()
+        if self._drag is not None:
+            z, start, (cx, cy) = self._drag
+            p = self._plane_point(ev.position().x(), ev.position().y(), z)
+            if p is not None:
+                self.moved.emit(cx + p[0] - start[0], cy + p[1] - start[1])
+            self._last = pos
+            return
+        dx, dy = pos.x() - self._last.x(), pos.y() - self._last.y()
+        self._last = pos
+        b = ev.buttons()
+        if b & Qt.MouseButton.LeftButton and not (ev.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.camera.orbit(dx, dy)
+        elif b & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton) or \
+                (b & Qt.MouseButton.LeftButton and ev.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.camera.pan(dx, dy, self.height())
+        elif not b and self.tris is not None:
+            over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
+            if over != self._highlight:
+                self._highlight = over
+                if not self.place_on_face:
+                    self.setCursor(Qt.CursorShape.OpenHandCursor if over else Qt.CursorShape.ArrowCursor)
+                self.update()
+
+    def mouseReleaseEvent(self, ev):
+        if self._drag is not None:
+            self._drag = None
+            self.setCursor(Qt.CursorShape.OpenHandCursor if self._highlight else Qt.CursorShape.ArrowCursor)
+            self.moveFinished.emit()
+
+    def wheelEvent(self, ev):
+        self.camera.zoom(ev.angleDelta().y() / 120.0)
+
+    def keyPressEvent(self, ev):
+        k = ev.key()
+        views = {Qt.Key.Key_1: "iso", Qt.Key.Key_2: "top", Qt.Key.Key_3: "front", Qt.Key.Key_4: "right"}
+        if k == Qt.Key.Key_F:
+            self.fit()
+        elif k in views:
+            self.camera.set_view(views[k])
+        elif k == Qt.Key.Key_Escape and self.place_on_face:
+            self.faceClicked.emit(None)
+        else:
+            super().keyPressEvent(ev)

@@ -63,6 +63,9 @@ def summary(step: Step) -> str:
         if t in ("brim", "both"):
             parts.append(f"brim {g('brim_width'):g} mm")
         return ", ".join(parts)
+    if sid == "fdm_support":
+        where = "everywhere" if g("placement") == "everywhere" else "build plate"
+        return f"{where}, {g('overhang_angle'):g}°, {g('density'):g}%"
     if sid == "fdm_emit":
         return "retract on travel" if g("retract") else "no retraction"
     if sid == "cam_profile":

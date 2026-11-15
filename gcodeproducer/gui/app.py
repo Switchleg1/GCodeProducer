@@ -26,6 +26,10 @@ def apply_theme(app) -> None:
         "QToolButton#sectionHeader:hover { background: #454952; }"
         "QToolButton#sectionHeader:checked { background: #34557f; color: white; }"
         "QFrame#sectionBody { background: #2b2d32; border-radius: 3px; }"
+        "QToolButton#modeButton { background: #34373d; border: 1px solid #44474e; padding: 5px 14px;"
+        "  font-weight: bold; color: #ccd; }"
+        "QToolButton#modeButton:checked { background: #3c78c8; color: white; border-color: #3c78c8; }"
+        "QToolButton#modeButton:disabled { color: #666; }"
         "QGroupBox { font-weight: bold; } QGroupBox QWidget { font-weight: normal; }")
 
 

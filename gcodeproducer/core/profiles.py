@@ -87,6 +87,7 @@ def _machine_schema(workflow: str) -> list:
         Param("infill_speed", "float", 60.0, unit="mm/s", group="Speeds"),
         Param("solid_infill_speed", "float", 40.0, unit="mm/s", group="Speeds",
               help="Top / bottom solid surfaces."),
+        Param("support_speed", "float", 50.0, unit="mm/s", group="Speeds"),
         Param("first_layer_speed", "float", 20.0, unit="mm/s", group="Speeds"),
         Param("z_speed", "float", 10.0, unit="mm/s", group="Speeds"),
         Param("acceleration", "float", 2000.0, unit="mm/s\u00b2", group="Motion", allow_auto=True),

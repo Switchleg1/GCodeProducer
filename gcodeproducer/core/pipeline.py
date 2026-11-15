@@ -47,10 +47,13 @@ class PipelineResult:
 
 #: default stage order for each workflow (ids must exist once stages are loaded)
 DEFAULT_PIPELINES = {
-    wf.FDM: ["fdm_slice", "fdm_skirt_brim", "fdm_perimeters", "fdm_top_bottom", "fdm_infill",
-             "fdm_emit"],
+    wf.FDM: ["fdm_slice", "fdm_skirt_brim", "fdm_support", "fdm_perimeters", "fdm_top_bottom",
+             "fdm_infill", "fdm_emit"],
     wf.CAM: ["cam_profile", "cam_emit"],
 }
+
+#: optional stages that are part of the default pipeline but start switched off
+DEFAULT_DISABLED = {"fdm_support"}
 
 
 class SlicePipeline:
@@ -61,7 +64,7 @@ class SlicePipeline:
     @classmethod
     def default(cls, workflow: str) -> "SlicePipeline":
         workflow = wf.normalize(workflow)
-        steps = [Step(sid) for sid in DEFAULT_PIPELINES.get(workflow, [])]
+        steps = [Step(sid, enabled=sid not in DEFAULT_DISABLED) for sid in DEFAULT_PIPELINES.get(workflow, [])]
         return cls(workflow, steps)
 
     # ------------------------------------------------------------- persist

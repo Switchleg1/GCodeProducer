@@ -44,6 +44,7 @@ class Job:
     nozzle: Optional[Profile] = None
     tools: list = field(default_factory=list)       # CAM: list[Profile]
     mesh: object = None                              # imported geometry
+    placement: object = None                         # core.placement.Placement (None = default)
     model_path: Optional[str] = None
     settings: dict = field(default_factory=dict)    # resolved per-job overrides
     layers: list = field(default_factory=list)      # list[Layer]

@@ -2,16 +2,19 @@
 
 Layout follows GCodeTools:
 
-* toolbar             import / slice / save, camera views
-* left dock  Prepare  Setup (workflow, machine, consumables) -> Model -> Process
-                      (load / save / edit the workflow options) -> Slice
-* centre              3D viewer, vertical layer slider, position-in-layer slider
+* toolbar             import / slice / save, Prepare / Preview switch, camera views
+* left dock  Prepare  Setup (workflow, machine, consumables) -> Model (placement,
+                      support) -> Process (load / save / edit the workflow options) -> Slice
+* centre              two views sharing one camera:
+                      Prepare - the build plate with the model to place
+                      Preview - the sliced tool path, layer slider, in-layer slider
 * right docks         View (colours, visibility, features, camera) and tabbed
                       G-code / Statistics / Log
 """
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import time
@@ -19,12 +22,12 @@ from pathlib import Path
 
 import numpy as np
 from PyQt6.QtCore import QSettings, Qt, QTimer
-from PyQt6.QtGui import QAction, QColor, QIcon, QKeySequence, QPixmap, QShortcut
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QFileDialog, QFormLayout, QGroupBox,
-                             QHBoxLayout, QInputDialog, QLabel, QListWidget, QListWidgetItem, QMainWindow,
-                             QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSlider,
-                             QTableWidget, QTableWidgetItem, QTabWidget, QToolBar, QToolButton, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPixmap, QShortcut
+from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
+                             QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QListWidget,
+                             QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
+                             QPushButton, QSizePolicy, QSlider, QStackedWidget, QTableWidget, QTableWidgetItem,
+                             QToolBar, QToolButton, QVBoxLayout, QWidget)
 
 from .. import __version__
 from ..core import defaults, plugins
@@ -32,12 +35,14 @@ from ..core import workflow as wf
 from ..core.features import feature_color, feature_label
 from ..core.geometry import Mesh
 from ..core.pipeline import SlicePipeline
+from ..core.placement import Placement, bed_rect, bed_xy, fits
 from ..core.process import ProcessPreset
 from ..core.profiles import LibrarySet
 from ..core.session import build_job, find_importer, load_mesh, slice_job
 from ..core.toolpath import SOLID_KINDS, build_toolpath, format_duration
 from .camera import Camera
 from .library_dialog import LibraryDialog
+from .model_viewer import ModelViewer
 from .process_editor import PipelineDialog, ProcessEditor
 from .view_state import COLOR_MODES, ViewState
 from .viewer import GCodeViewer
@@ -62,6 +67,10 @@ class MainWindow(QMainWindow):
         self.dirty = {w: False for w in wf.ALL}
         self.mesh = None
         self.model_path = None
+        self.placement = Placement()
+        self.placed = None              # placement applied to the mesh (what gets sliced)
+        self.mode = "prepare"
+        self.stale = False              # preview no longer matches model / settings
         self.program = None
         self.tp = None
         self._fitted_for = None
@@ -94,6 +103,42 @@ class MainWindow(QMainWindow):
     # UI construction
     # ======================================================================
     def _build_central(self):
+        # ---- mode switch (shared actions: toolbar, View menu, Ctrl+1 / Ctrl+2)
+        self.act_prepare = QAction("Prepare", self)
+        self.act_prepare.setToolTip("Place the model: position, rotation, scale, support (Ctrl+1)")
+        self.act_prepare.setShortcut(QKeySequence("Ctrl+1"))
+        self.act_preview = QAction("Preview", self)
+        self.act_preview.setToolTip("The sliced tool path (Ctrl+2)")
+        self.act_preview.setShortcut(QKeySequence("Ctrl+2"))
+        grp = QActionGroup(self)
+        for a, mode in ((self.act_prepare, "prepare"), (self.act_preview, "preview")):
+            a.setCheckable(True)
+            grp.addAction(a)
+            a.triggered.connect(lambda _=False, m=mode: self.set_mode(m))
+        self.act_prepare.setChecked(True)
+        bar = QHBoxLayout()
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(0)
+        for a in (self.act_prepare, self.act_preview):
+            b = QToolButton()
+            b.setDefaultAction(a)
+            b.setObjectName("modeButton")
+            b.setMinimumWidth(110)
+            bar.addWidget(b)
+        bar.addSpacing(12)
+        self.stale_lbl = QLabel("")
+        self.stale_lbl.setStyleSheet("color:#e0a030;")
+        bar.addWidget(self.stale_lbl)
+        bar.addStretch(1)
+
+        # ---- prepare page: build plate + model
+        self.model_viewer = ModelViewer(self.camera)
+        self.model_viewer.glError.connect(lambda m: (self.log(m), QMessageBox.critical(self, "OpenGL", m)))
+        self.model_viewer.moved.connect(self._on_model_dragged)
+        self.model_viewer.moveFinished.connect(self._save_placement)
+        self.model_viewer.faceClicked.connect(self._on_face_clicked)
+
+        # ---- preview page: sliced tool path
         self.viewer = GCodeViewer(self.camera, self.state, "")
         self.viewer.glError.connect(lambda m: (self.log(m), QMessageBox.critical(self, "OpenGL", m)))
         self.viewer.lineSelected.connect(self._on_viewer_pick)
@@ -122,12 +167,21 @@ class MainWindow(QMainWindow):
         bottom.addWidget(QLabel("In layer"))
         bottom.addWidget(self.line_slider, 1)
         bottom.addWidget(self.single_layer)
+        preview = QWidget()
+        pv = QVBoxLayout(preview)
+        pv.setContentsMargins(0, 0, 0, 0)
+        pv.addLayout(top, 1)
+        pv.addLayout(bottom)
+
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.model_viewer)
+        self.stack.addWidget(preview)
 
         central = QWidget()
         v = QVBoxLayout(central)
         v.setContentsMargins(4, 4, 4, 4)
-        v.addLayout(top, 1)
-        v.addLayout(bottom)
+        v.addLayout(bar)
+        v.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
     def _dock(self, title, widget, area, name):
@@ -155,22 +209,14 @@ class MainWindow(QMainWindow):
         self.cons_rows: dict = {}      # kind -> (label, row widget, combo)
         for kind in ("material", "nozzle", "tool"):
             cb = QComboBox()
-            cb.currentIndexChanged.connect(lambda _i: self._save_selection())
+            cb.currentIndexChanged.connect(lambda _i: (self._save_selection(), self._set_stale()))
             row = self._with_edit(cb, kind)
             lab = QLabel(kind.capitalize())
             self.setup_form.addRow(lab, row)
             self.cons_rows[kind] = (lab, row, cb)
         pl.addWidget(setup)
 
-        model = QGroupBox("Model")
-        ml = QHBoxLayout(model)
-        self.lbl_model = QLabel("No model \u2014 import an STL or drop it on the window")
-        self.lbl_model.setWordWrap(True)
-        b_imp = QPushButton("Import\u2026")
-        b_imp.clicked.connect(self.import_dialog)
-        ml.addWidget(self.lbl_model, 1)
-        ml.addWidget(b_imp)
-        pl.addWidget(model)
+        pl.addWidget(self._build_model_box())
 
         proc = QGroupBox("Process")
         prl = QVBoxLayout(proc)
@@ -269,7 +315,7 @@ class MainWindow(QMainWindow):
             b.clicked.connect(lambda _=False, n=name: self.camera.set_view(n))
             ch.addWidget(b)
         bf = QPushButton("Fit")
-        bf.clicked.connect(self.viewer.fit)
+        bf.clicked.connect(self.fit_view)
         ch.addWidget(bf)
         cl.addLayout(ch)
         vl.addWidget(cam)
@@ -293,6 +339,116 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.dock_info, self.dock_log)
         self.dock_text.raise_()
 
+    def _build_model_box(self) -> QGroupBox:
+        """Model: file, placement (position / rotation / scale) and support."""
+        model = QGroupBox("Model")
+        ml = QVBoxLayout(model)
+        top = QHBoxLayout()
+        self.lbl_model = QLabel("No model \u2014 import an STL or drop it on the window")
+        self.lbl_model.setWordWrap(True)
+        b_imp = QPushButton("Import\u2026")
+        b_imp.clicked.connect(self.import_dialog)
+        top.addWidget(self.lbl_model, 1)
+        top.addWidget(b_imp, 0, Qt.AlignmentFlag.AlignTop)
+        ml.addLayout(top)
+
+        self.place_box = QWidget()
+        g = QGridLayout(self.place_box)
+        g.setContentsMargins(0, 2, 0, 0)
+        g.setHorizontalSpacing(4)
+        g.setVerticalSpacing(3)
+
+        def spin(lo, hi, dec, suffix, step=1.0):
+            sb = QDoubleSpinBox()
+            sb.setRange(lo, hi)
+            sb.setDecimals(dec)
+            sb.setSuffix(suffix)
+            sb.setSingleStep(step)
+            sb.setKeyboardTracking(False)
+            sb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            return sb
+
+        # position
+        g.addWidget(QLabel("Position"), 0, 0)
+        self.sp_x = spin(-5000, 5000, 2, " mm")
+        self.sp_y = spin(-5000, 5000, 2, " mm")
+        self.sp_x.setPrefix("X ")
+        self.sp_y.setPrefix("Y ")
+        g.addWidget(self.sp_x, 0, 1, 1, 2)
+        g.addWidget(self.sp_y, 0, 3, 1, 2)
+        b_center = QPushButton("Center")
+        b_center.setToolTip("Centre the model on the bed")
+        b_center.clicked.connect(self.center_model)
+        g.addWidget(b_center, 0, 5)
+        # rotation: value + rotate -90 / +90 about the world axis
+        self.sp_rot = {}
+        for r, axis in enumerate(("x", "y", "z"), start=1):
+            g.addWidget(QLabel(f"Rotate {axis.upper()}" if r == 1 else f"       {axis.upper()}"), r, 0)
+            sb = spin(-360, 360, 1, "\u00b0", 5.0)
+            sb.setWrapping(True)
+            self.sp_rot[axis] = sb
+            g.addWidget(sb, r, 1, 1, 3)
+            for c, d in ((4, -90), (5, 90)):
+                arrow = "\u21ba" if d < 0 else "\u21bb"
+                b = QPushButton(f"{arrow} 90")
+                b.setToolTip(f"Rotate {d:+d}\u00b0 about the {axis.upper()} axis")
+                b.clicked.connect(lambda _=False, a=axis, dd=d: self.rotate_model(a, dd))
+                g.addWidget(b, r, c)
+        # scale
+        g.addWidget(QLabel("Scale"), 4, 0)
+        self.sp_scale = spin(0.1, 100000, 1, " %", 5.0)
+        g.addWidget(self.sp_scale, 4, 1, 1, 3)
+        self.lbl_size = QLabel("")
+        self.lbl_size.setStyleSheet("color:#9aa;")
+        g.addWidget(self.lbl_size, 4, 4, 1, 2)
+        # actions
+        row = QHBoxLayout()
+        b_flat = QPushButton("Lay flat")
+        b_flat.setToolTip("Rest the largest flat face on the bed")
+        b_flat.clicked.connect(self.lay_flat)
+        self.b_face = QPushButton("Place on face")
+        self.b_face.setCheckable(True)
+        self.b_face.setToolTip("Then click a face of the model in the Prepare view")
+        self.b_face.toggled.connect(self._on_place_on_face)
+        b_reset = QPushButton("Reset")
+        b_reset.setToolTip("Reset rotation and scale and centre the model")
+        b_reset.clicked.connect(self.reset_placement)
+        for b in (b_flat, self.b_face, b_reset):
+            row.addWidget(b)
+        g.addLayout(row, 5, 0, 1, 6)
+        for sb in (self.sp_x, self.sp_y, self.sp_scale, *self.sp_rot.values()):
+            sb.valueChanged.connect(self._on_placement_spin)
+        ml.addWidget(self.place_box)
+
+        # support (FDM) - the same setting as the process' Support section
+        self.support_box = QWidget()
+        sl = QHBoxLayout(self.support_box)
+        sl.setContentsMargins(0, 4, 0, 0)
+        sl.addWidget(QLabel("Support"))
+        self.cb_support = QComboBox()
+        self.cb_support.addItem("None", "none")
+        self.cb_support.addItem("Touching build plate", "buildplate")
+        self.cb_support.addItem("Everywhere", "everywhere")
+        self.cb_support.setToolTip("Process setting (Support section)")
+        self.cb_support.currentIndexChanged.connect(self._on_support_combo)
+        sl.addWidget(self.cb_support, 1)
+        self.sp_overhang = QDoubleSpinBox()
+        self.sp_overhang.setRange(0, 89)
+        self.sp_overhang.setDecimals(0)
+        self.sp_overhang.setSuffix("\u00b0")
+        self.sp_overhang.setToolTip("Overhang angle (from vertical) that needs support")
+        self.sp_overhang.setKeyboardTracking(False)
+        self.sp_overhang.valueChanged.connect(self._on_overhang_spin)
+        sl.addWidget(self.sp_overhang)
+        self.cb_show_over = QCheckBox("Show")
+        self.cb_show_over.setToolTip("Highlight overhangs that need support in red")
+        self.cb_show_over.setChecked(True)
+        self.cb_show_over.toggled.connect(lambda _v: self._update_scene())
+        sl.addWidget(self.cb_show_over)
+        ml.addWidget(self.support_box)
+        self.place_box.setEnabled(False)
+        return model
+
     def _with_edit(self, combo, kind) -> QWidget:
         w = QWidget()
         h = QHBoxLayout(w)
@@ -314,11 +470,14 @@ class MainWindow(QMainWindow):
         for a in (self.act_import, self.act_slice, self.act_save):
             tb.addAction(a)
         tb.addSeparator()
+        tb.addAction(self.act_prepare)
+        tb.addAction(self.act_preview)
+        tb.addSeparator()
         tb.addAction(self.act_libs)
         tb.addSeparator()
         for name, key in (("Iso", "iso"), ("Top", "top"), ("Front", "front"), ("Right", "right")):
             tb.addAction(self._act(name, lambda _=False, k=key: self.camera.set_view(k)))
-        tb.addAction(self._act("Fit", self.viewer.fit))
+        tb.addAction(self._act("Fit", self.fit_view))
 
     def _act(self, text, slot, shortcut=None):
         a = QAction(text, self)
@@ -349,6 +508,9 @@ class MainWindow(QMainWindow):
         p.addSeparator()
         p.addAction(self._act("Edit pipeline stages\u2026", self.edit_pipeline))
         v = self.menuBar().addMenu("&View")
+        v.addAction(self.act_prepare)
+        v.addAction(self.act_preview)
+        v.addSeparator()
         for d in (self.dock_prepare, self.dock_view, self.dock_text, self.dock_info, self.dock_log):
             v.addAction(d.toggleViewAction())
         h = self.menuBar().addMenu("&Help")
@@ -443,6 +605,9 @@ class MainWindow(QMainWindow):
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._update_dirty()
+        self._sync_support_controls()
+        self._update_scene()
+        self._set_stale()
         self._update_enabled()
 
     def _reload_machines(self, select: str | None = None):
@@ -477,6 +642,8 @@ class MainWindow(QMainWindow):
             cb.setCurrentIndex(max(0, i))
         self._loading = False
         self._save_selection()
+        self._update_scene()
+        self._set_stale()
         self._update_enabled()
 
     def _machine(self):
@@ -551,6 +718,9 @@ class MainWindow(QMainWindow):
         self._loading = False
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._update_dirty()
+        self._set_stale()
+        self._sync_support_controls()
+        self._update_scene()
 
     def _confirm_discard(self) -> bool:
         if not self.dirty[self.workflow]:
@@ -565,6 +735,9 @@ class MainWindow(QMainWindow):
     def _mark_dirty(self):
         self.dirty[self.workflow] = True
         self._update_dirty()
+        self._set_stale()
+        self._sync_support_controls()
+        self._update_scene()
 
     def _update_dirty(self):
         d = self.dirty[self.workflow]
@@ -696,14 +869,200 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Import failed", str(exc))
             return
         self.mesh, self.model_path = mesh, path
-        lo, hi = mesh.bounds
-        sz = hi - lo
-        self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{sz[0]:.1f} \u00d7 {sz[1]:.1f} \u00d7 {sz[2]:.1f} mm, "
-                               f"{len(mesh.triangles):,} triangles")
+        self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
+        self.placement = self._load_placement(path)
+        self.b_face.setChecked(False)
+        self.place_box.setEnabled(True)
+        # a new model invalidates the old tool path
+        self.program = self.tp = None
+        self.viewer.set_toolpath(None)
+        self.text_panel.set_program(None)
+        self.feature_list.clear()
+        self.stale = False
+        self._sync_placement_controls()
+        self._update_scene()
+        self.set_mode("prepare")
+        self.camera.set_view("iso")
+        self.model_viewer.fit()
         self._add_recent(path)
         self.log(f"Loaded {path}")
         self._update_enabled()
+
+    # ------------------------------------------------------------- placement
+    def _auto_xy(self):
+        return bed_xy(self._machine(), self.workflow) or (0.0, 0.0)
+
+    def _placement_key(self, path) -> str:
+        return "placement/" + hashlib.md5(str(Path(path).resolve()).lower().encode()).hexdigest()
+
+    def _load_placement(self, path) -> Placement:
+        raw = self.settings.value(self._placement_key(path))
+        if raw:
+            try:
+                return Placement.from_dict(json.loads(raw))
+            except Exception:
+                pass
+        x, y = self._auto_xy()
+        return Placement(x=x, y=y)
+
+    def _save_placement(self):
+        if self.model_path:
+            self.settings.setValue(self._placement_key(self.model_path), json.dumps(self.placement.to_dict()))
+
+    def _sync_placement_controls(self):
+        pl = self.placement
+        vals = ((self.sp_x, pl.x if pl.x is not None else self._auto_xy()[0]),
+                (self.sp_y, pl.y if pl.y is not None else self._auto_xy()[1]),
+                (self.sp_rot["x"], pl.rx), (self.sp_rot["y"], pl.ry), (self.sp_rot["z"], pl.rz),
+                (self.sp_scale, pl.scale))
+        for sb, v in vals:
+            sb.blockSignals(True)
+            sb.setValue(v)
+            sb.blockSignals(False)
+
+    def _on_placement_spin(self, _v=0.0):
+        pl = self.placement
+        pl.x, pl.y = self.sp_x.value(), self.sp_y.value()
+        pl.rx, pl.ry, pl.rz = (self.sp_rot[a].value() for a in "xyz")
+        pl.scale = self.sp_scale.value()
+        self._placement_changed()
+
+    def _placement_changed(self):
+        self._save_placement()
+        self._update_scene()
+        self._set_stale()
+        if self.mode != "prepare":
+            self.set_mode("prepare")
+
+    def _on_model_dragged(self, x, y):
+        self.placement.x, self.placement.y = round(x, 2), round(y, 2)
+        self._sync_placement_controls()
+        self._update_scene()
+        self._set_stale()
+
+    def center_model(self):
+        self.placement.x, self.placement.y = self._auto_xy()
+        self._sync_placement_controls()
+        self._placement_changed()
+
+    def rotate_model(self, axis, degrees):
+        self.placement.rotate_by(axis, degrees)
+        self._sync_placement_controls()
+        self._placement_changed()
+
+    def lay_flat(self):
+        if self.mesh is None:
+            return
+        self.placement.lay_flat(self.mesh)
+        self._sync_placement_controls()
+        self._placement_changed()
+
+    def reset_placement(self):
+        x, y = self._auto_xy()
+        self.placement = Placement(x=x, y=y)
+        self._sync_placement_controls()
+        self._placement_changed()
+
+    def _on_place_on_face(self, on):
+        if on and self.mode != "prepare":
+            self.set_mode("prepare")
+        self.model_viewer.set_place_on_face(on)
+
+    def _on_face_clicked(self, normal):
+        if normal is not None:
+            self.placement.place_on_face(normal)
+            self._sync_placement_controls()
+            self._placement_changed()
+        self.b_face.setChecked(False)
+
+    def _support_step(self):
+        return self.pipelines[self.workflow].step("fdm_support") if self.workflow == wf.FDM else None
+
+    def _update_scene(self):
+        """Re-place the model and refresh the Prepare view (bed, overhangs, bounds)."""
+        machine = self._machine()
+        rect = bed_rect(machine, self.workflow) if machine is not None else (0, 0, 220, 220, 250)
+        if self.mesh is None:
+            self.placed = None
+            self.lbl_size.setText("")
+            self.model_viewer.set_scene(None, rect, (0, 0))
+            return
+        self.placed = self.placement.apply(self.mesh, self._auto_xy())
+        lo, hi = self.placed.bounds
+        sz = hi - lo
+        inside = fits(self.placed, rect)
+        self.lbl_size.setText(f"{sz[0]:.1f} \u00d7 {sz[1]:.1f} \u00d7 {sz[2]:.1f} mm")
+        self.lbl_size.setStyleSheet("color:#9aa;" if inside else "color:#f0a040;")
+        angle = None
+        step = self._support_step()
+        if step is not None and self.cb_show_over.isChecked():
+            angle = plugins.stages.get("fdm_support").resolve(step.params)["overhang_angle"]
+        self.model_viewer.set_scene(self.placed, rect, (self.placement.x, self.placement.y), angle, inside)
+
+    # --------------------------------------------------------------- support
+    def _sync_support_controls(self):
+        step = self._support_step()
+        self.support_box.setVisible(step is not None or self.workflow == wf.FDM)
+        for w in (self.cb_support, self.sp_overhang):
+            w.blockSignals(True)
+        if step is None:
+            self.cb_support.setCurrentIndex(0)
+            self.support_box.setEnabled(False)
+        else:
+            self.support_box.setEnabled(True)
+            p = plugins.stages.get("fdm_support").resolve(step.params)
+            mode = p["placement"] if step.enabled else "none"
+            self.cb_support.setCurrentIndex(max(0, self.cb_support.findData(mode)))
+            self.sp_overhang.setValue(p["overhang_angle"])
+        for w in (self.cb_support, self.sp_overhang):
+            w.blockSignals(False)
+
+    def _on_support_combo(self, _i=0):
+        step = self._support_step()
+        if step is None:
+            return
+        mode = self.cb_support.currentData()
+        step.enabled = mode != "none"
+        if mode != "none":
+            step.params = {**step.params, "placement": mode}
+        self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._mark_dirty()
+
+    def _on_overhang_spin(self, v):
+        step = self._support_step()
+        if step is None:
+            return
+        step.params = {**step.params, "overhang_angle": float(v)}
+        self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._mark_dirty()
+
+    # ----------------------------------------------------------------- views
+    def set_mode(self, mode: str):
+        if mode == "preview" and self.program is None:
+            mode = "prepare"
+        self.mode = mode
+        self.stack.setCurrentIndex(0 if mode == "prepare" else 1)
+        (self.act_prepare if mode == "prepare" else self.act_preview).setChecked(True)
+        if mode == "preview" and self.b_face.isChecked():
+            self.b_face.setChecked(False)
+        self._update_stale_label()
+
+    def fit_view(self):
+        (self.model_viewer if self.mode == "prepare" else self.viewer).fit()
+
+    def _set_stale(self):
+        if self.program is not None and not self.stale:
+            self.stale = True
+            self._update_stale_label()
+
+    def _update_stale_label(self):
+        if self.program is not None and self.stale:
+            self.stale_lbl.setText("\u26a0 Preview is out of date \u2014 press Slice")
+        elif self.program is None and self.mesh is not None:
+            self.stale_lbl.setText("Press Slice (Ctrl+R) to generate the tool path")
+        else:
+            self.stale_lbl.setText("")
 
     # ======================================================================
     # slicing
@@ -715,6 +1074,8 @@ class MainWindow(QMainWindow):
         self.act_slice.setEnabled(ok)
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
+        self.act_preview.setEnabled(self.program is not None)
+        self._update_stale_label()
 
     def run_slice(self):
         if self.mesh is None:
@@ -732,8 +1093,16 @@ class MainWindow(QMainWindow):
             t = self._consumable("tool")
             kw["tools"] = [t] if t else []
         mesh = Mesh(self.mesh.vertices.copy(), self.mesh.triangles)   # stages may move the mesh
+        placed = self.placement.apply(mesh, self._auto_xy())
+        if not fits(placed, bed_rect(machine, self.workflow)):
+            r = QMessageBox.question(self, "Outside the build volume",
+                                     "The model does not fit inside the machine's build volume.\n"
+                                     "Slice anyway?")
+            if r != QMessageBox.StandardButton.Yes:
+                return
         try:
-            job = build_job(self.workflow, machine, mesh=mesh, model_path=self.model_path, **kw)
+            job = build_job(self.workflow, machine, mesh=mesh, model_path=self.model_path,
+                            placement=copy.deepcopy(self.placement), **kw)
         except ValueError as exc:
             QMessageBox.warning(self, "Cannot slice", str(exc))
             return
@@ -772,6 +1141,8 @@ class MainWindow(QMainWindow):
             self.viewer.fit()
             self._fitted_for = self.model_path
         self.text_panel.set_program(self.program)
+        self.stale = False
+        self.set_mode("preview")
         self._setup_layers()
         self._refresh_feature_list()
         self._update_stats()
@@ -970,5 +1341,7 @@ class MainWindow(QMainWindow):
             "Left drag: orbit    Right / middle drag: pan    Wheel: zoom\n"
             "Double-click: select the line under the cursor\n"
             "F / 1 2 3 4: fit / iso, top, front, right view\n"
+            "Prepare view: drag the model to move it; 'Place on face', then click a face\n"
+            "Ctrl+1 / Ctrl+2: Prepare / Preview view\n"
             "PgUp / PgDn: next / previous layer    Home / End: first / last layer\n"
             "Ctrl+O import model    Ctrl+R slice    Ctrl+S save G-code"))
