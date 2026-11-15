@@ -108,7 +108,12 @@ On Windows you can double-click `GCodeProducer.bat`.
 1. Choose a **workflow** (FDM or CAM) and a **machine**.
 2. Pick the **consumables** the machine allows (material + nozzle, or a tool).
 3. **Import** an STL model.
-4. Enable / tune the **slice pipeline** stages.
+4. Choose a **process** preset, then edit the **slice pipeline**: add stages
+   (**+ Add**), remove them (**- Remove**), reorder them (**up / down**),
+   enable / disable them with the checkbox and tune each stage's parameters.
+   Core stages (slice, perimeters, emit) can be moved and tuned but not removed
+   or disabled. Edits show an *unsaved* marker; **Save** writes them back to the
+   selected process, **Save As** creates a new one.
 5. Click **Slice** and inspect the result in the shared 3D viewer, then
    **Save G-code**.
 

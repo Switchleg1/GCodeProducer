@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
         self.model_path = None
         self.program = None
         self.pipelines = {w: SlicePipeline.default(w) for w in wf.ALL}
+        self._dirty = {w: False for w in wf.ALL}
         self._worker = None
 
         self.camera = Camera()
@@ -96,9 +97,14 @@ class MainWindow(QMainWindow):
 
         # process presets (saveable workflow options)
         box = QGroupBox("Process (workflow options)"); prl = QVBoxLayout(box)
+        prow0 = QHBoxLayout()
         self.cb_process = QComboBox()
         self.cb_process.currentIndexChanged.connect(self._on_process_selected)
-        prl.addWidget(self.cb_process)
+        prow0.addWidget(self.cb_process, 1)
+        self.lbl_dirty = QLabel("")
+        self.lbl_dirty.setStyleSheet("color:#e0a030;")
+        prow0.addWidget(self.lbl_dirty)
+        prl.addLayout(prow0)
         prow = QHBoxLayout()
         for lbl, fn in (("Save", self._process_save), ("Save As…", self._process_save_as),
                         ("Delete", self._process_delete), ("Reset", self._process_reset)):
@@ -107,12 +113,20 @@ class MainWindow(QMainWindow):
         lay.addWidget(box)
 
         # pipeline
-        box = QGroupBox("Slice pipeline"); pl = QVBoxLayout(box)
+        box = QGroupBox("Slice pipeline (stages)"); pl = QVBoxLayout(box)
         self.lst_stages = QListWidget()
         self.lst_stages.currentRowChanged.connect(self._on_stage_selected)
         self.lst_stages.itemChanged.connect(self._on_stage_toggled)
         self.lst_stages.setMaximumHeight(150)
         pl.addWidget(self.lst_stages)
+        srow = QHBoxLayout()
+        for lbl, tip, fn in (("+ Add", "Add a stage", self._stage_add),
+                             ("− Remove", "Remove the selected stage", self._stage_remove),
+                             ("↑", "Move up", self._stage_up),
+                             ("↓", "Move down", self._stage_down)):
+            b = QPushButton(lbl); b.setToolTip(tip); b.clicked.connect(fn); srow.addWidget(b)
+        srow.addStretch(1)
+        pl.addLayout(srow)
         self.param_area = QScrollArea(); self.param_area.setWidgetResizable(True)
         self.param_area.setMinimumHeight(160)
         pl.addWidget(self.param_area, 1)
@@ -176,6 +190,7 @@ class MainWindow(QMainWindow):
         self._on_machine()
         self._reload_processes()
         self._reload_stages()
+        self._update_dirty()
 
     def _on_machine(self):
         # rebuild consumable selectors for the selected machine
@@ -222,7 +237,16 @@ class MainWindow(QMainWindow):
             except KeyError:
                 return
             self.pipelines[self.workflow] = preset.slice_pipeline()
+        self._dirty[self.workflow] = False
+        self._update_dirty()
         self._reload_stages()
+
+    def _mark_dirty(self):
+        self._dirty[self.workflow] = True
+        self._update_dirty()
+
+    def _update_dirty(self):
+        self.lbl_dirty.setText("● unsaved" if self._dirty.get(self.workflow) else "")
 
     def _process_save(self):
         pid = self.cb_process.currentData()
@@ -232,6 +256,8 @@ class MainWindow(QMainWindow):
         preset = self.libset.processes.get(pid)
         preset.set_pipeline(self.pipelines[self.workflow])
         self.libset.processes.save_all()
+        self._dirty[self.workflow] = False
+        self._update_dirty()
         self.statusBar().showMessage(f"Saved process '{preset.name}'", 4000)
 
     def _process_save_as(self):
@@ -246,7 +272,11 @@ class MainWindow(QMainWindow):
         self._reload_processes()
         idx = self.cb_process.findData(preset.id)
         if idx >= 0:
+            self.cb_process.blockSignals(True)
             self.cb_process.setCurrentIndex(idx)
+            self.cb_process.blockSignals(False)
+        self._dirty[self.workflow] = False
+        self._update_dirty()
         self.statusBar().showMessage(f"Saved process '{preset.name}'", 4000)
 
     def _process_delete(self):
@@ -264,42 +294,114 @@ class MainWindow(QMainWindow):
         self.cb_process.setCurrentIndex(0)
 
     # ------------------------------------------------------------- stages
-    def _reload_stages(self):
+    def _reload_stages(self, select_row: int = 0):
         self.lst_stages.blockSignals(True)
         self.lst_stages.clear()
         pipe = self.pipelines[self.workflow]
         for step in pipe.steps:
-            cls = plugins.stages.get(step.stage)
-            it = QListWidgetItem(f"{cls.name}")
+            try:
+                cls = plugins.stages.get(step.stage)
+                name, optional, tip = cls.name, cls.optional, cls.description
+            except KeyError:
+                name, optional, tip = step.stage + " (unknown)", True, ""
+            it = QListWidgetItem(name)
             it.setData(Qt.ItemDataRole.UserRole, step.stage)
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            optional = cls.optional
             it.setCheckState(Qt.CheckState.Checked if step.enabled else Qt.CheckState.Unchecked)
-            if not optional:
-                it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-                it.setToolTip("core stage (always runs)")
+            it.setToolTip(tip + ("\n(core stage: always runs)" if not optional else ""))
             self.lst_stages.addItem(it)
         self.lst_stages.blockSignals(False)
         if self.lst_stages.count():
-            self.lst_stages.setCurrentRow(0)
+            self.lst_stages.setCurrentRow(min(max(0, select_row), self.lst_stages.count() - 1))
+        else:
+            self.param_area.setWidget(QWidget())
 
     def _on_stage_toggled(self, item):
-        sid = item.data(Qt.ItemDataRole.UserRole)
-        for step in self.pipelines[self.workflow].steps:
-            if step.stage == sid:
-                step.enabled = item.checkState() == Qt.CheckState.Checked
+        row = self.lst_stages.row(item)
+        steps = self.pipelines[self.workflow].steps
+        if 0 <= row < len(steps):
+            cls = self._stage_cls(steps[row].stage)
+            want = item.checkState() == Qt.CheckState.Checked
+            if cls is not None and not cls.optional and not want:
+                # core stages cannot be disabled
+                item.setCheckState(Qt.CheckState.Checked)
+                self.statusBar().showMessage(f"{cls.name} is a core stage and always runs", 4000)
+                return
+            steps[row].enabled = want
+            self._mark_dirty()
 
     def _on_stage_selected(self, row):
-        if row < 0:
+        steps = self.pipelines[self.workflow].steps
+        if not (0 <= row < len(steps)):
+            self.param_area.setWidget(QWidget())
             return
-        pipe = self.pipelines[self.workflow]
-        step = pipe.steps[row]
-        cls = plugins.stages.get(step.stage)
-        params = cls.parameters()
+        step = steps[row]
+        cls = self._stage_cls(step.stage)
+        if cls is None:
+            self.param_area.setWidget(QLabel(f"Unknown stage '{step.stage}'"))
+            return
         values = {**cls.defaults(), **step.params}
-        editor = ParamEditor(params, values)
-        editor.changed.connect(lambda vals, s=step: s.params.update(vals))
+        editor = ParamEditor(cls.parameters(), values)
+
+        def on_change(vals, s=step):
+            s.params.update(vals)
+            self._mark_dirty()
+        editor.changed.connect(on_change)
         self.param_area.setWidget(editor)
+
+    def _stage_cls(self, sid):
+        try:
+            return plugins.stages.get(sid)
+        except KeyError:
+            return None
+
+    # --------------------------------------------------- pipeline editing
+    def _stage_add(self):
+        avail = [cls for cls in plugins.stages.all() if cls.applies_to(self.workflow)]
+        avail.sort(key=lambda c: c.name)
+        if not avail:
+            return
+        labels = [f"{c.name}  [{c.category}]" for c in avail]
+        sel, ok = QInputDialog.getItem(self, "Add stage",
+                                       f"Add a {wf.short(self.workflow)} stage to the pipeline:",
+                                       labels, 0, False)
+        if not ok:
+            return
+        cls = avail[labels.index(sel)]
+        steps = self.pipelines[self.workflow].steps
+        row = self.lst_stages.currentRow()
+        at = row + 1 if row >= 0 else len(steps)
+        steps.insert(at, Step(cls.id))
+        self._mark_dirty()
+        self._reload_stages(at)
+
+    def _stage_remove(self):
+        steps = self.pipelines[self.workflow].steps
+        row = self.lst_stages.currentRow()
+        if not (0 <= row < len(steps)):
+            return
+        cls = self._stage_cls(steps[row].stage)
+        if cls is not None and not cls.optional:
+            self.statusBar().showMessage(f"'{cls.name}' is a core stage and cannot be removed", 4000)
+            return
+        del steps[row]
+        self._mark_dirty()
+        self._reload_stages(row)
+
+    def _stage_up(self):
+        self._stage_move(-1)
+
+    def _stage_down(self):
+        self._stage_move(1)
+
+    def _stage_move(self, delta):
+        steps = self.pipelines[self.workflow].steps
+        row = self.lst_stages.currentRow()
+        new = row + delta
+        if 0 <= row < len(steps) and 0 <= new < len(steps):
+            steps[row], steps[new] = steps[new], steps[row]
+            self._mark_dirty()
+            self._reload_stages(new)
 
     # -------------------------------------------------------------- model
     def import_model(self):
