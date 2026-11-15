@@ -18,6 +18,8 @@ _FEATURE_SPEED = {
     "outer_perimeter": "outer_perimeter_speed",
     "inner_perimeter": "perimeter_speed",
     "infill": "infill_speed",
+    "solid_infill": "solid_infill_speed",
+    "top_infill": "solid_infill_speed",
 }
 
 
@@ -66,6 +68,7 @@ class FDMEmit(SliceStage):
                     continue
                 width = path.width or job.line_width
                 epm = extrusion_per_mm(width, h, fil, flow)
+                b.set_feature(path.feature)
                 base = _FEATURE_SPEED.get(path.feature, "print_speed")
                 spd = first_f if first else (path.speed or job.m(base, 60))
                 feed = spd * 60.0

@@ -47,7 +47,7 @@ class PipelineResult:
 
 #: default stage order for each workflow (ids must exist once stages are loaded)
 DEFAULT_PIPELINES = {
-    wf.FDM: ["fdm_slice", "fdm_perimeters", "fdm_infill", "fdm_emit"],
+    wf.FDM: ["fdm_slice", "fdm_perimeters", "fdm_top_bottom", "fdm_infill", "fdm_emit"],
     wf.CAM: ["cam_profile", "cam_emit"],
 }
 

@@ -32,6 +32,7 @@ class Layer:
     height: float
     contours: list = field(default_factory=list)   # closed slice polygons (n,2)
     paths: list = field(default_factory=list)       # list[Path] in print order
+    solid_mask: object = None                       # geometry.RegionMask: cells filled solid (top/bottom)
 
 
 @dataclass

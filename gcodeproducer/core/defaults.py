@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from . import workflow as wf
+from .pipeline import SlicePipeline
+from .process import ProcessPreset
 from .profiles import LibrarySet, Profile
 
 
@@ -35,8 +37,36 @@ def builtin_profiles() -> list:
     ]
 
 
+def _fdm_process(name, *, layer_height, first_layer_height=None, perimeters=2,
+                 density=20, pattern="grid", top=4, bottom=4):
+    pipe = SlicePipeline.default(wf.FDM)
+    pset = {
+        "fdm_slice": {"layer_height": layer_height,
+                      "first_layer_height": first_layer_height or layer_height},
+        "fdm_perimeters": {"perimeters": perimeters},
+        "fdm_top_bottom": {"top_layers": top, "bottom_layers": bottom},
+        "fdm_infill": {"density": density, "pattern": pattern},
+    }
+    for step in pipe.steps:
+        step.params.update(pset.get(step.stage, {}))
+    return ProcessPreset(name, wf.FDM, pipeline=pipe.to_dict())
+
+
+def builtin_processes() -> list:
+    return [
+        _fdm_process("0.20 mm Standard", layer_height=0.2, perimeters=2, density=20, pattern="grid"),
+        _fdm_process("0.30 mm Draft", layer_height=0.3, first_layer_height=0.3,
+                     perimeters=2, density=15, pattern="grid"),
+        _fdm_process("0.12 mm Fine", layer_height=0.12, perimeters=3, density=20,
+                     pattern="triangles", top=6, bottom=5),
+        _fdm_process("Strong (cubic 40%)", layer_height=0.2, perimeters=4, density=40,
+                     pattern="cubic", top=5, bottom=5),
+        ProcessPreset("Profile cut", wf.CAM),
+    ]
+
+
 def seed(libset: LibrarySet, save: bool = True) -> int:
-    """Populate every empty library with the starter profiles."""
+    """Populate every empty library with the starter profiles / processes."""
     added = 0
     by_kind: dict = {}
     for p in builtin_profiles():
@@ -47,6 +77,10 @@ def seed(libset: LibrarySet, save: bool = True) -> int:
             for p in profs:
                 lib.add(p)
                 added += 1
+    if len(libset.processes) == 0:
+        for pr in builtin_processes():
+            libset.processes.add(pr)
+            added += 1
     if save and added:
         libset.save()
     return added

@@ -85,6 +85,8 @@ def _machine_schema(workflow: str) -> list:
         Param("perimeter_speed", "float", 45.0, unit="mm/s", group="Speeds"),
         Param("outer_perimeter_speed", "float", 30.0, unit="mm/s", group="Speeds"),
         Param("infill_speed", "float", 60.0, unit="mm/s", group="Speeds"),
+        Param("solid_infill_speed", "float", 40.0, unit="mm/s", group="Speeds",
+              help="Top / bottom solid surfaces."),
         Param("first_layer_speed", "float", 20.0, unit="mm/s", group="Speeds"),
         Param("z_speed", "float", 10.0, unit="mm/s", group="Speeds"),
         Param("acceleration", "float", 2000.0, unit="mm/s\u00b2", group="Motion", allow_auto=True),
@@ -293,8 +295,10 @@ class LibrarySet:
     """All libraries under one root directory (``<root>/<kind>s/*.json``)."""
 
     def __init__(self, root: Optional[Path] = None):
+        from .process import ProcessLibrary
         self.root = Path(root) if root else default_root()
         self.libraries = {k: Library(k, self.root / f"{k}s") for k in KINDS}
+        self.processes = ProcessLibrary(self.root / "processes")
 
     def __getitem__(self, kind: str) -> Library:
         return self.libraries[kind]
@@ -306,11 +310,13 @@ class LibrarySet:
     def load(self) -> "LibrarySet":
         for lib in self.libraries.values():
             lib.load_dir()
+        self.processes.load_dir()
         return self
 
     def save(self) -> None:
         for lib in self.libraries.values():
             lib.save_all()
+        self.processes.save_all()
 
     # ------------------------------------------- consumables for a machine
     def consumables_for(self, machine: Profile, kind: str) -> list:

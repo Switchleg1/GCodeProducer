@@ -41,7 +41,18 @@ Libraries live under `~/.gcodeproducer/` by default (override with the
   materials/*.json     FDM filaments
   nozzles/*.json       FDM hot-end orifices
   tools/*.json         CAM cutters
+  processes/*.json     process presets (saveable workflow options)
 ```
+
+### Process presets (workflow options)
+
+A **process preset** bundles a whole slice pipeline — which stages run, in what
+order, with which parameters (layer height, perimeters, top/bottom layers,
+infill density/pattern, …) — for one workflow. Presets are saved / loaded
+independently of the machine and consumables, so you can keep e.g. *0.20 mm
+Standard*, *0.30 mm Draft*, *0.12 mm Fine* and *Strong (cubic 40%)* and switch
+between them. In the GUI the **Process** box has Save / Save As / Delete /
+Reset; on the CLI use `--process NAME` (and `gcodeproducer processes` to list).
 
 ## The slice pipeline
 
@@ -53,18 +64,24 @@ pipeline. A stage never runs in a workflow it doesn't target, so FDM operations
 (perimeters, infill, temperature) can't leak into a machining job and vice
 versa.
 
-| Workflow | Default stages                                             |
-|----------|------------------------------------------------------------|
-| FDM      | `fdm_slice` → `fdm_perimeters` → `fdm_infill` → `fdm_emit`  |
-| CAM      | `cam_profile` → `cam_emit`                                  |
+| Workflow | Default stages                                                                     |
+|----------|------------------------------------------------------------------------------------|
+| FDM      | `fdm_slice` → `fdm_perimeters` → `fdm_top_bottom` → `fdm_infill` → `fdm_emit`       |
+| CAM      | `cam_profile` → `cam_emit`                                                          |
 
 - **`fdm_slice`** — positions the mesh on the bed and intersects it into
   per-layer closed contours.
 - **`fdm_perimeters`** — offsets each contour inward into wall loops
   (outer + inner). The innermost loop bounds the infill region.
-- **`fdm_infill`** — fills the inside with a pattern (rectilinear, grid,
-  triangles, cubic, lines) at a chosen density, reusing GCodeTools' infill
-  generator.
+- **`fdm_top_bottom`** — top / bottom **solid** surfaces. A cell is sparse only
+  if the part covers it in all `top_layers` above *and* all `bottom_layers`
+  below; otherwise it is a solid surface (`top_infill` / `solid_infill`).
+  Detection uses shared-grid rasters, so interior top shells (e.g. the top of a
+  wide base under a narrow tower) are found, not just the first/last N layers.
+- **`fdm_infill`** — fills the remaining interior with a pattern (rectilinear,
+  grid, triangles, cubic, lines) at a chosen density, with perimeter overlap,
+  angle, min line length and travel-connection options, reusing GCodeTools'
+  infill generator. Sparse infill never overlaps the solid shells.
 - **`fdm_emit`** — walks the toolpaths into G-code with travels, retraction,
   temperatures (from the material), cooling and start/end blocks.
 - **`cam_profile`** — 2.5D contour/profile cut around the part silhouette,
@@ -105,13 +122,20 @@ speeds/feeds, start/end G-code and the allowed-consumable lists.
 python -m gcodeproducer workflows               # list workflows
 python -m gcodeproducer stages -v               # list slice stages + params
 python -m gcodeproducer libraries               # list every profile
+python -m gcodeproducer processes -v            # list process presets
 python -m gcodeproducer describe fdm_infill     # one stage's parameters
 
-# slice an STL to G-code (profiles seeded on first run)
+# slice with a saved process preset (workflow options)
+python -m gcodeproducer slice part.stl -w fdm -o part.gcode \
+    --machine "Generic 220 FDM" --material PLA --nozzle "0.4 mm" \
+    --process "0.12 mm Fine"
+
+# ...or build the pipeline from scratch and tune stages
 python -m gcodeproducer slice part.stl -w fdm -o part.gcode \
     --machine "Generic 220 FDM" --material PLA --nozzle "0.4 mm" \
     --layer-height 0.2 \
     -m "fdm_perimeters:perimeters=3" \
+    -m "fdm_top_bottom:top_layers=5,bottom_layers=4" \
     -m "fdm_infill:density=25,pattern=cubic"
 
 # machining
@@ -146,12 +170,14 @@ class Brim(SliceStage):
 
 ```
 gcodeproducer/
-  core/        gcode model + emitter (builder.py), geometry kernel, state
-               simulation, toolpath/features (shared with GCodeTools), the
-               profile/library system (profiles.py), job model, stage pipeline,
-               plugin discovery, session driver, starter profiles
+  core/        gcode model + emitter (builder.py), geometry kernel (slicing,
+               polygon offset, RegionMask), state simulation, toolpath/features
+               (shared with GCodeTools), the profile/library system
+               (profiles.py), process presets (process.py), job model, stage
+               pipeline, plugin discovery, session driver, starter profiles
   importers/   geometry importers (stl)
-  stages/      slice stages (fdm_slice/perimeters/infill/emit, cam_profile/emit)
+  stages/      slice stages (fdm_slice/perimeters/top_bottom/infill/emit,
+               cam_profile/emit)
   gui/         Qt6 main window + library editor, OpenGL viewer, widgets
   cli.py       command-line interface
 plugins/       drop-in user stages / importers

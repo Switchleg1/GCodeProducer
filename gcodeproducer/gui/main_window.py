@@ -94,6 +94,18 @@ class MainWindow(QMainWindow):
         ml.addWidget(self.lbl_model); ml.addWidget(btn_imp)
         lay.addWidget(box)
 
+        # process presets (saveable workflow options)
+        box = QGroupBox("Process (workflow options)"); prl = QVBoxLayout(box)
+        self.cb_process = QComboBox()
+        self.cb_process.currentIndexChanged.connect(self._on_process_selected)
+        prl.addWidget(self.cb_process)
+        prow = QHBoxLayout()
+        for lbl, fn in (("Save", self._process_save), ("Save As…", self._process_save_as),
+                        ("Delete", self._process_delete), ("Reset", self._process_reset)):
+            b = QPushButton(lbl); b.clicked.connect(fn); prow.addWidget(b)
+        prl.addLayout(prow)
+        lay.addWidget(box)
+
         # pipeline
         box = QGroupBox("Slice pipeline"); pl = QVBoxLayout(box)
         self.lst_stages = QListWidget()
@@ -162,6 +174,7 @@ class MainWindow(QMainWindow):
             self.cb_machine.addItem(p.name, p.id)
         self.cb_machine.blockSignals(False)
         self._on_machine()
+        self._reload_processes()
         self._reload_stages()
 
     def _on_machine(self):
@@ -189,6 +202,66 @@ class MainWindow(QMainWindow):
             return self.libset.machines.get(mid) if mid else None
         except KeyError:
             return None
+
+    # ------------------------------------------------------------ processes
+    def _reload_processes(self):
+        self.cb_process.blockSignals(True)
+        self.cb_process.clear()
+        self.cb_process.addItem("— default pipeline —", None)
+        for p in self.libset.processes.all(self.workflow):
+            self.cb_process.addItem(p.name, p.id)
+        self.cb_process.blockSignals(False)
+
+    def _on_process_selected(self, _i=0):
+        pid = self.cb_process.currentData()
+        if pid is None:
+            self.pipelines[self.workflow] = SlicePipeline.default(self.workflow)
+        else:
+            try:
+                preset = self.libset.processes.get(pid)
+            except KeyError:
+                return
+            self.pipelines[self.workflow] = preset.slice_pipeline()
+        self._reload_stages()
+
+    def _process_save(self):
+        pid = self.cb_process.currentData()
+        if pid is None:
+            self._process_save_as()
+            return
+        preset = self.libset.processes.get(pid)
+        preset.set_pipeline(self.pipelines[self.workflow])
+        self.libset.processes.save_all()
+        self.statusBar().showMessage(f"Saved process '{preset.name}'", 4000)
+
+    def _process_save_as(self):
+        name, ok = QInputDialog.getText(self, "Save process as", "Name:")
+        if not ok or not name.strip():
+            return
+        from ..core.process import ProcessPreset
+        preset = ProcessPreset(name.strip(), self.workflow,
+                               pipeline=self.pipelines[self.workflow].to_dict())
+        self.libset.processes.add(preset)
+        self.libset.processes.save_all()
+        self._reload_processes()
+        idx = self.cb_process.findData(preset.id)
+        if idx >= 0:
+            self.cb_process.setCurrentIndex(idx)
+        self.statusBar().showMessage(f"Saved process '{preset.name}'", 4000)
+
+    def _process_delete(self):
+        pid = self.cb_process.currentData()
+        if pid is None:
+            return
+        preset = self.libset.processes.get(pid)
+        if QMessageBox.question(self, "Delete", f"Delete process '{preset.name}'?") == \
+                QMessageBox.StandardButton.Yes:
+            self.libset.processes.remove(pid)
+            self._reload_processes()
+            self._on_process_selected()
+
+    def _process_reset(self):
+        self.cb_process.setCurrentIndex(0)
 
     # ------------------------------------------------------------- stages
     def _reload_stages(self):

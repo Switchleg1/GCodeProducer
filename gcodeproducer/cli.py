@@ -62,6 +62,15 @@ def cmd_describe(args):
     print(plugins.stages.get(args.stage).help_text())
 
 
+def cmd_processes(args):
+    ls = _libset(args)
+    for p in ls.processes.all(args.workflow or None):
+        steps = [s["stage"] for s in p.pipeline.get("steps", []) if s.get("enabled", True)]
+        print(f"{p.id:24} [{wf.short(p.workflow)}]  {p.name}")
+        if args.verbose:
+            print("    " + " -> ".join(steps))
+
+
 def cmd_slice(args):
     ls = _libset(args)
     workflow = wf.normalize(args.workflow)
@@ -85,7 +94,20 @@ def cmd_slice(args):
                     mesh=mesh, model_path=args.input,
                     settings={"layer_height": args.layer_height} if args.layer_height else {})
 
-    pipeline = SlicePipeline.load(args.config) if args.config else SlicePipeline.default(workflow)
+    if args.config:
+        pipeline = SlicePipeline.load(args.config)
+    elif args.process:
+        preset = None
+        for p in ls.processes.all(workflow):
+            if p.id == args.process or p.name.lower() == args.process.lower():
+                preset = p
+                break
+        if preset is None:
+            raise SystemExit(f"process '{args.process}' not found for {workflow}. "
+                             f"Have: {', '.join(p.name for p in ls.processes.all(workflow))}")
+        pipeline = preset.slice_pipeline()
+    else:
+        pipeline = SlicePipeline.default(workflow)
     for spec in args.stage_param or []:
         step = parse_stage_spec(spec)
         for s in pipeline.steps:
@@ -133,10 +155,16 @@ def build_parser():
     s.add_argument("--layer-height", type=float)
     s.add_argument("-m", "--stage-param", action="append",
                    help="stage_id:key=value,... override")
-    s.add_argument("--config", help="pipeline JSON")
+    s.add_argument("--process", help="named process preset (workflow options)")
+    s.add_argument("--config", help="pipeline JSON (overrides --process)")
     s.add_argument("--library"); s.add_argument("--no-seed", action="store_true")
     s.add_argument("-q", "--quiet", action="store_true")
     s.set_defaults(func=cmd_slice)
+
+    s = sub.add_parser("processes", help="list saved process presets (workflow options)")
+    s.add_argument("-w", "--workflow"); s.add_argument("-v", "--verbose", action="store_true")
+    s.add_argument("--library"); s.add_argument("--no-seed", action="store_true")
+    s.set_defaults(func=cmd_processes)
     return p
 
 
