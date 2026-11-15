@@ -118,7 +118,7 @@ choose a dedicated Slot operation if the entry requires a smaller axial load.
 ## Engagement settings and compatibility
 
 The user-visible types are **Slot**, **High engagement**, **Cut**, and
-**HSM (low horizontal engagement)**. Machine settings own High/Slot thresholds
+**HSM** (the label is short; its tooltip explains low horizontal engagement). Machine settings own High/Slot thresholds
 and feed modifiers. Tool profiles own the reusable HSM/Cut factors; operations
 can override any factor. See [engagement and feeds](engagement-and-feeds.md).
 

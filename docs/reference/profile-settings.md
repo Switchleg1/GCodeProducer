@@ -55,7 +55,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `slot_engagement_threshold` — Slot at / above | float / % | `95.0` | minimum 1; maximum 100 | Engagement.  |
 | `high_engagement_feed` — High engagement feed modifier | float / % | `75.0` | minimum 1; maximum 300 | Engagement.  |
 | `slotting_feed` — Slot feed modifier | float / % | `50.0` | minimum 1; maximum 300 | Engagement.  |
-| `stock_resolution` — Stock resolution | float / mm | `0.5` | minimum 0.1; maximum 5 | Material simulation. Requested height-field cell size; capped grid memory can coarsen it. Not a full solid/fixture simulation. |
+| `stock_resolution` — Legacy stock resolution (global settings now own this) | float / mm | `0.5` | minimum 0.02; maximum 5; Hidden in GUI (compatibility/API field) | Material simulation. Ignored. The material grid resolution is a global application setting (Settings dialog). |
 | `allowed_tools` — Allowed tools | multi | `*` | IDs from tool; `*` = all, `[]` = none | Allowed consumables. Tools from the tool library that are mounted / available. |
 | `start_gcode` — Start G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written before the job. A template: {variables}, {if ...}{else}{endif}. Empty = the default. |
 | `end_gcode` — End G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written after the job. A template like the start G-code. Empty = the default. |
@@ -105,7 +105,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `spindle_rpm` — Fixed spindle RPM | float / rpm | `18000.0` | No schema bound | Fixed rates (calculation off).  |
 | `max_doc` — Max depth/pass | float / mm | `2.0` | minimum 0 | Engagement. Positive values cap axial depth; 0 disables this cap, not a safety recommendation. |
 | `stepover` — Stepover | float / % | `40.0` | No schema bound | Engagement. Radial engagement as a % of diameter. |
-| `low_engagement_feed` — HSM feed (low horizontal engagement) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. Percentage of base cutting feed; operations may override. Engagement is estimated. |
+| `low_engagement_feed` — HSM feed | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. HSM = low horizontal (radial) engagement. Percentage of base cutting feed; operations may override. Engagement is estimated. |
 | `standard_engagement_feed` — Cut feed | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. May exceed 100% when calibrated for the cutter/material; capped by machine max feed. |
 | `high_engagement_feed` — Legacy high engagement feed (machine now owns default) | float / % | `75.0` | minimum 1; maximum 300; Hidden in GUI (compatibility/API field) | Engagement feeds.  |
 | `slotting_feed` — Legacy slot feed (machine now owns default) | float / % | `50.0` | minimum 1; maximum 300; Hidden in GUI (compatibility/API field) | Engagement feeds. Full-width slots have no single climb/conventional hand. Percentage of base cutting feed. |

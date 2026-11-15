@@ -28,7 +28,8 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
-| Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
+| Roughing clearance / stock to leave | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile; not axial depth allowance |
+| Pocket overcut into void | 0 mm | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
 
 Choose realistic end depths explicitly; an automatically created operation
 is not a safe default machining plan. For stepdown `s`, generation uses up to
@@ -150,9 +151,27 @@ leaves the cutter centre 3.2 mm from the selected retained boundaries and
 uses four depth passes. It does not reserve an axial 0.2 mm floor allowance;
 set End to -5.8 if that is required.
 
+### Overcut into void material
+
+**Pocket overcut into void** grows the pocket region outward by the given
+distance, then removes every part cross-section sampled just above each pass
+depth (plus the roughing clearance) from the growth and clips it to the
+allocated blank. The result is: the pocket extends into stock that will be
+removed anyway, never into the model. On the annular flange example an
+overcut of 3 mm pushes the outer contours past the flange rim into the blank
+while the boss side is unchanged, so a following outside Profile does not
+meet a thin standing wall where the two operations abut. The added area is
+logged. This is a planar, per-operation feature: it does not sequence
+operations, and the cross-sections are conservative unions over the sampled
+depths, so a part that widens below the floor blocks the overcut at that
+width for the whole operation. Invalid STL sections fall back to their convex
+hull, which only ever protects more material.
+
 Not implemented: adaptive clearing, trochoidal motion, rest machining,
 automatic rough/finish stock tracking, helical entry or machining from a full
-3D stock-removal simulation.
+3D stock-removal simulation. Air-cut removal across operations is described
+in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) and
+[global settings](../settings.md).
 
 ## Profile
 

@@ -22,7 +22,7 @@ for a particular printer, material, cutter, or machine.
 
 1. [Installation and first jobs](getting-started.md)
 2. [GUI, placement, preview and keyboard controls](gui.md)
-3. [Settings ownership, libraries and saved state](profiles-and-state.md)
+3. [Settings ownership, libraries and saved state](profiles-and-state.md) and [global settings](settings.md)
 4. Choose [FDM printing](fdm/README.md) or [CAM machining](cam/README.md).
 5. Before machining, read [stock checks and their limitations](cam/stock-and-safety.md).
 

@@ -81,6 +81,7 @@ class Operation:
     lead_in: bool = True
     lead_out: bool = True
     lead_length: float = 0.0            # 0 = half tool diameter
+    overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
 
 
 @dataclass
@@ -318,11 +319,41 @@ def highlight_geometry(payload):
     return out
 
 
+def _drop_air_paths(paths, remaining, radius, name, log=None):
+    """Remove pocket paths whose cutter sweep meets no remaining material at this depth.
+
+    A path after a dropped one loses stay-down permission (its expected previous
+    endpoint no longer exists); the emitter then enters from safe height.
+    """
+    from shapely.geometry import LineString, Point
+    from shapely.prepared import prep
+    probe = prep(remaining)
+    kept, dropped, broken = [], 0, False
+    for path in paths:
+        p = np.asarray(path.points)[:, :2]
+        geom = Point(p[0]).buffer(radius) if len(p) == 1 else LineString(np.vstack((p, p[0])) if path.closed else p).buffer(radius)
+        if probe.intersects(geom) and remaining.intersection(geom).area > 1e-9:
+            if broken:
+                path.stay_down, path.stay_down_from = False, None
+                broken = False
+            kept.append(path)
+        else:
+            dropped += 1
+            broken = True
+    if dropped and log:
+        log(f"  {name}: {dropped} air-only paths removed at this depth")
+    return kept
+
+
 def generate(job, ctx):
     """Generate ordered 2.5D operations. Fail rather than silently machining wrong geometry."""
     from .job import Layer, Path
     from .infill_gen import scan_fill
-    from .cam_paths import contour_pocket, direction_for, orient_contour, link_contours
+    from .cam_paths import (contour_pocket, direction_for, orient_contour, link_contours,
+                            pocket_region, part_section, overcut_region)
+    from .app_settings import pref
+    from shapely.geometry import box as shapely_box
+    skip_air = bool(pref(job, "skip_air_cuts"))
     setup = job.cam_setup
     topo = cached_topology(job.mesh)
     tools = {t.id: t for t in job.tools}
@@ -356,15 +387,14 @@ def generate(job, ctx):
                 raise ValueError(f"{op.name}: select machining geometry first")
             start = op.start.resolve(job.mesh, topo, op.geometry, setup.stock)
             end = op.end.resolve(job.mesh, topo, op.geometry, setup.stock)
+            if (op.kind == "pocket" and op.start.source == "selection" and math.isfinite(start)
+                    and math.isfinite(end) and start <= end + 1e-6):
+                # A single flat floor selection has no higher edge: begin at the material
+                # surface (air-cut removal then drops to the current material top).
+                start = Depth("stock_top", op.start.value).resolve(job.mesh, topo, op.geometry, setup.stock)
+                ctx.log(f"  {op.name}: flat selection; start taken from the material surface Z{start:g}")
             if not (math.isfinite(start) and math.isfinite(end)) or end > start:
                 raise ValueError(f"{op.name}: end Z must be at or below start Z")
-            reach=float(tool.get("length",0) or 0)
-            surface=setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
-            if reach>0 and surface-end>reach+1e-3:
-                warning=f"{op.name}: depth below material surface exceeds tool cutting length; verify reach, shank and holder clearance."
-                if warning not in job.warnings:
-                    job.warnings.append(warning)
-                    ctx.log("REACH WARNING: "+warning)
             if not op.auto_stepdown and (op.stepdown <= 0 or not math.isfinite(op.stepdown)):
                 raise ValueError(f"{op.name}: stepdown must be positive")
             from .cam_cutting import resolve_cutting
@@ -403,16 +433,30 @@ def generate(job, ctx):
             if op.kind == "pocket":
                 if not 0 < op.stepover <= 100:
                     raise ValueError("Pocket stepover must be between 0 and 100 percent")
+                if op.overcut < 0 or not math.isfinite(op.overcut):
+                    raise ValueError(f"{op.name}: overcut must be zero or positive")
+                region = pocket_region(loops)
+                if op.overcut > 0:
+                    depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
+                    protected = part_section(job.mesh, depths, op.stock)
+                    limit = None
+                    if setup.stock.allocated:
+                        lo_s, hi_s = setup.stock.bounds
+                        limit = shapely_box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+                    grown = overcut_region(region, op.overcut, protected, limit)
+                    ctx.log(f"  {op.name}: overcut {op.overcut:g} mm into void material adds "
+                            f"{grown.area - region.area:.1f} mm² (part sections protected)")
+                    region = grown
                 if op.strategy == "contour":
-                    contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log)
-                    linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down)
+                    contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log, region=region)
+                    linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
                     paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
                                   stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                              for i, (p, link) in enumerate(linked)]
                 elif op.strategy == "raster":
-                    from .cam_paths import pocket_region, boundary_paths
-                    region = pocket_region(loops).buffer(-(diameter/2+op.stock))
-                    regions = [p for p, _ in boundary_paths(region, direction)]
+                    from .cam_paths import boundary_paths
+                    centre_region = region.buffer(-(diameter/2+op.stock))
+                    regions = [p for p, _ in boundary_paths(centre_region, direction)]
                     if not regions:
                         raise ValueError(f"{op.name}: pocket is too small for this tool")
                     for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
@@ -450,6 +494,31 @@ def generate(job, ctx):
                     paths.append(Path("drill", np.array([[x, y]]), width=diameter))
             if not paths:
                 raise ValueError(f"{op.name}: no machinable paths")
+            surface = setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
+            if material_history is not None:
+                # Current material top where this operation actually cuts: material already
+                # removed by earlier operations does not consume flute length.
+                current_top = material_history.top_within(PlanarStock.sweep(paths, diameter/2), surface, end)
+                if current_top is not None:
+                    surface = current_top
+            reach = float(tool.get("length", 0) or 0)
+            if reach > 0 and surface - end > reach + 1e-3:
+                warning = (f"{op.name}: {surface - end:g} mm below the current material surface (Z{surface:g}) exceeds the "
+                           f"tool cutting length {reach:g} mm; verify reach, shank and holder clearance.")
+                if warning not in job.warnings:
+                    job.warnings.append(warning)
+                    ctx.log("REACH WARNING: " + warning)
+            if skip_air and material_history is not None:
+                # Earlier operations already removed material here: begin at the first
+                # depth that still holds stock instead of air-cutting from the requested start.
+                effective = material_history.top_within(PlanarStock.sweep(paths, diameter/2), start, end)
+                if effective is None:
+                    ctx.log(f"  {op.name}: entire depth range Z{start:g}..Z{end:g} is already removed; operation skipped")
+                    continue
+                if effective < start - 1e-6:
+                    ctx.log(f"  {op.name}: start lowered from Z{start:g} to Z{effective:g} (material above is already removed)")
+                    start = effective
+                    count = max(1, math.ceil((start - end) / step))
             cached_key, planned = None, None
             for i in range(count):
                 z = max(end, start - (i + 1) * step)
@@ -457,14 +526,21 @@ def generate(job, ctx):
                 key = remaining.normalize().wkb if remaining is not None else b"unallocated"
                 if key != cached_key:
                     planned = copy.deepcopy(paths)
+                    if skip_air and remaining is not None and op.kind == "pocket":
+                        planned = _drop_air_paths(planned, remaining, diameter/2, op.name, ctx.log)
+                    cached_key = key
+                    if not planned:
+                        ctx.log(f"  {op.name}: depth pass Z{z:g} lies entirely in removed material; pass skipped")
+                        continue
                     if op.kind != "drill":
                         from .cam_engagement import plan_engagement
                         for warning in plan_engagement(planned, job, op, tool, ctx.log, remaining):
                             if warning not in job.warnings:job.warnings.append(warning)
-                    cached_key = key
                     if op.kind == "pocket" and op.strategy == "contour":
                         ctx.log(f"  {op.name}: {sum(p.stay_down for p in planned)} stay-down links, "
                                 f"{sum(not p.stay_down for p in planned)} safe-height entries per depth pass")
+                if not planned:
+                    continue
                 if material_history:material_history.remove(planned,z,diameter/2)
                 layer = Layer(len(layers), z, min(step, start - z), paths=planned)
                 layer.cam_tool_id = tool.id
@@ -477,6 +553,6 @@ def generate(job, ctx):
             ctx.log(f"  {op.name}: {len(paths)} paths, {count} passes, Z{start:g} to Z{end:g}")
         ctx.progress((gi + 1) / max(1, len(setup.groups)))
     if not layers:
-        raise ValueError("CAM setup has no enabled operations")
+        raise ValueError("CAM setup has no enabled operations that remove material")
     job.layers = layers
     return f"{len(setup.groups)} tool groups, {len(layers)} depth passes"

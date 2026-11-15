@@ -83,12 +83,32 @@ Every operation has independent Start Z and End Z definitions:
 | Material surface + offset | Offset in mm | Allocated stock top Z; falls back to model top when unallocated |
 | Machining selection + offset | Offset in mm | Minimum/maximum Z over all current cutting references |
 
-New Pocket operations use Material surface for Start and Machining selection
-with Minimum Z for End. Thus a selected floor at Z-15 stops removal at -15,
-not the model bottom at -30. With an upper boss rim at Z0 and lower flange rim
-at Z-15, the selection also resolves to -15. Selecting only an upper rim at
-Z0 initially supplies no removal depth; add the lower boundary or set a
-specific end reference. Empty machining selections cannot resolve this source.
+New Pocket operations use **Machining selection, Maximum Z** for Start and
+**Machining selection, Minimum Z** for End. Selecting a counterbore's upper
+rim at Z-15 and its lower rim at Z-21 therefore cuts exactly Z-15…-21; a
+selected floor at Z-15 stops removal at -15, not the model bottom at -30.
+When the selection is flat (one floor face, or rims at a single height) the
+maximum equals the minimum, so generation takes Start from the **material
+surface** instead and logs that choice; the Start offset still applies.
+Selecting only an upper rim at Z0 supplies no removal depth; add the lower
+boundary or set a specific end reference. Empty machining selections cannot
+resolve this source.
+
+With **Remove air cutting** (default, [Settings](../settings.md)) the Start is
+also lowered to the highest Z where the operation's cutter sweep still meets
+material left by earlier operations. A bolt-hole pocket entered after the
+flange floor was cleared to Z-15 begins at Z-15 even when its Start field
+resolves to the Z0 material surface. The lowered start, skipped passes and
+skipped operations are logged; switch the setting off to keep every requested
+pass. The estimate uses planar cutter sweeps of **earlier operations in this
+setup only**; material removed by a previous program or by hand is unknown.
+
+![Bolt-hole pocket starting below the cleared flange](../pictures/cam-air-cut-removed.png)
+
+Actual capture: the counterbore pocket (selected from its Z-15 and Z-21 rims)
+stacks its passes from Z-15 downward after the flange pocket; nothing is
+cut in the air above it.
+
 Existing saved depth definitions are preserved. **Use pocket selection depths**
 explicitly switches both fields to these defaults and resets offsets; it is
 available on Pocket operations. See the

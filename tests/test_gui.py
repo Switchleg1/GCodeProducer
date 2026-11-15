@@ -588,3 +588,35 @@ def test_new_cam_tool_enables_material_calculation(win,monkeypatch):
     assert tool.get("auto_cutting_data") is True
     assert tool.get("steel_chip_load")>0 and tool.get("hard_plastic_sfm")>0
     dialog.close()
+
+
+def test_settings_dialog_persists_preferences_and_marks_cam_stale(win, monkeypatch, tmp_path):
+    from gcodeproducer.core import app_settings
+    from gcodeproducer.gui.settings_dialog import SettingsDialog
+    assert win.preferences == app_settings.DEFAULTS
+    captured = {}
+
+    def fake_exec(self):
+        captured["dialog"] = self
+        self.editor._set("stock_resolution", 0.1)
+        self.editor._set("skip_air_cuts", False)
+        return 1
+    monkeypatch.setattr(SettingsDialog, "exec", fake_exec)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.program = object(); win.stale = False
+    win.edit_settings()
+    assert win.preferences["stock_resolution"] == pytest.approx(0.1)
+    assert win.preferences["skip_air_cuts"] is False
+    assert app_settings.load(win.libset.root)["stock_resolution"] == pytest.approx(0.1)
+    assert win.stale                                   # generated CAM output depends on preferences
+    dlg = SettingsDialog(win.preferences, win)
+    dlg._defaults()
+    assert dlg.result_values() == app_settings.DEFAULTS
+    dlg.close()
+
+
+def test_feature_list_has_hsm_and_conflict_tooltips(win):
+    from gcodeproducer.core.features import FEATURE_LABELS, FEATURE_TOOLTIPS
+    assert FEATURE_LABELS["hsm"] == "HSM" and "low horizontal" in FEATURE_TOOLTIPS["hsm"]
+    assert "conflict" in FEATURE_TOOLTIPS and "collision" in FEATURE_TOOLTIPS
+    assert "(low horizontal" not in win.cam_editor.feed_controls["low_engagement_feed"].specialValueText()

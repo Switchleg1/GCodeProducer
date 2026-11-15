@@ -68,6 +68,7 @@ def _intersects(a, b, lo, hi):
 def check_stock(job, program, sim=None, progressive=False):
     """Warnings, with G-code line numbers. Intended cuts/plunges are not rapid collisions."""
     from .sim import simulate
+    from .features import CAM_CUT_FEATURES
     stock = getattr(job.cam_setup, "stock", None)
     if stock is None or not stock.allocated:
         return ["CAM stock is not allocated; material collision checking could not run."]
@@ -123,7 +124,7 @@ def check_stock(job, program, sim=None, progressive=False):
         if sim.motion_cmd[i] == "G0" and contact and not upward_retract:
             warn(f"{label}: rapid motion intersects the original material (tool radius {r:g} mm).")
         elif sim.motion_cmd[i] == "G1" and contact and not upward_retract:
-            intended = ln.feature in ("cut", "slot", "high_engagement", "hsm", "air", "plunge", "lead_in", "lead_out") and ln.op is not None
+            intended = (ln.feature in CAM_CUT_FEATURES or ln.feature in ("plunge", "lead_in", "lead_out")) and ln.op is not None
             if not intended:
                 warn(f"{label}: custom/unclassified feed move enters the material.")
             if not spindle:

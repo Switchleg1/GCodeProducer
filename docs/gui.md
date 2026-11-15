@@ -23,6 +23,10 @@ the current controls.
 
 ## Setup and import
 
+**File → Settings… (Ctrl+,)** holds [global preferences](settings.md) that
+affect generated output for every model: air-cut removal, material grid
+resolution and cell limit, conflict colouring and the warning dialog.
+
 Choose the workflow before configuring a machine. FDM offers allowed material
 and nozzle profiles. CAM tools are added in the tool-change tree rather than
 selected as a single global tool. Profile edit buttons open Libraries on the
@@ -98,7 +102,11 @@ additional confirmation to export.
 - Layer controls are disabled in Prepare but remain outside the viewport so
   their labels do not resize the 3D area when changing views.
 - Colour by feature, movement kind, speed or layer. Feature checkboxes hide or
-  show categories. Hidden paths still exist in exported G-code.
+  show categories; hover a CAM entry such as *HSM*, *Conflict* or *Collision*
+  for its meaning. Hidden paths still exist in exported G-code.
+- CAM moves flagged by the planner or the stock checks are recoloured
+  **Conflict** (yellow) or **Collision** (magenta) when the global setting
+  allows it; see [global settings](settings.md#conflict-and-collision-colouring).
 - Double-click a move to select its G-code line; double-click a line to locate
   the corresponding move in 3D.
 - Statistics summarize lines, layers, motion bounds and time. FDM also reports

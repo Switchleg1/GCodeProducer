@@ -7,12 +7,34 @@ from the machine profile.
 from __future__ import annotations
 
 import math
+import re
 
 import numpy as np
 
 from ..core.builder import GCodeBuilder
 from ..core.gcode import format_number
 from .base import CAM, SliceStage
+
+
+_LINE = re.compile(r"^Line (\d+):")
+
+
+def mark_collisions(program, warnings):
+    """Recolour moves named by 'Line N:' findings as the Collision feature.
+
+    Only line-specific findings are mapped; setup-level findings (unallocated
+    stock, safe Z, part containment) have no single move to highlight.
+    """
+    count = 0
+    for warning in warnings:
+        m = _LINE.match(warning)
+        if not m:
+            continue
+        index = int(m.group(1))-1
+        if 0 <= index < len(program.lines) and program.lines[index].feature != "collision":
+            program.lines[index].feature = "collision"
+            count += 1
+    return count
 
 
 class CAMEmit(SliceStage):
@@ -31,7 +53,8 @@ class CAMEmit(SliceStage):
         first_id = getattr(job.layers[0], "cam_tool_id", None) if job.layers else None
         tool = tool_map.get(first_id) or (job.tools[0] if job.tools else None)
         from ..core.cam_cutting import resolve_cutting
-        from ..core.cam_material import HeightStock, simulate_material
+        from ..core.cam_material import height_stock_for, simulate_material
+        from ..core.app_settings import pref
         from ..core.cam_leads import ramp, walk
         stock = getattr(job.cam_setup,"stock",None)
         if stock is None and job.settings.get("machining_material"):
@@ -39,7 +62,7 @@ class CAMEmit(SliceStage):
             stock=Stock(category=job.settings["machining_material"])
         if stock is None and any(t.get("auto_cutting_data",False) for t in job.tools):
             raise ValueError("Automatic CAM tools need a machining material category (CLI: --cam-material)")
-        live = HeightStock(stock,job.m("stock_resolution",.5)) if stock is not None and stock.allocated else None
+        live = height_stock_for(job,stock) if stock is not None and stock.allocated else None
         first_op = getattr(job.layers[0],"cam_operation_config",None) if job.layers else None
         first_data = resolve_cutting(job.machine,tool,stock,first_op) if tool else None
         position = np.zeros(3)
@@ -75,6 +98,8 @@ class CAMEmit(SliceStage):
             requested = limited(float(feed)*factor)
             feature = ({"slot": "slot", "high": "high_engagement", "hsm": "hsm", "air": "air"}.get(condition.regime, "cut")
                        if condition is not None else "cut")
+            if condition is not None and condition.conflict and pref(job,"highlight_conflicts"):
+                feature = "conflict"
             b.set_feature(feature)
             note = None
             if condition is not None:
@@ -214,6 +239,9 @@ class CAMEmit(SliceStage):
             job.warnings = list(job.warnings) + stock_warnings
             for warning in stock_warnings:
                 ctx.log(f"STOCK WARNING: {warning}")
+            if pref(job,"highlight_conflicts"):
+                flagged=mark_collisions(prog,stock_warnings)
+                if flagged:ctx.log(f"  {flagged} flagged moves recoloured as Collision")
         for request, cap in sorted(capped):
             ctx.log(f"  CAM feed capped: {request:g} -> {cap:g} mm/min (machine max_feed)")
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))

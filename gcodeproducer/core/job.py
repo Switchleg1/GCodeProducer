@@ -18,9 +18,10 @@ from .profiles import Profile
 @dataclass(frozen=True, slots=True)
 class CutCondition:
     engagement: float                  # estimated radial engagement 0..1
-    regime: str                        # air / low / standard / high / slot
+    regime: str                        # air / hsm / cut / high / slot
     hand: str                          # climb / conventional / neutral / mixed / air (M3)
     feed_factor: float = 1.0            # multiplier of tool cutting feed
+    conflict: bool = False              # segment cuts against the requested hand (highlighted, warned)
 
 
 @dataclass
@@ -62,6 +63,7 @@ class Job:
     cam_setup: object = None                       # core.cam.CAMSetup (None = legacy CLI profile)
     model_path: Optional[str] = None
     settings: dict = field(default_factory=dict)    # resolved per-job overrides
+    preferences: dict = field(default_factory=dict) # global application preferences (core.app_settings)
     layers: list = field(default_factory=list)      # list[Layer]
     material_results: list = field(default_factory=list)  # operation output surfaces from progressive stock simulation
     warnings: list = field(default_factory=list)   # advisory CAM stock safety findings

@@ -67,14 +67,16 @@ This view adds one generated depth pass and its leads. The illustrated tool
 uses demonstration non-iron-metal data (3 mm diameter, 200 SFM, 0.025 mm/tooth)
 and automatic Pocket axial depth 25% D. It is not a manufacturer-qualified
 recipe. All images are actual application captures with isolated settings;
-the checking grid is 0.5 mm and the visible surface is display-decimated.
+the checking grid was 0.5 mm at capture time (the default is now 0.2 mm) and
+the visible surface is display-decimated.
 
 ## Resolution and display limits
 
-The CAM machine's **Material simulation → stock_resolution** requests the
-height-field cell size (default 0.5 mm). A memory guard coarsens large blanks
-to about 160,000 cells. The actual resolution is logged and shown with the
-selected output. The display mesh is further bounded to roughly 100×100 cells;
+The global **Material grid resolution** setting ([Settings](../settings.md))
+requests the height-field cell size (default 0.2 mm). The **Maximum grid
+cells** limit (default 2,000,000) coarsens larger blanks and warns when it
+does. The previous machine `stock_resolution` field is ignored. The actual
+resolution is logged and shown with the selected output. The display mesh is further bounded to roughly 100×100 cells;
 its visual sampling is not the complete checking grid.
 
 Sub-cell features can be missed or represented imperfectly. Centre-sampled
@@ -147,7 +149,11 @@ engagement analysis are not a substitute for a controller-aware simulator.
 Warnings are logged, shown after generation and retained for export
 confirmation. Mixed-hand and lead warnings are not discarded when stock checks
 run. Tool-number reuse across different profiles and cut depths beyond stored tool
-cutting length are also warnings, not full holder/reach tests: validate
+cutting length are also warnings, not full holder/reach tests. The reach
+check measures from the **current** material top within the operation's
+sweep (material removed by earlier operations does not consume flute length),
+but shank or holder contact with higher material next to the cut is not
+modelled: validate
 what tool is actually installed, not just the simulated requested tool.
 
 [Stock allocation](stock-and-safety.md) · [Cutting data](cutting-data.md) ·

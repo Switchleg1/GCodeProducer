@@ -41,8 +41,10 @@ FEATURE_TABLE = [
     ("slot",              "Slot",    (1.00, 0.55, 0.00)),
     ("high_engagement",   "High engagement",     (1.00, 0.20, 0.10)),
     ("cut",               "Cut",                  (0.30, 0.85, 0.35)),
-    ("hsm",               "HSM (low horizontal engagement)", (0.20, 0.65, 1.00)),
+    ("hsm",               "HSM",                  (0.20, 0.65, 1.00)),
     ("air",               "Air cut",              (0.55, 0.55, 0.55)),
+    ("conflict",          "Conflict (wrong hand / uncertain)", (1.00, 0.95, 0.10)),
+    ("collision",         "Collision (material contact)", (1.00, 0.00, 1.00)),
     ("unknown",           "Unknown",              (0.65, 0.65, 0.65)),
 ]
 
@@ -50,7 +52,13 @@ FEATURE_IDS = [f[0] for f in FEATURE_TABLE]
 FEATURE_LABELS = {f[0]: f[1] for f in FEATURE_TABLE}
 _FEATURE_COLORS = {f[0]: f[2] for f in FEATURE_TABLE}
 
-CAM_FEATURES = ["rapid", "plunge", "retract", "lead_in", "lead_out", "slot", "high_engagement", "cut", "hsm", "air"]
+CAM_FEATURES = ["rapid", "plunge", "retract", "lead_in", "lead_out", "slot", "high_engagement", "cut", "hsm", "air",
+                "conflict", "collision"]
+# Feature ids that an operation's own cut moves may legitimately carry (incl. flagged ones).
+CAM_CUT_FEATURES = {"cut", "slot", "high_engagement", "hsm", "air", "conflict"}
+FEATURE_TOOLTIPS = {"hsm": "HSM: low horizontal (radial) engagement, below the machine HSM threshold",
+                    "conflict": "Cut segments the planner could not keep on the requested climb/conventional hand",
+                    "collision": "Moves the stock checks flagged: rapid/spindle-off/unexpected contact, below-bottom or deep entry"}
 # Features a 3D printer speed modifier can act on (excludes custom/unknown and CAM features).
 PRINT_FEATURES = [f for f in FEATURE_IDS if f not in ("custom", "unknown") and f not in CAM_FEATURES]
 FDM_FEATURES = PRINT_FEATURES

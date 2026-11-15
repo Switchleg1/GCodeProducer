@@ -61,6 +61,49 @@ def pocket_region(loops):
     return region
 
 
+def part_section(mesh, depths, clearance=0.0):
+    """Union of valid part cross-sections sampled just above each depth (even-odd nesting).
+
+    Conservative: protects part material anywhere in the sampled depth range.
+    Polygons that fail to form valid rings are dilated point sets, never dropped.
+    """
+    from .geometry import slice_z
+    from shapely.geometry import MultiPoint
+    from shapely.ops import unary_union
+    sections = []
+    for z in sorted(set(float(d) for d in depths)):
+        region = Polygon()
+        for loop in slice_z(mesh, z+1e-4):
+            loop = np.asarray(loop, float)
+            if len(loop) < 3:
+                continue
+            p = Polygon(loop)
+            if not p.is_valid:
+                p = p.buffer(0)
+                if p.is_empty:
+                    p = MultiPoint(loop).convex_hull
+            region = region.symmetric_difference(p)
+        if not region.is_empty:
+            sections.append(region.buffer(0))
+    union = unary_union(sections) if sections else Polygon()
+    return union.buffer(clearance, join_style=BufferJoinStyle.round) if clearance > 0 and not union.is_empty else union
+
+
+def overcut_region(region, overcut, protected, limit=None):
+    """Grow a pocket region into void material only: never into the part section."""
+    if overcut <= 0:
+        return region
+    grown = region.buffer(overcut, join_style=BufferJoinStyle.round)
+    if limit is not None:
+        grown = grown.intersection(limit)
+    if protected is not None and not protected.is_empty:
+        grown = grown.difference(protected)
+    result = region.union(grown).buffer(0)
+    if result.is_empty or not result.is_valid:
+        raise ValueError("Overcut produced no valid removal region")
+    return result
+
+
 def _polygons(region):
     if region.geom_type == "Polygon":
         return [region]
@@ -101,7 +144,7 @@ def _nearest_seam(points, position):
     return float(distance2[i]), phased
 
 
-def link_contours(contours, loops, radius, allowance, direction, enabled=True):
+def link_contours(contours, loops, radius, allowance, direction, enabled=True, region=None):
     """Nearby loops with short, region-checked same-Z cutting links.
 
     The caller must reset links at every depth/operation/tool boundary. A link
@@ -112,7 +155,8 @@ def link_contours(contours, loops, radius, allowance, direction, enabled=True):
     """
     if not contours:
         return []
-    centre = pocket_region(loops).buffer(-(radius+allowance), join_style=BufferJoinStyle.round)
+    region = pocket_region(loops) if region is None else region
+    centre = region.buffer(-(radius+allowance), join_style=BufferJoinStyle.round)
     # Only a sub-micron tolerance for GEOS boundary roundoff, not extra clearance.
     valid = prep(centre.buffer(1e-7))
     remaining = [np.asarray(p, float) for p in contours]
@@ -145,7 +189,7 @@ def link_contours(contours, loops, radius, allowance, direction, enabled=True):
     return result
 
 
-def contour_pocket(loops, radius, allowance, stepover, direction, log=None):
+def contour_pocket(loops, radius, allowance, stepover, direction, log=None, region=None):
     """Successive inward offsets of the whole pocket, including island fronts.
 
     Return closed XY loops. Fronts split into mixed-shape loops as islands meet
@@ -156,7 +200,7 @@ def contour_pocket(loops, radius, allowance, stepover, direction, log=None):
         raise ValueError("Pocket stepover must be between 0 and 100 percent")
     if radius <= 0 or allowance < 0:
         raise ValueError("Pocket tool radius must be positive and stock allowance nonnegative")
-    region = pocket_region(loops)
+    region = pocket_region(loops) if region is None else region
     inset = radius+allowance
     centre = region.buffer(-inset, join_style=BufferJoinStyle.round)
     if centre.is_empty:

@@ -28,7 +28,7 @@ def test_mouse_click_selects_geometry(win, cube_stl, app, mode):
     ed.set_setup(CAMSetup.from_dict(ed.setup.to_dict()))  # reopening restores an operation
     op = ed.operation()
     assert op is not None and win.model_viewer.cam_pick_mode == "face"
-    assert op.start.source == "stock_top" and op.end.source == "selection"
+    assert op.start.source == "selection" and op.start.extreme == "max" and op.end.source == "selection"
     ed.pick.setCurrentIndex(ed.pick.findData(mode))
     ed._edit()  # Editing settings must not silently leave selection mode.
     assert win.model_viewer.cam_pick_mode == mode
@@ -71,6 +71,6 @@ def test_saved_pocket_can_explicitly_switch_to_selection_depths(win, cube_stl):
     ed.set_setup(CAMSetup.from_dict(ed.setup.to_dict()))
     assert ed.operation().end.source == "bottom"  # no silent migration of existing cuts
     ed.b_selection_depths.click()
-    assert ed.operation().start.source == "stock_top"
+    assert ed.operation().start.source == "selection" and ed.operation().start.extreme == "max"
     assert ed.operation().end.source == "selection"
     assert ed.operation().end.extreme == "min"

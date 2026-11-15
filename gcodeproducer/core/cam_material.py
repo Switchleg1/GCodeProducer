@@ -21,7 +21,23 @@ class PlanarStock:
         cuts=[g for depth,g in self.removed.values() if depth <= z+1e-6]
         return self.blank.difference(unary_union(cuts)) if cuts else self.blank
 
-    def remove(self,paths,z,radius):
+    def top_within(self,geom,start,end):
+        """Highest Z in [end, start] where ``geom`` still meets material, else None.
+
+        Material is piecewise constant between recorded removal depths, so only
+        ``start`` and the depths just below each recorded removal need testing.
+        """
+        if geom.is_empty:return None
+        candidates=[min(start,self.top)]+sorted({d for d,_ in self.removed.values() if end<d<start},reverse=True)
+        for z in candidates:
+            # ``at`` applies a 1e-6 tolerance of its own; probe clearly below a recorded depth.
+            probe=z-1e-4 if z<start or z>=self.top-1e-9 else z
+            if self.at(probe).intersection(geom).area>1e-9:
+                return float(min(z,start))
+        return None
+
+    @staticmethod
+    def sweep(paths,radius):
         sweeps=[]
         previous=None
         for path in paths:
@@ -34,18 +50,22 @@ class PlanarStock:
                 q=np.vstack((p,p[0])) if path.closed else p
                 sweeps.append(LineString(q).buffer(radius))
             previous=p[0] if path.closed else p[-1]
-        swept=unary_union(sweeps).normalize()
+        return unary_union(sweeps).normalize()
+
+    def remove(self,paths,z,radius):
+        swept=self.sweep(paths,radius)
         key=swept.wkb
         old=self.removed.get(key)
         self.removed[key]=(min(z,old[0]) if old else z,swept)
 
 
 class HeightStock:
-    def __init__(self,stock,resolution=.5):
+    def __init__(self,stock,resolution=.2,max_cells=2_000_000):
         self.stock=stock
         lo,hi=stock.bounds
-        resolution=max(float(resolution),.1)
-        resolution=max(resolution,math.sqrt(stock.width*stock.depth/160000))
+        self.requested=max(float(resolution),.02)
+        resolution=max(self.requested,math.sqrt(stock.width*stock.depth/max(int(max_cells),10_000)))
+        self.coarsened=resolution>self.requested+1e-12
         self.nx=max(1,int(math.ceil(stock.width/resolution)))
         self.ny=max(1,int(math.ceil(stock.depth/resolution)))
         self.dx=stock.width/self.nx;self.dy=stock.depth/self.ny
@@ -137,12 +157,17 @@ class HeightStock:
         return np.ascontiguousarray(np.concatenate(quads),np.float32)
 
 
+def height_stock_for(job,stock):
+    from .app_settings import pref
+    return HeightStock(stock,pref(job,"stock_resolution"),pref(job,"stock_max_cells"))
+
+
 def simulate_material(job,program,log=None):
     """Execute emitted moves in order, preserving material across all operations."""
     from .sim import simulate
     stock=getattr(job.cam_setup,"stock",None)
     if stock is None or not stock.allocated:return [],[]
-    state=HeightStock(stock,job.m("stock_resolution",.5))
+    state=height_stock_for(job,stock)
     sim=simulate(program)
     by_id={t.id:t.resolved() for t in job.tools}
     tools={int(by_id[t.id].get("tool_number",1)):by_id[t.id] for t in job.tools}
@@ -151,9 +176,12 @@ def simulate_material(job,program,log=None):
     snapshots=[{"label":"Initial material","last_layer":-1,"positions":state.surface(),
                 "resolution":state.resolution,"heights":state.heights.copy()}]
     warnings=[];spindle=False;last_op=None;last_layer=-1
-    intended={"cut","slot","high_engagement","hsm","air","plunge","lead_in","lead_out"}
+    from .features import CAM_CUT_FEATURES
+    intended=CAM_CUT_FEATURES|{"plunge","lead_in","lead_out"}
     def warn(text):
         if len(warnings)<100 and text not in warnings:warnings.append(text)
+    if state.coarsened:
+        warn(f"Material grid coarsened from {state.requested:g} to {state.resolution:g} mm by the global cell limit; raise it in Settings for finer checks.")
     def snapshot(label):
         snapshots.append({"label":label,"last_layer":last_layer,"positions":state.surface(),
                           "resolution":state.resolution,"heights":state.heights.copy()})

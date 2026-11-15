@@ -114,7 +114,8 @@ class CAMEditor(QWidget):
         self.depth_summary.setWordWrap(True)
         form.addRow(self.depth_summary)
         self.b_selection_depths = QPushButton("Use pocket selection depths")
-        self.b_selection_depths.setToolTip("Start at material surface; end at the lowest selected face/edge Z. Replaces both depth definitions.")
+        self.b_selection_depths.setToolTip("Start at the highest selected face/edge Z; end at the lowest. Replaces both depth definitions. "
+                                           "With 'Remove air cutting' (Settings) the start also drops below material removed by earlier operations.")
         self.b_selection_depths.clicked.connect(self.use_selection_depths)
         form.addRow(self.b_selection_depths)
         self.auto_stepdown = QCheckBox("Tool/material axial depth default")
@@ -148,6 +149,11 @@ class CAMEditor(QWidget):
         for k in ("outside", "inside", "on"):
             self.side.addItem(k.title(), k)
         self.stock = self.spin(0, 100, 0)
+        self.stock.setToolTip("Roughing clearance: material left on every selected wall/island for a later finishing pass.")
+        self.overcut = self.spin(0, 1000, 0)
+        self.overcut.setToolTip("Pocket only: grow the removal region outward by this distance into void material (stock that is not "
+                                "part of the model at any pass depth). Part cross-sections plus roughing clearance are never entered. "
+                                "Lets this pocket overlap the next operation so no thin wall remains between them.")
         self.strategy = QComboBox()
         self.strategy.addItem("Wall-parallel contours", "contour")
         self.strategy.addItem("Raster lines", "raster")
@@ -157,7 +163,8 @@ class CAMEditor(QWidget):
                            ("Conventional", "conventional"), ("Meander", "meander")):
             self.direction.addItem(label, key)
         for label, w in (("Stepdown (mm)", self.stepdown), ("Pocket stepover (%)", self.stepover),
-                         ("Profile side", self.side), ("Stock to leave (mm)", self.stock),
+                         ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
+                         ("Pocket overcut into void (mm)", self.overcut),
                          ("Pocket strategy", self.strategy), ("Cutting direction", self.direction)):
             form.addRow(label, w)
             if isinstance(w, QComboBox):
@@ -171,7 +178,7 @@ class CAMEditor(QWidget):
         self.feed_controls = {}
         feeds = QGroupBox("Engagement feeds (% of tool feed)")
         ff = QFormLayout(feeds)
-        for key, label in (("low_engagement_feed", "HSM (low horizontal engagement)"),
+        for key, label in (("low_engagement_feed", "HSM"),
                            ("standard_engagement_feed", "Cut"),
                            ("high_engagement_feed", "High engagement"),
                            ("slotting_feed", "Slot")):
@@ -179,7 +186,8 @@ class CAMEditor(QWidget):
             sb.setDecimals(0)
             sb.setSpecialValueText("Machine default" if key in ("high_engagement_feed","slotting_feed") else "Tool default")
             sb.setSuffix(" %")
-            sb.setToolTip("0 inherits the tool profile. 100% is base tool feed; values above 100% increase it, subject to machine max feed.")
+            sb.setToolTip(("HSM = low horizontal (radial) engagement. " if key == "low_engagement_feed" else "")
+                          + "0 inherits the tool profile. 100% is base tool feed; values above 100% increase it, subject to machine max feed.")
             sb.valueChanged.connect(self._edit)
             self.feed_controls[key] = sb
             ff.addRow(label, sb)
@@ -263,7 +271,7 @@ class CAMEditor(QWidget):
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
         op = Operation(name=kind.title(), kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1)
         if kind == "pocket":
-            op.start = Depth("stock_top")
+            op.start = Depth("selection", extreme="max")
             op.end = Depth("selection", extreme="min")
         elif kind == "engrave":
             op.end = Depth("top", -0.2)
@@ -325,6 +333,8 @@ class CAMEditor(QWidget):
             self.stepover.setValue(op.stepover)
             self.side.setCurrentIndex(self.side.findData(op.side))
             self.stock.setValue(op.stock)
+            self.overcut.setValue(op.overcut)
+            self.overcut.setEnabled(op.kind == "pocket")
             self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
@@ -360,6 +370,7 @@ class CAMEditor(QWidget):
         op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
         op.lead_length = self.lead_length.value()
         op.side, op.stock = self.side.currentData(), self.stock.value()
+        op.overcut = self.overcut.value()
         op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
         op.stay_down = self.stay_down.isChecked()
         for key, sb in self.feed_controls.items():
@@ -410,7 +421,7 @@ class CAMEditor(QWidget):
         op = self.operation()
         if op is None or op.kind != "pocket":
             return
-        op.start, op.end = Depth("stock_top"), Depth("selection", extreme="min")
+        op.start, op.end = Depth("selection", extreme="max"), Depth("selection", extreme="min")
         self._loading = True
         for key, (source, val, extreme) in self.depth_controls.items():
             d = getattr(op, key)

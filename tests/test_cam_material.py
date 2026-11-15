@@ -98,6 +98,10 @@ def test_later_operation_uses_prior_removal_in_engagement(libset):
     second=Operation(kind="pocket",name="previously cleared",geometry=[floor_ref(mesh)],
                      start=Depth("top"),end=Depth("top",-1))
     job.cam_setup.groups[0].operations.append(second)
+    ctx=StageContext()
+    generate(job,ctx)   # default: remove air cutting -> fully cleared operation is skipped
+    assert not [l for l in job.layers if l.cam_operation==second.name]
+    job.preferences={"skip_air_cuts":False}
     generate(job,StageContext())
     later=[l for l in job.layers if l.cam_operation==second.name]
     assert later

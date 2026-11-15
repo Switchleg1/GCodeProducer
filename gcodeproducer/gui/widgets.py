@@ -158,6 +158,8 @@ class ParamEditor(QWidget):
             cb.setChecked(bool(v))
             cb.setToolTip(p.help)
             cb.toggled.connect(lambda val, n=p.name: self._set(n, bool(val)))
+            self._widgets[p.name] = cb
+            self._setters[p.name] = lambda val, c=cb: c.setChecked(bool(val))
             return cb
         if p.type == "choice":
             co = QComboBox()

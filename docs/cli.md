@@ -43,6 +43,7 @@ python -m gcodeproducer slice INPUT.stl [options]
 | `--material`, `--nozzle` | FDM consumables |
 | `--tool` | One tool for the legacy CLI CAM profile |
 | `--cam-material` | Machining category for an automatic SFM/chip-load tool (e.g. `non_iron_metal`, `steel`) |
+| `--pref KEY=VALUE` | Override one [global setting](settings.md) for this run (repeatable); `gcodeproducer settings` lists keys |
 | `--process` | Saved pipeline preset by ID/name |
 | `--config` | Pipeline JSON; takes precedence over `--process` |
 | `-m`, `--stage-param` | Repeatable `stage_id:key=value,...` override |

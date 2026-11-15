@@ -31,9 +31,9 @@ from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, 
                              QToolBar, QToolButton, QVBoxLayout, QWidget)
 
 from .. import __version__
-from ..core import defaults, plugins
+from ..core import app_settings, defaults, plugins
 from ..core import workflow as wf
-from ..core.features import feature_color, feature_label
+from ..core.features import FEATURE_TOOLTIPS, feature_color, feature_label
 from ..core.geometry import Mesh
 from ..core.pipeline import SlicePipeline
 from ..core.placement import Placement, bed_rect, bed_xy, fits
@@ -46,6 +46,7 @@ from ..core.session import build_job, find_importer, load_mesh
 from ..core.toolpath import SOLID_KINDS, format_duration
 from .camera import Camera
 from .library_dialog import LibraryDialog
+from .settings_dialog import SettingsDialog
 from .model_viewer import ModelViewer
 from .process_editor import PipelineDialog, ProcessEditor
 from .view_state import COLOR_MODES, ViewState
@@ -65,6 +66,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("GCodeProducer", os.environ.get("GCODEPRODUCER_SETTINGS", "GCodeProducer"))
 
         self.libset = LibrarySet().load()
+        self.preferences = app_settings.load(self.libset.root)
         defaults.seed(self.libset)
         self.workflow = wf.FDM
         self.pipelines = {w: SlicePipeline.default(w) for w in wf.ALL}
@@ -668,6 +670,7 @@ class MainWindow(QMainWindow):
         self.act_slice = self._act("Slice", self.run_slice, "Ctrl+R")
         self.act_save = self._act("Save G-code\u2026", self.save_gcode, QKeySequence.StandardKey.Save)
         self.act_libs = self._act("Libraries\u2026", lambda: self.edit_libraries("machine"))
+        self.act_settings = self._act("Settings\u2026", self.edit_settings, "Ctrl+,")
         for a in (self.act_import, self.act_slice, self.act_save):
             tb.addAction(a)
         tb.addSeparator()
@@ -687,6 +690,19 @@ class MainWindow(QMainWindow):
         a.triggered.connect(slot)
         return a
 
+    def edit_settings(self):
+        dlg = SettingsDialog(self.preferences, self)
+        if dlg.exec():
+            new = dlg.result_values()
+            changed = new != self.preferences
+            self.preferences = new
+            try:
+                app_settings.save(new, self.libset.root)
+            except OSError as exc:
+                QMessageBox.warning(self, "Settings", f"Could not save settings: {exc}")
+            if changed and self.workflow == wf.CAM:
+                self._set_stale()      # generated output depends on CAM preferences
+
     def _build_menu(self):
         m = self.menuBar().addMenu("&File")
         m.addAction(self.act_import)
@@ -700,6 +716,7 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_process_export)
         m.addSeparator()
         m.addAction(self.act_libs)
+        m.addAction(self.act_settings)
         m.addSeparator()
         m.addAction(self._act("Exit", self.close, "Ctrl+Q"))
         p = self.menuBar().addMenu("&Process")
@@ -1732,7 +1749,7 @@ class MainWindow(QMainWindow):
                             placement=copy.deepcopy(self.placement),
                             support_blocks=copy.deepcopy(self.blocks),
                             support=copy.deepcopy(self.model_support) if self.workflow == wf.FDM else None,
-                            **kw)
+                            preferences=dict(self.preferences), **kw)
         except ValueError as exc:
             QMessageBox.warning(self, "Cannot slice", str(exc))
             return
@@ -1841,10 +1858,10 @@ class MainWindow(QMainWindow):
                                      f"{len(self.program.lines):,} lines, "
                                      f"est. {format_duration(tp.stats.get('est_time_s', 0))}", 8000)
 
-        if self.cam_warnings:
+        if self.cam_warnings and self.preferences.get("warning_dialog", True):
             QMessageBox.warning(self, "CAM material / engagement warnings",
                                 "\n".join(self.cam_warnings[:15]) +
-                                "\n\nReview the toolpath and full log before machining. These checks are conservative, not a full collision simulation.")
+                                "\n\nFlagged moves are coloured Conflict / Collision in Feature colour mode. Review the toolpath and full log before machining; these checks are approximate 2.5D, not a full collision simulation.")
 
     def _slice_failed(self, tb):
         self.progress.setVisible(False)
@@ -1984,6 +2001,8 @@ class MainWindow(QMainWindow):
                 if k not in present:
                     continue
                 it = QListWidgetItem(feature_label(f))
+                if f in FEATURE_TOOLTIPS:
+                    it.setToolTip(FEATURE_TOOLTIPS[f])
                 pm = QPixmap(14, 14)
                 r, g, b = feature_color(f)
                 pm.fill(QColor(int(r * 255), int(g * 255), int(b * 255)))

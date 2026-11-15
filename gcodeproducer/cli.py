@@ -71,6 +71,28 @@ def cmd_processes(args):
             print("    " + " -> ".join(steps))
 
 
+def _preferences(args, root):
+    from .core import app_settings
+    prefs = app_settings.load(root)
+    for item in getattr(args, "pref", []) or []:
+        if "=" not in item:
+            raise SystemExit(f"--pref expects KEY=VALUE, got '{item}'")
+        key, value = item.split("=", 1)
+        if key not in app_settings.DEFAULTS:
+            raise SystemExit(f"Unknown setting '{key}'. Known: {', '.join(app_settings.DEFAULTS)}")
+        prefs[key] = value.lower() in ("1", "true", "yes", "on") if isinstance(app_settings.DEFAULTS[key], bool) else value
+    return app_settings.validated(prefs)
+
+
+def cmd_settings(args):
+    from .core import app_settings
+    from .core.profiles import default_root
+    prefs = app_settings.load(default_root())
+    for p in app_settings.SCHEMA:
+        print(f"{p.name} = {prefs[p.name]!r}  ({p.label}; default {p.default!r})")
+    return 0
+
+
 def cmd_slice(args):
     ls = _libset(args)
     workflow = wf.normalize(args.workflow)
@@ -113,7 +135,8 @@ def cmd_slice(args):
                     mesh=mesh, model_path=args.input, placement=placement, support_blocks=blocks,
                     support=model_support,
                     settings={**({"layer_height": args.layer_height} if args.layer_height else {}),
-                              **({"machining_material": args.cam_material} if args.cam_material else {})})
+                              **({"machining_material": args.cam_material} if args.cam_material else {})},
+                    preferences=_preferences(args, ls.root))
 
     if args.config:
         pipeline = SlicePipeline.load(args.config)
@@ -180,6 +203,8 @@ def build_parser():
     from .core.cam_cutting import MATERIALS
     s.add_argument("--cam-material",choices=[m[0] for m in MATERIALS],
                    help="machining category for automatic CAM tool SFM/chip-load calculation")
+    s.add_argument("--pref", action="append", default=[], metavar="KEY=VALUE",
+                   help="override a global setting (see 'settings' command) for this run only")
     s.add_argument("--layer-height", type=float)
     g = s.add_argument_group("placement")
     g.add_argument("--x", type=float, help="model centre X on the bed (default: bed centre)")
@@ -210,6 +235,7 @@ def build_parser():
     s.add_argument("-q", "--quiet", action="store_true")
     s.set_defaults(func=cmd_slice)
 
+    sub.add_parser("settings", help="show global settings and their defaults").set_defaults(func=cmd_settings)
     s = sub.add_parser("processes", help="list saved process presets (workflow options)")
     s.add_argument("-w", "--workflow"); s.add_argument("-v", "--verbose", action="store_true")
     s.add_argument("--library"); s.add_argument("--no-seed", action="store_true")

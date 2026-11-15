@@ -123,6 +123,8 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   including engagement-factor increases. Tool and machine RPM ceilings are
   enforced, and below-minimum requests fail rather than overspeeding an SFM
   target. Verify the configured ceilings and cutter/material suitability.
+- The machine `stock_resolution` field is ignored; the material grid is a
+  [global setting](settings.md) together with air-cut removal and colouring.
 - Current types are HSM, Cut, High engagement and Slot. Machine thresholds
   default to 40/80/95%; High is above 80%. HSM/Cut inherit tool factors,
   High/Slot inherit machine factors. Operation overrides accept 1–300%; 0

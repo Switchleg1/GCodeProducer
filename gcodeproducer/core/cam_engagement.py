@@ -142,7 +142,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             log("  engagement uses a conservative XY blank estimate (stock not allocated)")
     mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot") else None
     totals = Counter()
-    flipped = slots = handed = 0
+    flipped = slots = handed = conflicts = 0
     previous = None
     warnings = []
     for path in paths:
@@ -198,8 +198,13 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                        if c.hand not in ("neutral", "air")]
             wrong = sum(d for c, d in checked if c.hand != desired)
             if wrong > .02*max(sum(d for _, d in checked), 1e-12):
+                path.cut_conditions = [CutCondition(c.engagement, c.regime, c.hand, c.feed_factor,
+                                                    conflict=c.hand not in ("neutral", "air", desired))
+                                       for c in path.cut_conditions]
+                conflicts += sum(c.conflict for c in path.cut_conditions)
                 message = (f"{operation.name}: local material switches sides along a path; "
-                           f"not every non-slot segment can remain {desired}. Inspect engagement/direction.")
+                           f"not every non-slot segment can remain {desired}. "
+                           f"Segments cutting the other hand are highlighted as Conflict.")
                 if message not in warnings:
                     warnings.append(message)
         loop = np.vstack((p, p[0])) if path.closed else p
@@ -208,7 +213,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
     if log:
         log(f"  {operation.name}: remaining-material direction, {flipped} paths reversed; "
             f"{slots} full-slot/neutral paths (do not choose cutting hand)")
-        log("  engagement moves: " + ", ".join(f"{k}={totals[k]}" for k in ("slot", "high", "cut", "hsm", "air")))
+        log("  engagement moves: " + ", ".join(f"{k}={totals[k]}" for k in ("slot", "high", "cut", "hsm", "air"))
+            + (f", conflict segments={conflicts}" if conflicts else ""))
         for warning in warnings:
             log("ENGAGEMENT WARNING: " + warning)
     return warnings
