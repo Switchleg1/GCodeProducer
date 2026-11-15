@@ -57,12 +57,12 @@ class FDMSupport(SliceStage):
         Param("min_area", "float", 1.0, unit="mm\u00b2", min=0, decimals=2, group="Distances",
               help="Ignore overhang specks smaller than this."),
         Param("fill_holes", "float", 0.0, label="Fill holes up to", unit="mm²", min=0, max=100000,
-              decimals=1, group="Holes & edges",
+              decimals=1, group="Holes & edges", hidden=True,
               help="0 (default): every hole is an edge like the outside - the support stops 'Extend past "
                    "model edge' into it. Above 0: holes up to this area count as solid and the support "
                    "runs right across under them."),
         Param("edge_margin", "float", 1.0, label="Extend past model edge", unit="mm", min=0, max=20,
-              decimals=2, step=0.1, allow_auto=True, hint=1.0, group="Holes & edges",
+              decimals=2, step=0.1, allow_auto=True, hint=1.0, group="Holes & edges", hidden=True,
               help="How far the support reaches past the model's edges (and into holes too large to fill) "
                    "so the perimeters along every edge sit on support. 0 = stop at the edge; "
                    "auto = one line width. Rounded to the support grid (about \u00b10.2 mm)."),

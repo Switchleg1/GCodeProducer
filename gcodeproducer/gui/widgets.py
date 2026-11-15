@@ -60,7 +60,7 @@ class ParamEditor(QWidget):
             if getattr(p, "hidden", False):
                 continue                   # value kept in self.values, edited elsewhere
             if p.group not in groups:
-                box = QGroupBox(p.group)
+                box = QGroupBox(p.group.replace("&", "&&"))   # '&' is a mnemonic marker in Qt
                 form = QFormLayout(box)
                 form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
                 groups[p.group] = form

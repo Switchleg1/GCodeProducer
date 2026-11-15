@@ -236,7 +236,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
-   | Support             | overhang angle, density, pattern, XY distance, top / bottom Z gap, top / bottom interface layers, interface density, min area, extend past model edge (mm), fill holes up to (mm², off by default). The placement (build plate / everywhere / manual blocks) is set in *Model → Support* |
+   | Support             | overhang angle, density, pattern, XY distance, top / bottom Z gap, top / bottom interface layers, interface density, min area. Placement (build plate / everywhere / manual blocks), *Extend past edge* and *Fill holes* are set in *Model → Support* (still saved with the process) |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |

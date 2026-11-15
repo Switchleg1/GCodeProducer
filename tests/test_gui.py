@@ -349,3 +349,29 @@ def test_support_placement_hidden_in_process_editor(win):
     win.cb_support.setCurrentIndex(win.cb_support.findData("everywhere"))
     step = win.pipelines["fdm"].step("fdm_support")
     assert step.params["placement"] == "everywhere"
+
+
+def test_support_section_shows_only_process_settings():
+    """Placement, 'extend past edge' and 'fill holes' live in Model > Support, not in the process editor."""
+    from gcodeproducer.gui.widgets import ParamEditor
+    from gcodeproducer.stages.fdm_support import FDMSupport
+    ed = ParamEditor(FDMSupport.parameters(), FDMSupport.defaults())
+    titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
+    assert not any("Holes" in t for t in titles)
+    for hidden in ("placement", "edge_margin", "fill_holes"):
+        assert hidden not in ed._widgets
+    labels = " ".join(w.text() for w in ed.findChildren(QtWidgets.QLabel))
+    assert "Extend past" not in labels and "Fill holes" not in labels
+    # values are still carried along when other settings change
+    got = {}
+    ed.changed.connect(got.update)
+    ed._set("density", 20.0)
+    assert got["edge_margin"] == 1.0 and got["fill_holes"] == 0.0
+
+
+def test_ampersand_group_titles_render_literally():
+    from gcodeproducer.core.profiles import schema
+    from gcodeproducer.gui.widgets import ParamEditor
+    ed = ParamEditor(schema("tool"), {})
+    titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
+    assert "Feeds && speeds" in titles                     # shown as 'Feeds & speeds'
