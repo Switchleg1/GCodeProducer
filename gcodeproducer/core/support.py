@@ -245,6 +245,48 @@ def blocks_from_columns(sup, layers, base, gap: int = 1, min_size: float = 1.0) 
     return blocks
 
 
+def tiled_blocks_from_columns(sup, layers, base, tile: float, gap: int = 1) -> list:
+    """Cover the support with ``tile`` x ``tile`` blocks on a regular grid.
+
+    Every grid square that contains support becomes one block, with its own
+    height range (lowest to highest support layer inside it, up to the model).
+    Uniform small blocks are easy to delete / resize one by one.
+    """
+    if not sup or tile <= 0:
+        return []
+    foot = np.zeros_like(sup[0])
+    for s in sup:
+        foot |= s
+    if not foot.any():
+        return []
+    res = base.res
+    rows, cols = np.nonzero(foot)
+    x_start = base.lo[0] + cols.min() * res
+    y_start = base.lo[1] + rows.min() * res
+    ny, nx = foot.shape
+    # tile index of every cell (by cell centre)
+    tx = np.floor((base.lo[0] + (np.arange(nx) + 0.5) * res - x_start) / tile).astype(int)
+    ty = np.floor((base.lo[1] + (np.arange(ny) + 0.5) * res - y_start) / tile).astype(int)
+    first: dict = {}
+    last: dict = {}
+    for k, s in enumerate(sup):
+        if not s.any():
+            continue
+        r, c = np.nonzero(s)
+        for key in set(zip(tx[c].tolist(), ty[r].tolist())):
+            first.setdefault(key, k)
+            last[key] = k
+    blocks = []
+    for (i, j) in sorted(first, key=lambda t: (t[1], t[0])):
+        lo_l, hi_l = layers[first[(i, j)]], layers[last[(i, j)]]
+        x0 = x_start + i * tile
+        y0 = y_start + j * tile
+        z0 = max(0.0, lo_l.z - lo_l.height)
+        z1 = hi_l.z + (gap + 1) * hi_l.height
+        blocks.append(SupportBlock(x0, y0, z0, x0 + tile, y0 + tile, z1))
+    return blocks
+
+
 def slice_layers(mesh, layer_height: float, first_layer_height: float | None = None) -> list:
     """Every layer from the bed to the top of the mesh (empty ones included)."""
     from .job import Layer
@@ -263,8 +305,13 @@ def slice_layers(mesh, layer_height: float, first_layer_height: float | None = N
 
 def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, angle: float = 50.0,
                     everywhere: bool = False, xy_distance: float = 0.8, gap: int = 1,
-                    min_area: float = 1.0, first_layer_height: float | None = None) -> list:
-    """Automatic support for a placed mesh, returned as editable blocks."""
+                    min_area: float = 1.0, first_layer_height: float | None = None,
+                    block_size: float | None = None) -> list:
+    """Automatic support for a placed mesh, returned as editable blocks.
+
+    ``block_size`` tiles the support with blocks of that size; None gives one
+    bounding block per support island.
+    """
     layers = slice_layers(mesh, layer_height, first_layer_height)
     if len(layers) < 2:
         return []
@@ -273,4 +320,6 @@ def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, a
     masks = model_masks(layers, base)
     over = overhangs(masks, layers, base.res, angle, min_area)
     sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere)
+    if block_size:
+        return tiled_blocks_from_columns(sup, layers, base, float(block_size), gap)
     return blocks_from_columns(sup, layers, base, gap)

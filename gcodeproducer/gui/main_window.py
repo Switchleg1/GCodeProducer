@@ -490,7 +490,7 @@ class MainWindow(QMainWindow):
         bl.setContentsMargins(0, 2, 0, 0)
         r1 = QHBoxLayout()
         b_gen = QPushButton("Auto-generate")
-        b_gen.setToolTip("Replace the blocks with one block per island of automatic support")
+        b_gen.setToolTip("Replace the blocks with automatic support, tiled with blocks of the Block size")
         b_gen.clicked.connect(self.generate_blocks)
         self.cb_gen_everywhere = QCheckBox("Allow on model")
         self.cb_gen_everywhere.setToolTip("Auto-generate support that may stand on the model "
@@ -507,13 +507,14 @@ class MainWindow(QMainWindow):
                                       "block that fills the gap up to the model above (Esc = done)")
         self.b_place_block.toggled.connect(self._on_place_block_mode)
         rp.addWidget(self.b_place_block, 1)
-        rp.addWidget(QLabel("Size"))
+        rp.addWidget(QLabel("Block size"))
         self.sp_place_size = QDoubleSpinBox()
         self.sp_place_size.setRange(0.5, 500)
         self.sp_place_size.setDecimals(1)
         self.sp_place_size.setSingleStep(1.0)
         self.sp_place_size.setSuffix(" mm")
-        self.sp_place_size.setToolTip("Width and depth of the blocks placed by clicking")
+        self.sp_place_size.setToolTip("Width and depth of the blocks placed by clicking and of the tiles "
+                                      "Auto-generate covers the support with")
         self.sp_place_size.setValue(float(self.settings.value("place_block_size", 5.0)))
         self.sp_place_size.valueChanged.connect(lambda v: self.settings.setValue("place_block_size", v))
         rp.addWidget(self.sp_place_size)
@@ -1310,13 +1311,15 @@ class MainWindow(QMainWindow):
             blocks = support_generate(self.placed, lh, lw, sp["overhang_angle"],
                                       everywhere=self.cb_gen_everywhere.isChecked(),
                                       xy_distance=sp["xy_distance"], gap=sp["z_gap_layers"],
-                                      min_area=sp["min_area"], first_layer_height=flh)
+                                      min_area=sp["min_area"], first_layer_height=flh,
+                                      block_size=self.sp_place_size.value())
         finally:
             QApplication.restoreOverrideCursor()
         self.blocks = blocks
         self.sel_block = 0 if blocks else -1
         self._blocks_changed(keep_row=True)
-        msg = f"Generated {len(blocks)} support block(s)" if blocks else "No support needed \u2014 no blocks"
+        msg = (f"Generated {len(blocks)} support block(s) of {self.sp_place_size.value():g} mm"
+               if blocks else "No support needed \u2014 no blocks")
         self.statusBar().showMessage(msg, 6000)
         self.log(msg)
 

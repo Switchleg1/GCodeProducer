@@ -91,6 +91,13 @@ def test_generated_blocks_match_auto(libset, tmp_path):
     manual, _ = _slice(libset, path, "blocks", blocks=blocks)
     assert len(manual) == len(auto)
     assert sorted({ln.layer for ln in manual}) == sorted({ln.layer for ln in auto})
+    # tiled with a block size: uniform blocks, same support
+    for size in (3.0, 5.0, 8.0):
+        tiles = generate_blocks(placed, 0.2, block_size=size)
+        assert len(tiles) > 1
+        assert all(t.size[0] == pytest.approx(size) and t.size[1] == pytest.approx(size) for t in tiles)
+        assert len(_slice(libset, path, "blocks", blocks=tiles)[0]) == len(auto)
+    assert len(generate_blocks(placed, 0.2, block_size=3.0)) > len(generate_blocks(placed, 0.2, block_size=8.0))
 
 
 def test_blocks_limit_where_support_goes(libset, tmp_path):

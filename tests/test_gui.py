@@ -171,9 +171,19 @@ def test_manual_support_blocks(win, app, tmp_path):
     win.open_model(_bracket(tmp_path))
     win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
     assert win._support_mode() == "blocks" and win.blocks_box.isVisibleTo(win)
+    win.sp_place_size.setValue(6.0)
     win.generate_blocks()
-    assert len(win.blocks) == 1 and win.lst_blocks.count() == 1
-    assert win.model_viewer.show_blocks and len(win.model_viewer.blocks) == 1
+    n = len(win.blocks)
+    assert n > 1 and win.lst_blocks.count() == n
+    assert all(b.size[0] == pytest.approx(6.0) for b in win.blocks)
+    assert win.model_viewer.show_blocks and len(win.model_viewer.blocks) == n
+    win.sp_place_size.setValue(12.0)
+    win.generate_blocks()
+    assert 0 < len(win.blocks) < n
+    win.clear_blocks()
+    win.sp_place_size.setValue(40.0)                  # one tile covers the whole support area
+    win.generate_blocks()
+    assert len(win.blocks) == 1
     # add / resize / remove
     win.add_block()
     assert len(win.blocks) == 2 and win.sel_block == 1

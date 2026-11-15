@@ -172,11 +172,15 @@ consumables, process and recent models are remembered.
    **Manual support blocks** are boxes on the plate: support is generated
    **only inside the blocks, wherever the model is above them** (with the
    usual Z gap and XY distance).
-   - **Auto-generate** runs the automatic support and wraps each support island
-     in a block (*Allow on model* also lets support stand on the model). The
-     result slices the same as automatic support, and you can then edit it.
-   - **Place blocks** (pick and place): set the block **Size** (width = depth,
-     mm), switch *Place blocks* on, then click in the Prepare view:
+   - **Auto-generate** runs the automatic support and covers it with a grid of
+     blocks of the **Block size** (each tile gets its own height, from the
+     lowest to the highest support inside it). *Allow on model* also lets
+     support stand on the model. Smaller blocks give finer control, larger
+     ones fewer blocks to manage. For a model on the bed, the result slices the
+     same as automatic support. Then delete, move or resize individual tiles.
+   - **Place blocks** (pick and place): set the **Block size** (width = depth,
+     mm; also used by Auto-generate), switch *Place blocks* on, then click in
+     the Prepare view:
      - on the **bed** or a surface facing **up**: a block from that height
        straight up to the next face of the model above;
      - on a surface facing **down** (an overhang seen from below): a block from
