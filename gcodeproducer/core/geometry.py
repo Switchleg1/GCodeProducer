@@ -216,6 +216,47 @@ def offset(poly: np.ndarray, delta: float) -> list:
     return [out]
 
 
+def point_in_polygon(pt, poly: np.ndarray) -> bool:
+    x, y = float(pt[0]), float(pt[1])
+    p = np.asarray(poly, float)
+    x0, y0 = p[:, 0], p[:, 1]
+    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
+    cross = (y0 > y) != (y1 > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xi = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+    return bool(np.count_nonzero(cross & (x < xi)) % 2)
+
+
+def outer_contours(polys: list) -> list:
+    """Contours that are not holes (contained by an even number of other contours)."""
+    out = []
+    for i, p in enumerate(polys):
+        depth = sum(1 for j, q in enumerate(polys) if j != i and point_in_polygon(p[0], q))
+        if depth % 2 == 0:
+            out.append(p)
+    return out
+
+
+def convex_hull(points: np.ndarray) -> np.ndarray:
+    """Monotone-chain convex hull, CCW, (n,2)."""
+    pts = np.unique(np.round(np.asarray(points, float), 6), axis=0)
+    if len(pts) < 3:
+        return pts
+    pts = pts[np.lexsort((pts[:, 1], pts[:, 0]))]
+
+    def half(seq):
+        h = []
+        for q in seq:
+            while len(h) >= 2 and ((h[-1][0] - h[-2][0]) * (q[1] - h[-2][1])
+                                   - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0])) <= 0:
+                h.pop()
+            h.append(q)
+        return h
+    lower = half(pts)
+    upper = half(pts[::-1])
+    return np.asarray(lower[:-1] + upper[:-1], float)
+
+
 class RegionMask:
     """Filled boolean occupancy grid for closed polygons (even-odd rule).
 

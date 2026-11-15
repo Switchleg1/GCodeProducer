@@ -41,7 +41,22 @@ class ProcessPreset:
             self.pipeline = SlicePipeline.default(self.workflow).to_dict()
 
     def slice_pipeline(self) -> SlicePipeline:
-        return SlicePipeline.from_dict(self.pipeline)
+        return SlicePipeline.from_dict(self.pipeline).ensure_defaults()
+
+    @classmethod
+    def import_file(cls, path: str) -> "ProcessPreset":
+        """Load a preset from any file (also accepts a bare pipeline JSON)."""
+        with open(path, "r", encoding="utf-8") as fh:
+            d = json.load(fh)
+        if "pipeline" not in d and "steps" in d:          # bare SlicePipeline file
+            d = {"name": Path(path).stem, "workflow": d.get("workflow", wf.FDM), "pipeline": d}
+        p = cls.from_dict(d)
+        p.path = None
+        return p
+
+    def export_file(self, path: str) -> None:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(self.to_dict(), fh, indent=2)
 
     def set_pipeline(self, pipeline: SlicePipeline) -> None:
         self.pipeline = pipeline.to_dict()

@@ -66,11 +66,14 @@ versa.
 
 | Workflow | Default stages                                                                     |
 |----------|------------------------------------------------------------------------------------|
-| FDM      | `fdm_slice` → `fdm_perimeters` → `fdm_top_bottom` → `fdm_infill` → `fdm_emit`       |
+| FDM      | `fdm_slice` → `fdm_skirt_brim` → `fdm_perimeters` → `fdm_top_bottom` → `fdm_infill` → `fdm_emit` |
 | CAM      | `cam_profile` → `cam_emit`                                                          |
 
 - **`fdm_slice`** — positions the mesh on the bed and intersects it into
   per-layer closed contours.
+- **`fdm_skirt_brim`**: skirt around the first-layer convex hull (distance,
+  loops, number of layers) and / or a brim attached to the part outline (width,
+  gap). Holes are not brimmed.
 - **`fdm_perimeters`** — offsets each contour inward into wall loops
   (outer + inner). The innermost loop bounds the infill region.
 - **`fdm_top_bottom`** — top / bottom **solid** surfaces. A cell is sparse only
@@ -98,28 +101,57 @@ pip install -e .
 
 ## GUI
 
+![GCodeProducer](docs/screenshot.jpg)
+
 ```bash
 python -m gcodeproducer gui                    # start the GUI
 python -m gcodeproducer gui part.stl           # start and import a model
 ```
 
-On Windows you can double-click `GCodeProducer.bat`.
+On Windows you can double-click `GCodeProducer.bat`. The layout follows
+GCodeTools: a toolbar, a **Prepare** dock on the left, the 3D viewer in the
+centre, and **View / G-code / Statistics / Log** docks on the right. Docks can
+be moved, floated and hidden (View menu); the layout, last machine,
+consumables, process and recent models are remembered.
 
-1. Choose a **workflow** (FDM or CAM) and a **machine**.
-2. Pick the **consumables** the machine allows (material + nozzle, or a tool).
-3. **Import** an STL model.
-4. Choose a **process** preset, then edit the **slice pipeline**: add stages
-   (**+ Add**), remove them (**- Remove**), reorder them (**up / down**),
-   enable / disable them with the checkbox and tune each stage's parameters.
-   Core stages (slice, perimeters, emit) can be moved and tuned but not removed
-   or disabled. Edits show an *unsaved* marker; **Save** writes them back to the
-   selected process, **Save As** creates a new one.
-5. Click **Slice** and inspect the result in the shared 3D viewer, then
-   **Save G-code**.
+**Prepare dock** (top to bottom):
 
-Use **File → Edit libraries…** to add, duplicate, delete and edit machine,
-material, nozzle and tool profiles. Machine profiles carry the build volume,
-speeds/feeds, start/end G-code and the allowed-consumable lists.
+1. **Setup**: workflow (FDM / CAM), machine and the consumables that machine
+   allows (material + nozzle, or tool). The ✎ buttons open the library
+   editor on that profile.
+2. **Model**: import an STL (or drop it on the window). Recent models are under
+   *File → Recent models*.
+3. **Process**: the *workflow options*, i.e. everything that is **not** machine,
+   material or nozzle specific. Pick a saved process from the list and edit it
+   in collapsible sections, each showing a summary when closed:
+
+   | Section             | Settings                                                              |
+   |---------------------|-----------------------------------------------------------------------|
+   | Layers              | layer height, first layer height, centre on bed                       |
+   | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
+   | Walls               | wall loops, wall line width                                           |
+   | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
+   | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |
+   | Travel & output     | retract on travel, min travel to retract, seam position               |
+
+   Changes show **● modified**. **Save** writes them to the selected process,
+   **Save as…** creates a new one, **Revert** discards them. *More ▾* has
+   **Import / Export** (share a process as a `.json` file), **Rename**,
+   **Delete**, and *Edit pipeline stages…* (advanced: add, remove, reorder or
+   duplicate stages). Switching process with unsaved changes asks first, and
+   unsaved edits survive a restart.
+4. **Slice** (Ctrl+R), then **Save G-code** (Ctrl+S).
+
+**Viewer**: the vertical slider picks the top layer (PgUp / PgDn, Home /
+End), *In layer* scrubs through it, *Single layer* isolates it. Colour by
+feature, move type, speed or layer, and toggle features in the View dock.
+Double-click a move to jump to its G-code line; double-click a G-code line to
+jump to it in 3D. *Statistics* shows layers, estimated time, filament length
+and weight, and more.
+
+Speeds and feeds are set on the **machine**; temperatures, flow, cooling and
+retraction on the **material**; diameter and line width on the **nozzle**.
+Edit them with *Libraries…* (toolbar) or the ✎ buttons.
 
 ## CLI
 
@@ -183,7 +215,8 @@ gcodeproducer/
   importers/   geometry importers (stl)
   stages/      slice stages (fdm_slice/perimeters/top_bottom/infill/emit,
                cam_profile/emit)
-  gui/         Qt6 main window + library editor, OpenGL viewer, widgets
+  gui/         Qt6 main window, process editor (process_editor.py), library
+               editor (library_dialog.py), OpenGL viewer, widgets
   cli.py       command-line interface
 plugins/       drop-in user stages / importers
 examples/      sample model (cube20.stl)

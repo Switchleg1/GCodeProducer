@@ -3,25 +3,26 @@ from __future__ import annotations
 
 from ..core import geometry
 from ..core.job import Path
-from .base import FDM, Param, SliceStage
+from .base import AUTO, FDM, Param, SliceStage
 
 
 class FDMPerimeters(SliceStage):
     id = "fdm_perimeters"
-    name = "Perimeters"
-    description = "Offset each contour inward to make the outer and inner wall loops."
+    name = "Walls"
+    description = "Outer and inner wall loops, offset inward from each layer contour."
     workflows = (FDM,)
     optional = False
     category = "Walls"
     params = [
-        Param("perimeters", "int", 2, min=1, max=20, help="Number of wall loops."),
-        Param("line_width", "float", 0.0, unit="mm", allow_auto=True,
-              help="0 / auto = nozzle line width."),
+        Param("perimeters", "int", 2, label="Wall loops", min=1, max=20, group="Walls",
+              help="Number of perimeter loops."),
+        Param("line_width", "float", AUTO, label="Wall line width", unit="mm", min=0.05, max=3,
+              allow_auto=True, hint=0.45, group="Walls", help="auto = nozzle line width."),
     ]
 
     def run(self, job, params, ctx):
         lw = params["line_width"]
-        lw = job.line_width if lw in (0, "auto") else float(lw)
+        lw = job.line_width if lw in (0, AUTO) else float(lw)
         count = params["perimeters"]
         job.settings["perimeter_line_width"] = lw
         job.settings["perimeters"] = count

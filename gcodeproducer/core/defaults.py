@@ -38,11 +38,12 @@ def builtin_profiles() -> list:
 
 
 def _fdm_process(name, *, layer_height, first_layer_height=None, perimeters=2,
-                 density=20, pattern="grid", top=4, bottom=4):
+                 density=20, pattern="grid", top=4, bottom=4, adhesion="skirt", brim_width=5.0):
     pipe = SlicePipeline.default(wf.FDM)
     pset = {
         "fdm_slice": {"layer_height": layer_height,
                       "first_layer_height": first_layer_height or layer_height},
+        "fdm_skirt_brim": {"type": adhesion, "brim_width": brim_width},
         "fdm_perimeters": {"perimeters": perimeters},
         "fdm_top_bottom": {"top_layers": top, "bottom_layers": bottom},
         "fdm_infill": {"density": density, "pattern": pattern},
@@ -60,7 +61,7 @@ def builtin_processes() -> list:
         _fdm_process("0.12 mm Fine", layer_height=0.12, perimeters=3, density=20,
                      pattern="triangles", top=6, bottom=5),
         _fdm_process("Strong (cubic 40%)", layer_height=0.2, perimeters=4, density=40,
-                     pattern="cubic", top=5, bottom=5),
+                     pattern="cubic", top=5, bottom=5, adhesion="brim", brim_width=6.0),
         ProcessPreset("Profile cut", wf.CAM),
     ]
 

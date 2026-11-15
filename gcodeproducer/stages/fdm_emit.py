@@ -25,16 +25,19 @@ _FEATURE_SPEED = {
 
 class FDMEmit(SliceStage):
     id = "fdm_emit"
-    name = "Emit G-code"
-    description = "Turn the toolpaths into G-code with travels, retraction, temperatures and cooling."
+    name = "Travel & output"
+    description = ("Writes the G-code: travels, retraction, seams, temperatures and cooling. "
+                   "Retraction length / speed come from the material; speeds from the machine.")
     workflows = (FDM,)
     optional = False
     category = "Output"
     params = [
-        Param("retract", "bool", True, help="Retract on travels between features."),
-        Param("min_travel_retract", "float", 1.5, unit="mm",
-              help="Shortest travel that triggers a retraction."),
-        Param("seam", "choice", "nearest", choices=["nearest", "origin"],
+        Param("retract", "bool", True, label="Retract on travel", group="Travel",
+              help="Retract on travels between features (length / speed from the material)."),
+        Param("min_travel_retract", "float", 1.5, label="Min travel to retract", unit="mm",
+              min=0, decimals=2, group="Travel", help="Shorter travels do not retract."),
+        Param("seam", "choice", "nearest", label="Seam position", group="Travel",
+              choices=[("nearest", "Nearest to previous move"), ("origin", "Fixed (loop start)")],
               help="Where closed loops start."),
     ]
 

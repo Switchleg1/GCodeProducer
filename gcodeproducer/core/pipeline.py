@@ -47,7 +47,8 @@ class PipelineResult:
 
 #: default stage order for each workflow (ids must exist once stages are loaded)
 DEFAULT_PIPELINES = {
-    wf.FDM: ["fdm_slice", "fdm_perimeters", "fdm_top_bottom", "fdm_infill", "fdm_emit"],
+    wf.FDM: ["fdm_slice", "fdm_skirt_brim", "fdm_perimeters", "fdm_top_bottom", "fdm_infill",
+             "fdm_emit"],
     wf.CAM: ["cam_profile", "cam_emit"],
 }
 
@@ -81,6 +82,36 @@ class SlicePipeline:
     def load(cls, path: str) -> "SlicePipeline":
         with open(path, "r", encoding="utf-8") as fh:
             return cls.from_dict(json.load(fh))
+
+    def ensure_defaults(self) -> "SlicePipeline":
+        """Insert default stages missing from an older saved pipeline.
+
+        Optional stages are added *disabled* so an old process keeps producing the
+        same output; core stages are added enabled.  Positions follow the default order.
+        """
+        order = DEFAULT_PIPELINES.get(self.workflow, [])
+        have = {s.stage for s in self.steps}
+        for k, sid in enumerate(order):
+            if sid in have:
+                continue
+            try:
+                optional = plugins.stages.get(sid).optional
+            except KeyError:
+                continue
+            # insert after the closest preceding default stage that is present
+            pos = 0
+            for prev in reversed(order[:k]):
+                idx = next((i for i, s in enumerate(self.steps) if s.stage == prev), None)
+                if idx is not None:
+                    pos = idx + 1
+                    break
+            self.steps.insert(pos, Step(sid, enabled=not optional))
+            have.add(sid)
+        return self
+
+    def step(self, stage_id: str):
+        """First step running ``stage_id`` (or None)."""
+        return next((s for s in self.steps if s.stage == stage_id), None)
 
     def validate(self) -> None:
         for s in self.steps:

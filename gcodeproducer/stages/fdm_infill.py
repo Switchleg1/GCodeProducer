@@ -9,7 +9,7 @@ import numpy as np
 
 from ..core import infill_gen
 from ..core.job import Path
-from .base import FDM, Param, SliceStage
+from .base import AUTO, FDM, Param, SliceStage
 
 
 class FDMInfill(SliceStage):
@@ -19,14 +19,17 @@ class FDMInfill(SliceStage):
     workflows = (FDM,)
     category = "Infill"
     params = [
-        Param("density", "float", 20.0, unit="%", min=0, max=100),
-        Param("pattern", "choice", "grid", choices=list(infill_gen.PATTERNS)),
-        Param("angle", "float", 45.0, unit="\u00b0", min=-180, max=180),
-        Param("line_width", "float", 0.0, unit="mm", allow_auto=True),
-        Param("overlap", "float", 15.0, unit="%",
-              help="Overlap with the innermost perimeter (% of infill width)."),
-        Param("min_length", "float", 0.5, unit="mm"),
-        Param("connect", "bool", True, help="Order lines to shorten travels between them."),
+        Param("density", "float", 20.0, unit="%", min=0, max=100, decimals=1, group="Pattern",
+              help="0 = hollow (walls and shells only)."),
+        Param("pattern", "choice", "grid", choices=list(infill_gen.PATTERNS), group="Pattern"),
+        Param("angle", "float", 45.0, unit="\u00b0", min=-180, max=180, decimals=1, group="Pattern"),
+        Param("line_width", "float", AUTO, unit="mm", min=0.05, max=3, allow_auto=True, hint=0.45,
+              group="Lines", help="auto = wall line width."),
+        Param("overlap", "float", 15.0, unit="%", min=-100, max=100, decimals=1, group="Lines",
+              help="Overlap with the innermost wall (% of infill width)."),
+        Param("min_length", "float", 0.5, unit="mm", min=0, decimals=2, group="Lines"),
+        Param("connect", "bool", True, label="Shortest travel order", group="Lines",
+              help="Order lines nearest-first to shorten travels."),
     ]
 
     def run(self, job, params, ctx):
@@ -34,7 +37,7 @@ class FDMInfill(SliceStage):
         if density <= 0:
             return "infill off"
         lw = params["line_width"]
-        lw = job.settings.get("perimeter_line_width", job.line_width) if lw in (0, "auto") else float(lw)
+        lw = job.settings.get("perimeter_line_width", job.line_width) if lw in (0, AUTO) else float(lw)
         spacing = lw / max(density, 1e-3)
         pattern = params["pattern"]
         angle = params["angle"]

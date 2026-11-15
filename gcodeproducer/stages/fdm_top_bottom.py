@@ -12,7 +12,7 @@ import numpy as np
 
 from ..core import geometry, infill_gen
 from ..core.job import Path
-from .base import FDM, Param, SliceStage
+from .base import AUTO, FDM, Param, SliceStage
 
 
 class FDMTopBottom(SliceStage):
@@ -22,16 +22,20 @@ class FDMTopBottom(SliceStage):
     workflows = (FDM,)
     category = "Infill"
     params = [
-        Param("top_layers", "int", 4, min=0, max=50, help="Number of solid top layers (0 = off)."),
-        Param("bottom_layers", "int", 4, min=0, max=50, help="Number of solid bottom layers (0 = off)."),
-        Param("pattern", "choice", "rectilinear",
+        Param("top_layers", "int", 4, min=0, max=50, group="Shells",
+              help="Number of solid top layers (0 = off)."),
+        Param("bottom_layers", "int", 4, min=0, max=50, group="Shells",
+              help="Number of solid bottom layers (0 = off)."),
+        Param("pattern", "choice", "rectilinear", group="Solid fill",
               choices=[("rectilinear", "Rectilinear (alternating 90\u00b0)"),
                        ("lines", "Lines (same direction)"),
                        ("grid", "Grid")]),
-        Param("angle", "float", 45.0, unit="\u00b0"),
-        Param("line_width", "float", 0.0, unit="mm", allow_auto=True),
-        Param("overlap", "float", 25.0, unit="%", help="Overlap with the perimeter (% of line width)."),
-        Param("min_length", "float", 0.4, unit="mm"),
+        Param("angle", "float", 45.0, unit="\u00b0", min=-180, max=180, decimals=1, group="Solid fill"),
+        Param("line_width", "float", AUTO, unit="mm", min=0.05, max=3, allow_auto=True, hint=0.45,
+              group="Solid fill", help="auto = wall line width."),
+        Param("overlap", "float", 25.0, unit="%", min=-100, max=100, decimals=1, group="Solid fill",
+              help="Overlap with the innermost wall (% of line width)."),
+        Param("min_length", "float", 0.4, unit="mm", min=0, decimals=2, group="Solid fill"),
     ]
 
     def run(self, job, params, ctx):
@@ -43,7 +47,7 @@ class FDMTopBottom(SliceStage):
             return "no layers"
 
         lw = params["line_width"]
-        lw = job.settings.get("perimeter_line_width", job.line_width) if lw in (0, "auto") else float(lw)
+        lw = job.settings.get("perimeter_line_width", job.line_width) if lw in (0, AUTO) else float(lw)
         res = max(0.25, lw * 0.75)
         lo, hi = job.mesh.bounds
         lo2, hi2 = lo[:2], hi[:2]

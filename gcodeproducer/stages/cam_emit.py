@@ -17,13 +17,14 @@ from .base import CAM, Param, SliceStage
 
 class CAMEmit(SliceStage):
     id = "cam_emit"
-    name = "Emit G-code"
+    name = "Output"
     description = "Turn the milling toolpaths into G-code with rapids, plunges and spindle control."
     workflows = (CAM,)
     optional = False
     category = "Output"
     params = [
-        Param("ramp", "bool", False, help="(reserved) ramp into cuts instead of straight plunge."),
+        Param("ramp", "bool", False, label="Ramp entry (reserved)", group="Entry",
+              help="Reserved: ramp into cuts instead of a straight plunge."),
     ]
 
     def run(self, job, params, ctx):
