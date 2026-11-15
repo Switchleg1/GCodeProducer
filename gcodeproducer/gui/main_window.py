@@ -1320,7 +1320,8 @@ class MainWindow(QMainWindow):
                                       everywhere=self.cb_gen_everywhere.isChecked(),
                                       xy_distance=sp["xy_distance"], gap=sp["z_gap_layers"],
                                       min_area=sp["min_area"], first_layer_height=flh,
-                                      block_size=self.sp_place_size.value())
+                                      block_size=self.sp_place_size.value(), fill_holes=sp["fill_holes"],
+                                      edge_margin=lw if sp["edge_margin"] == "auto" else sp["edge_margin"])
         finally:
             QApplication.restoreOverrideCursor()
         self.blocks = blocks

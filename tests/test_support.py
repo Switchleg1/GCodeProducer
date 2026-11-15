@@ -76,3 +76,77 @@ def test_cli_stage_param_enables_support(tmp_path, monkeypatch, capsys):
     assert main(["slice", path, "-o", str(out), "-q", "-m", "fdm_support:placement=buildplate"]) == 0
     assert ";TYPE:support" in out.read_text()
     assert main(["slice", path, "-o", str(out), "-q", "-m", "fdm_support:typo=1"]) == 2   # typo reported
+
+
+# ------------------------------------------------------------------ holes & edges
+def _hole_plate(tmp_path, hole=8):
+    from conftest import box_tris, frame_tris, write_tris
+    h0, h1 = 22 - hole / 2, 22 + hole / 2          # hole centred at (22, 22) -> (117, 117) on the bed
+    return write_tris(tmp_path / "hp.stl", box_tris(10, 10, 0, 16, 16, 15) +
+                      frame_tris(0, 0, 30, 30, h0, h0, h1, h1, 15, 18))
+
+
+def _support_pts(libset, path, mode="buildplate", blocks=None, **params):
+    from gcodeproducer.core import sim
+    pipe = SlicePipeline.default(wf.FDM)
+    st = pipe.step("fdm_support")
+    st.enabled = True
+    st.params.update({"placement": mode, **params})
+    job = build_job(wf.FDM, libset.machines.get("generic-220-fdm"), material=libset["material"].get("pla"),
+                    nozzle=libset["nozzle"].get("0-4-mm"), mesh=load_mesh(path), support_blocks=blocks)
+    p = slice_job(job, pipe).program
+    s = sim.simulate(p)
+    sel = np.array([ln.feature.startswith("support") for ln in p.lines]) & s.extruding
+    # sample every support line every 0.1 mm
+    out = []
+    for x0, y0, x1, y1, z in zip(s.px[sel], s.py[sel], s.x[sel], s.y[sel], s.z[sel]):
+        t = np.linspace(0, 1, max(2, int(np.hypot(x1 - x0, y1 - y0) / 0.1)))
+        out.append(np.stack([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, np.full_like(t, z)], 1))
+    return np.concatenate(out) if out else np.zeros((0, 3))
+
+
+def _count(pts, x0, y0, x1, y1, z=14.8):
+    m = (np.abs(pts[:, 2] - z) < 1e-3) & (pts[:, 0] > x0) & (pts[:, 0] < x1) & (pts[:, 1] > y0) & (pts[:, 1] < y1)
+    return int(m.sum())
+
+
+@pytest.mark.parametrize("mode", ["buildplate", "blocks"])
+def test_small_hole_is_supported_underneath(libset, tmp_path, mode):
+    from gcodeproducer.core.support import SupportBlock
+    path = _hole_plate(tmp_path, hole=8)                     # 64 mm2 < default 100 mm2
+    blocks = [SupportBlock(95, 95, 0, 125, 125, 30)]
+    pts = _support_pts(libset, path, mode, blocks)
+    assert _count(pts, 115, 115, 119, 119) > 0              # under the hole centre
+    assert not (pts[:, 2] > 15.0 + 1e-6).any()              # never climbs into the hole / plate
+    off = _support_pts(libset, path, mode, blocks, fill_holes=0, edge_margin=0)
+    assert _count(off, 115, 115, 119, 119) == 0             # the old behaviour: a hole in the support
+
+
+def test_edge_margin_supports_hole_perimeters(libset, tmp_path):
+    path = _hole_plate(tmp_path, hole=14)                   # 196 mm2: stays open with the default
+    pts = _support_pts(libset, path)
+    off = _support_pts(libset, path, edge_margin=0)
+    ring = lambda q: _count(q, 109.5, 109.5, 110.5, 124.5) + _count(q, 123.5, 109.5, 124.5, 124.5)
+    hole_edge = lambda q: _count(q, 110.2, 112, 110.8, 122)     # just inside the hole's wall
+    assert hole_edge(pts) > hole_edge(off)                   # margin reaches under the hole perimeter
+    assert _count(pts, 114, 114, 120, 120) == 0              # but the large hole itself stays open
+    assert not (pts[:, 2] > 15.0 + 1e-6).any()
+
+
+def test_margin_keeps_z_gap(libset, tmp_path):
+    from gcodeproducer.core.support import SupportBlock
+    path = _hole_plate(tmp_path, hole=14)
+    pts = _support_pts(libset, path, "blocks", [SupportBlock(95, 95, 0, 125, 125, 30)], edge_margin=1.0)
+    assert pts[:, 2].max() == pytest.approx(14.8)            # plate starts at 15.0: one empty layer
+
+
+def test_support_polys_fill_holes():
+    from gcodeproducer.core.job import Layer
+    from gcodeproducer.core.support import support_polys
+    sq = lambda a, b: np.array([[a, a], [b, a], [b, b], [a, b]], float)
+    layer = Layer(0, 0.2, 0.2, outline=[sq(0, 30), sq(5, 9), sq(10, 25), sq(12, 14)])   # hole 16, hole 225 with island
+    assert len(support_polys(layer, 0)) == 4
+    kept = support_polys(layer, 100)                         # small hole filled, big hole (and island) kept
+    assert len(kept) == 3 and not any(abs(abs(float(np.ptp(k[:, 0]))) - 4) < 1e-9 for k in kept)
+    kept = support_polys(layer, 1000)                        # both holes filled; the island goes with its hole
+    assert len(kept) == 1

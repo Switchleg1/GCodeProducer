@@ -3,7 +3,8 @@
 Everything works on per-layer boolean rasters on one shared grid
 (:class:`~gcodeproducer.core.geometry.RegionMask`):
 
-* :func:`model_masks`    - the model's cross-section on every layer
+* :func:`model_masks`    - the model's cross-section on every layer (small holes
+                           filled, so support continues under them)
 * :func:`overhangs`      - cells that need support (overhang angle)
 * :func:`auto_columns`   - automatic support: columns grown down from overhangs
                            (``buildplate`` or ``everywhere``)
@@ -81,13 +82,38 @@ def make_grid(lo, hi, line_width: float) -> geometry.RegionMask:
     return geometry.RegionMask(lo[:2], hi[:2], res)
 
 
-def model_masks(layers, base: geometry.RegionMask) -> list:
+def support_polys(layer, fill_holes: float = 0.0) -> list:
+    """The layer's slice polygons with holes up to ``fill_holes`` mm² filled in.
+
+    For support purposes a small hole counts as solid: the support below runs
+    on under it (so the hole's perimeters are supported) and never climbs up
+    inside it.  Larger openings - e.g. a pocket opening downward - stay open and
+    are supported like any other overhang.
+    """
+    polys = [np.asarray(c, float) for c in (layer.outline or layer.contours) if len(c) >= 3]
+    if fill_holes <= 0 or len(polys) < 2:
+        return polys
+    inside = [[j for j, q in enumerate(polys) if j != i and geometry.point_in_polygon(p[0], q)]
+              for i, p in enumerate(polys)]
+    drop = {i for i, p in enumerate(polys)
+            if len(inside[i]) % 2 == 1 and abs(geometry.area(p)) <= fill_holes}
+    if not drop:
+        return polys
+    # also drop anything nested inside a filled hole (it lies in solid area now)
+    return [p for i, p in enumerate(polys) if i not in drop and not any(k in drop for k in inside[i])]
+
+
+def model_masks(layers, base: geometry.RegionMask, fill_holes: float = 0.0) -> list:
     out = []
     for layer in layers:
         rm = base.like()
-        rm.fill([np.asarray(c, float) for c in (layer.outline or layer.contours) if len(c) >= 3])
+        rm.fill(support_polys(layer, fill_holes))
         out.append(rm.grid)
     return out
+
+
+def margin_cells(edge_margin: float, res: float) -> int:
+    return max(0, int(math.ceil(edge_margin / res - 1e-9)))
 
 
 def overhangs(masks, layers, res: float, angle_deg: float, min_area: float) -> list:
@@ -104,9 +130,33 @@ def overhangs(masks, layers, res: float, angle_deg: float, min_area: float) -> l
     return over
 
 
-def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhere: bool) -> list:
+def _gap_free(s, masks, i, gap, grow):
+    """Clear the top Z gap: no support within ``gap`` layers under the model (or its margin)."""
+    n = len(masks)
+    for k in range(1, gap + 1):
+        if i + k < n and masks[i + k].any():
+            s &= ~(geometry.dilate(masks[i + k], grow) if grow else masks[i + k])
+    return s
+
+
+def _with_margin(core, reach, grow, masks, i, xy, gap):
+    """Grow existing support ``core`` by ``grow`` cells - only where the model above
+    (``reach``) is within the margin, clear of the model's sides and of the Z gap.
+    The margin never creates support on its own, it only widens real support so
+    the perimeters along the model's edges (and around holes) sit fully on it."""
+    if not grow or not core.any():
+        return core
+    s = geometry.dilate(core, grow) & geometry.dilate(reach, grow) & ~geometry.dilate(masks[i], xy)
+    return _gap_free(s, masks, i, gap, grow) | core
+
+
+def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhere: bool,
+                 edge_margin: float = 0.0) -> list:
+    """Columns grown down from the overhangs.  ``edge_margin`` (mm) widens the
+    support past the overhang's edges so its perimeters sit fully on support."""
     n = len(masks)
     xy = max(1, int(math.ceil(xy_distance / res)))
+    grow = margin_cells(edge_margin, res)
     below_any = [np.zeros_like(masks[0])]
     for i in range(1, n):
         below_any.append(below_any[-1] | masks[i - 1])
@@ -123,6 +173,13 @@ def auto_columns(masks, over, res: float, xy_distance: float, gap: int, everywhe
                 s &= ~masks[i - 1]           # one layer gap on top of the model
         else:
             s &= ~below_any[i]               # build plate only: nothing of the model underneath
+        if grow and s.any():
+            s = _with_margin(s, acc, grow, masks, i, xy, gap)
+            if everywhere:
+                if i > 0:
+                    s &= ~masks[i - 1]
+            else:
+                s &= ~below_any[i]
         sup[i] = s
     return sup
 
@@ -142,10 +199,16 @@ def block_cells(base: geometry.RegionMask, blocks, z: float) -> np.ndarray:
     return g
 
 
-def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int) -> list:
-    """Support inside the block volumes wherever there is model above (with a Z gap)."""
+def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
+                  edge_margin: float = 0.0) -> list:
+    """Support inside the block volumes wherever there is model above (with a Z gap).
+
+    ``edge_margin`` (mm) widens that support past the model's edges (also into
+    holes too large to fill) so the perimeters along every edge sit on support.
+    """
     n = len(masks)
     xy = max(1, int(math.ceil(xy_distance / base.res)))
+    grow = margin_cells(edge_margin, base.res)
     above = np.zeros_like(masks[0])
     sup = [None] * n
     for i in range(n - 1, -1, -1):
@@ -154,9 +217,9 @@ def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int) -> 
             above |= masks[j]
         mid_z = layers[i].z - layers[i].height * 0.5
         s = block_cells(base, blocks, mid_z) & above & ~geometry.dilate(masks[i], xy)
-        for k in range(1, gap + 1):          # keep the top Z gap empty under the model
-            if i + k < n:
-                s &= ~masks[i + k]
+        s = _gap_free(s, masks, i, gap, 0)
+        if grow and s.any():
+            s = _with_margin(s, above, grow, masks, i, xy, gap)
         if i > 0:
             s &= ~masks[i - 1]               # one layer gap on top of the model
         sup[i] = s
@@ -306,7 +369,8 @@ def slice_layers(mesh, layer_height: float, first_layer_height: float | None = N
 def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, angle: float = 50.0,
                     everywhere: bool = False, xy_distance: float = 0.8, gap: int = 1,
                     min_area: float = 1.0, first_layer_height: float | None = None,
-                    block_size: float | None = None) -> list:
+                    block_size: float | None = None, fill_holes: float = 0.0,
+                    edge_margin: float = 0.0) -> list:
     """Automatic support for a placed mesh, returned as editable blocks.
 
     ``block_size`` tiles the support with blocks of that size; None gives one
@@ -317,9 +381,9 @@ def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, a
         return []
     lo, hi = mesh.bounds
     base = make_grid(lo, hi, line_width)
-    masks = model_masks(layers, base)
+    masks = model_masks(layers, base, fill_holes)
     over = overhangs(masks, layers, base.res, angle, min_area)
-    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere)
+    sup = auto_columns(masks, over, base.res, xy_distance, gap, everywhere, edge_margin)
     if block_size:
         return tiled_blocks_from_columns(sup, layers, base, float(block_size), gap)
     return blocks_from_columns(sup, layers, base, gap)

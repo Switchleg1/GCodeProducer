@@ -82,7 +82,18 @@ versa.
   down from the overhangs, leave a Z gap under the part, and stay
   `xy_distance` away from the model. *Touching build plate* keeps only columns
   with no model underneath. *Everywhere* lets them stand on the model (with a
-  one-layer gap). *Manual blocks* uses the job's support blocks instead
+  one-layer gap). **Holes and edges** (all modes):
+  - Holes in the model up to *Support under holes up to* (default 100 mm²)
+    count as solid. Support runs on under them, so the hole and its
+    perimeters are supported, and it never climbs up inside the hole. Larger
+    openings (e.g. a pocket opening downward) stay open and are supported as
+    overhangs.
+  - *Edge margin* (default one line width) widens existing support past the
+    model's edges and into holes too large to fill, so the perimeters along
+    every edge sit fully on support. It keeps the XY distance, the Z gap and
+    the build-plate rule, and it never creates support on its own.
+
+  *Manual blocks* uses the job's support blocks instead
   (`core/support.py`; `--support-blocks` on the CLI). The top
   `interface_layers` are printed denser as `support_interface`.
 - **`fdm_perimeters`** — offsets each contour inward into wall loops
@@ -208,7 +219,7 @@ consumables, process and recent models are remembered.
    |---------------------|-----------------------------------------------------------------------|
    | Layers              | layer height, first layer height, centre on bed                       |
    | Skirt / brim        | none / skirt / brim / both, skirt loops, distance, height, brim width & gap |
-   | Support             | build plate / everywhere, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area |
+   | Support             | build plate / everywhere / manual blocks, overhang angle, density, pattern, XY distance, top Z gap, interface layers & density, min area, support under holes up to (mm²), edge margin |
    | Walls               | wall loops, wall line width                                           |
    | Top / bottom shells | top / bottom solid layers, solid pattern, angle, overlap              |
    | Infill              | density, pattern (rectilinear, grid, triangles, cubic, lines), angle, line width, overlap, min length, travel order |

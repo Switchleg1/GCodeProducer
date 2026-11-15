@@ -9,3 +9,9 @@ dist/
 venv/
 *.gcode
 !examples/*.gcode
+.edit_*.py
+.shot*.py
+.hole.py
+.chk.py
+*.jpg
+!docs/*.jpg
