@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import QLabel
 from ..core.workflow import FDM
 from ..core.toolpath import RETRACT, SOLID_KINDS, Toolpath
 from . import shaders
+from .bed import BedRenderer
 from .camera import Camera
 from .view_state import ViewState
 
@@ -106,6 +107,7 @@ class GCodeViewer(QOpenGLWidget):
         self.setFormat(default_surface_format())
         self.camera = camera
         self.state = state
+        self.bed_rect = None            # machine plate; None = grid around the tool path
         self.tp: Toolpath | None = None
         self.cursor = 1 << 30
         self.selected = -1
@@ -137,6 +139,14 @@ class GCodeViewer(QOpenGLWidget):
         self.info.adjustSize()
         self.info.move(6, self.height() - self.info.height() - 6)
         self.info.setVisible(bool(text))
+
+    def set_bed(self, rect) -> None:
+        """Machine plate (x0, y0, x1, y1, height) - the same plate the Prepare view shows."""
+        rect = tuple(float(v) for v in rect) if rect is not None else None
+        if rect != self.bed_rect:
+            self.bed_rect = rect
+            self._bed_dirty = True
+            self.update()
 
     def set_toolpath(self, tp: Toolpath | None) -> None:
         self.tp = tp
@@ -172,6 +182,8 @@ class GCodeViewer(QOpenGLWidget):
         self.m_events = _Mesh()
         self.m_tool = _Mesh()
         self.m_grid = _Mesh(False)
+        self.bed = BedRenderer(_Mesh)
+        self._bed_dirty = True
         self.m_plane = _Mesh(False)
         self.m_axes = _Mesh(False)
         self.m_axes.upload(np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [0, 0, 0], [0, 0, 1]], np.float32))
@@ -276,8 +288,17 @@ class GCodeViewer(QOpenGLWidget):
         GL.glEnable(GL.GL_DEPTH_TEST)
         GL.glDepthMask(GL.GL_TRUE)
 
-        # grid
-        if st.show_grid and self.m_grid.count:
+        if self._bed_dirty and self.bed_rect is not None:
+            self._bed_dirty = False
+            self.bed.upload(self.bed_rect)
+        below = cam.eye()[2] < 0.0
+        if self.bed_rect is not None:
+            # the machine's plate, exactly as in the Prepare view
+            if not below:
+                self.bed.draw_plate(self.p_flat, mvp, 1.0)
+            self.bed.draw_lines(self.p_flat, mvp, grid=st.show_grid)
+        # grid around the tool path (only when no machine plate is known)
+        elif st.show_grid and self.m_grid.count:
             GL.glUseProgram(self.p_flat)
             GL.glUniformMatrix4fv(self._u(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
             GL.glUniform4f(self._u(self.p_flat, "uColor"), 0.28, 0.29, 0.32, 1.0)
@@ -317,6 +338,9 @@ class GCodeViewer(QOpenGLWidget):
             # section plane
             if st.section and st.section_show_plane:
                 self._draw_plane(mvp)
+
+        if self.bed_rect is not None and below:
+            self.bed.draw_plate(self.p_flat, mvp, 0.45)      # see-through from below
 
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)

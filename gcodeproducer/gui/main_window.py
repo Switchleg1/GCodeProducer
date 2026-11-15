@@ -176,35 +176,35 @@ class MainWindow(QMainWindow):
         lv = QVBoxLayout()
         lv.addWidget(self.layer_lbl)
         lv.addWidget(self.layer_slider, 1, Qt.AlignmentFlag.AlignHCenter)
-        top = QHBoxLayout()
-        top.setContentsMargins(0, 0, 0, 0)
-        top.addWidget(self.viewer, 1)
-        top.addLayout(lv)
 
         self.line_slider = QSlider(Qt.Orientation.Horizontal)
         self.line_slider.setToolTip("Position within the top layer")
         self.line_slider.valueChanged.connect(self._on_line_slider)
         self.single_layer = QCheckBox("Single layer")
         self.single_layer.toggled.connect(lambda _v: self._apply_layers())
+        self.lbl_in_layer = QLabel("In layer")
         bottom = QHBoxLayout()
-        bottom.addWidget(QLabel("In layer"))
+        bottom.addWidget(self.lbl_in_layer)
         bottom.addWidget(self.line_slider, 1)
         bottom.addWidget(self.single_layer)
-        preview = QWidget()
-        pv = QVBoxLayout(preview)
-        pv.setContentsMargins(0, 0, 0, 0)
-        pv.addLayout(top, 1)
-        pv.addLayout(bottom)
 
+        # both views share one area (and one camera): the layer controls sit outside
+        # it, so Prepare and Preview have exactly the same size and framing; the
+        # controls are disabled in Prepare
         self.stack = QStackedWidget()
         self.stack.addWidget(self.model_viewer)
-        self.stack.addWidget(preview)
+        self.stack.addWidget(self.viewer)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.addWidget(self.stack, 1)
+        top.addLayout(lv)
 
         central = QWidget()
         v = QVBoxLayout(central)
         v.setContentsMargins(4, 4, 4, 4)
         v.addLayout(bar)
-        v.addWidget(self.stack, 1)
+        v.addLayout(top, 1)
+        v.addLayout(bottom)
         self.setCentralWidget(central)
 
     def _dock(self, title, widget, area, name):
@@ -1207,6 +1207,7 @@ class MainWindow(QMainWindow):
         rect = bed_rect(machine, self.workflow) if machine is not None else (0, 0, 220, 220, 250)
         show_blocks = self._support_mode() == "blocks"
         self.model_viewer.set_blocks(self.blocks, self.sel_block, show_blocks)
+        self.viewer.set_bed(rect)                     # Preview shows the same machine plate
         if self.mesh is None:
             self.placed = None
             self.lbl_size.setText("")
@@ -1447,6 +1448,8 @@ class MainWindow(QMainWindow):
             mode = "prepare"
         self.mode = mode
         self.stack.setCurrentIndex(0 if mode == "prepare" else 1)
+        for w in (self.layer_slider, self.layer_lbl, self.line_slider, self.single_layer, self.lbl_in_layer):
+            w.setEnabled(mode == "preview")
         (self.act_prepare if mode == "prepare" else self.act_preview).setChecked(True)
         if mode == "preview" and self.b_face.isChecked():
             self.b_face.setChecked(False)
@@ -1582,10 +1585,7 @@ class MainWindow(QMainWindow):
         import gc
         gc.freeze()
         tp = self.tp
-        self.viewer.set_toolpath(tp)
-        if self._fitted_for != self.model_path:
-            self.viewer.fit()
-            self._fitted_for = self.model_path
+        self.viewer.set_toolpath(tp)            # camera unchanged: same view as Prepare
         self.text_panel.set_program(self.program)
         self.stale = False
         self.set_mode("preview")

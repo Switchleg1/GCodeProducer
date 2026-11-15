@@ -35,6 +35,8 @@ def apply_theme(app) -> None:
 
 
 def run_gui(path: str | None = None) -> int:
+    import multiprocessing
+    multiprocessing.freeze_support()          # slicing runs in a spawned process (also when frozen)
     from PyQt6.QtGui import QSurfaceFormat
     from PyQt6.QtWidgets import QApplication
 

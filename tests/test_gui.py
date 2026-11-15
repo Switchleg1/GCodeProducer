@@ -389,3 +389,27 @@ def test_auto_generate_runs_in_background(win, app, tmp_path):
         app.processEvents()
         time.sleep(0.01)
     assert win.b_gen_blocks.isEnabled() and len(win.blocks) > 1
+
+
+def test_preview_uses_machine_plate_and_same_view(win, app):
+    """The sliced Preview shows the machine's plate (not a grid around the part), the views have the
+    same size, and slicing does not move the shared camera."""
+    from gcodeproducer.core.placement import bed_rect
+    from gcodeproducer.core.profiles import Profile
+    m = Profile("machine", "Wide", workflow="fdm", values={"bed_x": 300, "bed_y": 200, "height": 180})
+    win.libset.machines.add(m)
+    win._reload_machines(m.id)
+    win.resize(1400, 900)
+    win.show()
+    win.open_model(os.path.join(os.path.dirname(__file__), "..", "examples", "cube20.stl"))
+    assert win.viewer.bed_rect == bed_rect(m, "fdm") == win.model_viewer.rect
+    cam = (tuple(win.camera.target), win.camera.distance, win.camera.yaw, win.camera.pitch)
+    win.run_slice()
+    _wait(win, app)
+    assert win.mode == "preview"
+    assert (tuple(win.camera.target), win.camera.distance, win.camera.yaw, win.camera.pitch) == cam
+    app.processEvents()
+    assert win.viewer.size() == win.model_viewer.size()
+    assert not win.layer_slider.isEnabled() or win.mode == "preview"
+    win.set_mode("prepare")
+    assert not win.layer_slider.isEnabled()

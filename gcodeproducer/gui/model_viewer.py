@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import QLabel
 from ..core.geometry import ray_triangles
 from ..core.placement import face_normals, overhang_faces
 from . import shaders
+from .bed import BedRenderer
 from .camera import Camera, perspective
 from .viewer import _compile, _Mesh, default_surface_format
 
@@ -227,10 +228,7 @@ class ModelViewer(QOpenGLWidget):
             self.glError.emit(f"OpenGL shader error: {exc}")
             return
         self.m_model = _TriMesh()
-        self.m_bed = _Mesh(False)
-        self.m_grid = _Mesh(False)
-        self.m_outline = _Mesh(False)
-        self.m_volume = _Mesh(False)
+        self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
         self.m_bedges = _Mesh(False)
         self._blocks_dirty = True
@@ -243,22 +241,7 @@ class ModelViewer(QOpenGLWidget):
 
     def _upload(self):
         self._dirty = False
-        x0, y0, x1, y1, h = self.rect
-        self.m_bed.upload(np.array([[x0, y0, -0.02], [x1, y0, -0.02], [x1, y1, -0.02], [x0, y1, -0.02]], np.float32))
-        self.m_outline.upload(np.array([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]], np.float32))
-        step = 10.0 if max(x1 - x0, y1 - y0) <= 600 else 50.0
-        pts = []
-        for x in np.arange(math.ceil(x0 / step) * step, x1 + 1e-6, step):
-            pts += [(x, y0, 0), (x, y1, 0)]
-        for y in np.arange(math.ceil(y0 / step) * step, y1 + 1e-6, step):
-            pts += [(x0, y, 0), (x1, y, 0)]
-        self.m_grid.upload(np.array(pts, np.float32))
-        c = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-        vol = []
-        for i in range(4):
-            a, b = c[i], c[(i + 1) % 4]
-            vol += [(a[0], a[1], h), (b[0], b[1], h), (a[0], a[1], 0), (a[0], a[1], h)]
-        self.m_volume.upload(np.array(vol, np.float32))
+        self.bed.upload(self.rect)
         if self.vertices is None:
             self.m_model.count = 0
             return
@@ -365,31 +348,10 @@ class ModelViewer(QOpenGLWidget):
         return best, bt, (o + d * bt if best >= 0 else None)
 
     def _draw_bed(self, mvp, alpha):
-        GL.glUseProgram(self.p_flat)
-        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
-        ucol = GL.glGetUniformLocation(self.p_flat, "uColor")
-        if alpha < 1.0:
-            GL.glEnable(GL.GL_BLEND)
-            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
-            GL.glDepthMask(GL.GL_FALSE)
-        GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
-        GL.glPolygonOffset(1.0, 1.0)
-        GL.glUniform4f(ucol, 0.19, 0.20, 0.23, alpha)
-        self.m_bed.draw(GL.GL_TRIANGLE_FAN)
-        GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
-        GL.glDepthMask(GL.GL_TRUE)
-        GL.glDisable(GL.GL_BLEND)
+        self.bed.draw_plate(self.p_flat, mvp, alpha)
 
     def _draw_lines(self, mvp):
-        GL.glUseProgram(self.p_flat)
-        GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
-        ucol = GL.glGetUniformLocation(self.p_flat, "uColor")
-        GL.glUniform4f(ucol, 0.29, 0.30, 0.34, 1.0)
-        self.m_grid.draw(GL.GL_LINES)
-        GL.glUniform4f(ucol, 0.55, 0.57, 0.62, 1.0)
-        self.m_outline.draw(GL.GL_LINE_LOOP)
-        GL.glUniform4f(ucol, 0.33, 0.35, 0.40, 1.0)
-        self.m_volume.draw(GL.GL_LINES)
+        self.bed.draw_lines(self.p_flat, mvp)
 
     def _draw_axes(self, w, h):
         size = int(90 * self.devicePixelRatioF())
