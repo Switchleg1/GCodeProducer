@@ -127,6 +127,7 @@ class CAMEditor(QWidget):
         self.strategy.addItem("Wall-parallel contours", "contour")
         self.strategy.addItem("Raster lines", "raster")
         self.direction = QComboBox()
+        self.direction.setToolTip("M3: choose hand from remaining material. A full-width first slot has no unique climb/conventional hand.")
         for label, key in (("Machine default", "machine"), ("Climb", "climb"),
                            ("Conventional", "conventional"), ("Meander", "meander")):
             self.direction.addItem(label, key)
@@ -142,6 +143,25 @@ class CAMEditor(QWidget):
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
+        self.feed_controls = {}
+        feeds = QGroupBox("Engagement feeds (% of tool feed)")
+        ff = QFormLayout(feeds)
+        for key, label in (("low_engagement_feed", "Low (<40%)"),
+                           ("standard_engagement_feed", "Standard (40–70%)"),
+                           ("high_engagement_feed", "High (>70%, below slot)"),
+                           ("slotting_feed", "Slotting (95–100%)")):
+            sb = self.spin(0, 300, 0)
+            sb.setDecimals(0)
+            sb.setSpecialValueText("Tool default")
+            sb.setSuffix(" %")
+            sb.setToolTip("0 inherits the tool profile. 100% is base tool feed; values above 100% increase it, subject to machine max feed.")
+            sb.valueChanged.connect(self._edit)
+            self.feed_controls[key] = sb
+            ff.addRow(label, sb)
+        feed_note = QLabel("Planar estimate, not machine telemetry. Full slots and balanced frontal entries have no unique cutting hand.")
+        feed_note.setWordWrap(True)
+        ff.addRow(feed_note)
+        form.addRow(feeds)
         layout.addWidget(self.details)
         warning = QLabel("2.5D CAM • Conservative original-stock checks only; no stock-removal, "
                          "holder or fixture simulation. Verify clearance and air-cut before machining.")
@@ -274,6 +294,9 @@ class CAMEditor(QWidget):
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
             self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
+            for key, sb in self.feed_controls.items():
+                sb.setValue(getattr(op, key))
+                sb.setEnabled(op.kind != "drill")
             self.strategy.setEnabled(op.kind == "pocket")
             self.direction.setEnabled(op.kind in ("pocket", "profile"))
             self.stepover.setEnabled(op.kind == "pocket")
@@ -295,6 +318,8 @@ class CAMEditor(QWidget):
         op.side, op.stock = self.side.currentData(), self.stock.value()
         op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
         op.stay_down = self.stay_down.isChecked()
+        for key, sb in self.feed_controls.items():
+            setattr(op, key, sb.value())
         self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
         item = self.tree.currentItem()
         item.setText(0, f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else ""))

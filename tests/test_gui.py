@@ -42,6 +42,13 @@ def test_sections_and_setup(win):
     assert win.fdm_process_box.isHidden()
     assert not win.cam_scroll.isHidden()
     assert win.cam_editor.tool_combo.count() > 0
+    ei = win.color_combo.findData("engagement")
+    assert ei >= 0 and win.color_combo.model().item(ei).isEnabled()
+    win.color_combo.setCurrentIndex(ei)
+    assert win.state.color_mode == "engagement"
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
+    assert not win.color_combo.model().item(ei).isEnabled()
+    assert win.state.color_mode == "feature"
 
 
 def test_edit_save_revert_process(win):
@@ -457,6 +464,9 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     ed.add_operation()
     op = ed.operation()
     assert op.kind == "pocket"
+    assert ed.feed_controls["standard_engagement_feed"].specialValueText() == "Tool default"
+    ed.feed_controls["standard_engagement_feed"].setValue(150)
+    assert op.standard_engagement_feed == 150
     ed.pick.setCurrentIndex(ed.pick.findData("face"))
     assert win.model_viewer.cam_pick_mode == "face"
     lo, hi = win.placed.bounds
@@ -478,6 +488,7 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     saved = ed.setup.to_dict()
     win.open_model(cube_stl)
     assert ed.setup.to_dict() == saved
+    assert ed.feed_controls["standard_engagement_feed"].value() == 150
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
     win.select_process("0-20-mm-standard")
     assert ed.setup.to_dict() == saved

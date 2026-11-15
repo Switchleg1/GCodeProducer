@@ -22,6 +22,7 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
 | Cutting direction | Machine default | Inherit Climb/Conventional/Meander, or override per operation |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
+| Low / Standard / High / Slotting feed | Tool default (0) | Override each band's percentage of base tool feed; Low <40%, Standard 40–70%, High >70% below slot, Slotting ≈95–100% |
 | Profile side | Outside | Outside, Inside or On |
 | Stock to leave | 0 mm | Radial allowance used by Pocket/Profile; not axial depth allowance |
 
@@ -38,8 +39,11 @@ the full cutter-centre link is inside the permitted region. Other paths or
 blocked/disconnected links retract before positioning and plunging. No ramp,
 helix, lead-in,
 lead-out or cutter-compensation cycle is inserted. Avoid geometry/tooling
-that cannot tolerate that entry. Tool feed/plunge feed and RPM are used as
-stored; there is no general CAM machine-capability capping equivalent to FDM.
+that cannot tolerate that entry. Tool cutting feed is adjusted by estimated engagement-band factors; plunge
+feed remains separate. Positive machine `max_feed` caps emitted cutting,
+link and plunge feed. Tool RPM still requires manual verification; there is
+no general spindle capability capping or chip-load optimizer.
+See [engagement/feed controls](engagement-and-feeds.md).
 
 ## Pocket
 
@@ -116,9 +120,10 @@ links retain safe-Z entries. These are not a continuous spiral or fitted
 `G2/G3` controller arcs.
 
 **Raster lines** retains straight-line clearing plus wall boundary passes.
-It honours its full stepover range. Climb/conventional raster requests select
-consistent forward/reverse scan direction, but that does not prove mechanical
-climb engagement throughout arbitrary geometry. Meander alternates scan lines.
+It honours its full stepover range. Operation-driven scan lines are oriented
+using estimated remaining material, rather than assuming fixed +X is always
+climb. Meander alternates successive one-sided cutting hands; neutral slots do
+not set the hand.
 See [toolpath strategy and direction](toolpaths.md) for the full rules.
 
 Restrictions and checks:
@@ -168,8 +173,9 @@ allowance increases that offset to 3.3 mm. That can still place the cutter
 inside the allocated raw blank: the vertical entry must be evaluated, not
 assumed to be in air.
 
-Climb/conventional/meander winding follows the machine default or operation
-override; the assumed spindle is clockwise M3. See [direction rules](toolpaths.md).
+Climb/conventional/meander requests follow the machine default or operation
+override; actual clearing hand is chosen from estimated remaining material.
+Full-slot paths do not define the cutting hand. The assumed spindle is M3. See [direction rules](toolpaths.md).
 
 Not implemented: holding tabs, bridges, lead-ins/outs,
 controller G41/G42 compensation, and

@@ -120,7 +120,7 @@ def check_stock(job, program, sim=None):
         if sim.motion_cmd[i] == "G0" and contact and not upward_retract:
             warn(f"{label}: rapid motion intersects the original material (tool radius {r:g} mm).")
         elif sim.motion_cmd[i] == "G1" and contact and not upward_retract:
-            intended = ln.feature in ("cut", "plunge") and ln.op is not None
+            intended = ln.feature in ("cut", "slot", "high_engagement", "air", "plunge") and ln.op is not None
             if not intended:
                 warn(f"{label}: custom/unclassified feed move enters the material.")
             if not spindle:

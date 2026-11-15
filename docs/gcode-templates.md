@@ -94,7 +94,9 @@ Important distinctions:
 - `chamber_temp`: zero when chamber heating is unavailable/not requested.
 - FDM `tool`: currently extruder 0, not a multi-extruder selection system.
 - CAM `tool`, tool name/diameter/feed/RPM: first active tool at startup, last
-  active tool at shutdown, not just the first allowed library entry.
+  active tool at shutdown, not just the first allowed library entry. CAM
+  `feed` is the tool's base cutting feed; per-move engagement factors and the
+  machine max-feed cap can change emitted F values.
 - `layer`: 1-based template value; internal preview/program indices are 0-based.
 - At FDM start, current-layer values describe the first layer; at FDM end,
   they describe the last layer, including `current_layer_height`.

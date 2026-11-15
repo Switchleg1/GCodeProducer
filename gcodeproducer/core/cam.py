@@ -67,6 +67,10 @@ class Operation:
     strategy: str = "contour"          # pocket: contour-parallel or legacy raster
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
+    low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults
+    standard_engagement_feed: float = 0.0
+    high_engagement_feed: float = 0.0
+    slotting_feed: float = 0.0
 
 
 @dataclass
@@ -304,6 +308,7 @@ def generate(job, ctx):
     topo = cached_topology(job.mesh)
     tools = {t.id: t for t in job.tools}
     layers = []
+    job.warnings = []
     for gi, group in enumerate(setup.groups):
         if group.tool_id not in tools:
             raise ValueError(f"CAM tool '{group.tool_id}' is missing or not allowed by the machine")
@@ -362,8 +367,6 @@ def generate(job, ctx):
                     paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
                                   stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                              for i, (p, link) in enumerate(linked)]
-                    ctx.log(f"  {op.name}: {sum(p.stay_down for p in paths)} stay-down links, "
-                            f"{sum(not p.stay_down for p in paths)} safe-height entries per depth pass")
                 elif op.strategy == "raster":
                     from .cam_paths import pocket_region, boundary_paths
                     region = pocket_region(loops).buffer(-(diameter/2+op.stock))
@@ -405,6 +408,12 @@ def generate(job, ctx):
                     paths.append(Path("drill", np.array([[x, y]]), width=diameter))
             if not paths:
                 raise ValueError(f"{op.name}: no machinable paths")
+            if op.kind != "drill":
+                from .cam_engagement import plan_engagement
+                job.warnings.extend(plan_engagement(paths, job, op, tool, ctx.log))
+            if op.kind == "pocket" and op.strategy == "contour":
+                ctx.log(f"  {op.name}: {sum(p.stay_down for p in paths)} stay-down links, "
+                        f"{sum(not p.stay_down for p in paths)} safe-height entries per depth pass")
             for i in range(count):
                 z = max(end, start - (i + 1) * step)
                 layer = Layer(len(layers), z, min(step, start - z), paths=paths)

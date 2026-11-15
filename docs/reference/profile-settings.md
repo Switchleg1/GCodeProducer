@@ -45,11 +45,11 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `clearance_z` — Clearance z | float / mm | `5.0` | No schema bound | Clearance.  |
 | `rapid_xy` — Rapid xy | float / mm/min | `3000.0` | No schema bound | Speeds & feeds.  |
 | `rapid_z` — Rapid z | float / mm/min | `1000.0` | No schema bound | Speeds & feeds.  |
-| `max_feed` — Max feed | float / mm/min | `2000.0` | No schema bound | Speeds & feeds.  |
+| `max_feed` — Max feed | float / mm/min | `2000.0` | minimum 0 | Speeds & feeds. Caps cutting, engagement-adjusted/link and plunge G1 feeds; 0 = no cap. Not a spindle or G0 limit. |
 | `spindle_min` — Spindle min | float / rpm | `6000.0` | No schema bound | Spindle.  |
 | `spindle_max` — Spindle max | float / rpm | `24000.0` | No schema bound | Spindle.  |
 | `units` — Units | choice | `mm` | `mm` = mm; `inch` = inch | Work area.  |
-| `cut_direction` — Default cutting direction | choice | `climb` | `climb` = Climb; `conventional` = Conventional; `meander` = Meander | Toolpaths. Default for CAM pockets/profiles (M3 clockwise spindle). Operations may override it. Meander alternates adjacent passes. |
+| `cut_direction` — Default cutting direction | choice | `climb` | `climb` = Climb; `conventional` = Conventional; `meander` = Meander | Toolpaths. Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses direction; full slots are neutral. Operations may override. Meander alternates one-sided passes. |
 | `allowed_tools` — Allowed tools | multi | `*` | IDs from tool; `*` = all, `[]` = none | Allowed consumables. Tools from the tool library that are mounted / available. |
 | `start_gcode` — Start G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written before the job. A template: {variables}, {if ...}{else}{endif}. Empty = the default. |
 | `end_gcode` — End G-code | gcode | workflow template; see [defaults](default-templates.md) | No schema bound | G-code. Written after the job. A template like the start G-code. Empty = the default. |
@@ -99,4 +99,8 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `spindle_rpm` — Spindle rpm | float / rpm | `18000.0` | No schema bound | Feeds & speeds.  |
 | `max_doc` — Max depth/pass | float / mm | `2.0` | No schema bound | Engagement.  |
 | `stepover` — Stepover | float / % | `40.0` | No schema bound | Engagement. Radial engagement as a % of diameter. |
+| `low_engagement_feed` — Low engagement feed (<40%) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. Percentage of base cutting feed; operations may override. Engagement is estimated. |
+| `standard_engagement_feed` — Standard engagement feed (40–70%) | float / % | `100.0` | minimum 1; maximum 300 | Engagement feeds. May exceed 100% when calibrated for the cutter/material; capped by machine max feed. |
+| `high_engagement_feed` — High engagement feed (>70%, below slot) | float / % | `75.0` | minimum 1; maximum 300 | Engagement feeds.  |
+| `slotting_feed` — Slotting feed (95–100%) | float / % | `50.0` | minimum 1; maximum 300 | Engagement feeds. Full-width slots have no single climb/conventional hand. Percentage of base cutting feed. |
 

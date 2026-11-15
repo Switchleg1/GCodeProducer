@@ -72,7 +72,9 @@ motion. It enters each depth pass from safe Z with XY positioning and a plunge
 at tool plunge feed. Wall-parallel pockets can then follow nearby contours
 using clearance-checked same-depth feed links. Blocked/disconnected links and
 other path strategies retain retract/position/plunge handling. Cuts and links
-use tool cutting feed. This is not ramp/helical entry.
+use tool cutting feed adjusted by estimated engagement (including heavier
+entry links), capped by a positive machine max feed. The first full-width
+slot is neutral; later pass direction follows remaining material. This is not ramp/helical entry.
 
 Between tool groups, output retracts to safe Z, stops the spindle (`M5`),
 issues `T… M6`, and restarts the spindle (`M3 S…`). A real controller may need
@@ -105,6 +107,7 @@ if the current blank is no longer suitable.
 Implemented machining is **initial 2.5D** from STL-derived topology:
 
 - [Geometry selection and linked depths](selection-and-depths.md)
+- [Engagement-aware direction and feed factors](engagement-and-feeds.md)
 - [Wall-following strategies and cutting direction](toolpaths.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)

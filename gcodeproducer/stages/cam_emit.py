@@ -38,6 +38,41 @@ class CAMEmit(SliceStage):
         plunge = tool.get("plunge_feed", 300) if tool else 300
         rpm = tool.get("spindle_rpm", 18000) if tool else job.m("spindle_max", 18000)
         rapid_xy = job.m("rapid_xy", 3000)
+        max_feed = float(job.m("max_feed", 0) or 0)
+        if not math.isfinite(max_feed) or max_feed < 0:
+            raise ValueError("Machine max feed must be nonnegative and finite")
+        capped = set()
+        last_feed = None
+        last_condition = None
+
+        def limited(value):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("CAM cutting/plunge feeds must be positive and finite")
+            if max_feed > 0 and value > max_feed:
+                capped.add((value, max_feed))
+                return max_feed
+            return value
+
+        def cut_move(point, condition=None, comment=None, force=False):
+            nonlocal last_feed, last_condition
+            factor = condition.feed_factor if condition is not None else 1.0
+            requested = limited(float(feed)*factor)
+            feature = ({"slot": "slot", "high": "high_engagement", "air": "air"}.get(condition.regime, "cut")
+                       if condition is not None else "cut")
+            b.set_feature(feature)
+            note = None
+            if condition is not None:
+                note = f"{condition.regime} {condition.engagement*100:.0f}% engagement; {condition.hand}"
+                key = (condition.regime, condition.hand)
+                if key != last_condition and comment is None:
+                    comment = note
+                last_condition = key
+            f = f" F{format_number(requested,1)}" if force or last_feed != requested else ""
+            line = b.command(f"G1 X{format_number(point[0],3)} Y{format_number(point[1],3)}{f}", comment)
+            if condition is not None:
+                line.engagement = condition.engagement
+                line.note = note
+            last_feed = requested
 
         self._start(b, job, tool, rpm, safe_z, log=ctx.log)
         b.set_feature("rapid", comment=False)
@@ -72,22 +107,18 @@ class CAMEmit(SliceStage):
                 linked = (path.stay_down and previous_end is not None and path.stay_down_from is not None
                           and np.allclose(previous_end, path.stay_down_from, atol=1e-7, rtol=0))
                 if linked:
-                    b.set_feature("cut", comment=False)
-                    b.command(f"G1 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
-                              f"F{format_number(feed,1)}", "stay-down link")
+                    cut_move(start, path.link_condition, "stay-down link", force=True)
                 else:
                     b.set_feature("rapid", comment=False)
                     b.command(f"G0 Z{format_number(safe_z,3)}")
                     b.command(f"G0 X{format_number(start[0],3)} Y{format_number(start[1],3)} "
                               f"F{format_number(rapid_xy,1)}")
                     b.set_feature("plunge", comment=False)
-                    b.command(f"G1 Z{format_number(layer.z,3)} F{format_number(plunge,1)}")
-                b.set_feature("cut", comment=False)
-                first = True
-                for q in loop[1:]:
-                    f = f" F{format_number(feed,1)}" if first else ""
-                    b.command(f"G1 X{format_number(q[0],3)} Y{format_number(q[1],3)}{f}")
-                    first = False
+                    b.command(f"G1 Z{format_number(layer.z,3)} F{format_number(limited(float(plunge)),1)}")
+                    last_feed = None
+                for i, q in enumerate(loop[1:]):
+                    condition = path.cut_conditions[i] if i < len(path.cut_conditions) else None
+                    cut_move(q, condition, force=i == 0)
                 previous_end = loop[-1][:2]
             ctx.progress((li + 1) / n)
 
@@ -98,9 +129,12 @@ class CAMEmit(SliceStage):
         job.program = prog
         if job.cam_setup is not None:
             from ..core.stock import check_stock
-            job.warnings = check_stock(job, prog)
-            for warning in job.warnings:
+            stock_warnings = check_stock(job, prog)
+            job.warnings = list(job.warnings) + stock_warnings
+            for warning in stock_warnings:
                 ctx.log(f"STOCK WARNING: {warning}")
+        for request, cap in sorted(capped):
+            ctx.log(f"  CAM feed capped: {request:g} -> {cap:g} mm/min (machine max_feed)")
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
         return f"{len(prog.lines)} lines, {moves} moves, {len(job.layers)} depth passes"
 

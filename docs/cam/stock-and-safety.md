@@ -128,11 +128,15 @@ dialog does not recalculate the result.
 - Stock-removal state, fixtures, clamps, vises, holders, flute reach, shank
   contact or full machine kinematics.
 - Retained-part gouging by every intended cut, cutter deflection, chip load,
-  cutting forces, chatter, workholding stability or thermal behaviour.
+  cutting forces, chatter, workholding stability or thermal behaviour. The
+  separate [engagement estimator](engagement-and-feeds.md) subtracts planar
+  sweeps within an operation for direction/feed planning, but it is not a
+  full 3D stock-removal/collision simulator.
 - Exact custom arc/canned-cycle geometry, controller macros, smoothing or
   arbitrary multi-command blocks.
-- Machine capability capping of all CAM tool requests; tool feeds/RPM require
-  manual verification.
+- Complete machine capability validation: positive `max_feed` now caps cutting
+  and plunge requests, but RPM/tool/material suitability still require manual
+  verification. Feed factors are not calibrated safety guarantees.
 - Guaranteed blank fit within every physical machine/fixture boundary just
   because the model's work-volume check passes.
 

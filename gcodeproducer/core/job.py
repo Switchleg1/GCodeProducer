@@ -15,6 +15,14 @@ from . import workflow as wf
 from .profiles import Profile
 
 
+@dataclass(frozen=True, slots=True)
+class CutCondition:
+    engagement: float                  # estimated radial engagement 0..1
+    regime: str                        # air / low / standard / high / slot
+    hand: str                          # climb / conventional / neutral / mixed / air (M3)
+    feed_factor: float = 1.0            # multiplier of tool cutting feed
+
+
 @dataclass
 class Path:
     """A generated toolpath: a polyline tagged with a feature type."""
@@ -25,6 +33,8 @@ class Path:
     speed: Optional[float] = None      # mm/s (FDM) or mm/min (CAM); None = stage default
     stay_down: bool = False             # CAM: validated cutting-depth link from preceding path in same pass
     stay_down_from: Optional[tuple] = None  # expected preceding XY endpoint; stale metadata forces retract
+    cut_conditions: list = field(default_factory=list)  # one per emitted XY segment
+    link_condition: Optional[CutCondition] = None
 
 
 @dataclass

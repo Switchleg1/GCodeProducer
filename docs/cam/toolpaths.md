@@ -57,8 +57,9 @@ square. Disconnected remaining regions are handled independently.
 The old offset-generation order alternated outer and inner boundary fronts.
 Execution now chooses nearby loops instead of jumping across the pocket width.
 Seams may be inserted along a contour segment to minimize the connection distance;
-closed-loop shape and requested climb/conventional winding are retained. Meander
-is reoriented in execution order so adjacent traversed loops still alternate.
+closed-loop shape is retained. The subsequent engagement plan chooses winding
+from remaining material; Meander alternates successive one-sided hands rather
+than counting neutral full-slot loops.
 
 Every permitted connector is a straight **G1 at the tool's cutting feed**, not
 a rapid at cutting depth. Its entire centreline must lie inside the removal
@@ -104,9 +105,9 @@ proof, chip-load model or rest-machining system.
 
 | Setting | Meaning |
 |---|---|
-| **Climb** (default) | Apply climb contour winding for the assumed clockwise `M3` spindle |
-| Conventional | Reverse the climb contour winding |
-| Meander | Alternate adjacent paths; contour loops alternate CCW/CW, raster lines alternate forward/reverse |
+| **Climb** (default) | Orient one-sided clearing against the remaining material, assuming `M3` |
+| Conventional | Request the opposite remaining-material hand |
+| Meander | Alternate the hand of successive one-sided passes; neutral slots do not choose/advance it |
 
 Pocket/Profile operation **Cutting direction** defaults to **Machine default**.
 Choose an explicit value to override only that operation. Changing machines or
@@ -118,20 +119,20 @@ new constant-engagement machining strategy or a synonym for a spiral.
 
 ### Winding convention: clockwise spindle
 
-With `M3` clockwise rotation:
+With `M3`, **uncut material on the right of travel is climb**, and on the
+left is conventional. A full-width slot has no unique hand. The planner now
+subtracts completed cutter sweeps and selects subsequent direction from the
+remaining material—not from the winding of that first slot.
 
-- Inside a pocket's outer wall: **Climb = CCW**.
-- Around a retained island/external profile: **Climb = CW**.
-- Pocket island boundaries and outer boundaries therefore have opposite winding.
-- Conventional reverses those directions.
-- Meander alternates absolute CCW/CW winding in generated-loop order, beginning
-  CCW, irrespective of boundary type. It intentionally does not preserve one
-  cutting hand around every retained surface.
+A finishing pass against an outside retained island is normally CW for climb;
+a finishing pass inside an outer retained wall is normally CCW. Those wall
+examples must **not** be blindly applied to intermediate clearing loops.
+For the annular outside-to-inside case, uncut material lies inward after the
+neutral first slot, so subsequent climb passes are **CW**. Meander alternates
+one-sided hands, not a slot-index-based CW/CCW rule.
 
-For Profile, Outside/On use the retained-side convention derived from loop
-nesting. Inside flips that convention for internal-wall compensation. For
-On-line paths, actual engagement is ambiguous; inspect the assumed side before
-using a direction label as a machining guarantee.
+See [remaining-material direction and engagement feeds](engagement-and-feeds.md)
+for the estimator, neutral entries, mixed-side warnings and inspection tools.
 
 During clearing a cutter can engage material on both sides, especially at entry
 or narrow regions. Winding alone does not guarantee pure climb engagement on
@@ -141,14 +142,16 @@ compensated**. Verify controller orientation, rotation and material side.
 
 ### Raster and other operations
 
-Raster mode keeps parallel scan lines plus contour boundary passes. Climb uses
-forward scan order, Conventional reverse, and Meander alternating scan order.
-The finishing boundary loops use the contour winding rules. Scan direction
-is not an analytical climb/conventional engagement proof against every wall.
+Raster mode keeps parallel scan lines plus contour boundary passes. In an
+operation-driven setup, the same remaining-material analysis can reverse open
+scan lines when the next uncut side requires it. A scan's label or initial
+ordering alone is not a proof of climb engagement.
 
 Drill has no XY contour handedness. Engrave follows selected curves without
 retained-side knowledge; the Pocket/Profile direction control is disabled for
-these operations. Legacy single-tool CLI profiles inherit the machine default.
+these operations. Engrave still receives estimated engagement/feed factors.
+Legacy single-tool CLI profiles inherit a wall-based machine direction without
+the operation removal/engagement plan; they do not claim slot-aware clearing.
 
 ## Existing projects and migration
 

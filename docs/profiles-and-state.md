@@ -108,16 +108,22 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   not provide full cutter-shape/holder collision geometry, chip-load
   calculations, or automatic V-carving depth.
 - CAM machine `cut_direction` defaults to Climb; Pocket/Profile inherit it
-  unless overridden. Conventional reverses winding and Meander alternates
-  paths; the convention assumes M3. See [toolpath directions](cam/toolpaths.md).
+  unless overridden. Operation-driven paths now choose the hand from estimated
+  remaining material, not a neutral first slot. Meander alternates one-sided
+  passes; the convention assumes M3. See [direction and engagement](cam/engagement-and-feeds.md).
 - CAM tool feed/plunge feed/RPM drive output; stepdown is capped at tool
   `max_doc`. Tree operation stepover currently starts at 40%, independently
   of the tool profile's stored stepover field.
 - CAM `safe_z` and XY rapid feed are used. Separate `clearance_z`, `rapid_z`
   and the reserved ramp option do not currently implement extra clearance,
   explicit Z rapid feed control or ramp entry.
-- CAM machine `max_feed` and spindle-range fields are **not general tool-request
-  caps** in the current emitter. Verify each tool's feed and RPM yourself.
+- A positive CAM machine `max_feed` caps cutting/link and plunge feed requests,
+  including engagement-factor increases. CAM spindle-range fields still do
+  **not** generally cap tool RPM. Verify cutter/material suitability independently.
+- Tool engagement factors default to Low 100%, Standard (40–70%) 100%, High
+  75%, Slotting 50% of base feed. Operation fields at 0 inherit the tool;
+  1–300% overrides are supported. Air moves remain at machine-capped base feed.
+  This is a planar per-operation estimate, not a full 3D stock simulator.
 - CAM output is currently millimetres (`G21` in the default template). The
   stored machine `units` field is not an automatic inch postprocessor.
 - CAM origin choices affect placement only as implemented: centre origin

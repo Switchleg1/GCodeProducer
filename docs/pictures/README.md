@@ -18,6 +18,8 @@ paths; do not scatter new images across the documentation root.
 | [cam-pocket-generated-pass.png](cam-pocket-generated-pass.png) | Contour-geometry capture before stay-down linking; green concentric cuts and amber original stock, entry/rapid motion hidden | [Toolpath strategies](../cam/toolpaths.md) |
 | [cam-pocket-stay-down.png](cam-pocket-stay-down.png) | Current application capture: neighbouring closed loops joined by short green cutting-feed links, one depth pass with entry/rapids hidden | [Stay-down linking](../cam/toolpaths.md#stay-down-ordering-and-link-checks) |
 | [cam-pocket-square-circle.png](cam-pocket-square-circle.png) | Actual generated paths for a constructed square pocket with circular island; straight and curved fronts transition into corner contours; linking motion hidden | [Toolpath strategies](../cam/toolpaths.md) |
+| [cam-pocket-engagement-features.png](cam-pocket-engagement-features.png) | Actual feature-coloured annular pass: initial neutral slot orange, ordinary clearing green, heavier entry links separately classified; entry/rapids hidden | [Engagement and feeds](../cam/engagement-and-feeds.md#illustrated-annular-example) |
+| [cam-pocket-engagement-estimate.png](cam-pocket-engagement-estimate.png) | Same generated pass coloured by estimated radial engagement; 3 mm tool, base feed 800 mm/min, Standard override 150%, Slotting 50% | [Engagement and feeds](../cam/engagement-and-feeds.md#illustrated-annular-example) |
 | [cam-pocket-raster-pass.png](cam-pocket-raster-pass.png) | Earlier raster-strategy capture for comparison, including magenta entry/retract motion | [Toolpath strategies](../cam/toolpaths.md#raster-comparison) |
 
 The selected-floor and annular-pass captures show a part with boss top Z0,

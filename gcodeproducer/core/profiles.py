@@ -67,14 +67,15 @@ def _machine_schema(workflow: str) -> list:
             Param("clearance_z", "float", 5.0, unit="mm", group="Clearance"),
             Param("rapid_xy", "float", 3000.0, unit="mm/min", group="Speeds & feeds"),
             Param("rapid_z", "float", 1000.0, unit="mm/min", group="Speeds & feeds"),
-            Param("max_feed", "float", 2000.0, unit="mm/min", group="Speeds & feeds"),
+            Param("max_feed", "float", 2000.0, unit="mm/min", min=0, group="Speeds & feeds",
+                  help="Caps cutting, engagement-adjusted/link and plunge G1 feeds; 0 = no cap. Not a spindle or G0 limit."),
             Param("spindle_min", "float", 6000.0, unit="rpm", group="Spindle"),
             Param("spindle_max", "float", 24000.0, unit="rpm", group="Spindle"),
             Param("units", "choice", "mm", choices=["mm", "inch"], group="Work area"),
             Param("cut_direction", "choice", "climb", label="Default cutting direction", group="Toolpaths",
                   choices=[("climb", "Climb"), ("conventional", "Conventional"), ("meander", "Meander")],
-                  help="Default for CAM pockets/profiles (M3 clockwise spindle). Operations may override it. "
-                       "Meander alternates adjacent passes."),
+                  help="Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses "
+                       "direction; full slots are neutral. Operations may override. Meander alternates one-sided passes."),
             Param("allowed_tools", "multi", ALL_ITEMS, choices_from="tool", group="Allowed consumables",
                   help="Tools from the tool library that are mounted / available."),
         ] + common_tail
@@ -158,6 +159,17 @@ _TOOL_SCHEMA = [
     Param("max_doc", "float", 2.0, unit="mm", group="Engagement", label="Max depth/pass"),
     Param("stepover", "float", 40.0, unit="%", group="Engagement",
           help="Radial engagement as a % of diameter."),
+    Param("low_engagement_feed", "float", 100.0, unit="%", min=1, max=300, decimals=0,
+          label="Low engagement feed (<40%)", group="Engagement feeds",
+          help="Percentage of base cutting feed; operations may override. Engagement is estimated."),
+    Param("standard_engagement_feed", "float", 100.0, unit="%", min=1, max=300, decimals=0,
+          label="Standard engagement feed (40–70%)", group="Engagement feeds",
+          help="May exceed 100% when calibrated for the cutter/material; capped by machine max feed."),
+    Param("high_engagement_feed", "float", 75.0, unit="%", min=1, max=300, decimals=0,
+          label="High engagement feed (>70%, below slot)", group="Engagement feeds"),
+    Param("slotting_feed", "float", 50.0, unit="%", min=1, max=300, decimals=0,
+          label="Slotting feed (95–100%)", group="Engagement feeds",
+          help="Full-width slots have no single climb/conventional hand. Percentage of base cutting feed."),
 ]
 
 

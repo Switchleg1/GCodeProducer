@@ -343,7 +343,7 @@ class MainWindow(QMainWindow):
         form = QFormLayout()
         self.color_combo = QComboBox()
         for k, lab in COLOR_MODES:
-            if k in ("feature", "type", "speed", "layer"):
+            if k in ("feature", "type", "speed", "layer", "engagement"):
                 self.color_combo.addItem(lab, k)
         self.color_combo.currentIndexChanged.connect(self._on_color_mode)
         form.addRow("Color by", self.color_combo)
@@ -803,6 +803,10 @@ class MainWindow(QMainWindow):
         self.fdm_process_box.setVisible(self.workflow == wf.FDM)
         self.cam_editor.setVisible(self.workflow == wf.CAM)
         self.cam_scroll.setVisible(self.workflow == wf.CAM)
+        ei = self.color_combo.findData("engagement")
+        self.color_combo.model().item(ei).setEnabled(self.workflow == wf.CAM)
+        if self.workflow != wf.CAM and self.color_combo.currentData() == "engagement":
+            self.color_combo.setCurrentIndex(0)
         self._cam_pick_mode("")
         self.process_menu.setEnabled(self.workflow == wf.FDM)
         self.act_process_import.setEnabled(self.workflow == wf.FDM)
@@ -1755,7 +1759,7 @@ class MainWindow(QMainWindow):
                                      f"est. {format_duration(tp.stats.get('est_time_s', 0))}", 8000)
 
         if self.cam_warnings:
-            QMessageBox.warning(self, "CAM material / clearance warnings",
+            QMessageBox.warning(self, "CAM material / engagement warnings",
                                 "\n".join(self.cam_warnings[:15]) +
                                 "\n\nReview the toolpath and full log before machining. These checks are conservative, not a full collision simulation.")
 
@@ -1776,7 +1780,7 @@ class MainWindow(QMainWindow):
             return
         if self.workflow == wf.CAM and self.cam_warnings:
             if QMessageBox.question(self, "Export with CAM warnings?",
-                                    "Material/clearance warnings remain. Export anyway?") != QMessageBox.StandardButton.Yes:
+                                    "CAM material/engagement warnings remain. Export anyway?") != QMessageBox.StandardButton.Yes:
                 return
         ext = ".gcode" if self.workflow == wf.FDM else ".nc"
         base = Path(self.model_path).with_suffix(ext) if self.model_path else Path("out" + ext)
@@ -1866,6 +1870,8 @@ class MainWindow(QMainWindow):
     # view panel
     # ======================================================================
     def _on_color_mode(self, _i):
+        if self.color_combo.currentData() is None:
+            return
         self.state.set("colors", color_mode=self.color_combo.currentData())
         self._update_legend()
 
@@ -1877,6 +1883,8 @@ class MainWindow(QMainWindow):
                 self.legend.setText(f"Feed: blue = {lo:.0f} \u2026 red = {hi:.0f} mm/min")
             else:
                 self.legend.setText(f"Speed: blue = {lo / 60:.0f} \u2026 red = {hi / 60:.0f} mm/s")
+        elif mode == "engagement" and self.workflow == wf.CAM:
+            self.legend.setText("Estimated radial engagement: blue = 0%, red = 100%. Full slots are hand-neutral.")
         elif mode == "layer":
             self.legend.setText("Layer: blue = first \u2026 red = last")
         else:

@@ -16,7 +16,7 @@ output before operating a machine.
   editable support blocks, and reusable process presets.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Drill, and Engrave
   operations; face/edge selection, geometry-linked depths, wall-following pockets,
-  and machine-default climb/conventional/meander direction.
+  machine-default climb/conventional/meander direction, and engagement-based feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
   top-at-Z0 placement, and conservative stock-contact warnings.
 - **Libraries:** separate machines, FDM materials/nozzles, and CAM tools.

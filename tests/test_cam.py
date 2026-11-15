@@ -101,7 +101,7 @@ def test_tool_change_order_and_template_values(libset, mesh):
     assert text.index("T1 M6") < text.index("Operation: first") < text.index("T2 M6") < text.index("Operation: second")
     assert "G0 Z30\nM5 ;spindle off before tool change\nT2 M6" in text
     assert text.rstrip().endswith("; last tool 2")
-    cut_layers = {line.layer for line in result.program.lines if line.feature == "cut"}
+    cut_layers = {line.layer for line in result.program.lines if line.feature in ("cut", "slot", "high_engagement", "air")}
     assert cut_layers == set(range(len(job.layers)))
 
 

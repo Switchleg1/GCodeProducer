@@ -13,7 +13,7 @@
 | `core/profiles.py`, `core/params.py` | Profile schemas, default/coercion rules, allowed consumables |
 | `core/geometry.py` | STL loading/welding, slicing, offsets, raster masks, picking math |
 | `core/placement.py`, `core/support.py` | Model transformation, FDM support masks/blocks |
-| `core/cam.py`, `core/cam_paths.py`, `core/stock.py` | CAM setup/topology/references, Shapely wall-parallel offsets/direction, and conservative stock checks |
+| `core/cam.py`, `core/cam_paths.py`, `core/cam_engagement.py`, `core/stock.py` | CAM setup/topology, wall-parallel offsets, remaining-material hand/engagement/feed planning, and conservative stock checks |
 | `core/gcode_template.py`, `core/gcode_vars.py` | Template evaluation, variable registry and defaults |
 | `core/builder.py`, `core/gcode.py` | Emission and G-code line/program representation |
 | `core/sim.py`, `core/toolpath.py` | Modal state simulation and viewer-ready path arrays |
@@ -52,7 +52,13 @@ group and operation metadata. Wall-parallel pocket paths can carry `stay_down`
 permission and an expected preceding XY endpoint. The planner validates each
 straight connector against the cutter-centre region; the emitter checks the
 endpoint and resets permission at every layer/operation/tool boundary. Do not
-infer safe linking from proximity alone or carry this permission across Z changes. The emitter marks program lines with layer and
+infer safe linking from proximity alone or carry this permission across Z changes.
+`cam_engagement.py` then subtracts completed planar sweeps to choose clearing
+hand (slots are neutral) and attaches per-segment/link `CutCondition` records.
+Closed-loop reversal preserves the seam and therefore valid link endpoints.
+The emitter applies feed factors/caps and carries engagement/notes into program
+metadata. This XY estimate is reused per depth and resets per operation; do
+not document it as complete 3D stock-removal simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
 ## Ownership invariants
