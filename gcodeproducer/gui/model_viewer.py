@@ -10,6 +10,7 @@
   select it (yellow), drag it to move it, Delete removes it
 * *place blocks* mode: clicking the bed or the model places a block there
   (the GUI fills the vertical gap to the next face of the model)
+* *remove blocks* mode: the block under the cursor turns red, clicking deletes it
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ OVERHANG_COLOR = (0.92, 0.30, 0.26)
 OUTSIDE_COLOR = (0.95, 0.62, 0.20)
 BLOCK_COLOR = (0.25, 0.85, 0.45)
 BLOCK_SEL_COLOR = (1.0, 0.85, 0.2)
+BLOCK_DEL_COLOR = (1.0, 0.25, 0.25)
 
 _BOX_FACES = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6), (0, 4, 5), (0, 5, 1),
               (1, 5, 6), (1, 6, 2), (2, 6, 7), (2, 7, 3), (3, 7, 4), (3, 4, 0)]
@@ -121,6 +123,8 @@ class ModelViewer(QOpenGLWidget):
         self.sel_block = -1
         self.show_blocks = False
         self.place_block = False
+        self.remove_block = False
+        self.hover_block = -1
         self._bdrag = None                    # (index, plane z, start point)
         self._ready = False
         self._dirty = True
@@ -157,18 +161,31 @@ class ModelViewer(QOpenGLWidget):
         self.blocks = list(blocks)
         self.sel_block = selected
         self.show_blocks = visible
+        if self.hover_block >= len(self.blocks):
+            self.hover_block = -1
         self._blocks_dirty = True
         self.update()
 
     def set_place_on_face(self, on: bool):
         self.place_on_face = on
-        self.setCursor(Qt.CursorShape.CrossCursor if on or self.place_block else Qt.CursorShape.ArrowCursor)
+        self._tool_cursor()
         self._update_info()
+
+    def _tool_cursor(self):
+        tool = self.place_on_face or self.place_block or self.remove_block
+        self.setCursor(Qt.CursorShape.CrossCursor if tool else Qt.CursorShape.ArrowCursor)
 
     def set_place_block(self, on: bool):
         self.place_block = on
-        self.setCursor(Qt.CursorShape.CrossCursor if on or self.place_on_face else Qt.CursorShape.ArrowCursor)
+        self._tool_cursor()
         self._update_info()
+
+    def set_remove_block(self, on: bool):
+        self.remove_block = on
+        self.hover_block = -1
+        self._tool_cursor()
+        self._update_info()
+        self.update()
 
     def fit(self, whole_bed: bool = False):
         """Frame the model with some bed around it (or the whole bed)."""
@@ -189,6 +206,8 @@ class ModelViewer(QOpenGLWidget):
             txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
         elif self.place_block:
             txt = "Click the bed or the model to place a support block  •  Esc = done"
+        elif self.remove_block:
+            txt = "Click a support block to remove it  •  Esc = done"
         else:
             txt = "Drag the model to move it  \u2022  drag elsewhere to orbit, right-drag to pan"
         self.info.setText(txt)
@@ -314,20 +333,24 @@ class ModelViewer(QOpenGLWidget):
         GL.glDepthMask(GL.GL_FALSE)
         nf, ne = len(_BOX_FACES) * 3, len(_BOX_EDGES) * 2
         for k in range(len(self.blocks)):
-            col = BLOCK_SEL_COLOR if k == self.sel_block else BLOCK_COLOR
-            GL.glUniform4f(ucol, *col, 0.30 if k == self.sel_block else 0.20)
+            col = self._block_color(k)
+            GL.glUniform4f(ucol, *col, 0.30 if col != BLOCK_COLOR else 0.20)
             GL.glBindVertexArray(self.m_bfaces.vao)
             GL.glDrawArrays(GL.GL_TRIANGLES, k * nf, nf)
         GL.glBindVertexArray(self.m_bedges.vao)
         for depth, alpha in ((False, 0.35), (True, 1.0)):     # hidden edges faint, visible edges solid
             (GL.glEnable if depth else GL.glDisable)(GL.GL_DEPTH_TEST)
             for k in range(len(self.blocks)):
-                col = BLOCK_SEL_COLOR if k == self.sel_block else BLOCK_COLOR
-                GL.glUniform4f(ucol, *col, alpha)
+                GL.glUniform4f(ucol, *self._block_color(k), alpha)
                 GL.glDrawArrays(GL.GL_LINES, k * ne, ne)
         GL.glEnable(GL.GL_DEPTH_TEST)
         GL.glDepthMask(GL.GL_TRUE)
         GL.glDisable(GL.GL_BLEND)
+
+    def _block_color(self, k):
+        if self.remove_block and k == self.hover_block:
+            return BLOCK_DEL_COLOR
+        return BLOCK_SEL_COLOR if k == self.sel_block else BLOCK_COLOR
 
     def pick_block(self, mx, my):
         """(index, distance, point) of the nearest support block under the mouse."""
@@ -419,6 +442,12 @@ class ModelViewer(QOpenGLWidget):
         if ev.button() != Qt.MouseButton.LeftButton or ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
         mx, my = ev.position().x(), ev.position().y()
+        if self.remove_block:
+            bi = self.pick_block(mx, my)[0]
+            if bi >= 0:
+                self.hover_block = -1
+                self.blockDeleteRequested.emit(bi)
+            return                                   # a miss just orbits
         pt, tri = self.pick(mx, my)
         if self.place_block:
             if tri >= 0:
@@ -472,6 +501,11 @@ class ModelViewer(QOpenGLWidget):
         elif b & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton) or \
                 (b & Qt.MouseButton.LeftButton and ev.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             self.camera.pan(dx, dy, self.height())
+        elif not b and self.remove_block:
+            hb = self.pick_block(ev.position().x(), ev.position().y())[0]
+            if hb != self.hover_block:
+                self.hover_block = hb
+                self.update()
         elif not b and self.tris is not None:
             over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
             if over != self._highlight:
@@ -504,7 +538,7 @@ class ModelViewer(QOpenGLWidget):
             self.camera.set_view(views[k])
         elif k == Qt.Key.Key_Escape and self.place_on_face:
             self.faceClicked.emit(None)
-        elif k == Qt.Key.Key_Escape and self.place_block:
+        elif k == Qt.Key.Key_Escape and (self.place_block or self.remove_block):
             self.placeModeExited.emit()
         elif k in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.show_blocks and self.sel_block >= 0:
             self.blockDeleteRequested.emit(self.sel_block)

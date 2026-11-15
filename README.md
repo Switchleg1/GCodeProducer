@@ -188,8 +188,12 @@ consumables, process and recent models are remembered.
 
      Clicking where nothing is above (e.g. the top of the part) places nothing.
      Keep clicking to place more; *Esc* or the button again ends the mode.
-   - **+ Add** puts a 10 × 10 mm block under the model. **Remove** (or
-     *Delete* in the view) and **Clear** remove blocks.
+   - **Remove blocks** (toggle, next to *Place blocks*): the block under the
+     cursor turns red and clicking deletes it. Keep clicking to remove more;
+     *Esc* or the button again ends the mode. *Place blocks*, *Remove blocks*
+     and *Place on face* are exclusive: switching one on switches the others off.
+   - **+ Add** puts a 10 × 10 mm block under the model. **Delete selected**
+     (or the *Delete* key in the view) and **Clear** remove blocks.
    - Select a block in the list or click it in the Prepare view (it turns
      yellow), then drag it to move it, or type its position (X / Y centre,
      bottom Z) and size (W / D / H).

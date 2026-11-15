@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         self.model_viewer.blockReleased.connect(self._on_block_released)
         self.model_viewer.blockDeleteRequested.connect(self.remove_block)
         self.model_viewer.placeBlockClicked.connect(self._on_place_block_click)
-        self.model_viewer.placeModeExited.connect(lambda: self.b_place_block.setChecked(False))
+        self.model_viewer.placeModeExited.connect(self._end_block_tools)
 
         # ---- preview page: sliced tool path
         self.viewer = GCodeViewer(self.camera, self.state, "")
@@ -507,6 +507,13 @@ class MainWindow(QMainWindow):
                                       "block that fills the gap up to the model above (Esc = done)")
         self.b_place_block.toggled.connect(self._on_place_block_mode)
         rp.addWidget(self.b_place_block, 1)
+        self.b_remove_block = QPushButton("Remove blocks")
+        self.b_remove_block.setCheckable(True)
+        self.b_remove_block.setToolTip("Click support blocks in the Prepare view to delete them (Esc = done)")
+        self.b_remove_block.toggled.connect(self._on_remove_block_mode)
+        rp.addWidget(self.b_remove_block, 1)
+        bl.addLayout(rp)
+        rp = QHBoxLayout()
         rp.addWidget(QLabel("Block size"))
         self.sp_place_size = QDoubleSpinBox()
         self.sp_place_size.setRange(0.5, 500)
@@ -518,10 +525,11 @@ class MainWindow(QMainWindow):
         self.sp_place_size.setValue(float(self.settings.value("place_block_size", 5.0)))
         self.sp_place_size.valueChanged.connect(lambda v: self.settings.setValue("place_block_size", v))
         rp.addWidget(self.sp_place_size)
+        rp.addStretch(1)
         bl.addLayout(rp)
         r2 = QHBoxLayout()
         for text, tip, fn in (("+ Add", "Add a block under the model", self.add_block),
-                              ("Remove", "Remove the selected block (Delete)", self.remove_block),
+                              ("Delete selected", "Delete the selected block (Delete key)", self.remove_block),
                               ("Clear", "Remove all blocks", self.clear_blocks)):
             b = QPushButton(text)
             b.setToolTip(tip)
@@ -1131,8 +1139,8 @@ class MainWindow(QMainWindow):
     def _on_place_on_face(self, on):
         if on and self.mode != "prepare":
             self.set_mode("prepare")
-        if on and self.b_place_block.isChecked():
-            self.b_place_block.setChecked(False)
+        if on:
+            self._end_block_tools()
         self.model_viewer.set_place_on_face(on)
 
     def _on_face_clicked(self, normal):
@@ -1192,8 +1200,8 @@ class MainWindow(QMainWindow):
         for w in (self.cb_support, self.sp_overhang):
             w.blockSignals(False)
         self.blocks_box.setVisible(self._support_mode() == "blocks")
-        if self._support_mode() != "blocks" and self.b_place_block.isChecked():
-            self.b_place_block.setChecked(False)
+        if self._support_mode() != "blocks":
+            self._end_block_tools()
         self._update_blocks_hint()
 
     def _on_support_combo(self, _i=0):
@@ -1244,7 +1252,7 @@ class MainWindow(QMainWindow):
             txt = "No blocks \u2014 click Auto-generate, or Place blocks and click under the model. " \
                   "Support is only generated inside blocks, where the model is above."
         else:
-            txt = "Click a block in the view to select it, drag to move it, Delete removes it."
+            txt = "Click a block in the view to select it, drag to move it, Delete or Remove blocks "                   "removes it."
         self.lbl_blocks_hint.setText(txt)
 
     def _sync_block_spins(self):
@@ -1327,9 +1335,21 @@ class MainWindow(QMainWindow):
         if on:
             if self.mode != "prepare":
                 self.set_mode("prepare")
-            if self.b_face.isChecked():
-                self.b_face.setChecked(False)
+            self.b_face.setChecked(False)
+            self.b_remove_block.setChecked(False)       # the two block tools are exclusive
         self.model_viewer.set_place_block(on)
+
+    def _on_remove_block_mode(self, on):
+        if on:
+            if self.mode != "prepare":
+                self.set_mode("prepare")
+            self.b_face.setChecked(False)
+            self.b_place_block.setChecked(False)
+        self.model_viewer.set_remove_block(on)
+
+    def _end_block_tools(self):
+        self.b_place_block.setChecked(False)
+        self.b_remove_block.setChecked(False)
 
     def _on_place_block_click(self, x, y, z, facing_down):
         """A click in place-blocks mode: fill the vertical gap at that point with a block."""
@@ -1374,8 +1394,8 @@ class MainWindow(QMainWindow):
         (self.act_prepare if mode == "prepare" else self.act_preview).setChecked(True)
         if mode == "preview" and self.b_face.isChecked():
             self.b_face.setChecked(False)
-        if mode == "preview" and self.b_place_block.isChecked():
-            self.b_place_block.setChecked(False)
+        if mode == "preview":
+            self._end_block_tools()
         self._update_stale_label()
 
     def fit_view(self):

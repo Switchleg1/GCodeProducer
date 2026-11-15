@@ -266,3 +266,45 @@ def test_pick_and_place_blocks(win, app, tmp_path):
     win.b_place_block.setChecked(True)
     win.cb_support.setCurrentIndex(win.cb_support.findData("buildplate"))
     assert not win.b_place_block.isChecked()
+
+
+def test_block_tools_are_exclusive(win, tmp_path):
+    win.open_model(_bracket(tmp_path))
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    mv = win.model_viewer
+    win.b_place_block.setChecked(True)
+    assert mv.place_block and not mv.remove_block
+    win.b_remove_block.setChecked(True)                 # turns Place off
+    assert win.b_remove_block.isChecked() and not win.b_place_block.isChecked()
+    assert mv.remove_block and not mv.place_block
+    win.b_place_block.setChecked(True)                  # and the other way round
+    assert not win.b_remove_block.isChecked() and mv.place_block and not mv.remove_block
+    win.b_face.setChecked(True)                         # Place on face ends both
+    assert not win.b_place_block.isChecked() and not win.b_remove_block.isChecked()
+    win.b_remove_block.setChecked(True)                 # ...and is ended by them
+    assert not win.b_face.isChecked() and mv.remove_block
+
+
+def test_remove_blocks_by_clicking(win, app, tmp_path):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    from gcodeproducer.core.support import SupportBlock
+    win.resize(1400, 900)
+    win.show()
+    win.open_model(_bracket(tmp_path))
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    win.blocks = [SupportBlock(96, 96, 0, 102, 102, 15), SupportBlock(118, 118, 0, 124, 124, 15)]
+    win.sel_block = 0
+    win._blocks_changed()
+    win.b_remove_block.setChecked(True)
+    app.processEvents()
+    cam = win.camera
+    cam.target, cam.distance, cam.yaw, cam.pitch = np.array([110.0, 110.0, 6.0]), 120.0, -90.0, 10.0
+    _click_world(win, app, (110.0, 110.0, 6.0))         # empty space between the blocks: nothing removed
+    assert len(win.blocks) == 2
+    _click_world(win, app, (121.0, 118.0, 7.0))         # front face of the second block
+    assert len(win.blocks) == 1 and win.blocks[0].x0 == 96
+    _click_world(win, app, (99.0, 96.0, 7.0))
+    assert win.blocks == [] and win.lst_blocks.count() == 0
+    QTest.keyClick(win.model_viewer, Qt.Key.Key_Escape)
+    assert not win.b_remove_block.isChecked() and not win.model_viewer.remove_block
