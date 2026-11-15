@@ -101,8 +101,11 @@ versa.
   *Manual blocks* uses the job's support blocks instead
   (`core/support.py`; `--support-blocks` on the CLI). The top
   `interface_layers` are printed denser as `support_interface`.
-- **`fdm_perimeters`** — offsets each contour inward into wall loops
-  (outer + inner). The innermost loop bounds the infill region.
+- **`fdm_perimeters`**: wall loops for every contour, offset into the
+  material: outer contours shrink and **holes grow**, so the walls of a hole
+  sit in the part and the hole keeps its size. A hole's walls stop before they
+  would cross the part's outer edge (thin rims). The innermost loops bound the
+  infill region.
 - **`fdm_top_bottom`** — top / bottom **solid** surfaces. A cell is sparse only
   if the part covers it in all `top_layers` above *and* all `bottom_layers`
   below; otherwise it is a solid surface (`top_infill` / `solid_infill`).

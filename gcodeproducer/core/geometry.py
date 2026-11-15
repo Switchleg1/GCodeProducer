@@ -261,14 +261,24 @@ def point_in_polygon(pt, poly: np.ndarray) -> bool:
     return bool(np.count_nonzero(cross & (x < xi)) % 2)
 
 
+def hole_flags(polys: list) -> list:
+    """True for every contour that is a hole (inside an odd number of other contours)."""
+    return [sum(1 for j, q in enumerate(polys) if j != i and point_in_polygon(p[0], q)) % 2 == 1
+            for i, p in enumerate(polys)]
+
+
 def outer_contours(polys: list) -> list:
     """Contours that are not holes (contained by an even number of other contours)."""
-    out = []
-    for i, p in enumerate(polys):
-        depth = sum(1 for j, q in enumerate(polys) if j != i and point_in_polygon(p[0], q))
-        if depth % 2 == 0:
-            out.append(p)
-    return out
+    return [p for p, hole in zip(polys, hole_flags(polys)) if not hole]
+
+
+def offset_into_material(poly: np.ndarray, distance: float, is_hole: bool) -> list:
+    """Offset a slice contour ``distance`` into the part's material.
+
+    An outer contour shrinks; a hole contour grows (its material is outside it).
+    A negative ``distance`` moves away from the material instead.
+    """
+    return offset(poly, distance if is_hole else -distance)
 
 
 def convex_hull(points: np.ndarray) -> np.ndarray:
@@ -453,15 +463,24 @@ def perimeter_loops(contours: list, line_width: float, count: int) -> list:
 
     Result: list of (index, loops) where loops[0] is the outer wall.
     """
+    polys = [np.asarray(c, float) for c in contours]
+    holes = hole_flags(polys)
     result = []
-    for c in contours:
+    for c, hole in zip(polys, holes):
+        # the outer contour this hole sits in: its walls must not grow past it
+        parent = None
+        if hole:
+            parents = [q for q, h in zip(polys, holes) if not h and q is not c and point_in_polygon(c[0], q)]
+            parent = min(parents, key=lambda q: abs(area(q))) if parents else None
         loops = []
         for k in range(count):
-            d = -line_width * (0.5 + k)
-            got = offset(c, d)
+            got = offset_into_material(c, line_width * (0.5 + k), hole)
             if not got:
                 break
-            loops.append(got[0])
+            loop = got[0]
+            if parent is not None and not all(point_in_polygon(pt, parent) for pt in loop[::max(1, len(loop) // 32)]):
+                break                       # thin rim: no room for another wall around the hole
+            loops.append(loop)
         if loops:
             result.append(loops)
     return result

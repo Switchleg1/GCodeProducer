@@ -49,11 +49,12 @@ class CAMProfile(SliceStage):
         contours = geometry.slice_z(mesh, top - 1e-3)
         if not contours:
             contours = geometry.slice_z(mesh, (top + bottom) / 2)
-        off = {"outside": +1, "inside": -1, "on": 0}[params["side"]]
+        # 'outside' = away from the material: outer contours grow, holes shrink
+        off = {"outside": -1, "inside": +1, "on": 0}[params["side"]]
         d = off * (radius + params["stock_to_leave"])
         paths2d = []
-        for c in contours:
-            loops = geometry.offset(c, d) if d != 0 else [c]
+        for c, hole in zip(contours, geometry.hole_flags(contours)):
+            loops = geometry.offset_into_material(c, d, hole) if d != 0 else [c]
             paths2d.extend(loops)
         if not paths2d:
             return "nothing to profile"
