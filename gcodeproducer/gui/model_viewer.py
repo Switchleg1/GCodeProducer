@@ -8,6 +8,8 @@
   is tinted orange
 * manual support blocks are drawn as translucent green boxes: click one to
   select it (yellow), drag it to move it, Delete removes it
+* *place blocks* mode: clicking the bed or the model places a block there
+  (the GUI fills the vertical gap to the next face of the model)
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ from PyQt6.QtGui import QCursor
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QLabel
 
+from ..core.geometry import ray_triangles
 from ..core.placement import face_normals, overhang_faces
 from . import shaders
 from .camera import Camera, perspective
@@ -90,29 +93,6 @@ class _TriMesh:
             GL.glDrawArrays(GL.GL_TRIANGLES, 0, self.count)
 
 
-def ray_triangles(origin, direction, tris: np.ndarray):
-    """Möller-Trumbore against all triangles (m,3,3). Returns (t, index) of the nearest hit or (inf, -1)."""
-    if tris is None or len(tris) == 0:
-        return math.inf, -1
-    v0, v1, v2 = tris[:, 0], tris[:, 1], tris[:, 2]
-    e1, e2 = v1 - v0, v2 - v0
-    p = np.cross(direction, e2)
-    det = np.einsum("ij,ij->i", e1, p)
-    ok = np.abs(det) > 1e-12
-    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
-    s = origin - v0
-    u = np.einsum("ij,ij->i", s, p) * inv
-    q = np.cross(s, e1)
-    v = (q @ direction) * inv
-    t = np.einsum("ij,ij->i", e2, q) * inv
-    hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-6)
-    if not hit.any():
-        return math.inf, -1
-    t = np.where(hit, t, np.inf)
-    i = int(np.argmin(t))
-    return float(t[i]), i
-
-
 class ModelViewer(QOpenGLWidget):
     moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
     moveFinished = pyqtSignal()
@@ -121,6 +101,8 @@ class ModelViewer(QOpenGLWidget):
     blockDragged = pyqtSignal(int, float, float)   # block index, total dX, dY since the press
     blockReleased = pyqtSignal(int)
     blockDeleteRequested = pyqtSignal(int)
+    placeBlockClicked = pyqtSignal(float, float, float, bool)   # x, y, z, clicked face points down
+    placeModeExited = pyqtSignal()
     glError = pyqtSignal(str)
 
     def __init__(self, camera: Camera, parent=None):
@@ -138,6 +120,7 @@ class ModelViewer(QOpenGLWidget):
         self.blocks = []                      # core.support.SupportBlock
         self.sel_block = -1
         self.show_blocks = False
+        self.place_block = False
         self._bdrag = None                    # (index, plane z, start point)
         self._ready = False
         self._dirty = True
@@ -179,7 +162,12 @@ class ModelViewer(QOpenGLWidget):
 
     def set_place_on_face(self, on: bool):
         self.place_on_face = on
-        self.setCursor(Qt.CursorShape.CrossCursor if on else Qt.CursorShape.ArrowCursor)
+        self.setCursor(Qt.CursorShape.CrossCursor if on or self.place_block else Qt.CursorShape.ArrowCursor)
+        self._update_info()
+
+    def set_place_block(self, on: bool):
+        self.place_block = on
+        self.setCursor(Qt.CursorShape.CrossCursor if on or self.place_on_face else Qt.CursorShape.ArrowCursor)
         self._update_info()
 
     def fit(self, whole_bed: bool = False):
@@ -199,6 +187,8 @@ class ModelViewer(QOpenGLWidget):
             txt = "Import a model (Ctrl+O) or drop an STL here"
         elif self.place_on_face:
             txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
+        elif self.place_block:
+            txt = "Click the bed or the model to place a support block  •  Esc = done"
         else:
             txt = "Drag the model to move it  \u2022  drag elsewhere to orbit, right-drag to pan"
         self.info.setText(txt)
@@ -430,6 +420,17 @@ class ModelViewer(QOpenGLWidget):
             return
         mx, my = ev.position().x(), ev.position().y()
         pt, tri = self.pick(mx, my)
+        if self.place_block:
+            if tri >= 0:
+                n, _ = face_normals(self.vertices, self.triangles[tri:tri + 1])
+                self.placeBlockClicked.emit(float(pt[0]), float(pt[1]), float(pt[2]), bool(n[0][2] < -0.1))
+                return
+            o, _d = self.ray(mx, my)
+            p = self._plane_point(mx, my, 0.0) if o[2] > 0 else None
+            if p is not None:
+                self.placeBlockClicked.emit(float(p[0]), float(p[1]), 0.0, False)
+                return
+            return                                   # missed everything: plain orbit
         if not self.place_on_face:
             bi, bt, bpt = self.pick_block(mx, my)
             mt = np.linalg.norm(pt - self.ray(mx, my)[0]) if pt is not None else math.inf
@@ -475,7 +476,7 @@ class ModelViewer(QOpenGLWidget):
             over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
             if over != self._highlight:
                 self._highlight = over
-                if not self.place_on_face:
+                if not (self.place_on_face or self.place_block):
                     self.setCursor(Qt.CursorShape.OpenHandCursor if over else Qt.CursorShape.ArrowCursor)
                 self.update()
 
@@ -503,6 +504,8 @@ class ModelViewer(QOpenGLWidget):
             self.camera.set_view(views[k])
         elif k == Qt.Key.Key_Escape and self.place_on_face:
             self.faceClicked.emit(None)
+        elif k == Qt.Key.Key_Escape and self.place_block:
+            self.placeModeExited.emit()
         elif k in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.show_blocks and self.sel_block >= 0:
             self.blockDeleteRequested.emit(self.sel_block)
         else:

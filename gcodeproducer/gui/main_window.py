@@ -39,6 +39,7 @@ from ..core.pipeline import SlicePipeline
 from ..core.placement import Placement, bed_rect, bed_xy, fits
 from ..core.process import ProcessPreset
 from ..core.support import SupportBlock
+from ..core.support import block_at as support_block_at
 from ..core.support import generate_blocks as support_generate
 from ..core.profiles import LibrarySet
 from ..core.session import build_job, find_importer, load_mesh, slice_job
@@ -148,6 +149,8 @@ class MainWindow(QMainWindow):
         self.model_viewer.blockDragged.connect(self._on_block_dragged)
         self.model_viewer.blockReleased.connect(self._on_block_released)
         self.model_viewer.blockDeleteRequested.connect(self.remove_block)
+        self.model_viewer.placeBlockClicked.connect(self._on_place_block_click)
+        self.model_viewer.placeModeExited.connect(lambda: self.b_place_block.setChecked(False))
 
         # ---- preview page: sliced tool path
         self.viewer = GCodeViewer(self.camera, self.state, "")
@@ -496,6 +499,25 @@ class MainWindow(QMainWindow):
         r1.addWidget(self.cb_gen_everywhere)
         r1.addStretch(1)
         bl.addLayout(r1)
+        # pick and place: click the model / bed to drop a block of this size there
+        rp = QHBoxLayout()
+        self.b_place_block = QPushButton("Place blocks")
+        self.b_place_block.setCheckable(True)
+        self.b_place_block.setToolTip("Click the bed or a surface of the model in the Prepare view to place a "
+                                      "block that fills the gap up to the model above (Esc = done)")
+        self.b_place_block.toggled.connect(self._on_place_block_mode)
+        rp.addWidget(self.b_place_block, 1)
+        rp.addWidget(QLabel("Size"))
+        self.sp_place_size = QDoubleSpinBox()
+        self.sp_place_size.setRange(0.5, 500)
+        self.sp_place_size.setDecimals(1)
+        self.sp_place_size.setSingleStep(1.0)
+        self.sp_place_size.setSuffix(" mm")
+        self.sp_place_size.setToolTip("Width and depth of the blocks placed by clicking")
+        self.sp_place_size.setValue(float(self.settings.value("place_block_size", 5.0)))
+        self.sp_place_size.valueChanged.connect(lambda v: self.settings.setValue("place_block_size", v))
+        rp.addWidget(self.sp_place_size)
+        bl.addLayout(rp)
         r2 = QHBoxLayout()
         for text, tip, fn in (("+ Add", "Add a block under the model", self.add_block),
                               ("Remove", "Remove the selected block (Delete)", self.remove_block),
@@ -1108,6 +1130,8 @@ class MainWindow(QMainWindow):
     def _on_place_on_face(self, on):
         if on and self.mode != "prepare":
             self.set_mode("prepare")
+        if on and self.b_place_block.isChecked():
+            self.b_place_block.setChecked(False)
         self.model_viewer.set_place_on_face(on)
 
     def _on_face_clicked(self, normal):
@@ -1167,6 +1191,8 @@ class MainWindow(QMainWindow):
         for w in (self.cb_support, self.sp_overhang):
             w.blockSignals(False)
         self.blocks_box.setVisible(self._support_mode() == "blocks")
+        if self._support_mode() != "blocks" and self.b_place_block.isChecked():
+            self.b_place_block.setChecked(False)
         self._update_blocks_hint()
 
     def _on_support_combo(self, _i=0):
@@ -1214,8 +1240,8 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "lbl_blocks_hint"):
             return
         if not self.blocks:
-            txt = "No blocks \u2014 click Auto-generate, or + Add and size them. Support is only " \
-                  "generated inside blocks, where the model is above."
+            txt = "No blocks \u2014 click Auto-generate, or Place blocks and click under the model. " \
+                  "Support is only generated inside blocks, where the model is above."
         else:
             txt = "Click a block in the view to select it, drag to move it, Delete removes it."
         self.lbl_blocks_hint.setText(txt)
@@ -1294,6 +1320,28 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg, 6000)
         self.log(msg)
 
+    def _on_place_block_mode(self, on):
+        if on:
+            if self.mode != "prepare":
+                self.set_mode("prepare")
+            if self.b_face.isChecked():
+                self.b_face.setChecked(False)
+        self.model_viewer.set_place_block(on)
+
+    def _on_place_block_click(self, x, y, z, facing_down):
+        """A click in place-blocks mode: fill the vertical gap at that point with a block."""
+        if self.placed is None:
+            return
+        blk = support_block_at(self.placed, x, y, z, self.sp_place_size.value(), facing_down=facing_down)
+        if blk is None:
+            what = "below" if facing_down else "above"
+            self.statusBar().showMessage(f"Nothing of the model {what} that point \u2014 no block placed", 4000)
+            return
+        self.blocks.append(blk)
+        self.sel_block = len(self.blocks) - 1
+        self._blocks_changed()
+        self.statusBar().showMessage(f"Block {len(self.blocks)}: Z {blk.z0:.2f} \u2192 {blk.z1:.2f} mm", 4000)
+
     def add_block(self):
         if self.placed is None:
             return
@@ -1323,6 +1371,8 @@ class MainWindow(QMainWindow):
         (self.act_prepare if mode == "prepare" else self.act_preview).setChecked(True)
         if mode == "preview" and self.b_face.isChecked():
             self.b_face.setChecked(False)
+        if mode == "preview" and self.b_place_block.isChecked():
+            self.b_place_block.setChecked(False)
         self._update_stale_label()
 
     def fit_view(self):

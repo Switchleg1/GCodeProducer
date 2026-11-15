@@ -164,6 +164,34 @@ def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int) -> 
 
 
 # --------------------------------------------------------------------------
+def block_at(mesh, x: float, y: float, z: float, size: float, facing_down: bool = False,
+             eps: float = 1e-3):
+    """Pick-and-place: a ``size`` x ``size`` block filling the vertical gap at (x, y).
+
+    * clicked on the bed or on a face pointing up (``facing_down`` False): the block
+      runs from ``z`` straight up to the next face of the model above;
+    * clicked on a face pointing down (an overhang seen from below): it runs from
+      the next surface below (model or bed) up to ``z``.
+
+    Returns a :class:`SupportBlock`, or None when there is nothing to fill
+    (e.g. clicking the top of the model).
+    """
+    tris = np.asarray(mesh.vertices, float)[np.asarray(mesh.triangles)]
+    if facing_down:
+        t, i = geometry.ray_triangles(np.array([x, y, z - eps]), np.array([0.0, 0.0, -1.0]), tris)
+        z0 = max(0.0, z - eps - t) if i >= 0 else 0.0
+        z1 = z
+    else:
+        t, i = geometry.ray_triangles(np.array([x, y, z + eps]), np.array([0.0, 0.0, 1.0]), tris)
+        if i < 0:
+            return None
+        z0, z1 = max(0.0, z), z + eps + t
+    if z1 - z0 < 0.05:
+        return None
+    h = size / 2.0
+    return SupportBlock(x - h, y - h, z0, x + h, y + h, z1)
+
+
 def _components(grid: np.ndarray) -> list:
     """8-connected components of a boolean grid -> list of (rows, cols) index arrays."""
     seen = np.zeros_like(grid)

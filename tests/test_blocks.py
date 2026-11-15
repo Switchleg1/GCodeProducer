@@ -124,3 +124,18 @@ def test_cli_z_and_blocks(tmp_path, monkeypatch):
                  "-m", "fdm_support:placement=blocks"]) == 0
     text = out.read_text()
     assert ";TYPE:support" in text
+
+
+def test_block_at(tmp_path):
+    from gcodeproducer.core.geometry import load_stl
+    from gcodeproducer.core.support import block_at
+    t = load_stl(write_boxes(tmp_path / "t.stl", T_SHAPE))
+    shelf = load_stl(write_boxes(tmp_path / "s.stl", [(0, 0, 0, 30, 30, 4), (0, 0, 4, 10, 10, 20),
+                                                      (0, 0, 20, 30, 30, 22)]))
+    box = lambda b: (b.x0, b.y0, b.z0, b.x1, b.y1, b.z1)
+    assert box(block_at(t, 25, 25, 0.0, 4)) == pytest.approx((23, 23, 0, 27, 27, 15))     # bed -> plate
+    assert block_at(t, 50, 50, 0.0, 4) is None                                           # nothing above
+    assert block_at(t, 25, 25, 18.0, 4) is None                                          # top of the part
+    assert box(block_at(t, 25, 25, 15.0, 4, facing_down=True)) == pytest.approx((23, 23, 0, 27, 27, 15))
+    assert box(block_at(shelf, 20, 20, 4.0, 5)) == pytest.approx((17.5, 17.5, 4, 22.5, 22.5, 20))
+    assert box(block_at(shelf, 20, 20, 20.0, 5, facing_down=True)) == pytest.approx((17.5, 17.5, 4, 22.5, 22.5, 20))

@@ -30,6 +30,7 @@ def apply_theme(app) -> None:
         "  font-weight: bold; color: #ccd; }"
         "QToolButton#modeButton:checked { background: #3c78c8; color: white; border-color: #3c78c8; }"
         "QToolButton#modeButton:disabled { color: #666; }"
+        "QPushButton:checked { background: #3c78c8; color: white; border: 1px solid #5a8fd8; }"
         "QGroupBox { font-weight: bold; } QGroupBox QWidget { font-weight: normal; }")
 
 

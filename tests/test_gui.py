@@ -203,3 +203,56 @@ def test_manual_support_blocks(win, app, tmp_path):
     # rotating the model removes them (they no longer match)
     win.rotate_model("z", 90)
     assert win.blocks == []
+
+
+def _click_world(win, app, point):
+    """Send a real left click to the Prepare view at the pixel showing world ``point``."""
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+    mv = win.model_viewer
+    w, h = mv.width(), mv.height()
+    m = (mv.camera.proj_matrix(w / h) @ mv.camera.view_matrix()).astype(float)
+    c = m @ np.array([*point, 1.0])
+    px = (c[0] / c[3] + 1) / 2 * w
+    py = (1 - c[1] / c[3]) / 2 * h
+    QTest.mouseClick(mv, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(int(round(px)), int(round(py))))
+    app.processEvents()
+
+
+def test_pick_and_place_blocks(win, app, tmp_path):
+    win.resize(1400, 900)
+    win.show()
+    win.open_model(_bracket(tmp_path))                 # T: pillar 105..115, plate 95..125 at Z 15..18
+    win.cb_support.setCurrentIndex(win.cb_support.findData("blocks"))
+    win.sp_place_size.setValue(4.0)
+    win.b_place_block.setChecked(True)
+    assert win.model_viewer.place_block
+    app.processEvents()
+    cam = win.camera
+    # from below: click the plate's underside -> block from the bed up to it
+    cam.target, cam.distance, cam.yaw, cam.pitch = np.array([110.0, 110.0, 8.0]), 120.0, -60.0, -55.0
+    _click_world(win, app, (120.0, 120.0, 15.0))
+    assert len(win.blocks) == 1
+    b = win.blocks[0]
+    assert b.size[0] == pytest.approx(4.0) and b.z0 == pytest.approx(0) and b.z1 == pytest.approx(15, abs=0.01)
+    assert b.center == pytest.approx((120, 120), abs=0.3)
+    # from above: the top of the plate has nothing above it -> no block
+    cam.pitch = 60.0
+    _click_world(win, app, (100.0, 120.0, 18.0))
+    assert len(win.blocks) == 1 and "no block" in win.statusBar().currentMessage()
+    # from the side, just above the bed: click the bed under the plate -> block up to the plate
+    cam.target, cam.yaw, cam.pitch = np.array([110.0, 110.0, 2.0]), 0.0, 4.0
+    _click_world(win, app, (123.0, 98.0, 0.0))
+    assert len(win.blocks) == 2
+    b = win.blocks[1]
+    assert b.z0 == pytest.approx(0) and b.z1 == pytest.approx(15, abs=0.01)
+    # at a 4 degree grazing angle one pixel spans ~0.7 mm of bed along the view direction
+    assert b.center == pytest.approx((123, 98), abs=1.5)
+    # Esc leaves the mode; leaving manual-blocks mode switches it off too
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    QTest.keyClick(win.model_viewer, Qt.Key.Key_Escape)
+    assert not win.b_place_block.isChecked() and not win.model_viewer.place_block
+    win.b_place_block.setChecked(True)
+    win.cb_support.setCurrentIndex(win.cb_support.findData("buildplate"))
+    assert not win.b_place_block.isChecked()

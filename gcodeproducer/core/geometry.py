@@ -175,6 +175,30 @@ def _chain(segs, tol: float = 1e-4) -> list:
     return polys
 
 
+# ------------------------------------------------------------- ray casting
+def ray_triangles(origin, direction, tris: np.ndarray):
+    """Möller-Trumbore against all triangles (m,3,3). Returns (t, index) of the nearest hit or (inf, -1)."""
+    if tris is None or len(tris) == 0:
+        return math.inf, -1
+    v0, v1, v2 = tris[:, 0], tris[:, 1], tris[:, 2]
+    e1, e2 = v1 - v0, v2 - v0
+    p = np.cross(direction, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+    s = origin - v0
+    u = np.einsum("ij,ij->i", s, p) * inv
+    q = np.cross(s, e1)
+    v = (q @ direction) * inv
+    t = np.einsum("ij,ij->i", e2, q) * inv
+    hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-6)
+    if not hit.any():
+        return math.inf, -1
+    t = np.where(hit, t, np.inf)
+    i = int(np.argmin(t))
+    return float(t[i]), i
+
+
 # ------------------------------------------------------------- polygons
 def area(poly: np.ndarray) -> float:
     x, y = poly[:, 0], poly[:, 1]

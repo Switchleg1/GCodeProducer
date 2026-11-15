@@ -175,6 +175,15 @@ consumables, process and recent models are remembered.
    - **Auto-generate** runs the automatic support and wraps each support island
      in a block (*Allow on model* also lets support stand on the model). The
      result slices the same as automatic support, and you can then edit it.
+   - **Place blocks** (pick and place): set the block **Size** (width = depth,
+     mm), switch *Place blocks* on, then click in the Prepare view:
+     - on the **bed** or a surface facing **up**: a block from that height
+       straight up to the next face of the model above;
+     - on a surface facing **down** (an overhang seen from below): a block from
+       the next surface below (model or bed) up to that face.
+
+     Clicking where nothing is above (e.g. the top of the part) places nothing.
+     Keep clicking to place more; *Esc* or the button again ends the mode.
    - **+ Add** puts a 10 × 10 mm block under the model. **Remove** (or
      *Delete* in the view) and **Clear** remove blocks.
    - Select a block in the list or click it in the Prepare view (it turns
