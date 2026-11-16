@@ -46,6 +46,7 @@ for a particular printer, material, cutter, or machine.
 | [Selecting geometry and depths](cam/selection-and-depths.md) | Planar faces, feature chains, selection purpose, live Z references |
 | [Cutting data](cam/cutting-data.md) | Six machining materials, per-tool SFM/chip load, axial defaults, RPM/feed calculations and unlocks |
 | [Material state and leads](cam/material-state-and-leads.md) | Current material, operation outputs, default-on Material display, leads and motion checks |
+| [Holding tabs](cam/holding-tabs.md) | Side-click rails to stock XY edges, retained tab height, path splitting, area order and preserved leads |
 | [Engagement, cutting hand and feeds](cam/engagement-and-feeds.md) | Slot, High engagement, Cut and HSM; machine thresholds/modifiers and feed caps |
 | [Toolpath strategy and direction](cam/toolpaths.md) | Wall-parallel offsets, square/circle transitions, climb/conventional/meander and machine defaults |
 | [Pocket, Profile, Slot, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |

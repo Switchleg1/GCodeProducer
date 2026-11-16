@@ -33,6 +33,20 @@ def walk(points,closed,distance,entry):
     return result[::-1].copy() if entry else result
 
 
+def exit_path(points,closed,distance):
+    """Use the requested cleared-contour exit, shortened to the surviving section.
+
+    A tab may leave a section shorter than the configured lead length. Do not
+    silently drop its exit: follow as much already-cut path as is available.
+    """
+    p=np.asarray(points,float)[:,:2]
+    if len(p)<2:return None
+    q=np.vstack((p,p[0])) if closed else p
+    available=float(np.linalg.norm(np.diff(q,axis=0),axis=1).sum())
+    if available<1e-9:return None
+    return walk(p,closed,min(max(0,float(distance)),available),False)
+
+
 def _repeat_walk(cycle,distance):
     """Walk ``distance`` along ``cycle`` (closed sequence of points) repeated as often as needed."""
     seg=np.diff(cycle,axis=0)
@@ -43,7 +57,8 @@ def _repeat_walk(cycle,distance):
     total=float(lengths.sum())
     if total<1e-6:return None
     laps=int(np.floor(distance/total))
-    if (laps+1)*len(lengths)>MAX_POINTS:return None
+    if (laps+1)*len(lengths)>MAX_POINTS:
+        raise ValueError(f"Lead-in would exceed {MAX_POINTS} segments; reduce lead length or depth per pass")
     pieces=[cycle[:1]]+[cycle[1:]]*laps        # complete laps, then the partial remainder
     rest=distance-laps*total
     result=np.vstack(pieces)

@@ -144,7 +144,9 @@ selected path.
 ## Lead-out
 
 Before a required retract at the end of a contour chain, lead-out follows a
-short portion of the just-cut contour at depth, then retracts. It is omitted
+short portion of the just-cut contour at depth, then retracts. On a short
+section (for example a path split by a holding tab), the exit is shortened to
+its available length rather than silently omitted. It is omitted
 between paths that will stay down. The current height field checks the exit
 against remaining material; an uncertain/contacting exit is skipped and a
 retract is used instead, with a log explanation.

@@ -35,6 +35,17 @@ def bed_geometry(rect):
     return plate, grid, outline, np.array(vol, np.float32)
 
 
+def tab_geometry(bounds):
+    edges, faces = [], []
+    for lo, hi in bounds:
+        c = np.array([[x, y, z] for z in (lo[2], hi[2]) for y in (lo[1], hi[1]) for x in (lo[0], hi[0])])
+        for a,b in ((0,1),(1,3),(3,2),(2,0),(4,5),(5,7),(7,6),(6,4),(0,4),(1,5),(2,6),(3,7)):
+            edges.extend((c[a],c[b]))
+        for a,b,d,e in ((0,1,3,2),(4,6,7,5),(0,4,5,1),(2,3,7,6),(0,2,6,4),(1,5,7,3)):
+            faces.extend((c[a],c[b],c[d],c[a],c[d],c[e]))
+    return (np.asarray(faces,np.float32).reshape(-1,3), np.asarray(edges,np.float32).reshape(-1,3))
+
+
 class BedRenderer:
     """Owns the GL buffers of the plate; create it inside ``initializeGL``."""
 
@@ -44,6 +55,8 @@ class BedRenderer:
         self.m_outline = mesh_cls(False)
         self.m_volume = mesh_cls(False)
         self.m_stock = mesh_cls(False)
+        self.m_tabs = mesh_cls(False)
+        self.m_tab_edges = mesh_cls(False)
         self.m_material = [mesh_cls(False) for _ in range(3)]
         self.rect = None
 
@@ -67,6 +80,26 @@ class BedRenderer:
                 faces.extend((c[a],c[b],c[d],c[a],c[d],c[e]))
         self.upload_material(np.asarray(faces,np.float32).reshape(-1,3))
         self.m_stock.upload(np.asarray(points, np.float32).reshape(-1, 3))
+
+    def upload_tabs(self, bounds):
+        faces, edges = tab_geometry(bounds)
+        self.m_tabs.upload(faces)
+        self.m_tab_edges.upload(edges)
+
+    def draw_tabs(self, prog, mvp):
+        GL.glUseProgram(prog)
+        GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog, "uMVP"), 1, GL.GL_TRUE, mvp)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glDepthMask(GL.GL_FALSE)
+        GL.glUniform4f(GL.glGetUniformLocation(prog, "uColor"), .65, .25, 1., .35)
+        self.m_tabs.draw(GL.GL_TRIANGLES)
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glDisable(GL.GL_BLEND)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glUniform4f(GL.glGetUniformLocation(prog, "uColor"), .85, .45, 1., 1.)
+        self.m_tab_edges.draw(GL.GL_LINES)
+        GL.glEnable(GL.GL_DEPTH_TEST)
 
     def upload_material(self,positions):
         triangles=np.asarray(positions,np.float32).reshape(-1,3,3)

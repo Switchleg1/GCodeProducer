@@ -99,6 +99,16 @@ preview **out of date**. Regenerate before relying on it. CAM export is blocked
 until paths are regenerated after edits; a program with safety warnings needs
 additional confirmation to export.
 
+## CAM holding tabs
+
+In **Material / stock → Holding tabs — model**, choose **Place tabs** and
+click side walls to retain rectangular rails to the stock's X/Y edges.
+**Remove tabs** repeatedly removes clicked rails; selecting a row edits its
+width, height or direction. Esc returns to navigation. No operation needs to
+be selected. Purple volumes appear in both views with Show → Material. Tabs
+are saved with the model and split paths according to Area order, preserving
+leads; see [holding tabs](cam/holding-tabs.md) for setup and safety limits.
+
 ## Inspecting generated paths
 
 - The vertical layer slider selects the highest visible layer/depth pass.

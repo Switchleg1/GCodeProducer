@@ -318,12 +318,15 @@ class MainWindow(QMainWindow):
         self.cam_editor = CAMEditor()
         self.cam_editor.defaults = self.preferences
         self.stock_editor.set_stock(self.cam_editor.setup.stock)
+        self.stock_editor.tabs.set_setup(self.cam_editor.setup)
+        self.stock_editor.tabs.changed.connect(self._cam_changed)
+        self.stock_editor.tabs.modeRequested.connect(self._cam_pick_mode)
         self.cam_editor.setVisible(False)
         self.cam_editor.changed.connect(self._cam_changed)
         self.cam_editor.selectionChanged.connect(self._cam_highlight)
         self.cam_editor.pickModeChanged.connect(self._cam_pick_mode)
         self.model_viewer.camPickRequested.connect(self._cam_pick)
-        self.model_viewer.camSelectionExited.connect(lambda: self.cam_editor.pick.setCurrentIndex(0))
+        self.model_viewer.camSelectionExited.connect(self._cam_selection_exited)
         self.cam_scroll = QScrollArea()
         self.cam_scroll.setWidgetResizable(True)
         self.cam_scroll.setWidget(self.cam_editor)
@@ -1370,8 +1373,19 @@ class MainWindow(QMainWindow):
                                    json.dumps(self.cam_editor.setup.to_dict()))
         self._set_stale()
 
+    def _cam_selection_exited(self):
+        self.stock_editor.tabs.end_mode()
+        self.cam_editor.pick.setCurrentIndex(0)
+        self.model_viewer.set_cam_mode("")
+
     def _cam_pick_mode(self, mode):
         self._cam_pick_task = None
+        if not mode.startswith("tab"):
+            self.stock_editor.tabs.end_mode()
+        else:
+            self.cam_editor.pick.blockSignals(True)
+            self.cam_editor.pick.setCurrentIndex(0)
+            self.cam_editor.pick.blockSignals(False)
         if mode and self.workflow == wf.CAM:
             self.b_face.setChecked(False)
             self.b_place_block.setChecked(False)
@@ -1383,9 +1397,17 @@ class MainWindow(QMainWindow):
         if self.workflow != wf.CAM or self.placed is None or self._worker is not None:
             return
         self._cam_pick_operation = self.cam_editor.operation()
-        self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload))
+        self._cam_pick_kind = payload[0]
+        if payload[0].startswith("tab"):
+            self._cam_pick_task = self.compute.submit("cam_tab_pick", (self.placed, copy.deepcopy(self.cam_editor.setup), *payload))
+        else:
+            self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload))
 
     def _cam_highlight(self):
+        self.stock_editor.tabs.set_setup(self.cam_editor.setup)
+        if self.workflow != wf.CAM:
+            self.model_viewer.set_tab_bounds([])
+            self.viewer.set_tab_bounds([])
         # Scalar rate calculation is cheap; do not leave locked rate fields stale
         # while a large topology task is running in the compute process.
         if self.workflow==wf.CAM:
@@ -1411,11 +1433,13 @@ class MainWindow(QMainWindow):
         if self.workflow != wf.CAM or self.placed is None or self._worker is not None:
             return
         op = self.cam_editor.operation()
+        context = None
         if op:
             gi,_=self.cam_editor.indices()
             tool=next((t for t in self.cam_editor.tools if t.id==self.cam_editor.setup.groups[gi].tool_id),None)
             context={"tool":tool,"machine":self._machine()} if tool and self._machine() else None
-            self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op), copy.deepcopy(self.cam_editor.setup.stock),copy.deepcopy(context)))
+        self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op),
+            copy.deepcopy(self.cam_editor.setup.stock), copy.deepcopy(context), copy.deepcopy(self.cam_editor.setup.tabs)))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
@@ -1798,13 +1822,23 @@ class MainWindow(QMainWindow):
     def _on_compute_done(self, tid, result):
         if tid == self._cam_pick_task:
             self._cam_pick_task = None
-            if self.workflow == wf.CAM and self.cam_editor.operation() is self._cam_pick_operation:
-                self.cam_editor.accept_pick(result)
+            if self.workflow == wf.CAM:
+                if getattr(self, "_cam_pick_kind", "").startswith("tab"):
+                    self.stock_editor.tabs.accept_pick(result)
+                elif self.cam_editor.operation() is self._cam_pick_operation:
+                    self.cam_editor.accept_pick(result)
             return
         if tid == self._cam_highlight_task:
             self._cam_highlight_task = None
             if self.workflow == wf.CAM:
                 self.model_viewer.set_cam_selection(result['faces'], result['edges'])
+                self.model_viewer.set_tab_bounds(result.get('tabs', []))
+                self.viewer.set_tab_bounds(result.get('tabs', []))
+                if result.get('tab_error'):
+                    self.stock_editor.tabs.status.setText(result['tab_error'])
+                else:
+                    self.stock_editor.tabs.status.setText(f"{len(result.get('tabs', []))} enabled holding tabs. "
+                        "Height is measured from stock bottom; use Place tabs and click side walls to add more.")
                 self.cam_editor.depth_summary.setText(result['depths'])
                 self.cam_editor.cutting_summary.setText(result.get('cutting',''))
                 self.cam_editor.set_calculated(result.get('cutting_values',{}))
@@ -1836,6 +1870,8 @@ class MainWindow(QMainWindow):
             self._update_enabled()
             return
         self.cam_warnings = out.get("warnings", [])
+        self.model_viewer.set_tab_bounds(out.get("tab_bounds", []))
+        self.viewer.set_tab_bounds(out.get("tab_bounds", []))
         self.program, self.tp = out["program"], out["toolpath"]
         self._filament_mm = out["filament_mm"]
         # a big program is ~1M Python objects; Python's periodic full garbage collection

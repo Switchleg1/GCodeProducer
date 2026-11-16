@@ -14,6 +14,7 @@ import numpy as np
 
 from . import geometry
 from .stock import Stock
+from .cam_tabs import HoldingTab
 
 KINDS = ("pocket", "profile", "drill", "engrave", "slot")
 
@@ -80,7 +81,7 @@ class Operation:
     lead_feed: float = 300.
     lead_in: bool = True
     lead_out: bool = True
-    lead_length: float = 0.0            # 0 = half tool diameter
+    lead_length: float = 0.0            # 0 = auto: >= one diameter, with <=10-degree ramp
     overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
     area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
@@ -97,6 +98,7 @@ class CAMSetup:
     groups: list[ToolGroup] = field(default_factory=list)
     fingerprint: str = ""
     stock: Stock = field(default_factory=Stock)
+    tabs: list[HoldingTab] = field(default_factory=list)
 
     def to_dict(self):
         return asdict(self)
@@ -117,7 +119,8 @@ class CAMSetup:
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])
                 ops.append(Operation(**d))
             groups.append(ToolGroup(g["tool_id"], ops))
-        return cls(groups, data.get("fingerprint", ""), Stock.from_dict(data.get("stock", {})))
+        return cls(groups, data.get("fingerprint", ""), Stock.from_dict(data.get("stock", {})),
+                   [HoldingTab(**t) for t in data.get("tabs", [])])
 
 
 def fingerprint(mesh):
@@ -304,7 +307,16 @@ def highlight_geometry(payload):
     mesh, op, *stocks = payload
     op_stock = stocks[0] if stocks else None
     topo = cached_topology(mesh)
-    out = topo.highlight(op.geometry)
+    out = topo.highlight(op.geometry) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
+    out["tabs"] = []
+    if len(stocks) > 2 and stocks[2]:
+        from .cam_tabs import resolve_bounds
+        try:
+            out["tabs"] = resolve_bounds(mesh, op_stock, stocks[2])
+        except ValueError as exc:
+            out["tab_error"] = str(exc)
+    if op is None:
+        return out
     if len(stocks) > 1 and stocks[1]:
         from .cam_cutting import resolve_cutting
         context = stocks[1]
@@ -347,6 +359,65 @@ def _drop_air_paths(paths, remaining, radius, name, log=None):
     return kept
 
 
+def _tab_schedule(areas, op, region, tabs, start, end, step, count, radius, log=None):
+    """Schedule depth bands separated by tab tops, splitting only below each tab.
+
+    Upper passes still cut the stock OVER the tabs normally. Once a tab becomes
+    active its interrupted path sections are areas: finish a section to depth,
+    or visit every section at each depth, following the operation's Area order.
+    """
+    from .cam_tabs import mask_at, clip_paths
+    from .cam_paths import machining_areas
+    records = []
+    next_area = 0
+    indices = list(range(count))
+    # Roofs round upward to emitted G-code precision, never into the rail.
+    roofs = sorted({math.ceil(float(hi[2])*1000-1e-9)/1000 for _, hi in tabs
+                    if end < hi[2] < start}, reverse=True)
+    for roof in roofs:
+        if roof >= start-1e-6:
+            continue
+        if not any(abs(max(end, start-(i+1)*step)-roof) < 1e-6 for i in indices):
+            indices.append((start-roof)/step-1)
+            if log:log(f"  {op.name}: added tab-top pass Z{roof:g} before splitting paths below the rail")
+    indices.sort()
+    for parent, paths in enumerate(areas):
+        bands = []
+        for i in indices:
+            z = float(f"{max(end, start-(i+1)*step):.3f}")
+            active = tuple(j for j, (_, hi) in enumerate(tabs) if z < hi[2]-1e-6)
+            if bands and bands[-1][0] == active:
+                bands[-1][1].append(i)
+            else:
+                bands.append((active, [i]))
+        for active, depths in bands:
+            if not active:
+                pieces = [paths]
+            else:
+                z = float(f"{max(end, start-(depths[-1]+1)*step):.3f}")
+                mask = mask_at(tabs, z, radius)
+                clipped = clip_paths(paths, mask)
+                if not clipped:
+                    if log:log(f"  {op.name}: tab-protected area {parent+1}, {len(depths)} depth passes omitted")
+                    continue
+                if op.kind == "pocket":
+                    centre = region.buffer(-(radius+op.stock)).difference(mask)
+                    pieces = machining_areas(clipped, op.kind, centre)
+                else:
+                    pieces = [[p] for p in clipped]
+                if log:log(f"  {op.name}: holding tabs split area {parent+1} into {len(pieces)} sections below Z"
+                           f"{min(tabs[j][1][2] for j in active):g}")
+            for piece in pieces:
+                if len(records)+len(depths)>100000:
+                    raise ValueError(f"{op.name}: too many tab sections/depth passes")
+                for i in depths:
+                    records.append((next_area, i, active, piece))
+                next_area += 1
+    if op.area_order == "depth":
+        records.sort(key=lambda item: (item[1], item[0]))
+    return records
+
+
 def generate(job, ctx):
     """Generate ordered 2.5D operations. Fail rather than silently machining wrong geometry."""
     from .job import Layer, Path
@@ -363,6 +434,10 @@ def generate(job, ctx):
     import copy
     from .cam_material import PlanarStock
     material_history = PlanarStock(setup.stock) if setup.stock.allocated else None
+    from .cam_tabs import resolve_tabs
+    tabs = resolve_tabs(job.mesh, setup)
+    if tabs:
+        ctx.log(f"  {len(tabs)} holding tabs protected across all operations")
     layers = []
     job.warnings = []
     numbers={}
@@ -456,6 +531,8 @@ def generate(job, ctx):
                         limit = limit.buffer(reach_out, join_style=BufferJoinStyle.mitre)
                 if op.overcut > 0:
                     depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
+                    depths.extend(math.ceil(float(hi[2])*1000-1e-9)/1000 for _, hi in tabs
+                                  if end < hi[2] < start)
                     # No extra clearance here: the contour inset already leaves op.stock on part walls.
                     protected = part_section(job.mesh, depths, 0.0)
                     grown = overcut_region(region, op.overcut, protected, limit)
@@ -549,15 +626,20 @@ def generate(job, ctx):
             schedule = [(ai, i) for ai in range(len(areas)) for i in range(count)]
             if op.area_order == "depth":
                 schedule.sort(key=lambda item: (item[1], item[0]))
+            if tabs:
+                schedule = _tab_schedule(areas, op, region, tabs, start, end, step, count, diameter/2, ctx.log)
+            else:
+                schedule = [(ai, i, None, area_paths) for ai, i in schedule for area_paths in [areas[ai]]]
             label = "each area to full depth" if op.area_order == "area" else "each depth across all areas"
             ctx.log(f"  {op.name}: {len(areas)} machining areas, {label}")
+            op_layer_start = len(layers)
             cached_key, planned = None, None
-            for ai, i in schedule:
+            for ai, i, tab_key, area_paths in schedule:
                 z = max(end, start - (i + 1) * step)
                 remaining = material_history.at(z) if material_history else None
-                key = (ai, remaining.normalize().wkb if remaining is not None else b"unallocated")
+                key = (ai, tab_key, remaining.normalize().wkb if remaining is not None else b"unallocated")
                 if key != cached_key:
-                    planned = copy.deepcopy(areas[ai])
+                    planned = copy.deepcopy(area_paths)
                     if skip_air and remaining is not None and op.kind == "pocket":
                         planned = _drop_air_paths(planned, remaining, diameter/2, op.name, ctx.log)
                     cached_key = key
@@ -583,7 +665,7 @@ def generate(job, ctx):
                 layer.cam_operation_config = op
                 layer.cam_cutting = cutting
                 layers.append(layer)
-            ctx.log(f"  {op.name}: {len(paths)} paths, {count} passes, Z{start:g} to Z{end:g}")
+            ctx.log(f"  {op.name}: {len(paths)} base XY paths, {len(layers)-op_layer_start} area/depth passes, Z{start:g} to Z{end:g}")
         ctx.progress((gi + 1) / max(1, len(setup.groups)))
     if not layers:
         raise ValueError("CAM setup has no enabled operations that remove material")

@@ -119,6 +119,7 @@ class ModelViewer(QOpenGLWidget):
         self.tris = None                      # (m,3,3) for picking
         self.rect = (0.0, 0.0, 220.0, 220.0, 250.0)
         self.stock = None
+        self.tab_bounds = []
         self.show_material = True
         self.overhang_angle = None            # None = do not show overhangs
         self.inside = True
@@ -170,6 +171,11 @@ class ModelViewer(QOpenGLWidget):
 
     def set_stock(self, stock):
         self.stock = stock
+        self._dirty = True
+        self.update()
+
+    def set_tab_bounds(self, bounds):
+        self.tab_bounds = list(bounds)
         self._dirty = True
         self.update()
 
@@ -231,6 +237,9 @@ class ModelViewer(QOpenGLWidget):
     def _update_info(self):
         if self.vertices is None:
             txt = "Import a model (Ctrl+O) or drop an STL here"
+        elif self.cam_pick_mode.startswith("tab"):
+            txt = ("CAM: click a tab rail to remove" if self.cam_pick_mode == "tab_remove" else
+                   "CAM: click side walls to place holding tabs to the material edge") + " • Esc = navigate"
         elif self.cam_pick_mode:
             txt = f"CAM: select {self.cam_pick_mode}s • Shift-drag to pan, drag to orbit • Esc = navigate"
         elif self.place_on_face:
@@ -274,6 +283,7 @@ class ModelViewer(QOpenGLWidget):
         self._dirty = False
         self.bed.upload(self.rect)
         self.bed.upload_stock(self.stock)
+        self.bed.upload_tabs(self.tab_bounds)
         if self.vertices is None:
             self.m_model.count = 0
             return
@@ -342,6 +352,7 @@ class ModelViewer(QOpenGLWidget):
         if self.show_material:
             self.bed.draw_stock(self.p_flat,mvp)
             self.bed.draw_material(self.p_flat,mvp)
+            self.bed.draw_tabs(self.p_flat,mvp)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)

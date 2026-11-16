@@ -39,6 +39,8 @@ def run_slice(job, pipeline, log=None, progress=None) -> dict:
     prog = res.program
     out = {"program": prog, "steps": res.steps, "toolpath": None, "filament_mm": 0.0, "warnings": list(job.warnings),
            "material_results": job.material_results}
+    from .cam_tabs import resolve_tabs
+    out["tab_bounds"] = resolve_tabs(job.mesh, job.cam_setup) if job.cam_setup is not None else []
     if prog is not None:
         out["toolpath"] = build_toolpath(prog)
         s = simulate(prog)
@@ -56,6 +58,11 @@ def run_cam_pick(payload):
     return pick_geometry(payload)
 
 
+def run_tab_pick(payload):
+    from .cam_tabs import tab_pick
+    return tab_pick(*payload)
+
+
 def run_cam_highlight(payload):
     from .cam import highlight_geometry
     return highlight_geometry(payload)
@@ -63,6 +70,7 @@ def run_cam_highlight(payload):
 
 TASKS = {
     "cam_pick": lambda payload, log, progress: run_cam_pick(payload),
+    "cam_tab_pick": lambda payload, log, progress: run_tab_pick(payload),
     "cam_highlight": lambda payload, log, progress: run_cam_highlight(payload),
     "slice": lambda payload, log, progress: run_slice(*payload, log=log, progress=progress),
     "blocks": lambda payload, log, progress: run_blocks(payload),

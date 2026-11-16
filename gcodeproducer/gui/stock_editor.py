@@ -50,6 +50,9 @@ class StockEditor(QGroupBox):
         self.size_info = QLabel("")
         self.size_info.setWordWrap(True)
         form.addRow(self.size_info)
+        from .cam_tabs_editor import CAMTabsEditor
+        self.tabs = CAMTabsEditor()
+        form.addRow(self.tabs)
 
     def set_stock(self, stock):
         self.stock = stock

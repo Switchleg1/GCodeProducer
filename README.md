@@ -18,7 +18,8 @@ output before operating a machine.
   operations; face/edge selection, geometry-linked depths, wall-following pockets,
   machine-default climb/conventional/meander direction, and Slot/High/Cut/HSM feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
-  top-at-Z0 placement, current-material checks, leads and per-operation material outputs.
+  top-at-Z0 placement, current-material checks, leads, per-operation material outputs,
+  and side-placed holding tabs that retain rails to the material's XY edges.
 - **CAM cutting data:** six machining materials, per-tool SFM/chip load and axial
   defaults, constrained RPM calculation, and independent manual feed unlocks.
 - **Libraries:** separate machines, FDM materials/nozzles, and CAM tools.

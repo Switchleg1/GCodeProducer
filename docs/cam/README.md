@@ -111,13 +111,15 @@ Implemented machining is **initial 2.5D** from STL-derived topology:
 - [Geometry selection and linked depths](selection-and-depths.md)
 - [SFM, chip load, machining materials and axial defaults](cutting-data.md)
 - [Current material, process outputs and lead-in/out](material-state-and-leads.md)
+- [Holding tabs: click side walls to retain rails to stock XY edges](holding-tabs.md)
 - [Engagement-aware direction and feed factors](engagement-and-feeds.md)
 - [Wall-following strategies and cutting direction](toolpaths.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)
 
-No general 3D surfacing, CAD/STEP topology, tabs, cutter-holder or fixture
-simulation is provided. Segmented contour lead ramps and progressive 2.5D
+Model-owned rectangular holding tabs are implemented, including radius-aware
+path splits and protected-tab travel checks. No general 3D surfacing, CAD/STEP
+topology, cutter-holder or fixture simulation is provided. Segmented contour lead ramps and progressive 2.5D
 material outputs/checks are implemented, not a general solid-removal solver. Tool type labels do not implement V-carving
 or ballnose surface compensation. The legacy CLI silhouette profile is a
 separate, narrower workflow; see [CLI scope](../cli.md#legacy-cam-command).

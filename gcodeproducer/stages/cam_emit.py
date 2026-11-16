@@ -55,7 +55,7 @@ class CAMEmit(SliceStage):
         from ..core.cam_cutting import resolve_cutting
         from ..core.cam_material import height_stock_for, simulate_material
         from ..core.app_settings import pref
-        from ..core.cam_leads import ramp_entry, walk
+        from ..core.cam_leads import ramp_entry, exit_path
         stock = getattr(job.cam_setup,"stock",None)
         if stock is None and job.settings.get("machining_material"):
             from ..core.stock import Stock
@@ -127,7 +127,8 @@ class CAMEmit(SliceStage):
 
         def move3(command,target,rate,feature,comment=None):
             nonlocal position,last_feed
-            target=np.asarray(target,float)
+            target=np.asarray(target,float).copy()
+            target[2]=float(format_number(target[2],3))
             b.set_feature(feature)
             f=f" F{feed_text(limited(float(rate)))}" if rate is not None and command=="G1" else ""
             line=b.command(f"{command} X{format_number(target[0],3)} Y{format_number(target[1],3)} Z{format_number(target[2],3)}{f}",comment)
@@ -275,7 +276,7 @@ class CAMEmit(SliceStage):
                         b.set_feature("plunge", comment=False)
                         b.command(f"G1 Z{format_number(entry,3)} F{feed_text(limited(float(plunge)))}")
                         if live is not None:live.cut(position,np.r_[approach,entry],active_radius)
-                        position[2]=entry
+                        position[2]=float(format_number(entry,3))
                     if lead is not None:
                         for q in lead[1:]:
                             rate=plunge*(float(job.m("slotting_feed",50))/100 if live.contact(position,q,active_radius) else 1)
@@ -286,7 +287,7 @@ class CAMEmit(SliceStage):
                     cut_move(q, condition, force=i == 0)
                 next_path=layer.paths[path_index+1] if path_index+1<len(layer.paths) else None
                 if config is not None and config.lead_out and len(pts)>1 and not (next_path and next_path.stay_down):
-                    exit_xy=walk(pts,path.closed,config.lead_length or 2*active_radius,False)
+                    exit_xy=exit_path(pts,path.closed,config.lead_length or 2*active_radius)
                     if exit_xy is not None:
                         for q in exit_xy[1:]:
                             target=np.r_[q,layer.z]

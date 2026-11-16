@@ -66,6 +66,7 @@ class PlanarStock:
 class HeightStock:
     def __init__(self,stock,resolution=.2,max_cells=2_000_000):
         self.stock=stock
+        self.tabs=[]                         # exact tab boxes, independent of grid sampling
         lo,hi=stock.bounds
         self.requested=max(float(resolution),.02)
         resolution=max(self.requested,math.sqrt(stock.width*stock.depth/max(int(max_cells),10_000)))
@@ -109,7 +110,9 @@ class HeightStock:
         if patch is None:return float(self.bottom)
         region,distance,_=patch
         values=self.heights[region][distance<=radius*radius]
-        return float(values.max()) if len(values) else float(self.heights[region].max())
+        height=float(values.max()) if len(values) else float(self.heights[region].max())
+        from .cam_tabs import top_along
+        return top_along(self.tabs,p,p,radius,height)
 
     def max_height_along(self,a,b,radius):
         """Highest current material within ``radius`` of the XY segment a-b (blank bottom if none)."""
@@ -118,9 +121,16 @@ class HeightStock:
         if patch is None:return float(self.bottom)
         region,distance,_=patch
         values=self.heights[region][distance<=radius*radius]
-        return float(values.max()) if len(values) else float(self.bottom)
+        height=float(values.max()) if len(values) else float(self.bottom)
+        from .cam_tabs import top_along
+        return top_along(self.tabs,a,b,radius,height)
+
+    def tab_contact(self,a,b,radius):
+        from .cam_tabs import contact
+        return bool(self.tabs) and contact(self.tabs,np.asarray(a),np.asarray(b),radius)
 
     def contact(self,a,b,radius):
+        if self.tab_contact(a,b,radius):return True
         patch=self._patch(np.asarray(a),np.asarray(b),radius)
         if patch is None:return False
         region,distance,z=patch
@@ -132,7 +142,13 @@ class HeightStock:
         region,distance,z=patch
         h=self.heights[region]
         hit=distance <= radius*radius
-        self.heights[region]=np.where(hit,np.minimum(h,np.maximum(z,self.bottom)),h)
+        h=np.where(hit,np.minimum(h,np.maximum(z,self.bottom)),h)
+        if self.tabs:
+            x,y=np.meshgrid(self.x[region[1]],self.y[region[0]])
+            for lo,hi in self.tabs:
+                keep=(x>=lo[0])&(x<=hi[0])&(y>=lo[1])&(y<=hi[1])
+                h=np.where(keep,np.maximum(h,hi[2]),h)
+        self.heights[region]=h
 
     def surface(self):
         """Display mesh bounded to about 100x100 cells; include step/outer walls."""
@@ -172,7 +188,11 @@ class HeightStock:
 
 def height_stock_for(job,stock):
     from .app_settings import pref
-    return HeightStock(stock,pref(job,"stock_resolution"),pref(job,"stock_max_cells"))
+    state=HeightStock(stock,pref(job,"stock_resolution"),pref(job,"stock_max_cells"))
+    if job.cam_setup is not None and job.cam_setup.tabs:
+        from .cam_tabs import resolve_tabs
+        state.tabs=resolve_tabs(job.mesh,job.cam_setup)
+    return state
 
 
 def simulate_material(job,program,log=None):
@@ -216,6 +236,8 @@ def simulate_material(job,program,log=None):
         contact=state.contact(a,b,radius)
         up=np.linalg.norm(a[:2]-b[:2])<1e-6 and b[2]>a[2]
         label=f"Line {i+1}"
+        if not up and state.tab_contact(a,b,radius):
+            warn(f"{label}: cutter motion intersects a protected holding tab.")
         if min(a[2],b[2])<state.bottom-1e-3:warn(f"{label}: motion below material bottom; table/spoilboard risk.")
         if sim.motion_cmd[i]=="G0" and contact and not up:
             warn(f"{label}: rapid motion contacts CURRENT remaining material (grid {state.resolution:g} mm).")

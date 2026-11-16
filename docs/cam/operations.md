@@ -89,6 +89,11 @@ not globally increasing depth: with area-first ordering it returns to the
 shallower passes when the next area begins. Calculated material outputs remain
 per operation, after **all** its areas have completed.
 
+[Holding tabs](holding-tabs.md) can split paths into further sections below
+the tab tops. Those sections follow the same Area order. Upper passes still
+cut normally above the rails; an extra tab-top pass is inserted if needed.
+Each interrupted section keeps the operation's lead-in/out settings.
+
 Set the default for newly created operations in
 [Settings → Default operation settings](../settings.md). Changing the default
 never changes saved operations. Older setups without an Area order field use
@@ -274,10 +279,11 @@ Climb/conventional/meander requests follow the machine default or operation
 override; actual clearing hand is chosen from estimated remaining material.
 Full-slot paths do not define the cutting hand. The assumed spindle is M3. See [direction rules](toolpaths.md).
 
-Not implemented: holding tabs, bridges,
-controller G41/G42 compensation, and
-fixture-aware routing. Breaking through the bottom may release the part;
-workholding is your responsibility.
+[Holding tabs](holding-tabs.md) retain model-owned rectangular bridges to the
+stock edge; place them on side walls in Material / stock. Controller G41/G42
+compensation and fixture-aware routing are not implemented. Breaking through
+the bottom without adequate tabs/workholding may release the part; a generic
+tab configuration is not a mechanical holding guarantee.
 
 ## Slot
 

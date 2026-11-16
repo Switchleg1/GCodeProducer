@@ -682,6 +682,43 @@ def test_area_order_uses_global_default_and_operation_override(win):
     assert ed.operation().area_order == "area"   # global defaults never rewrite saved operations
 
 
+def test_holding_tabs_click_tools_model_persistence_and_shared_slot(win, cube_stl):
+    import json
+    import numpy as np
+    from gcodeproducer.core.cam_tabs import tab_pick
+    from gcodeproducer.core.cam import highlight_geometry
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    win._auto_stock()
+    editor = win.stock_editor.tabs
+    assert editor.setup is win.cam_editor.setup
+    assert win.cam_editor.operation() is None    # tabs do not need an operation selected
+    editor.place.click()
+    assert win.model_viewer.cam_pick_mode == "tab" and editor.place.isChecked()
+    lo, hi = win.placed.bounds
+    origin = [hi[0]+10, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2]
+    result = tab_pick(win.placed, editor.setup, "tab", origin, [-1,0,0])
+    editor.accept_pick(result)
+    assert len(editor.setup.tabs) == 1 and editor.list.count() == 1
+    saved = json.loads(win.settings.value(win._model_key("cam", cube_stl)))
+    assert len(saved["tabs"]) == 1 and saved["groups"] == []
+    out = highlight_geometry((win.placed, None, editor.setup.stock, None, editor.setup.tabs))
+    assert len(out["tabs"]) == 1    # overlay is available even without any tool groups
+    win.open_model(cube_stl)
+    assert len(editor.setup.tabs) == 1
+    assert editor.setup is win.cam_editor.setup
+    editor.list.setCurrentRow(0)
+    editor.width.setValue(6)
+    assert editor.setup.tabs[0].width == 6
+    editor.remove.click()
+    assert win.model_viewer.cam_pick_mode == "tab_remove"
+    win._cam_selection_exited()
+    assert not editor.remove.isChecked() and not win.model_viewer.cam_pick_mode
+    editor.delete_selected()
+    assert not editor.setup.tabs
+    assert json.loads(win.settings.value(win._model_key("cam", cube_stl)))["tabs"] == []
+
+
 def test_settings_dialog_messages_section(win):
     from gcodeproducer.core import app_settings
     from gcodeproducer.gui.settings_dialog import SettingsDialog

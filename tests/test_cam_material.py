@@ -142,6 +142,20 @@ def test_later_operation_uses_prior_removal_in_engagement(libset):
     assert np.mean([c.engagement for c in conditions])<.1
 
 
+def test_short_section_exit_is_shortened_not_skipped():
+    from gcodeproducer.core.cam_leads import exit_path
+    short = np.array([[0.,0.], [1.,0.]])
+    out = exit_path(short, False, 3)
+    assert out is not None and np.allclose(out, [[1,0], [0,0]])
+    assert exit_path(short[:1], False, 3) is None
+
+
+def test_excessive_ramp_never_silently_falls_back_to_plunge():
+    from gcodeproducer.core.cam_leads import ramp_entry
+    with pytest.raises(ValueError, match="Lead-in would exceed"):
+        ramp_entry(np.array([[0.,0.], [.0001,0.]]), False, -10, 1, 0)
+
+
 def test_ramp_length_is_exactly_what_the_slope_needs():
     from gcodeproducer.core.cam_leads import ramp_entry
     square=np.array([[0.,0.],[2.,0.],[2.,2.],[0.,2.]])

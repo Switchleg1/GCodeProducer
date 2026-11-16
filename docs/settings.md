@@ -90,8 +90,8 @@ cells and is coarsened by the default cell limit. Raise the limit knowingly.
   a review aid, and the warning text still appears.
 - **Collision** (magenta): moves named by a `Line N:` stock finding — rapid or
   spindle-off contact with current material, unclassified feed contact,
-  motion below the blank bottom or an entry deeper than the tool's depth per
-  pass. Setup-level findings (unallocated stock, safe Z, part containment)
+  motion below the blank bottom, an entry deeper than the tool's depth per
+  pass, or contact with a protected [holding tab](cam/holding-tabs.md). Setup-level findings (unallocated stock, safe Z, part containment)
   have no single move and are not coloured.
 
 Colouring does not alter the G-code. A program with coloured moves must be
