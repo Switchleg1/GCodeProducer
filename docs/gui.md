@@ -101,10 +101,13 @@ additional confirmation to export.
 
 ## Material boundary selection
 
-CAM operations offer **Selection target → Part / Material boundaries** alongside
-Select faces/edges. Pick the original blank's top/bottom face or a complete
-horizontal rim for Pocket/Profile; side faces and vertical edges can supply
-linked height references. References follow blank edits. See
+CAM operations default to **Pick from → Part + material together** alongside
+Select faces/edges. Select a part rim and a material edge in one Pocket to
+clear the space between them, without switching selection types. One horizontal
+material edge identifies the blank rim; selected part loops are retained inner
+boundaries. *Part only* / *Material only* remain optional pick filters. Side
+faces and vertical edges can supply linked height references; references
+follow blank edits. See
 [material boundaries](cam/selection-and-depths.md#selecting-material-boundaries)
 for stock-envelope Pocket behaviour and 2.5D limits.
 

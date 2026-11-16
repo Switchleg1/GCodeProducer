@@ -229,6 +229,23 @@ class Topology:
                 return chain
         raise ValueError("Edge reference no longer exists; reselect geometry")
 
+    def pocket_boundary(self, ref):
+        """In a mixed material/part pocket, one edge can identify a complete
+        horizontal rim. Circular feature chains already do; at a rectangular
+        corner use the adjacent planar face's boundary containing this edge.
+        """
+        chain = self.edge_chain(ref)
+        if chain[0] == chain[-1]:
+            return chain
+        edge = tuple(sorted(ref.indices))
+        for seed in self.edges.get(edge, []):
+            if np.ptp(self.vertices[self.triangles[seed], 2]) > 1e-4:
+                continue
+            for rim in chains(self.face_edges(seed)):
+                if rim[0] == rim[-1] and any(tuple(sorted((a,b))) == edge for a,b in zip(rim,rim[1:])):
+                    return rim
+        return chain
+
     def polylines(self, ref, stock=None):
         if ref.kind.startswith("stock_"):
             from .stock_geometry import polylines
@@ -257,6 +274,20 @@ class Topology:
 
 def pick_geometry(payload):
     mesh, mode, origin, direction, mvp, viewport, mouse, *stocks = payload
+    if mode.startswith("mixed_"):
+        base = mode.removeprefix("mixed_")
+        part = pick_geometry((mesh, base, origin, direction, mvp, viewport, mouse))
+        from .stock_geometry import pick
+        material = pick(stocks[0] if stocks else None, "stock_"+base, origin, direction, mvp, viewport, mouse)
+        if not material or "reference" not in material:
+            return part
+        if part is None:
+            return material
+        # Faces prefer the visible part over the transparent blank. For edges,
+        # choose the closest pixel candidate across BOTH geometries (part wins ties).
+        if base == "edge" and material["pick_distance"] < part["pick_distance"]-1e-5:
+            return material
+        return part
     if mode.startswith("stock_"):
         from .stock_geometry import pick
         return pick(stocks[0] if stocks else None, mode, origin, direction, mvp, viewport, mouse)
@@ -298,7 +329,9 @@ def pick_geometry(payload):
     if ref is None:
         return None
     z = topo.points(ref)[:, 2]
-    return {"reference": ref, "z_min": float(z.min()), "z_max": float(z.max())}
+    result = {"reference": ref, "z_min": float(z.min()), "z_max": float(z.max())}
+    if mode == "edge":result["pick_distance"] = float(best)
+    return result
 
 
 _cached = (None, None)
@@ -499,16 +532,23 @@ def generate(job, ctx):
             if safe <= max(float(job.mesh.bounds[1][2]), start,
                            setup.stock.top if setup.stock.allocated else -math.inf):
                 raise ValueError("Safe Z must be above the model and all operation start heights")
-            selected_edges, stock_edges = set(), set()
+            selected_edges, stock_edges, keep_edges = set(), set(), set()
             cam_vertices = topo.vertices
-            if any(ref.kind.startswith("stock_") for ref in op.geometry):
+            has_stock_bounds = any(ref.kind.startswith("stock_") for ref in op.geometry)
+            if has_stock_bounds:
                 from .stock_geometry import vertices as stock_vertices
                 cam_vertices = np.vstack((topo.vertices, stock_vertices(setup.stock)))
             for ref in op.geometry:
                 if ref.kind.startswith("stock_"):
-                    from .stock_geometry import indices as stock_indices
-                    ids = [len(topo.vertices)+i for i in stock_indices(ref)]
-                    if ref.kind == "stock_face":
+                    from .stock_geometry import indices as stock_indices, FACES
+                    local_ids = stock_indices(ref)
+                    if ref.kind == "stock_edge" and op.kind == "pocket":
+                        if np.ptp(cam_vertices[[len(topo.vertices)+i for i in local_ids], 2]) > 1e-4:
+                            raise ValueError(f"{op.name}: select a horizontal material edge for a pocket rim")
+                        # One straight stock edge identifies the whole top/bottom rim.
+                        local_ids = FACES[1 if local_ids[0] >= 4 else 0]
+                    ids = [len(topo.vertices)+i for i in local_ids]
+                    if ref.kind == "stock_face" or len(ids) == 4:
                         if np.ptp(cam_vertices[ids, 2]) > 1e-4:
                             raise ValueError(f"{op.name}: 2.5D operations require a horizontal material face; use side faces as height references")
                         ids.append(ids[0])
@@ -520,9 +560,13 @@ def generate(job, ctx):
                         raise ValueError(f"{op.name}: 2.5D operations require a horizontal face")
                     edges = (topo.pocket_face_edges(ref.indices[0]) if op.kind == "pocket"
                              else topo.face_edges(ref.indices[0]))
+                    if op.kind == "pocket" and has_stock_bounds:
+                        keep_edges.update(tuple(sorted(e)) for e in edges)
                 else:
-                    chain = topo.edge_chain(ref)
-                    edges = zip(chain, chain[1:])
+                    chain = topo.pocket_boundary(ref) if op.kind == "pocket" and has_stock_bounds else topo.edge_chain(ref)
+                    edges = list(zip(chain, chain[1:]))
+                    if ref.kind == "edge":
+                        keep_edges.update(tuple(sorted(e)) for e in edges)
                 selected_edges.update(tuple(sorted(e)) for e in edges)
             polys = [cam_vertices[p] for p in chains(selected_edges)]
             if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
@@ -571,7 +615,11 @@ def generate(job, ctx):
                     from shapely.geometry import Polygon
                     from shapely.ops import unary_union
                     sections = [protected] if protected.geom_type == "Polygon" else list(getattr(protected, "geoms", ()))
-                    protected = unary_union([Polygon(p.exterior) for p in sections if p.geom_type == "Polygon"])
+                    protect = [Polygon(p.exterior) for p in sections if p.geom_type == "Polygon"]
+                    # Selected part rims/face footprints are retained inner boundaries,
+                    # not just depth hints. Honour them even above/below that model rim.
+                    protect.extend(pocket_region([cam_vertices[p][:-1, :2]]) for p in chains(keep_edges))
+                    protected = unary_union(protect)
                     region = (limit if limit is not None else region).difference(protected).buffer(0)
                     if region.is_empty:
                         raise ValueError(f"{op.name}: no material outside the protected part at these depths")

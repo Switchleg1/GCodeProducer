@@ -76,13 +76,15 @@ class CAMEditor(QWidget):
         row.addWidget(clear)
         form.addRow(row)
         self.pick_source = QComboBox()
-        self.pick_source.addItem("Part", "part")
-        self.pick_source.addItem("Material boundaries", "stock")
-        self.pick_source.setToolTip("Select the part mesh or the original allocated blank's faces/edges. "
-                                    "Material references remain linked when the blank is resized. "
-                                    "Side faces and vertical edges may be height references; machining is still 2.5D.")
+        self.pick_source.addItem("Part + material together", "both")
+        self.pick_source.addItem("Part only", "part")
+        self.pick_source.addItem("Material only", "stock")
+        self.pick_source.setToolTip("By default pick both part and material boundaries in the same operation without switching. "
+                                    "The other choices are optional picking filters; neither clears existing selections. "
+                                    "For an outside pocket, a horizontal material edge defines the blank rim and selected "
+                                    "part rims or face footprints are retained inner boundaries.")
         self.pick_source.currentIndexChanged.connect(self._pick_source_changed)
-        form.addRow("Selection target", self.pick_source)
+        form.addRow("Pick from", self.pick_source)
         self.target = QComboBox()
         self.target.addItem("Apply picks to machining geometry", "geometry")
         self.target.addItem("Pick height reference only", "height")
@@ -254,7 +256,7 @@ class CAMEditor(QWidget):
         self.last_pick = None
         self.pick.setCurrentIndex(0)
         self.pick_source.blockSignals(True)
-        self.pick_source.setCurrentIndex(0)
+        self.pick_source.setCurrentIndex(self.pick_source.findData("both"))
         self.pick_source.blockSignals(False)
         first = next(((gi, 0) for gi, g in enumerate(setup.groups) if g.operations), (None, None))
         self.rebuild(first)
@@ -342,12 +344,6 @@ class CAMEditor(QWidget):
     def _selected(self, *_):
         self._loading = True
         op = self.operation()
-        if op and op.geometry:
-            material = [r.kind.startswith("stock_") for r in op.geometry]
-            if all(material) or not any(material):
-                self.pick_source.blockSignals(True)
-                self.pick_source.setCurrentIndex(self.pick_source.findData("stock" if all(material) else "part"))
-                self.pick_source.blockSignals(False)
         self.pick.setCurrentIndex(self.pick.findData("face") if op is not None else 0)
         self._pick_changed()
         self.last_pick = None
@@ -357,7 +353,7 @@ class CAMEditor(QWidget):
             self.name.setText(op.name)
             self.enabled.setChecked(op.enabled)
             self.geom_label.setText(f"{len(op.geometry)} geometry references")
-            self.pick_status.setText("Face picking is active. Choose Part or Material boundaries, then click a face or select its edges.")
+            self.pick_status.setText("Pick part and material boundaries together. For an outside pocket, select a part rim and a material edge.")
             self.depth_summary.setText("")
             for key, (source, val, extreme) in self.depth_controls.items():
                 d = getattr(op, key)

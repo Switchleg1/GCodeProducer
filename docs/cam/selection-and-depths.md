@@ -29,10 +29,11 @@ This is not a replacement for exact B-rep/CAD topology.
 1. Select an operation in the CAM tree. Its geometry count and settings appear;
    **face picking activates automatically**. Reopening a setup selects its first
    operation rather than leaving all selection controls disabled.
-2. Choose **Selection target: Part** or **Material boundaries**, then keep
-   **Select faces** or switch to **Select edges**. Explicit targeting means the
-   transparent blank never intercepts a Part selection. Material targeting
-   turns Show → Material on and uses Prepare.
+2. Leave **Pick from: Part + material together** (default), then keep
+   **Select faces** or switch to **Select edges**. Pick both types directly in
+   the same operation. *Part only* / *Material only* are optional filters for
+   ambiguous overlaps, not mutually exclusive operation types; switching a
+   filter never clears existing selections.
 3. Keep **Pick purpose: Apply picks to machining geometry**.
 4. Click an element to add it; click it again to remove it.
 5. Use **Clear geometry** to remove all cutting references from this operation.
@@ -63,17 +64,26 @@ for old scenes/operations are discarded rather than applied to the current one.
 
 ## Selecting material boundaries
 
-Choose **Selection target → Material boundaries** on the operation. Click a
-face or click near an edge to add/remove it as usual; yellow outlines and a
-translucent face fill show the selection. In a top view where top/bottom edges
-project onto the same pixel, the nearer edge wins. Switch the target back to
-**Part** to add part geometry or pick a part height without losing stock refs.
+By default **Pick from → Part + material together** accepts both geometries
+without switching modes. Click the part edge, then a material edge to add
+both to the same Pocket. Yellow outlines and translucent face fill show the
+selections. Edge picking chooses the closest screen-space edge across both
+geometries; a face click over the part prefers the part through the transparent
+blank. Click outside the part to pick the material face. Use the optional
+*Part only* or *Material only* filters only when overlapping picks are
+ambiguous. In a top view where top/bottom material edges coincide, the nearer
+edge wins.
 
 ![Selected material top face](../pictures/cam-material-boundary-selected.png)
 
-- A top/bottom material face supplies a closed rectangle. For Pocket/Profile
-  you can instead select all four horizontal edges forming a rim. A single
-  stock edge is an open line, suitable for Slot/Engrave.
+- A top/bottom material face supplies a closed rectangle. For Pocket, a single
+  horizontal material edge identifies that blank rim; you need not click all
+  four sides. A selected part rim becomes the retained inner boundary. A
+  circular part edge already forms a rim; a straight rectangular edge uses
+  its adjacent horizontal face's closed outline when available. Otherwise
+  complete the part's closed boundary explicitly.
+- Profile still needs a face or complete closed edge loop. A single material
+  edge remains an open line for Slot/Engrave.
 - Side faces and vertical edges can be picked as **height references** (minimum
   or maximum Z), but not as cutting geometry for a 2.5D operation. This does
   not implement side milling.
@@ -94,12 +104,36 @@ The operation's Material boundary limit controls the blank edge and roughing
 clearance controls part walls, with the same contour/raster strategy,
 engagement planning, tabs and Area order as other pockets.
 
-Part cutting references added alongside material bounds can supply selection
-heights, but do not XOR a second outer boundary into the blank. For example:
-select the material top face, switch to Part and select the flange floor, then
-use **Machining selection Maximum Z / Minimum Z**. The blank top supplies
-Start; the part floor supplies End. The result clears the blank down to that
-floor while retaining the boss and stock in its bore.
+### Clear between the part and material edges
+
+Select the **part's outer rim** and **one horizontal material edge** in the
+same Pocket, leaving mixed picking on. The material rim is the outside
+boundary; selected part rims (or part-face footprints) are retained inner
+boundaries. They are not just height hints or ignored in favour of the model
+section. The pocket clears the space **between** them, with roughing clearance
+on the part side and Material boundary limit on the blank side. Several
+selected part loops are retained islands, not alternating XOR cut regions.
+
+![Mixed part and material edge selection](../pictures/cam-mixed-boundary-selection.png)
+
+![Pocket clearing only outside the selected part rim](../pictures/cam-mixed-boundary-pocket.png)
+
+Actual capture: one part flange edge at Z-15 plus one top material edge at Z0
+in a single Pocket. Start/End use selection maximum/minimum (0 to -15).
+The material outside the selected flange rim is cleared to -15; stock inside
+that rim remains for later operations. Yellow Conflict segments still need
+review. This example is illustrative, not a calibrated machining recipe.
+
+If a part face/edge should supply **only a depth**, use **Pick height reference
+only → Use last pick** instead of adding it to cutting geometry. For example,
+select just the material top face as the cutting envelope and link End to the
+flange floor in height-only mode. That clears the blank to the floor while
+automatic part-section protection retains the boss; it does not retain the
+whole flange footprint above that floor.
+
+This corrects the earlier material-envelope behaviour that could ignore a
+selected part rim as a boundary. If an older mixed selection used a part face
+solely for End Z, convert it to a height-only reference before regeneration.
 
 ![Pocket bounded by material, with boss protected](../pictures/cam-material-boundary-pocket.png)
 

@@ -62,8 +62,8 @@ def test_material_pocket_protects_part_and_accepts_stock_rim(libset,strategy,sel
     mesh=stepped_part();job,op=job_for(mesh,[floor_ref(mesh)],libset)
     job.cam_setup.stock.margin=6;job.cam_setup.stock.auto(mesh)
     refs=[Reference("stock_edge",[i]) for i in (4,5,6,7)] if selection=="edges" else [Reference("stock_face",[1])]
-    # Mix a material envelope and part floor reference. This must not XOR the
-    # nested stock/floor/boss boundaries and accidentally clear the boss.
+    # Mix a material envelope and part face: retain its OUTER footprint, not
+    # XOR the nested stock/floor/boss boundaries or silently ignore that face.
     op.geometry=refs if selection=="face_only" else refs+[floor_ref(mesh)]
     op.strategy=strategy
     op.start=Depth("stock_top")
@@ -72,11 +72,12 @@ def test_material_pocket_protects_part_and_accepts_stock_rim(libset,strategy,sel
     assert min(l.z for l in job.layers)==-4
     points=np.concatenate([p.points for p in job.layers[-1].paths])
     assert abs(points).max()>24                    # clears beyond the part flange, to blank envelope
-    assert np.linalg.norm(points,axis=1).min()>11.4 # retains boss + cutter radius
+    inner = 11.4 if selection=="face_only" else 21.4
+    assert np.linalg.norm(points,axis=1).min()>inner # explicit part face retains its whole footprint
     for path in job.layers[-1].paths:
         p=path.points
         line=LineString(np.vstack((p,p[0])) if path.closed else p)
-        assert line.distance(Point(0,0))>11.4
+        assert line.distance(Point(0,0))>inner
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
     assert not [w for w in job.warnings if "rapid motion" in w]
 
@@ -98,6 +99,24 @@ def test_facing_stock_above_the_part_has_no_spurious_part_island(libset):
     op.start=Depth("stock_top");op.end=Depth("absolute",1)
     generate(job,StageContext())
     assert min(np.linalg.norm(p.points,axis=1).min() for p in job.layers[0].paths)<3
+
+
+@pytest.mark.parametrize("strategy", ["contour", "raster"])
+def test_single_material_edge_and_part_rim_clear_only_between_selected_bounds(libset, strategy):
+    mesh=stepped_part()
+    # The selected part edge is the flange rim (radius 20, Z-4), not the boss
+    # (radius 10). At Z-1/-2 the automatic model section alone would protect
+    # only the boss, but the explicitly selected flange rim must also be kept.
+    job,op=job_for(mesh,[Reference("edge",[96,97]), Reference("stock_edge",[4])],libset)
+    job.cam_setup.stock.margin=6;job.cam_setup.stock.auto(mesh)
+    op.strategy=strategy;op.start=Depth("stock_top");op.end=Depth("absolute",-2)
+    generate(job,StageContext())
+    for layer in job.layers:
+        for path in layer.paths:
+            points=path.points
+            line=LineString(np.vstack((points,points[0])) if path.closed else points)
+            assert line.distance(Point(0,0))>21.4   # selected 20 mm rim + 1.5 mm cutter radius
+    assert abs(np.concatenate([p.points for p in job.layers[-1].paths])).max()>24
 
 
 def test_material_side_face_is_height_only_and_stock_edges_can_engrave(libset):

@@ -58,4 +58,6 @@ def pick(stock, mode, origin, direction, mvp, viewport, mouse):
                 ref, best, best_depth = Reference("stock_edge",[i]), distance, depth
     if ref is None:return None
     z = polylines(stock,ref)[0][:,2]
-    return {"reference": ref, "z_min": float(z.min()), "z_max": float(z.max())}
+    result = {"reference": ref, "z_min": float(z.min()), "z_max": float(z.max())}
+    if mode == "stock_edge":result["pick_distance"] = float(best)
+    return result

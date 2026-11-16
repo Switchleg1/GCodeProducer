@@ -1387,7 +1387,7 @@ class MainWindow(QMainWindow):
             self.cam_editor.pick.setCurrentIndex(0)
             self.cam_editor.pick.blockSignals(False)
         if mode and self.workflow == wf.CAM:
-            if mode.startswith("stock_"):
+            if mode.startswith("stock_") or (mode in ("face", "edge") and self.cam_editor.pick_source.currentData() == "both"):
                 self.show_material_cb.setChecked(True)
             self.b_face.setChecked(False)
             self.b_place_block.setChecked(False)
@@ -1403,6 +1403,8 @@ class MainWindow(QMainWindow):
         if payload[0].startswith("tab"):
             self._cam_pick_task = self.compute.submit("cam_tab_pick", (self.placed, copy.deepcopy(self.cam_editor.setup), *payload))
         else:
+            if self.cam_editor.pick_source.currentData() == "both" and payload[0] in ("face", "edge"):
+                payload = ("mixed_"+payload[0], *payload[1:])
             self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload,
                                                        copy.deepcopy(self.cam_editor.setup.stock)))
 

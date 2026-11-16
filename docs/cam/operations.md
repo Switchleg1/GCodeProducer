@@ -106,6 +106,11 @@ The [material blank's faces/edges](selection-and-depths.md#selecting-material-bo
 can define an outside envelope as well as part geometry. Material-boundary
 pockets protect the part's section outlines (including unselected internal
 bores), and still use the operation's strategy, allowances, tabs and Area order.
+With both part and material geometry selected, the material rim is the outside
+envelope and selected part rims/face footprints are retained inner boundaries;
+one horizontal material edge can identify the whole blank rim. Mixed picking
+is the default. Use height-only picks if a part reference should provide just
+End Z rather than another retained boundary.
 
 **Purpose:** clear a selected closed XY region to an end depth.
 
