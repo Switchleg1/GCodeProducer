@@ -110,6 +110,18 @@ percentage, capped at tool Max depth/pass. Uncheck it to request an explicit
 stepdown. Existing operations keep their saved explicit stepdown unless you
 opt into the new default.
 
+If a saved Pocket axial percentage appears not to affect the cut, check:
+
+- The operation has **Tool/material axial depth default** enabled; a saved
+  explicit stepdown is intentionally independent of the tool table.
+- You edited the table for the **machining material category selected in
+  Material / stock** (each category has a separate Pocket axial value).
+- Tool **Max depth/pass** may cap the result. For example, 35% of a 3 mm
+  diameter requests 1.05 mm, but a 1 mm cap still yields 1 mm passes.
+
+Library Save explicitly commits pending numeric input; you do not need to
+press Enter or click another field before saving.
+
 The selected process type controls this default. A Pocket operation can begin
 with a full-width slot at the Pocket depth; radial Slot feed classification
 does not silently replace that operation's axial request. Reduce depth or

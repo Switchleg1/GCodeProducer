@@ -63,6 +63,12 @@ selected: `*` means all, an explicit ID list is a subset, and `[]` means none.
 A profile name alone is not enough to satisfy a saved CAM tool reference if
 its ID has changed. Back up JSON before manually editing IDs or allowed lists.
 
+**Save** commits the number/text currently being typed, even if focus has
+not left that field. Switching profiles or library tabs commits pending input
+to the corresponding in-memory profile first; Save then writes those edits
+to disk. Cancel still discards library edits. This includes every machining
+material's Pocket/Slot/Profile axial percentage in Tools.
+
 The profile JSON shape is:
 
 ```json

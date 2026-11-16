@@ -71,7 +71,13 @@ class LibraryDialog(QDialog):
     def kind(self) -> str:
         return KINDS[self.tabs.currentIndex()]
 
+    def _commit_editor(self):
+        editor = self.editor_area.widget()
+        if isinstance(editor, ParamEditor):
+            editor.commit()
+
     def _reload(self, select_id: str | None = None):
+        self._commit_editor()
         kind = self.kind()
         self.hint.setText(_HINT.get(kind, ""))
         self.lst.blockSignals(True)
@@ -84,11 +90,12 @@ class LibraryDialog(QDialog):
             self.lst.addItem(it)
             if p.id == select_id:
                 row = i
-        self.lst.blockSignals(False)
         if self.lst.count():
             self.lst.setCurrentRow(row)
-            self._select(row)
+            self.lst.blockSignals(False)
+            self._select(row)       # create once, after the complete list is ready
         else:
+            self.lst.blockSignals(False)
             self.editor_area.setWidget(QLabel("  No profiles yet \u2014 click New\u2026"))
 
     def _current(self) -> Profile | None:
@@ -98,6 +105,10 @@ class LibraryDialog(QDialog):
         return self.libset[self.kind()].get(it.data(Qt.ItemDataRole.UserRole))
 
     def _select(self, _row):
+        self._commit_editor()   # still bound to the previous profile, not the new list row
+        previous = self.editor_area.widget()
+        if isinstance(previous, ParamEditor):
+            previous.changed.disconnect()  # late focus-out signals must not overwrite the replacement form
         p = self._current()
         if p is None:
             return
@@ -110,6 +121,7 @@ class LibraryDialog(QDialog):
         self.editor_area.setWidget(editor)
 
     def _new(self):
+        self._commit_editor()
         kind = self.kind()
         workflow = wf.FDM
         if kind == "machine":
@@ -126,6 +138,7 @@ class LibraryDialog(QDialog):
             self._reload(p.id)
 
     def _dup(self):
+        self._commit_editor()
         p = self._current()
         if not p:
             return
@@ -136,6 +149,7 @@ class LibraryDialog(QDialog):
             self._reload(q.id)
 
     def _rename(self):
+        self._commit_editor()
         p = self._current()
         if not p:
             return
@@ -160,6 +174,7 @@ class LibraryDialog(QDialog):
         return p
 
     def accept(self):
+        self._commit_editor()
         for p in self._deleted:
             lib = self.libset[p.kind]
             if lib.directory:

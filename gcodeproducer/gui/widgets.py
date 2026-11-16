@@ -196,6 +196,8 @@ class ParamEditor(QWidget):
         le = QLineEdit(str(v or ""))
         le.setToolTip(p.help)
         le.editingFinished.connect(lambda n=p.name, le=le: self._set(n, le.text()))
+        self._widgets[p.name] = le
+        self._setters[p.name] = le.setText
         return le
 
     def _make_multi(self, p: Param, v) -> QWidget:
@@ -245,6 +247,22 @@ class ParamEditor(QWidget):
         b_none.clicked.connect(lambda: set_all(Qt.CheckState.Unchecked))
         self._widgets[p.name] = box
         return box
+
+    def commit(self):
+        """Flush text still being edited before a form is saved or replaced.
+
+        Numeric fields deliberately have keyboardTracking=False. Their text can
+        differ from value() until focus-out/Enter, which need not happen before
+        a dialog accepts or switches its profile. Do not rely on Qt focus order.
+        """
+        from PyQt6.QtWidgets import QAbstractSpinBox
+        for spin in self.findChildren(QAbstractSpinBox):
+            if spin.isEnabled():
+                spin.interpretText()
+        for name, widget in self._widgets.items():
+            if isinstance(widget, QLineEdit):
+                self.values[name] = widget.text()
+        self.changed.emit(dict(self.values))
 
     def _set(self, name, value):
         self.values[name] = value

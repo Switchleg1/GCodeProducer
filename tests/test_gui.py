@@ -590,6 +590,45 @@ def test_new_cam_tool_enables_material_calculation(win,monkeypatch):
     dialog.close()
 
 
+def test_tool_pocket_axial_pending_text_saves_before_dialog_closes(win):
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    from gcodeproducer.core.profiles import LibrarySet
+    tool = win.libset["tool"].all()[0]
+    dlg = LibraryDialog(win.libset, win, "tool", tool.id)
+    from gcodeproducer.core.cam_cutting import MATERIALS
+    expected = {f"{key}_pocket_axial": 37.5+i for i,(key,*_) in enumerate(MATERIALS)}
+    for name,value in expected.items():
+        spin = dlg.editor_area.widget()._widgets[name]
+        spin.lineEdit().setText(str(value))   # keyboard tracking off; no valueChanged/focus-out yet
+    dlg.accept()
+    win.libset.save()
+    loaded = LibrarySet(win.libset.root).load()["tool"].get(tool.id)
+    reopened = LibraryDialog(win.libset, win, "tool", tool.id)
+    for name,value in expected.items():
+        assert loaded.get(name) == value
+        assert reopened.editor_area.widget()._widgets[name].value() == value
+    reopened.close()
+
+
+def test_switching_library_profile_or_tab_commits_pending_numeric_text(win):
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    from gcodeproducer.core.profiles import KINDS, LibrarySet
+    tool = win.libset["tool"].all()[0]
+    dlg = LibraryDialog(win.libset, win, "tool", tool.id)
+    dlg.editor_area.widget()._widgets["soft_wood_pocket_axial"].lineEdit().setText("42.5")
+    row = dlg.lst.currentRow()
+    dlg.lst.setCurrentRow((row+1) % dlg.lst.count())
+    assert tool.get("soft_wood_pocket_axial") == 42.5
+    other = dlg._current()
+    dlg.editor_area.widget()._widgets["steel_pocket_axial"].lineEdit().setText("18.5")
+    dlg.tabs.setCurrentIndex(KINDS.index("machine"))
+    assert other.get("steel_pocket_axial") == 18.5
+    dlg.accept();win.libset.save()
+    loaded = LibrarySet(win.libset.root).load()
+    assert loaded["tool"].get(tool.id).get("soft_wood_pocket_axial") == 42.5
+    assert loaded["tool"].get(other.id).get("steel_pocket_axial") == 18.5
+
+
 def test_settings_dialog_persists_preferences_and_marks_cam_stale(win, monkeypatch, tmp_path):
     from gcodeproducer.core import app_settings
     from gcodeproducer.gui.settings_dialog import SettingsDialog
