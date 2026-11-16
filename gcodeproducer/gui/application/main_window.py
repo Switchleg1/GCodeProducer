@@ -1844,7 +1844,8 @@ class MainWindow(QMainWindow):
         if tid == self._cam_highlight_task:
             self._cam_highlight_task = None
             if self.workflow == wf.CAM:
-                self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []))
+                self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []),
+                                                    result.get('stock_edges', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
                 self.viewer.set_tab_bounds(result.get('tabs', []))
                 if result.get('tab_error'):

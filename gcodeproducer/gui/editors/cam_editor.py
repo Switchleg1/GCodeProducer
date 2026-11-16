@@ -45,7 +45,6 @@ class CAMEditor(QWidget):
         operation_defaults = Operation()
         self.tools = []
         self.defaults = {}            # global "default operation settings" (core.app_settings)
-        self.pick_target = "geometry"
         self.last_pick = None
         self._loading = False
         layout = QVBoxLayout(self)
@@ -111,10 +110,14 @@ class CAMEditor(QWidget):
                                     "part rims or face footprints are retained inner boundaries.")
         self.pick_source.currentIndexChanged.connect(self._pick_source_changed)
         form.addRow("Pick from", self.pick_source)
-        self.target = QComboBox()
-        self.target.addItem("Apply picks to machining geometry", "geometry")
-        self.target.addItem("Pick height reference only", "height")
-        form.addRow("Pick purpose", self.target)
+        self.selections = QTreeWidget()
+        self.selections.setHeaderLabels(["Selection", "Use for machining"])
+        self.selections.setRootIsDecorated(False)
+        self.selections.setMaximumHeight(150)
+        self.selections.setToolTip("Purpose is per selection. Uncheck an edge/face to keep it only as a height reference. "
+                                   "Select its row, then use it for Start Z or End Z below.")
+        self.selections.itemChanged.connect(self._selection_purpose_changed)
+        form.addRow("Pick purpose (per selection)", self.selections)
         self.pick_status = QLabel("Click geometry to add/remove it from this operation.")
         self.pick_status.setWordWrap(True)
         form.addRow(self.pick_status)
@@ -127,8 +130,8 @@ class CAMEditor(QWidget):
             extreme = QComboBox()
             extreme.addItem("Maximum Z", "max")
             extreme.addItem("Minimum Z", "min")
-            use = QPushButton("Use last pick")
-            use.setToolTip("Use the last clicked face/edge as a live height reference (then add an offset)")
+            use = QPushButton("Use selected reference")
+            use.setToolTip("Use the selected reference row (or last viewport pick) as a live height reference, with an offset")
             use.clicked.connect(lambda _=False, k=key: self.use_depth(k))
             source.currentIndexChanged.connect(self._edit)
             val.valueChanged.connect(self._edit)
@@ -173,6 +176,16 @@ class CAMEditor(QWidget):
             self.rate_controls[key]=(unlock,value)
             if key == "feed":
                 form.addRow(self.doc_override,self.stepdown)
+        self.direction_override = QCheckBox("Unlock cutting direction")
+        self.direction_override.setToolTip("Unchecked inherits the machine cutting direction. Checked overrides it for this operation.")
+        self.direction_override.toggled.connect(self._edit)
+        self.direction = QComboBox()
+        self.direction.setPlaceholderText("Machine default")
+        self.direction.setToolTip("M3: choose hand from remaining material. A full-width first slot has no unique climb/conventional hand.")
+        for label, key in CUT_DIRECTIONS:
+            self.direction.addItem(label, key)
+        self.direction.currentIndexChanged.connect(self._edit)
+        form.addRow(self.direction_override, self.direction)
         self.lead_in = QCheckBox("Lead-in ramp along selected contour")
         self.lead_out = QCheckBox("Lead-out along cleared contour")
         self.lead_in.toggled.connect(self._edit)
@@ -206,15 +219,11 @@ class CAMEditor(QWidget):
         self.strategy = QComboBox()
         self.strategy.addItem("Wall-parallel contours", "contour")
         self.strategy.addItem("Raster lines", "raster")
-        self.direction = QComboBox()
-        self.direction.setToolTip("M3: choose hand from remaining material. A full-width first slot has no unique climb/conventional hand.")
-        for label, key in CUT_DIRECTIONS:
-            self.direction.addItem(label, key)
         for label, w in (("Area order", self.area_order), ("Pocket stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
                          ("Pocket overcut into void (mm)", self.overcut),
                          ("Material boundary limit (mm)", self.material_limit),
-                         ("Pocket strategy", self.strategy), ("Cutting direction", self.direction)):
+                         ("Pocket strategy", self.strategy)):
             form.addRow(label, w)
             if isinstance(w, QComboBox):
                 w.currentIndexChanged.connect(self._edit)
@@ -371,6 +380,7 @@ class CAMEditor(QWidget):
         self.pick.setCurrentIndex(self.pick.findData("face") if op is not None else 0)
         self._pick_changed()
         self.last_pick = None
+        self._refresh_selections()
         self.details.setEnabled(op is not None)
         self.b_selection_depths.setVisible(op is not None and op.kind == "pocket")
         if op:
@@ -404,6 +414,7 @@ class CAMEditor(QWidget):
             self.material_limit.setValue(op.material_limit)
             self.material_limit.setEnabled(op.kind == "pocket")
             self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
+            self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
             self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
@@ -411,7 +422,8 @@ class CAMEditor(QWidget):
                 sb.setValue(getattr(op, key))
                 sb.setEnabled(op.kind != "drill")
             self.strategy.setEnabled(op.kind == "pocket")
-            self.direction.setEnabled(op.kind in ("pocket", "profile"))
+            self.direction_override.setEnabled(op.kind in ("pocket", "profile"))
+            self.direction.setEnabled(op.kind in ("pocket", "profile") and self.direction_override.isChecked())
             self.stepover.setEnabled(op.kind == "pocket")
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
@@ -441,13 +453,65 @@ class CAMEditor(QWidget):
         op.side, op.stock = self.side.currentData(), self.stock.value()
         op.overcut = self.overcut.value()
         op.material_limit = self.material_limit.value()
-        op.strategy, op.cut_direction = self.strategy.currentData(), self.direction.currentData()
+        op.strategy = self.strategy.currentData()
+        if self.direction_override.isChecked() and self.direction.currentIndex() < 0:
+            self.direction.blockSignals(True)
+            self.direction.setCurrentIndex(0)
+            self.direction.blockSignals(False)
+        op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
+        self.direction.setEnabled(op.kind in ("pocket", "profile") and self.direction_override.isChecked())
         op.stay_down = self.stay_down.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())
         self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
         item = self.tree.currentItem()
         item.setText(0, f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else ""))
+        self.changed.emit()
+
+    def _refresh_selections(self, selected=None):
+        op = self.operation()
+        current = self.selections.currentItem()
+        if selected is None and current is not None:
+            selected = current.data(0, Qt.ItemDataRole.UserRole)
+        refs = [] if op is None else list(op.geometry) + list(op.height_references)
+        if op is not None:
+            for depth in (op.start, op.end):
+                if depth.source == "geometry" and depth.reference is not None and depth.reference not in refs:
+                    refs.append(depth.reference)
+        self.selections.blockSignals(True)
+        self.selections.clear()
+        for ref in refs:
+            machining = ref in op.geometry
+            item = QTreeWidgetItem([ref.kind.replace("stock_", "material ") + " " +
+                                    ", ".join(map(str, ref.indices)), "Machining" if machining else "Height only"])
+            item.setData(0, Qt.ItemDataRole.UserRole, ref)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(1, Qt.CheckState.Checked if machining else Qt.CheckState.Unchecked)
+            self.selections.addTopLevelItem(item)
+            if ref == selected:
+                self.selections.setCurrentItem(item)
+        self.selections.resizeColumnToContents(0)
+        self.selections.blockSignals(False)
+
+    def _selection_purpose_changed(self, item, column):
+        op = self.operation()
+        if self._loading or op is None or column != 1:
+            return
+        ref = item.data(0, Qt.ItemDataRole.UserRole)
+        if item.checkState(1) == Qt.CheckState.Checked:
+            if ref not in op.geometry:
+                op.geometry.append(ref)
+            if ref in op.height_references:
+                op.height_references.remove(ref)
+        else:
+            if ref in op.geometry:
+                op.geometry.remove(ref)
+            if ref not in op.height_references:
+                op.height_references.append(ref)
+        self.selections.blockSignals(True)
+        item.setText(1, "Machining" if ref in op.geometry else "Height only")
+        self.selections.blockSignals(False)
+        self.geom_label.setText(f"{len(op.geometry)} geometry references")
         self.changed.emit()
 
     def accept_pick(self, result):
@@ -462,28 +526,38 @@ class CAMEditor(QWidget):
             return
         self.last_pick = result
         ref = result["reference"]
-        if self.target.currentData() == "geometry":
-            if ref in op.geometry:
-                op.geometry.remove(ref)
-            else:
-                op.geometry.append(ref)
+        if ref in op.geometry:
+            op.geometry.remove(ref)
+        elif ref in op.height_references:
+            op.height_references.remove(ref)
+        else:
+            op.geometry.append(ref)
+        self._refresh_selections(ref)
         self.geom_label.setText(f"{len(op.geometry)} geometry references")
         self.pick_status.setText(f"Picked {ref.kind.replace('stock_', 'material ')}: Z {result['z_min']:.3f} … {result['z_max']:.3f} mm")
         self.changed.emit()
 
     def use_depth(self, key):
         op = self.operation()
-        if op and self.last_pick:
+        item = self.selections.currentItem()
+        ref = item.data(0, Qt.ItemDataRole.UserRole) if item is not None else (
+            self.last_pick["reference"] if self.last_pick else None)
+        if op and ref is not None:
             _, _, extreme = self.depth_controls[key]
-            setattr(op, key, Depth("geometry", 0, self.last_pick["reference"], extreme.currentData()))
+            setattr(op, key, Depth("geometry", 0, ref, extreme.currentData()))
             source, val, _ = self.depth_controls[key]
             self._loading = True
             source.setCurrentIndex(source.findData("geometry"))
             val.setValue(0)
             self._loading = False
+            self._refresh_selections(ref)
             self.changed.emit()
 
     def set_calculated(self,values):
+        if not self.direction_override.isChecked() and "cut_direction" in values:
+            self.direction.blockSignals(True)
+            self.direction.setCurrentIndex(self.direction.findData(values["cut_direction"]))
+            self.direction.blockSignals(False)
         for key,(unlock,value) in self.rate_controls.items():
             if not unlock.isChecked() and key in values:
                 value.blockSignals(True);value.setValue(values[key]);value.blockSignals(False)
@@ -508,5 +582,6 @@ class CAMEditor(QWidget):
         op = self.operation()
         if op:
             op.geometry.clear()
+            self._refresh_selections()
             self.geom_label.setText("No geometry selected")
             self.changed.emit()

@@ -34,13 +34,22 @@ This is not a replacement for exact B-rep/CAD topology.
    the same operation. *Part only* / *Material only* are optional filters for
    ambiguous overlaps, not mutually exclusive operation types; switching a
    filter never clears existing selections.
-3. Keep **Pick purpose: Apply picks to machining geometry**.
-4. Click an element to add it; click it again to remove it.
-5. Use **Clear geometry** to remove all cutting references from this operation.
+3. Click an element to add it; click it again to remove it.
+4. In **Pick purpose (per selection)**, leave **Use for machining** checked for
+   cutting boundaries; uncheck any row that should supply only a height.
+5. Use **Clear geometry** to remove cutting references; saved height-only picks
+   and existing depth links are retained.
 
-Selected faces/edges highlight yellow. The operation owns its selections;
+Selected part faces/edges highlight yellow; selected material faces/edges
+highlight **green**, drawn over the material surface so they remain visible. The operation owns its selections;
 switching to another operation displays that operation's geometry. Merely
 selecting another tree node does not copy geometry between operations.
+
+![Per-selection machining checkbox and green material edge](../pictures/cam-per-selection-purpose.png)
+
+This current capture shows one checked part edge and an unchecked material edge
+used only for End Z. Older flange examples below show the previous global-purpose
+dropdown and yellow material highlights; their boundary examples still apply.
 
 A miss now displays a message rather than silently leaving the selection
 unchanged. Edge picking allows a small screen-space tolerance and checks
@@ -87,7 +96,7 @@ edge wins.
 - Side faces and vertical edges can be picked as **height references** (minimum
   or maximum Z), but not as cutting geometry for a 2.5D operation. This does
   not implement side milling.
-- **Use last pick** and both *Selected geometry* / *Machining selection* depth
+- **Use selected reference** and both *Selected geometry* / *Machining selection* depth
   sources accept material references. They stay linked to blank top/bottom
   and size, rather than freezing the picked coordinates.
 - Picking fails clearly if material is unallocated. Changing the blank marks
@@ -124,8 +133,8 @@ The material outside the selected flange rim is cleared to -15; stock inside
 that rim remains for later operations. Yellow Conflict segments still need
 review. This example is illustrative, not a calibrated machining recipe.
 
-If a part face/edge should supply **only a depth**, use **Pick height reference
-only → Use last pick** instead of adding it to cutting geometry. For example,
+If a part face/edge should supply **only a depth**, uncheck its **Use for
+machining** row and click **Use selected reference** for Start Z or End Z. For example,
 select just the material top face as the cutting envelope and link End to the
 flange floor in height-only mode. That clears the blank to the floor while
 automatic part-section protection retains the boss; it does not retain the
@@ -157,14 +166,20 @@ not permission to ignore tool reach, fixtures, or workholding checks.
 A horizontal face may define the operation boundary, while another face
 provides a bottom height. To avoid cutting both faces:
 
-1. Select the intended cutting boundary normally.
-2. Change Pick purpose to **Pick height reference only**.
-3. Click the depth-reference face/edge.
-4. Press **Use last pick** next to Start Z or End Z.
+1. Pick both edges/faces. Each gets its own row under **Pick purpose (per selection)**.
+2. Keep the cutting boundary checked under **Use for machining**.
+3. Uncheck the other row: it becomes **Height only** and is excluded from
+   toolpath boundaries and *Machining selection* depth extremes.
+4. Select that height-only row and press **Use selected reference** next to
+   Start Z or End Z. You can select either row later without picking again.
 
-A height-only pick updates the last-picked geometry/Z display but does not
-add/remove a cutting reference. **Use last pick** uses the chosen geometry
-as a live reference and resets that depth's numeric offset to zero. Set the
+Purpose is stored per reference and survives saving/reopening the model setup.
+Changing a checkbox does not erase an existing Start/End link. Older linked
+height references also appear as unchecked rows. Rechecking a row includes it
+in machining again; inspect the changed boundary before regenerating.
+
+**Use selected reference** uses that row (or the last viewport pick if no row
+is selected) as a live reference and resets that depth's numeric offset to zero. Set the
 offset afterwards. The minimum/maximum dropdown determines which extreme is
 used. A reference used for depth need not be horizontal; a vertical face can
 supply either its top or bottom Z. Cutting geometry has stricter requirements.
@@ -232,7 +247,7 @@ that is useful for the intended operation.
 Suppose the top is Z0 and the intended floor face is Z-6:
 
 - Select the pocket boundary as cutting geometry.
-- Pick the floor in height-only mode and Use last pick for End.
+- Pick the floor, uncheck its machining checkbox, and Use selected reference for End.
 - End source becomes Selected geometry, offset 0.
 - Start=Model top, stepdown=1.5 mm gives -1.5, -3, -4.5, -6.
 - To leave 0.2 mm of axial stock, change End's offset to **+0.2**, giving -5.8.

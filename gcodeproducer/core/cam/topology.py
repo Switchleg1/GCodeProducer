@@ -103,13 +103,17 @@ class Topology:
         return np.concatenate(self.polylines(ref, stock))
 
     def highlight(self, refs, stock=None):
-        faces, edges, material_faces = set(), [], []
+        faces, edges, material_faces, part_edges, material_edges = set(), [], [], [], []
         for ref in refs:
             if ref.kind == "face":
                 faces.update(self.face(ref.indices[0]))
             for p in self.polylines(ref, stock):
-                edges.extend(np.stack((p[:-1], p[1:]), axis=1).reshape(-1, 3))
+                segments = np.stack((p[:-1], p[1:]), axis=1).reshape(-1, 3)
+                edges.extend(segments)
+                (material_edges if ref.kind.startswith("stock_") else part_edges).extend(segments)
                 if ref.kind == "stock_face":
                     material_faces.extend(p[[0,1,2,0,2,3]])
         return {"faces": sorted(faces), "edges": np.asarray(edges).reshape(-1, 3),
-                "stock_faces": np.asarray(material_faces).reshape(-1, 3)}
+                "stock_faces": np.asarray(material_faces).reshape(-1, 3),
+                "part_edges": np.asarray(part_edges).reshape(-1, 3),
+                "stock_edges": np.asarray(material_edges).reshape(-1, 3)}

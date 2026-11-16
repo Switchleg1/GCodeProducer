@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from .rendering_constants import HIGHLIGHT_PASSES
+from .rendering_constants import HIGHLIGHT_PASSES, MATERIAL_SELECTION_COLOR, MATERIAL_SELECTION_FILL
 from gcodeproducer.gui.rendering.model_mesh import _TriMesh
 from gcodeproducer.gui.rendering.rendering_constants import (
     MODEL_COLOR,
@@ -90,6 +90,7 @@ class ModelViewer(QOpenGLWidget):
         self.cam_faces = []
         self.cam_edges = np.empty((0, 3))
         self.cam_stock_faces = np.empty((0, 3))
+        self.cam_stock_edges = np.empty((0, 3))
         self._cam_dirty = True
         self.place_on_face = False
         self.blocks = []                      # core.support.SupportBlock
@@ -148,10 +149,11 @@ class ModelViewer(QOpenGLWidget):
         self._tool_cursor()
         self._update_info()
 
-    def set_cam_selection(self, faces=(), edges=(), stock_faces=()):
+    def set_cam_selection(self, faces=(), edges=(), stock_faces=(), stock_edges=()):
         self.cam_faces = list(faces)
         self.cam_edges = np.asarray(edges, dtype=float).reshape(-1, 3)
         self.cam_stock_faces = np.asarray(stock_faces, dtype=float).reshape(-1, 3)
+        self.cam_stock_edges = np.asarray(stock_edges, dtype=float).reshape(-1, 3)
         self._cam_dirty = True
         self._dirty = True
         self.update()
@@ -235,6 +237,7 @@ class ModelViewer(QOpenGLWidget):
         self.m_model = _TriMesh()
         self.m_cam_edges = _Mesh(False)
         self.m_cam_stock = _Mesh(False)
+        self.m_cam_stock_edges = _Mesh(False)
         self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
         self.m_bedges = _Mesh(False)
@@ -309,6 +312,7 @@ class ModelViewer(QOpenGLWidget):
         if self._cam_dirty:
             self.m_cam_edges.upload(self.cam_edges)
             self.m_cam_stock.upload(self.cam_stock_faces)
+            self.m_cam_stock_edges.upload(self.cam_stock_edges)
             self._cam_dirty = False
         if len(self.cam_edges):
             GL.glUseProgram(self.p_flat)
@@ -327,9 +331,17 @@ class ModelViewer(QOpenGLWidget):
             GL.glDisable(GL.GL_DEPTH_TEST)
             GL.glEnable(GL.GL_BLEND)
             GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
-            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), 1., .85, .15, .2)
+            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *MATERIAL_SELECTION_FILL)
             self.m_cam_stock.draw(GL.GL_TRIANGLES)
             GL.glDisable(GL.GL_BLEND)
+            GL.glEnable(GL.GL_DEPTH_TEST)
+        if len(self.cam_stock_edges):
+            # Draw after the stock surface/fill so its own shading cannot hide selection.
+            GL.glUseProgram(self.p_flat)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *MATERIAL_SELECTION_COLOR)
+            GL.glDisable(GL.GL_DEPTH_TEST)
+            self.m_cam_stock_edges.draw(GL.GL_LINES)
             GL.glEnable(GL.GL_DEPTH_TEST)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)

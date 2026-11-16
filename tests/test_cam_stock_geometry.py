@@ -56,6 +56,31 @@ def test_live_depth_and_highlight_after_blank_resize():
     assert "Allocate material" in highlight_geometry((mesh,op,s))["depths"]
 
 
+def test_material_highlight_has_separate_edges_including_height_only_picks():
+    mesh=stepped_part();s=stock()
+    part=floor_ref(mesh);material=Reference("stock_edge",[4])
+    op=Operation(geometry=[part],height_references=[material])
+    result=highlight_geometry((mesh,op,s))
+    assert len(result["stock_edges"])==2 and len(result["part_edges"])>0
+    assert len(result["edges"])==len(result["stock_edges"])+len(result["part_edges"])
+    assert np.allclose(result["stock_edges"],polylines(s,material)[0])
+    assert op.geometry==[part]
+
+
+def test_height_only_stock_boundary_does_not_change_generated_pocket(libset):
+    mesh=stepped_part()
+    baseline,op=job_for(mesh,[floor_ref(mesh)],libset)
+    generate(baseline,StageContext())
+    extra,operation=job_for(mesh,[floor_ref(mesh)],libset)
+    operation.height_references=[Reference("stock_edge",[4])]
+    generate(extra,StageContext())
+    assert len(baseline.layers)==len(extra.layers)
+    for a,b in zip(baseline.layers,extra.layers):
+        assert a.z==b.z and len(a.paths)==len(b.paths)
+        for p,q in zip(a.paths,b.paths):
+            assert np.array_equal(p.points,q.points)
+
+
 @pytest.mark.parametrize("strategy",["contour","raster"])
 @pytest.mark.parametrize("selection",["face","edges","face_only"])
 def test_material_pocket_protects_part_and_accepts_stock_rim(libset,strategy,selection):

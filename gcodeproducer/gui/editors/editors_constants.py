@@ -31,8 +31,7 @@ DEPTH_ROWS = (("start", "Start Z"), ("end", "End Z"))
 
 OPERATION_SIDES = ("outside", "inside", "on")
 
-CUT_DIRECTIONS = (("Machine default", "machine"), ("Climb", "climb"),
-                           ("Conventional", "conventional"), ("Meander", "meander"))
+CUT_DIRECTIONS = (("Climb", "climb"), ("Conventional", "conventional"), ("Meander", "meander"))
 
 ENGAGEMENT_CONTROLS = (("low_engagement_feed", "HSM"),
                            ("standard_engagement_feed", "Cut"),

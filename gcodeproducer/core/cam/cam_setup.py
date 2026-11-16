@@ -33,6 +33,7 @@ class CAMSetup:
             for item in g.get("operations", []):
                 d = dict(item)
                 d["geometry"] = [Reference(**r) for r in d.get("geometry", [])]
+                d["height_references"] = [Reference(**r) for r in d.get("height_references", [])]
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])
                 ops.append(Operation(**d))
             groups.append(ToolGroup(g["tool_id"], ops))

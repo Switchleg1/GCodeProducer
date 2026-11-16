@@ -36,3 +36,4 @@ class Operation:
     overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
     area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
+    height_references: list[Reference] = field(default_factory=list)  # picked but excluded from machining

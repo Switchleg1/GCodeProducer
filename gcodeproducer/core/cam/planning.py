@@ -135,7 +135,12 @@ def highlight_geometry(payload):
     op_stock = stocks[0] if stocks else None
     topo = cached_topology(mesh)
     try:
-        out = topo.highlight(op.geometry, op_stock) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
+        refs = [] if op is None else list(op.geometry) + list(op.height_references)
+        if op is not None:
+            for depth in (op.start, op.end):
+                if depth.source == "geometry" and depth.reference is not None and depth.reference not in refs:
+                    refs.append(depth.reference)
+        out = topo.highlight(refs, op_stock) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
     except ValueError as exc:
         out = {"faces": [], "edges": np.empty((0, 3)), "depths": str(exc), "geometry_error": str(exc)}
     out["tabs"] = []
@@ -153,6 +158,8 @@ def highlight_geometry(payload):
         try:
             data = resolve_cutting(context["machine"],context["tool"],op_stock,op)
             out["cutting_values"] = asdict(data)
+            out["cutting_values"]["cut_direction"] = (context["machine"].get("cut_direction", "climb")
+                                                       if op.cut_direction == "machine" else op.cut_direction)
             out["cutting"] = data.summary()
         except ValueError as exc:
             out["cutting"] = str(exc)

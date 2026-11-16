@@ -15,7 +15,8 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
-| Start | Pocket: Material surface + 0; others: Model top + 0 | Pocket falls back to model top until stock is allocated; not safe approach height |
+| Pick purpose (per selection) | New picks checked | Uncheck a reference to keep it height-only, outside machining boundaries; select its row to link Start/End |
+| Start | Pocket: machining selection maximum Z + 0; others: Model top + 0 | A flat Pocket selection falls back to material surface (model top without allocated stock); not safe approach height |
 | End | Pocket: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
 | Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
 | Depth of cut (mm/pass) | Calculated while locked; editable while unlocked | Existing manual stepdowns reopen unlocked; automatic depths reopen locked |
@@ -25,7 +26,7 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
 | Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
-| Cutting direction | Machine default | Inherit Climb/Conventional/Meander, or override per operation |
+| Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
@@ -58,6 +59,16 @@ estimated engagement modifier; positive machine `max_feed` caps cut/link and
 plunge G1 requests. These calculations still need calibrated tool/material data.
 See [cutting data](cutting-data.md), [leads/material state](material-state-and-leads.md)
 and [engagement/feed controls](engagement-and-feeds.md).
+
+Cutting direction now sits directly below the lead/plunge feed unlock. Existing
+explicit direction overrides reopen checked; saved `machine` values reopen
+unchecked. Its unchecked/disabled control means machine inheritance, not a
+forced Climb setting.
+
+![Cutting direction unlock below lead/plunge feed](../pictures/cam-cutting-direction-unlock.png)
+
+This actual capture demonstrates controls and green material-edge selection;
+it is not a generated or qualified cutting recipe.
 
 ## Multiple machining areas
 

@@ -456,6 +456,7 @@ def test_gcode_template_box(app):
 
 
 def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
+    from PyQt6.QtCore import Qt
     from gcodeproducer.core.cam import Reference
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     win.open_model(cube_stl)
@@ -480,9 +481,9 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     assert win._cam_pick_task is None and len(op.geometry) == 1
     ed.use_depth("start")
     assert op.start.source == "geometry" and op.start.reference == op.geometry[0]
-    ed.target.setCurrentIndex(ed.target.findData("height"))
     ed.accept_pick({"reference": Reference("face", [0]), "z_min": 0, "z_max": 0})
-    assert len(op.geometry) == 1   # a height-only pick must not change machining geometry
+    ed.selections.currentItem().setCheckState(1, Qt.CheckState.Unchecked)
+    assert len(op.geometry) == 1   # the unchecked reference is excluded from machining
     ed.use_depth("end")
     assert op.end.source == "geometry" and op.end.reference == Reference("face", [0])
     saved = ed.setup.to_dict()
