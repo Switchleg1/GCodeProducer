@@ -69,12 +69,20 @@ class CAMEditor(QWidget):
         self.pick = QComboBox()
         for label, mode in (("Navigate / place model", ""), ("Select faces", "face"), ("Select edges", "edge")):
             self.pick.addItem(label, mode)
-        self.pick.currentIndexChanged.connect(lambda: self.pickModeChanged.emit(self.pick.currentData()))
+        self.pick.currentIndexChanged.connect(self._pick_changed)
         row.addWidget(self.pick)
         clear = QPushButton("Clear geometry")
         clear.clicked.connect(self.clear_geometry)
         row.addWidget(clear)
         form.addRow(row)
+        self.pick_source = QComboBox()
+        self.pick_source.addItem("Part", "part")
+        self.pick_source.addItem("Material boundaries", "stock")
+        self.pick_source.setToolTip("Select the part mesh or the original allocated blank's faces/edges. "
+                                    "Material references remain linked when the blank is resized. "
+                                    "Side faces and vertical edges may be height references; machining is still 2.5D.")
+        self.pick_source.currentIndexChanged.connect(self._pick_source_changed)
+        form.addRow("Selection target", self.pick_source)
         self.target = QComboBox()
         self.target.addItem("Apply picks to machining geometry", "geometry")
         self.target.addItem("Pick height reference only", "height")
@@ -214,6 +222,18 @@ class CAMEditor(QWidget):
         layout.addWidget(warning)
         self.rebuild()
 
+    def _pick_changed(self, *_):
+        mode = self.pick.currentData()
+        if mode and self.pick_source.currentData() == "stock":
+            mode = "stock_"+mode
+        self.pickModeChanged.emit(mode)
+
+    def _pick_source_changed(self, *_):
+        if not self.pick.currentData() and self.operation() is not None:
+            self.pick.setCurrentIndex(self.pick.findData("face"))
+        else:
+            self._pick_changed()
+
     @staticmethod
     def spin(lo, hi, value):
         w = QDoubleSpinBox()
@@ -233,6 +253,9 @@ class CAMEditor(QWidget):
         self.setup = setup
         self.last_pick = None
         self.pick.setCurrentIndex(0)
+        self.pick_source.blockSignals(True)
+        self.pick_source.setCurrentIndex(0)
+        self.pick_source.blockSignals(False)
         first = next(((gi, 0) for gi, g in enumerate(setup.groups) if g.operations), (None, None))
         self.rebuild(first)
 
@@ -319,7 +342,14 @@ class CAMEditor(QWidget):
     def _selected(self, *_):
         self._loading = True
         op = self.operation()
+        if op and op.geometry:
+            material = [r.kind.startswith("stock_") for r in op.geometry]
+            if all(material) or not any(material):
+                self.pick_source.blockSignals(True)
+                self.pick_source.setCurrentIndex(self.pick_source.findData("stock" if all(material) else "part"))
+                self.pick_source.blockSignals(False)
         self.pick.setCurrentIndex(self.pick.findData("face") if op is not None else 0)
+        self._pick_changed()
         self.last_pick = None
         self.details.setEnabled(op is not None)
         self.b_selection_depths.setVisible(op is not None and op.kind == "pocket")
@@ -327,7 +357,7 @@ class CAMEditor(QWidget):
             self.name.setText(op.name)
             self.enabled.setChecked(op.enabled)
             self.geom_label.setText(f"{len(op.geometry)} geometry references")
-            self.pick_status.setText("Face picking is active. Click the pocket floor, or choose Select edges for its bounds.")
+            self.pick_status.setText("Face picking is active. Choose Part or Material boundaries, then click a face or select its edges.")
             self.depth_summary.setText("")
             for key, (source, val, extreme) in self.depth_controls.items():
                 d = getattr(op, key)
@@ -407,6 +437,9 @@ class CAMEditor(QWidget):
         if result is None:
             self.pick_status.setText("Nothing selectable here. Click a visible face or switch to Select edges and click near a rim.")
             return
+        if "error" in result:
+            self.pick_status.setText(result["error"])
+            return
         self.last_pick = result
         ref = result["reference"]
         if self.target.currentData() == "geometry":
@@ -415,7 +448,7 @@ class CAMEditor(QWidget):
             else:
                 op.geometry.append(ref)
         self.geom_label.setText(f"{len(op.geometry)} geometry references")
-        self.pick_status.setText(f"Picked {ref.kind}: Z {result['z_min']:.3f} … {result['z_max']:.3f} mm")
+        self.pick_status.setText(f"Picked {ref.kind.replace('stock_', 'material ')}: Z {result['z_min']:.3f} … {result['z_max']:.3f} mm")
         self.changed.emit()
 
     def use_depth(self, key):

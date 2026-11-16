@@ -14,7 +14,7 @@
 | Placement | Translation, rotation, scale, Z anchor | Per-model Qt settings, separately for FDM and CAM |
 | CAM machine | Work area, safe Z, rapid/feed/spindle fields, default cutting direction, allowed tools, templates | Machine JSON |
 | CAM tool | T number, cutter dimensions/type, feeds/RPM, maximum depth/pass | Tool JSON |
-| CAM setup | Ordered tool groups/operations, cutting selections, depth references, allocated stock | Per-model Qt settings |
+| CAM setup | Ordered tool groups/operations, part/material boundary selections, linked depth references, allocated stock | Per-model Qt settings |
 | CAM stock | Material description/density, margin, position and blank dimensions | Inside CAM setup, not the FDM material library |
 | CAM holding tabs | Triangle/barycentric side anchors, width, height above stock bottom, XY edge direction, enabled | Inside model CAM setup; shared protection across all operations, not tool/process settings |
 

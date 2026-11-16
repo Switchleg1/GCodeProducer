@@ -38,7 +38,7 @@ class Depth:
         if self.source == "selection":
             if not references:
                 raise ValueError("Select pocket bounds to resolve machining depth")
-            points = np.concatenate([topology.points(ref) for ref in references])
+            points = np.concatenate([topology.points(ref, stock) for ref in references])
             z = points[:, 2].min() if self.extreme == "min" else points[:, 2].max()
             return float(z) + self.value
         if self.source == "absolute":
@@ -46,7 +46,7 @@ class Depth:
         if self.source == "geometry":
             if self.reference is None:
                 raise ValueError("Depth has no geometry reference")
-            points = topology.points(self.reference)
+            points = topology.points(self.reference, stock)
             z = points[:, 2].min() if self.extreme == "min" else points[:, 2].max()
         else:
             z = mesh.bounds[0 if self.source == "bottom" else 1][2]
@@ -229,28 +229,37 @@ class Topology:
                 return chain
         raise ValueError("Edge reference no longer exists; reselect geometry")
 
-    def polylines(self, ref):
+    def polylines(self, ref, stock=None):
+        if ref.kind.startswith("stock_"):
+            from .stock_geometry import polylines
+            return polylines(stock, ref)
         if ref.kind == "face":
             paths = chains(self.face_edges(ref.indices[0]))
         else:
             paths = [self.edge_chain(ref)]
         return [self.vertices[p] for p in paths]
 
-    def points(self, ref):
-        return np.concatenate(self.polylines(ref))
+    def points(self, ref, stock=None):
+        return np.concatenate(self.polylines(ref, stock))
 
-    def highlight(self, refs):
-        faces, edges = set(), []
+    def highlight(self, refs, stock=None):
+        faces, edges, material_faces = set(), [], []
         for ref in refs:
             if ref.kind == "face":
                 faces.update(self.face(ref.indices[0]))
-            for p in self.polylines(ref):
+            for p in self.polylines(ref, stock):
                 edges.extend(np.stack((p[:-1], p[1:]), axis=1).reshape(-1, 3))
-        return {"faces": sorted(faces), "edges": np.asarray(edges).reshape(-1, 3)}
+                if ref.kind == "stock_face":
+                    material_faces.extend(p[[0,1,2,0,2,3]])
+        return {"faces": sorted(faces), "edges": np.asarray(edges).reshape(-1, 3),
+                "stock_faces": np.asarray(material_faces).reshape(-1, 3)}
 
 
 def pick_geometry(payload):
-    mesh, mode, origin, direction, mvp, viewport, mouse = payload
+    mesh, mode, origin, direction, mvp, viewport, mouse, *stocks = payload
+    if mode.startswith("stock_"):
+        from .stock_geometry import pick
+        return pick(stocks[0] if stocks else None, mode, origin, direction, mvp, viewport, mouse)
     topo = cached_topology(mesh)
     distance, tri = geometry.ray_triangles(origin, direction, topo.vertices[topo.triangles])
     ref = None
@@ -307,7 +316,10 @@ def highlight_geometry(payload):
     mesh, op, *stocks = payload
     op_stock = stocks[0] if stocks else None
     topo = cached_topology(mesh)
-    out = topo.highlight(op.geometry) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
+    try:
+        out = topo.highlight(op.geometry, op_stock) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
+    except ValueError as exc:
+        out = {"faces": [], "edges": np.empty((0, 3)), "depths": str(exc), "geometry_error": str(exc)}
     out["tabs"] = []
     if len(stocks) > 2 and stocks[2]:
         from .cam_tabs import resolve_bounds
@@ -315,7 +327,7 @@ def highlight_geometry(payload):
             out["tabs"] = resolve_bounds(mesh, op_stock, stocks[2])
         except ValueError as exc:
             out["tab_error"] = str(exc)
-    if op is None:
+    if op is None or out.get("geometry_error"):
         return out
     if len(stocks) > 1 and stocks[1]:
         from .cam_cutting import resolve_cutting
@@ -487,9 +499,22 @@ def generate(job, ctx):
             if safe <= max(float(job.mesh.bounds[1][2]), start,
                            setup.stock.top if setup.stock.allocated else -math.inf):
                 raise ValueError("Safe Z must be above the model and all operation start heights")
-            selected_edges = set()
+            selected_edges, stock_edges = set(), set()
+            cam_vertices = topo.vertices
+            if any(ref.kind.startswith("stock_") for ref in op.geometry):
+                from .stock_geometry import vertices as stock_vertices
+                cam_vertices = np.vstack((topo.vertices, stock_vertices(setup.stock)))
             for ref in op.geometry:
-                if ref.kind == "face":
+                if ref.kind.startswith("stock_"):
+                    from .stock_geometry import indices as stock_indices
+                    ids = [len(topo.vertices)+i for i in stock_indices(ref)]
+                    if ref.kind == "stock_face":
+                        if np.ptp(cam_vertices[ids, 2]) > 1e-4:
+                            raise ValueError(f"{op.name}: 2.5D operations require a horizontal material face; use side faces as height references")
+                        ids.append(ids[0])
+                    edges = list(zip(ids, ids[1:]))
+                    stock_edges.update(tuple(sorted(e)) for e in edges)
+                elif ref.kind == "face":
                     pts = topo.vertices[topo.triangles[topo.face(ref.indices[0])]].reshape(-1, 3)
                     if np.ptp(pts[:, 2]) > 1e-4:
                         raise ValueError(f"{op.name}: 2.5D operations require a horizontal face")
@@ -499,7 +524,7 @@ def generate(job, ctx):
                     chain = topo.edge_chain(ref)
                     edges = zip(chain, chain[1:])
                 selected_edges.update(tuple(sorted(e)) for e in edges)
-            polys = [topo.vertices[p] for p in chains(selected_edges)]
+            polys = [cam_vertices[p] for p in chains(selected_edges)]
             if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
                 raise ValueError(f"{op.name}: 2.5D operations require constant-Z edges")
             paths = []
@@ -518,7 +543,8 @@ def generate(job, ctx):
                     raise ValueError(f"{op.name}: overcut must be zero or positive")
                 if not math.isfinite(op.material_limit):
                     raise ValueError(f"{op.name}: material boundary limit must be finite")
-                region = pocket_region(loops)
+                stock_loops = [cam_vertices[p][:-1, :2] for p in chains(stock_edges)] if stock_edges else []
+                region = pocket_region(stock_loops if stock_loops else loops)
                 limit = None
                 if setup.stock.allocated:
                     # contour_pocket insets every boundary by radius + roughing clearance. At the blank
@@ -529,12 +555,28 @@ def generate(job, ctx):
                     limit = shapely_box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
                     if abs(reach_out) > 1e-12:
                         limit = limit.buffer(reach_out, join_style=BufferJoinStyle.mitre)
-                if op.overcut > 0:
+                if limit is not None and limit.is_empty:
+                    raise ValueError(f"{op.name}: material boundary limit removes the whole blank")
+                if op.overcut > 0 or stock_edges:
                     depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
                     depths.extend(math.ceil(float(hi[2])*1000-1e-9)/1000 for _, hi in tabs
                                   if end < hi[2] < start)
                     # No extra clearance here: the contour inset already leaves op.stock on part walls.
                     protected = part_section(job.mesh, depths, 0.0)
+                if stock_edges:
+                    # Material references define the exterior removal envelope, never permission
+                    # to machine through the model or automatically bore its internal holes.
+                    # Fill section holes conservatively; use a separate part-selected operation
+                    # for those features. Part references can still supply the end Z.
+                    from shapely.geometry import Polygon
+                    from shapely.ops import unary_union
+                    sections = [protected] if protected.geom_type == "Polygon" else list(getattr(protected, "geoms", ()))
+                    protected = unary_union([Polygon(p.exterior) for p in sections if p.geom_type == "Polygon"])
+                    region = (limit if limit is not None else region).difference(protected).buffer(0)
+                    if region.is_empty:
+                        raise ValueError(f"{op.name}: no material outside the protected part at these depths")
+                    ctx.log(f"  {op.name}: material-boundary pocket; part sections protected")
+                if op.overcut > 0:
                     grown = overcut_region(region, op.overcut, protected, limit)
                     ctx.log(f"  {op.name}: overcut {op.overcut:g} mm into void material adds "
                             f"{grown.area - region.area:.1f} mm² (part sections protected, "

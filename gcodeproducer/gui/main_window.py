@@ -1387,6 +1387,8 @@ class MainWindow(QMainWindow):
             self.cam_editor.pick.setCurrentIndex(0)
             self.cam_editor.pick.blockSignals(False)
         if mode and self.workflow == wf.CAM:
+            if mode.startswith("stock_"):
+                self.show_material_cb.setChecked(True)
             self.b_face.setChecked(False)
             self.b_place_block.setChecked(False)
             self.b_remove_block.setChecked(False)
@@ -1401,7 +1403,8 @@ class MainWindow(QMainWindow):
         if payload[0].startswith("tab"):
             self._cam_pick_task = self.compute.submit("cam_tab_pick", (self.placed, copy.deepcopy(self.cam_editor.setup), *payload))
         else:
-            self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload))
+            self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload,
+                                                       copy.deepcopy(self.cam_editor.setup.stock)))
 
     def _cam_highlight(self):
         self.stock_editor.tabs.set_setup(self.cam_editor.setup)
@@ -1831,7 +1834,7 @@ class MainWindow(QMainWindow):
         if tid == self._cam_highlight_task:
             self._cam_highlight_task = None
             if self.workflow == wf.CAM:
-                self.model_viewer.set_cam_selection(result['faces'], result['edges'])
+                self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
                 self.viewer.set_tab_bounds(result.get('tabs', []))
                 if result.get('tab_error'):

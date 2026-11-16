@@ -127,6 +127,7 @@ class ModelViewer(QOpenGLWidget):
         self.cam_pick_mode = ""
         self.cam_faces = []
         self.cam_edges = np.empty((0, 3))
+        self.cam_stock_faces = np.empty((0, 3))
         self._cam_dirty = True
         self.place_on_face = False
         self.blocks = []                      # core.support.SupportBlock
@@ -185,9 +186,10 @@ class ModelViewer(QOpenGLWidget):
         self._tool_cursor()
         self._update_info()
 
-    def set_cam_selection(self, faces=(), edges=()):
+    def set_cam_selection(self, faces=(), edges=(), stock_faces=()):
         self.cam_faces = list(faces)
         self.cam_edges = np.asarray(edges, dtype=float).reshape(-1, 3)
+        self.cam_stock_faces = np.asarray(stock_faces, dtype=float).reshape(-1, 3)
         self._cam_dirty = True
         self._dirty = True
         self.update()
@@ -240,6 +242,8 @@ class ModelViewer(QOpenGLWidget):
         elif self.cam_pick_mode.startswith("tab"):
             txt = ("CAM: click a tab rail to remove" if self.cam_pick_mode == "tab_remove" else
                    "CAM: click side walls to place holding tabs to the material edge") + " • Esc = navigate"
+        elif self.cam_pick_mode.startswith("stock_"):
+            txt = f"CAM: select material {self.cam_pick_mode.removeprefix('stock_')}s • Esc = navigate"
         elif self.cam_pick_mode:
             txt = f"CAM: select {self.cam_pick_mode}s • Shift-drag to pan, drag to orbit • Esc = navigate"
         elif self.place_on_face:
@@ -268,6 +272,7 @@ class ModelViewer(QOpenGLWidget):
             return
         self.m_model = _TriMesh()
         self.m_cam_edges = _Mesh(False)
+        self.m_cam_stock = _Mesh(False)
         self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
         self.m_bedges = _Mesh(False)
@@ -339,10 +344,11 @@ class ModelViewer(QOpenGLWidget):
             self._draw_bed(mvp, 0.45)
         if self.show_blocks and self.blocks:
             self._draw_blocks(mvp)
+        if self._cam_dirty:
+            self.m_cam_edges.upload(self.cam_edges)
+            self.m_cam_stock.upload(self.cam_stock_faces)
+            self._cam_dirty = False
         if len(self.cam_edges):
-            if self._cam_dirty:
-                self.m_cam_edges.upload(self.cam_edges)
-                self._cam_dirty = False
             GL.glUseProgram(self.p_flat)
             GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
             GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), 1.0, 0.78, 0.15, 1.0)
@@ -353,6 +359,16 @@ class ModelViewer(QOpenGLWidget):
             self.bed.draw_stock(self.p_flat,mvp)
             self.bed.draw_material(self.p_flat,mvp)
             self.bed.draw_tabs(self.p_flat,mvp)
+        if len(self.cam_stock_faces):
+            GL.glUseProgram(self.p_flat)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
+            GL.glDisable(GL.GL_DEPTH_TEST)
+            GL.glEnable(GL.GL_BLEND)
+            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+            GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), 1., .85, .15, .2)
+            self.m_cam_stock.draw(GL.GL_TRIANGLES)
+            GL.glDisable(GL.GL_BLEND)
+            GL.glEnable(GL.GL_DEPTH_TEST)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)

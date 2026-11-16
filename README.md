@@ -15,7 +15,7 @@ output before operating a machine.
 - **FDM:** walls, top/bottom shells, sparse infill, skirt/brim, automatic support,
   editable support blocks, and reusable process presets.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave
-  operations; face/edge selection, geometry-linked depths, wall-following pockets,
+  operations; part/material face/edge selection, geometry-linked depths, wall-following pockets,
   machine-default climb/conventional/meander direction, and Slot/High/Cut/HSM feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
   top-at-Z0 placement, current-material checks, leads, per-operation material outputs,

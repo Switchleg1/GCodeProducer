@@ -15,6 +15,11 @@ reconstructs a limited topology after placement:
   branches stop chains. A cube edge stops at its corners; a faceted circular
   rim can form one closed chain.
 
+The allocated **material blank** also exposes its six rectangular faces and
+twelve straight edges. These are live stock references, not STL triangle ids;
+resizing or moving the blank updates them. They refer to the original allocated
+blank, not a calculated operation-output height field.
+
 A shallow crease below the threshold may not be selectable as a feature edge.
 Very coarse meshes may not approximate a circle well enough for drilling.
 This is not a replacement for exact B-rep/CAD topology.
@@ -24,7 +29,10 @@ This is not a replacement for exact B-rep/CAD topology.
 1. Select an operation in the CAM tree. Its geometry count and settings appear;
    **face picking activates automatically**. Reopening a setup selects its first
    operation rather than leaving all selection controls disabled.
-2. Keep **Select faces** or switch to **Select edges**.
+2. Choose **Selection target: Part** or **Material boundaries**, then keep
+   **Select faces** or switch to **Select edges**. Explicit targeting means the
+   transparent blank never intercepts a Part selection. Material targeting
+   turns Show → Material on and uses Prepare.
 3. Keep **Pick purpose: Apply picks to machining geometry**.
 4. Click an element to add it; click it again to remove it.
 5. Use **Clear geometry** to remove all cutting references from this operation.
@@ -52,6 +60,63 @@ face and CAM picking are separate, mutually exclusive actions.
 Topology, hit evaluation and selection highlights are computed outside the UI
 process. A short delay is expected after a pick or placement edit; requests
 for old scenes/operations are discarded rather than applied to the current one.
+
+## Selecting material boundaries
+
+Choose **Selection target → Material boundaries** on the operation. Click a
+face or click near an edge to add/remove it as usual; yellow outlines and a
+translucent face fill show the selection. In a top view where top/bottom edges
+project onto the same pixel, the nearer edge wins. Switch the target back to
+**Part** to add part geometry or pick a part height without losing stock refs.
+
+![Selected material top face](../pictures/cam-material-boundary-selected.png)
+
+- A top/bottom material face supplies a closed rectangle. For Pocket/Profile
+  you can instead select all four horizontal edges forming a rim. A single
+  stock edge is an open line, suitable for Slot/Engrave.
+- Side faces and vertical edges can be picked as **height references** (minimum
+  or maximum Z), but not as cutting geometry for a 2.5D operation. This does
+  not implement side milling.
+- **Use last pick** and both *Selected geometry* / *Machining selection* depth
+  sources accept material references. They stay linked to blank top/bottom
+  and size, rather than freezing the picked coordinates.
+- Picking fails clearly if material is unallocated. Changing the blank marks
+  CAM output stale; regenerate before export.
+
+### Material-boundary Pocket
+
+With material bounds selected, Pocket uses the blank as the outside removal
+envelope. It automatically protects the part's cross-sections at all requested
+depths, including inserted tab-top passes. Section holes are filled
+conservatively: an unselected bore inside a boss is **not** automatically
+machined. Use a separate part-selected operation for those internal features.
+The operation's Material boundary limit controls the blank edge and roughing
+clearance controls part walls, with the same contour/raster strategy,
+engagement planning, tabs and Area order as other pockets.
+
+Part cutting references added alongside material bounds can supply selection
+heights, but do not XOR a second outer boundary into the blank. For example:
+select the material top face, switch to Part and select the flange floor, then
+use **Machining selection Maximum Z / Minimum Z**. The blank top supplies
+Start; the part floor supplies End. The result clears the blank down to that
+floor while retaining the boss and stock in its bore.
+
+![Pocket bounded by material, with boss protected](../pictures/cam-material-boundary-pocket.png)
+
+These actual captures use the example flange part, 6 mm stock margin and a
+3 mm demonstration tool. End is linked to the Z-15 flange floor. Yellow
+Conflict segments mark the existing mixed-hand warning at square-to-round
+transitions; this is not a warning-free machining recipe. Material display
+sampling remains approximate.
+
+Selecting only the blank top face supplies no lower End automatically; set
+End explicitly or use a lower part/stock height reference. A facing pass above
+the model top can clear the whole blank plane. Deeper stock-boundary pockets
+use a conservative union of part sections over the entire depth range, so a
+part that widens below the floor can limit clearance for all passes. They are
+not an adaptive 3D rest-machining strategy or a general solid collision check.
+Profile/Slot/Engrave retain their normal side/depth rules; a stock reference is
+not permission to ignore tool reach, fixtures, or workholding checks.
 
 ## Cutting geometry versus height-only geometry
 

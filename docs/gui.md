@@ -99,6 +99,15 @@ preview **out of date**. Regenerate before relying on it. CAM export is blocked
 until paths are regenerated after edits; a program with safety warnings needs
 additional confirmation to export.
 
+## Material boundary selection
+
+CAM operations offer **Selection target → Part / Material boundaries** alongside
+Select faces/edges. Pick the original blank's top/bottom face or a complete
+horizontal rim for Pocket/Profile; side faces and vertical edges can supply
+linked height references. References follow blank edits. See
+[material boundaries](cam/selection-and-depths.md#selecting-material-boundaries)
+for stock-envelope Pocket behaviour and 2.5D limits.
+
 ## CAM holding tabs
 
 In **Material / stock → Holding tabs — model**, choose **Place tabs** and

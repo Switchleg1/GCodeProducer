@@ -102,6 +102,11 @@ interleaved behaviour.
 
 ## Pocket
 
+The [material blank's faces/edges](selection-and-depths.md#selecting-material-boundaries)
+can define an outside envelope as well as part geometry. Material-boundary
+pockets protect the part's section outlines (including unselected internal
+bores), and still use the operation's strategy, allowances, tabs and Area order.
+
 **Purpose:** clear a selected closed XY region to an end depth.
 
 Select a horizontal face boundary or a closed set of feature edges. Include
