@@ -551,7 +551,7 @@ def test_cam_material_output_and_unlock_controls(win,cube_stl,app,monkeypatch):
     ed=win.cam_editor;ed.add_tool();ed.add_operation()
     op=ed.operation()
     assert op.auto_stepdown and not ed.stepdown.isEnabled()
-    ed.auto_stepdown.setChecked(False)
+    ed.doc_override.setChecked(True)
     assert not op.auto_stepdown and ed.stepdown.isEnabled()
     unlock,value=ed.rate_controls["feed"]
     unlock.setChecked(True);value.setValue(1200)
@@ -576,6 +576,33 @@ def test_cam_material_output_and_unlock_controls(win,cube_stl,app,monkeypatch):
     assert not win.state.show_material and not win.model_viewer.show_material
     value.setValue(1300)
     assert not win.material_results and not win.material_output.isEnabled()
+
+
+def test_depth_of_cut_override_is_next_to_feed_and_persists_independently(win):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.core.cam_cutting import resolve_cutting
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    ed=win.cam_editor;ed.add_tool();ed.add_operation()
+    op=ed.operation()
+    form=ed.details.layout()
+    feed_row,_=form.getWidgetPosition(ed.rate_controls["feed"][0])
+    doc_row,_=form.getWidgetPosition(ed.doc_override)
+    assert doc_row==feed_row+1
+    assert not ed.doc_override.isChecked() and op.auto_stepdown and not ed.stepdown.isEnabled()
+    ed.set_calculated({"stepdown":.6})
+    ed.doc_override.setChecked(True)
+    ed.stepdown.setValue(.4)
+    assert not op.auto_stepdown and op.stepdown==.4 and ed.stepdown.isEnabled()
+    assert not op.unlock_feed and not op.unlock_rpm and not op.unlock_lead_feed
+    ed.set_calculated({"stepdown":.9})
+    assert ed.stepdown.value()==.4     # requested override is never replaced by async calculated output
+    ed.set_setup(CAMSetup.from_dict(ed.setup.to_dict()))
+    assert ed.doc_override.isChecked() and ed.stepdown.value()==.4
+    tool=next(t for t in ed.tools if t.id==ed.setup.groups[0].tool_id)
+    tool.values["max_doc"]=.3
+    assert resolve_cutting(win._machine(),tool,ed.setup.stock,ed.operation()).stepdown==.3
+    ed.doc_override.setChecked(False)
+    assert ed.operation().auto_stepdown and not ed.stepdown.isEnabled()
 
 
 def test_new_cam_tool_enables_material_calculation(win,monkeypatch):

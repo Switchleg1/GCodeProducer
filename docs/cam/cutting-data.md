@@ -104,16 +104,27 @@ qualified; this is not automatic work-offset/tool-length setup.
 
 ## Automatic versus explicit stepdown
 
-New GUI operations enable **Tool/material axial depth default**. The depth
-field is then disabled and the summary shows the resolved material/process
-percentage, capped at tool Max depth/pass. Uncheck it to request an explicit
-stepdown. Existing operations keep their saved explicit stepdown unless you
-opt into the new default.
+**Unlock depth of cut** sits immediately below **Unlock Normal cut base
+feed** on each operation, with a **mm/pass** field. It is unchecked for new
+operations: the disabled field shows the tool/material axial default,
+capped at tool Max depth/pass. Check it to request an independent operation
+stepdown. It does not unlock or change cut feed, plunge/lead feed or RPM.
+
+![Operation depth-of-cut override beside feed overrides](../pictures/cam-depth-of-cut-override.png)
+
+The capture requests 0.4 mm/pass while keeping the normal feed, RPM and lead
+feed inherited. Values are illustrative, not a qualified cutting recipe.
+A checked override is still capped by tool Max depth/pass; the requested
+value stays editable while the summary shows the resolved depth. The old
+*Tool/material axial depth default* checkbox and separate Stepdown row have
+been replaced by this inverse checkbox, using the same saved operation
+fields. Existing manual stepdowns reopen with the override checked; existing
+automatic depths reopen unchecked.
 
 If a saved Pocket axial percentage appears not to affect the cut, check:
 
-- The operation has **Tool/material axial depth default** enabled; a saved
-  explicit stepdown is intentionally independent of the tool table.
+- **Unlock depth of cut** is unchecked; a checked, saved explicit stepdown
+  is intentionally independent of the tool table.
 - You edited the table for the **machining material category selected in
   Material / stock** (each category has a separate Pocket axial value).
 - Tool **Max depth/pass** may cap the result. For example, 35% of a 3 mm

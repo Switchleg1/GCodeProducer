@@ -129,9 +129,14 @@ class CAMEditor(QWidget):
                                            "With 'Remove air cutting' (Settings) the start also drops below material removed by earlier operations.")
         self.b_selection_depths.clicked.connect(self.use_selection_depths)
         form.addRow(self.b_selection_depths)
-        self.auto_stepdown = QCheckBox("Tool/material axial depth default")
-        self.auto_stepdown.toggled.connect(self._edit)
-        form.addRow(self.auto_stepdown)
+        self.doc_override = QCheckBox("Unlock depth of cut")
+        self.doc_override.setToolTip("Override this operation's axial depth per pass in mm. Unchecked uses the tool/material "
+                                     "Slot/Pocket/Profile axial default. Tool Max depth/pass still caps the request.")
+        self.doc_override.toggled.connect(self._edit)
+        self.stepdown = self.spin(0.001, 1000, 1)
+        self.stepdown.setSuffix(" mm/pass")
+        self.stepdown.setToolTip(self.doc_override.toolTip())
+        self.stepdown.valueChanged.connect(self._edit)
         self.cutting_summary = QLabel("")
         self.cutting_summary.setWordWrap(True)
         form.addRow(self.cutting_summary)
@@ -144,6 +149,8 @@ class CAMEditor(QWidget):
             value.valueChanged.connect(self._edit)
             form.addRow(unlock,value)
             self.rate_controls[key]=(unlock,value)
+            if key == "feed":
+                form.addRow(self.doc_override,self.stepdown)
         self.lead_in = QCheckBox("Lead-in ramp along selected contour")
         self.lead_out = QCheckBox("Lead-out along cleared contour")
         self.lead_in.toggled.connect(self._edit)
@@ -154,7 +161,6 @@ class CAMEditor(QWidget):
         self.lead_length.setSpecialValueText("Auto length / 10° ramp")
         self.lead_length.valueChanged.connect(self._edit)
         form.addRow("Lead length (mm)",self.lead_length)
-        self.stepdown = self.spin(0.001, 1000, 1)
         self.stepover = self.spin(1, 100, 40)
         self.area_order = QComboBox()
         self.area_order.addItem("Each area to full depth", "area")
@@ -183,7 +189,7 @@ class CAMEditor(QWidget):
         for label, key in (("Machine default", "machine"), ("Climb", "climb"),
                            ("Conventional", "conventional"), ("Meander", "meander")):
             self.direction.addItem(label, key)
-        for label, w in (("Stepdown (mm)", self.stepdown), ("Area order", self.area_order), ("Pocket stepover (%)", self.stepover),
+        for label, w in (("Area order", self.area_order), ("Pocket stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
                          ("Pocket overcut into void (mm)", self.overcut),
                          ("Material boundary limit (mm)", self.material_limit),
@@ -360,7 +366,7 @@ class CAMEditor(QWidget):
                 source.setCurrentIndex(source.findData(d.source))
                 val.setValue(d.value)
                 extreme.setCurrentIndex(extreme.findData(d.extreme))
-            self.auto_stepdown.setChecked(op.auto_stepdown)
+            self.doc_override.setChecked(not op.auto_stepdown)
             self.stepdown.setValue(op.stepdown)
             self.stepdown.setEnabled(not op.auto_stepdown)
             for key,(unlock,value) in self.rate_controls.items():
@@ -403,7 +409,7 @@ class CAMEditor(QWidget):
         for key, (source, val, extreme) in self.depth_controls.items():
             d = getattr(op, key)
             d.source, d.value, d.extreme = source.currentData(), val.value(), extreme.currentData()
-        op.auto_stepdown = self.auto_stepdown.isChecked()
+        op.auto_stepdown = not self.doc_override.isChecked()
         self.stepdown.setEnabled(not op.auto_stepdown)
         op.stepdown, op.stepover = self.stepdown.value(), self.stepover.value()
         op.area_order = self.area_order.currentData()
@@ -463,7 +469,7 @@ class CAMEditor(QWidget):
         for key,(unlock,value) in self.rate_controls.items():
             if not unlock.isChecked() and key in values:
                 value.blockSignals(True);value.setValue(values[key]);value.blockSignals(False)
-        if self.auto_stepdown.isChecked() and "stepdown" in values:
+        if not self.doc_override.isChecked() and "stepdown" in values:
             self.stepdown.blockSignals(True);self.stepdown.setValue(values["stepdown"]);self.stepdown.blockSignals(False)
 
     def use_selection_depths(self):

@@ -17,8 +17,8 @@ cutting faces must be horizontal and selected edge chains constant-Z.
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
 | Start | Pocket: Material surface + 0; others: Model top + 0 | Pocket falls back to model top until stock is allocated; not safe approach height |
 | End | Pocket: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
-| Tool/material axial depth default | On for new GUI operations | Material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; configurable per tool and capped by max depth/pass |
-| Stepdown | Explicit value when automatic depth is off | Existing operations retain saved explicit depths |
+| Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
+| Depth of cut (mm/pass) | Calculated while locked; editable while unlocked | Existing manual stepdowns reopen unlocked; automatic depths reopen locked |
 | Area order | Each area to full depth | Finish one area before moving to the next, or visit all areas at each depth. New-operation default is in Settings → Default operation settings; saved operations own their choice |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
 | Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
