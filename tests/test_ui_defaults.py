@@ -149,3 +149,70 @@ def test_direction_unlock_is_below_lead_feed_and_preserves_legacy_override(app):
     editor.direction_override.setChecked(False)
     assert editor.operation().cut_direction == "machine" and not editor.direction.isEnabled()
     editor.close()
+
+
+@pytest.mark.parametrize("method", range(4))
+def test_reference_drawing_two_clicks_are_saved_not_machining_picks(app, method):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+    setup = CAMSetup()
+    editor = ReferenceGeometryEditor(setup)
+    modes = []
+    editor.modeRequested.connect(modes.append)
+    editor.method.setCurrentIndex(method)
+    editor.z.setValue(-3)
+    editor.start()
+    editor.accept_ray([2,3,10], [0,0,-1])
+    assert not setup.reference_shapes and editor.first == (2.,3.)
+    editor.accept_ray([6,8,10], [0,0,-1])
+    assert len(setup.reference_shapes) == 1 and not setup.groups
+    assert setup.reference_shapes[0].z == -3 and editor.first is None
+    assert editor.drawing and modes[-1].startswith("draw_")
+    editor.cancel()
+    assert modes[-1] == "" and not editor.drawing
+    editor.close()
+
+
+def test_reference_drawing_invalid_click_and_cancel_do_not_save_partial_shape(app):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+    setup = CAMSetup()
+    editor = ReferenceGeometryEditor(setup)
+    editor.start()
+    editor.accept_ray([0,0,10], [1,0,0])
+    assert editor.first is None and "edge-on" in editor.status.text()
+    editor.accept_ray([0,0,10], [0,0,-1])
+    editor.accept_ray([0,0,10], [0,0,-1])
+    assert not setup.reference_shapes and editor.first is not None
+    editor.z.setValue(-2)
+    assert editor.first is None and not editor.drawing and not setup.reference_shapes
+    editor.close()
+
+
+def test_reference_used_in_operations_cannot_be_deleted(app, monkeypatch):
+    from gcodeproducer.core.cam import CAMSetup, Operation, Reference, ToolGroup, Depth
+    from gcodeproducer.core.cam.reference_shape import ReferenceShape
+    from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+    shape = ReferenceShape()
+    ref = Reference("drawing", [shape.id])
+    operation = Operation(end=Depth("geometry", reference=ref))
+    setup = CAMSetup(groups=[ToolGroup("tool", [operation])], reference_shapes=[shape])
+    editor = ReferenceGeometryEditor(setup)
+    editor.items.setCurrentRow(0)
+    editor.remove()
+    assert setup.reference_shapes == [shape] and "used" in editor.status.text()
+    operation.end = Depth("bottom")
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args: QtWidgets.QMessageBox.StandardButton.No)
+    editor.remove()
+    assert setup.reference_shapes == [shape]
+    def picked_during_confirmation(*args):
+        operation.geometry.append(ref)
+        return QtWidgets.QMessageBox.StandardButton.Yes
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", picked_during_confirmation)
+    editor.remove()
+    assert setup.reference_shapes == [shape] and "now used" in editor.status.text()
+    operation.geometry.clear()
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args: QtWidgets.QMessageBox.StandardButton.Yes)
+    editor.remove()
+    assert not setup.reference_shapes
+    editor.close()

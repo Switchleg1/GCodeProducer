@@ -1,8 +1,9 @@
 """Model-specific, ordered CAM setup. Geometry references survive placement changes.
 
 STL has no CAD topology. Connected coplanar triangles form faces; feature
-edges omit triangle seams. References use original triangle/vertex indices,
-never copied world coordinates. Re-evaluate them against the placed mesh.
+edges omit triangle seams. Part references use original triangle/vertex indices
+and are re-evaluated against the placed mesh. Drawn outlines use stable IDs
+and remain in CAM work coordinates; they are not attached mesh topology.
 """
 from __future__ import annotations
 
@@ -59,20 +60,28 @@ def chains(edges):
 
 def pick_geometry(payload):
     mesh, mode, origin, direction, mvp, viewport, mouse, *stocks = payload
+    shapes = stocks[1] if len(stocks) > 1 else ()
+    if mode.startswith("reference_"):
+        from .reference_geometry import pick
+        return pick(shapes, mode.removeprefix("reference_"), origin, direction, mvp, viewport, mouse)
     if mode.startswith("mixed_"):
         base = mode.removeprefix("mixed_")
         part = pick_geometry((mesh, base, origin, direction, mvp, viewport, mouse))
         from gcodeproducer.core.cam.stock_geometry import pick
         material = pick(stocks[0] if stocks else None, "stock_"+base, origin, direction, mvp, viewport, mouse)
-        if not material or "reference" not in material:
+        from .reference_geometry import pick as pick_reference
+        drawing = pick_reference(shapes, base, origin, direction, mvp, viewport, mouse)
+        candidates = [v for v in (part, material, drawing) if v and "reference" in v]
+        if not candidates:
             return part
-        if part is None:
-            return material
-        # Faces prefer the visible part over the transparent blank. For edges,
-        # choose the closest pixel candidate across BOTH geometries (part wins ties).
-        if base == "edge" and material["pick_distance"] < part["pick_distance"]-1e-5:
-            return material
-        return part
+        if base == "edge":
+            # Same-pixel ties keep the established part/material priority.
+            result = candidates[0]
+            for candidate in candidates[1:]:
+                if candidate["pick_distance"] < result["pick_distance"]-1e-5:
+                    result = candidate
+            return result
+        return part or drawing or material
     if mode.startswith("stock_"):
         from gcodeproducer.core.cam.stock_geometry import pick
         return pick(stocks[0] if stocks else None, mode, origin, direction, mvp, viewport, mouse)
@@ -122,18 +131,23 @@ def pick_geometry(payload):
 _cached = (None, None)
 
 
-def cached_topology(mesh):
+def cached_topology(mesh, reference_shapes=()):
     global _cached
     key = fingerprint(mesh)
     if key != _cached[0]:
         _cached = (key, Topology(mesh))
+    references = {s.id:s for s in reference_shapes}
+    if len(references) != len(reference_shapes):
+        raise ValueError("Reference geometry IDs must be unique")
+    _cached[1].reference_shapes = references
     return _cached[1]
 
 
 def highlight_geometry(payload):
     mesh, op, *stocks = payload
     op_stock = stocks[0] if stocks else None
-    topo = cached_topology(mesh)
+    shapes = stocks[3] if len(stocks) > 3 else ()
+    topo = cached_topology(mesh, shapes)
     try:
         refs = [] if op is None else list(op.geometry) + list(op.height_references)
         if op is not None:
@@ -143,6 +157,12 @@ def highlight_geometry(payload):
         out = topo.highlight(refs, op_stock) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
     except ValueError as exc:
         out = {"faces": [], "edges": np.empty((0, 3)), "depths": str(exc), "geometry_error": str(exc)}
+    from .reference_geometry import line_segments
+    try:
+        out["reference_geometry"] = line_segments(shapes)
+    except ValueError as exc:
+        out["reference_geometry"] = np.empty((0, 3))
+        out["geometry_error"] = str(exc)
     out["tabs"] = []
     if len(stocks) > 2 and stocks[2]:
         from gcodeproducer.core.cam.tabs import resolve_bounds
@@ -275,7 +295,7 @@ def generate(job, ctx):
     from shapely import BufferJoinStyle
     skip_air = bool(pref(job, "skip_air_cuts"))
     setup = job.cam_setup
-    topo = cached_topology(job.mesh)
+    topo = cached_topology(job.mesh, setup.reference_shapes)
     tools = {t.id: t for t in job.tools}
     import copy
     from gcodeproducer.core.cam.planar_stock import PlanarStock
@@ -340,7 +360,13 @@ def generate(job, ctx):
                 from gcodeproducer.core.cam.stock_geometry import vertices as stock_vertices
                 cam_vertices = np.vstack((topo.vertices, stock_vertices(setup.stock)))
             for ref in op.geometry:
-                if ref.kind.startswith("stock_"):
+                if ref.kind == "drawing":
+                    points = topo.polylines(ref, setup.stock)[0][:-1]
+                    ids = list(range(len(cam_vertices),len(cam_vertices)+len(points)))
+                    cam_vertices = np.vstack((cam_vertices,points))
+                    edges = list(zip(ids, ids[1:]+ids[:1]))
+                    keep_edges.update(tuple(sorted(e)) for e in edges)
+                elif ref.kind.startswith("stock_"):
                     from gcodeproducer.core.cam.stock_geometry import indices as stock_indices
                     from gcodeproducer.core.cam.cam_constants import FACES
                     local_ids = stock_indices(ref)

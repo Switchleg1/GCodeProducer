@@ -4,9 +4,12 @@ import math, numpy as np, gcodeproducer.core.geometry.kernel as geometry
 
 class Topology:
     """Built in the compute process, not on the GUI thread."""
-    def __init__(self, mesh):
+    def __init__(self, mesh, reference_shapes=()):
         from gcodeproducer.core.cam.planning import chains
         self.mesh = mesh
+        self.reference_shapes = {s.id:s for s in reference_shapes}
+        if len(self.reference_shapes) != len(reference_shapes):
+            raise ValueError("Reference geometry IDs must be unique")
         self.triangles = np.asarray(mesh.triangles)
         self.vertices = np.asarray(mesh.vertices)
         t = self.vertices[self.triangles]
@@ -90,6 +93,11 @@ class Topology:
 
     def polylines(self, ref, stock=None):
         from gcodeproducer.core.cam.planning import chains
+        if ref.kind == "drawing":
+            shape = self.reference_shapes.get(ref.indices[0]) if len(ref.indices) == 1 else None
+            if shape is None:
+                raise ValueError("Reference geometry was deleted or is unavailable; select another boundary")
+            return [shape.polyline()]
         if ref.kind.startswith("stock_"):
             from gcodeproducer.core.cam.stock_geometry import polylines
             return polylines(stock, ref)
@@ -103,17 +111,19 @@ class Topology:
         return np.concatenate(self.polylines(ref, stock))
 
     def highlight(self, refs, stock=None):
-        faces, edges, material_faces, part_edges, material_edges = set(), [], [], [], []
+        faces, edges, material_faces, part_edges, material_edges, reference_edges = set(), [], [], [], [], []
         for ref in refs:
             if ref.kind == "face":
                 faces.update(self.face(ref.indices[0]))
             for p in self.polylines(ref, stock):
                 segments = np.stack((p[:-1], p[1:]), axis=1).reshape(-1, 3)
                 edges.extend(segments)
-                (material_edges if ref.kind.startswith("stock_") else part_edges).extend(segments)
+                target = reference_edges if ref.kind == "drawing" else material_edges if ref.kind.startswith("stock_") else part_edges
+                target.extend(segments)
                 if ref.kind == "stock_face":
                     material_faces.extend(p[[0,1,2,0,2,3]])
         return {"faces": sorted(faces), "edges": np.asarray(edges).reshape(-1, 3),
                 "stock_faces": np.asarray(material_faces).reshape(-1, 3),
                 "part_edges": np.asarray(part_edges).reshape(-1, 3),
-                "stock_edges": np.asarray(material_edges).reshape(-1, 3)}
+                "stock_edges": np.asarray(material_edges).reshape(-1, 3),
+                "reference_edges": np.asarray(reference_edges).reshape(-1, 3)}

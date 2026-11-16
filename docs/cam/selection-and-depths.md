@@ -29,7 +29,7 @@ This is not a replacement for exact B-rep/CAD topology.
 1. Select an operation in the CAM tree. Its geometry count and settings appear;
    **face picking activates automatically**. Reopening a setup selects its first
    operation rather than leaving all selection controls disabled.
-2. Leave **Pick from: Part + material together** (default), then keep
+2. Leave **Pick from: Part + material + references** (default), then keep
    **Select faces** or switch to **Select edges**. Pick both types directly in
    the same operation. *Part only* / *Material only* are optional filters for
    ambiguous overlaps, not mutually exclusive operation types; switching a
@@ -47,8 +47,10 @@ selecting another tree node does not copy geometry between operations.
 
 ![Per-selection machining checkbox and green material edge](../pictures/cam-per-selection-purpose.png)
 
-This current capture shows one checked part edge and an unchecked material edge
-used only for End Z. Older flange examples below show the previous global-purpose
+This capture shows one checked part edge and an unchecked material edge
+used only for End Z. Reference-drawing controls and the expanded default filter
+label were added later; these per-selection checkboxes are unchanged.
+Older flange examples below show the previous global-purpose
 dropdown and yellow material highlights; their boundary examples still apply.
 
 A miss now displays a message rather than silently leaving the selection
@@ -73,7 +75,7 @@ for old scenes/operations are discarded rather than applied to the current one.
 
 ## Selecting material boundaries
 
-By default **Pick from → Part + material together** accepts both geometries
+By default **Pick from → Part + material + references** accepts part/material and drawn outlines
 without switching modes. Click the part edge, then a material edge to add
 both to the same Pocket. Yellow outlines and translucent face fill show the
 selections. Edge picking chooses the closest screen-space edge across both
@@ -160,6 +162,18 @@ part that widens below the floor can limit clearance for all passes. They are
 not an adaptive 3D rest-machining strategy or a general solid collision check.
 Profile/Slot/Engrave retain their normal side/depth rules; a stock reference is
 not permission to ignore tool reach, fixtures, or workholding checks.
+
+## Drawn reference outlines
+
+Use **CAM setup → Reference geometry** to construct circles from a center/rim
+or opposite diameter endpoints, and rectangles from a center/corner or opposite
+corners. Their complete outlines can be picked with Select edges, or by clicking
+inside with Select faces. Use **Reference geometry only** for overlaps; normal
+mixed picking also considers drawings. Cyan outlines turn magenta when selected,
+independently of green material selections. Per-selection machining checkboxes
+and Start/End links work the same way. See
+[drawn reference geometry](reference-geometry.md) for Z planes, fixed work
+coordinates, persistence and machining limits.
 
 ## Cutting geometry versus height-only geometry
 

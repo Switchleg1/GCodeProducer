@@ -43,7 +43,8 @@ for a particular printer, material, cutter, or machine.
 | Guide | Coverage |
 |---|---|
 | [CAM workflow](cam/README.md) | Tool-change tree, negative-Z convention, generation and export |
-| [Selecting geometry and depths](cam/selection-and-depths.md) | Planar faces, feature chains, selection purpose, live Z references |
+| [Selecting geometry and depths](cam/selection-and-depths.md) | Planar faces, feature chains, per-selection purpose, live Z references |
+| [Drawn reference geometry](cam/reference-geometry.md) | Circles/rectangles from center or edge, XY construction plane, selectable saved outlines |
 | [Cutting data](cam/cutting-data.md) | Six machining materials, per-tool SFM/chip load, axial defaults, RPM/feed calculations and unlocks |
 | [Material state and leads](cam/material-state-and-leads.md) | Current material, operation outputs, default-on Material display, leads and motion checks |
 | [Holding tabs](cam/holding-tabs.md) | Side-click rails to stock XY edges, retained tab height, path splitting, area order and preserved leads |

@@ -9,6 +9,10 @@ import math
 
 KINDS = ("pocket", "profile", "drill", "engrave", "slot")
 
+REFERENCE_CHORD_ERROR = .01  # mm; circles are polygonal, not fitted G2/G3 arcs
+REFERENCE_MIN_SEGMENTS = 64
+REFERENCE_MAX_SEGMENTS = 8192
+
 MATERIALS = (
     ("soft_wood", "Soft wood", 600., .05),
     ("hard_wood", "Hard wood", 400., .04),

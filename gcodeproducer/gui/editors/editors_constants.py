@@ -1,5 +1,12 @@
 """Shared editor choices and operation-override bindings."""
 
+REFERENCE_DRAW_MODES = (
+    ("Circle — center then rim", "circle", "center", "center", "point on the circle"),
+    ("Circle — diameter endpoints", "circle", "edge", "first diameter endpoint", "opposite diameter endpoint"),
+    ("Rectangle — center then corner", "rectangle", "center", "center", "corner"),
+    ("Rectangle — opposite corners", "rectangle", "edge", "first corner", "opposite corner"),
+)
+
 RATE_FIELDS = {
     "rpm": ("Spindle RPM", 100000, "unlock_rpm"),
     "feed": ("Normal cut base feed", 50000, "unlock_feed"),

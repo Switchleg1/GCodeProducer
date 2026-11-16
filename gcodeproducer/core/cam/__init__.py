@@ -3,6 +3,7 @@ from gcodeproducer.core.cam.stock import Stock
 from gcodeproducer.core.cam.holding_tab import HoldingTab
 from gcodeproducer.core.cam.cam_constants import KINDS
 from gcodeproducer.core.cam.reference import Reference
+from gcodeproducer.core.cam.reference_shape import ReferenceShape
 from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.tool_group import ToolGroup

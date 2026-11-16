@@ -11,7 +11,7 @@
 | `core/libraries/` | Profile/process records and libraries, schemas and starter specifications |
 | `core/parameters/`, `core/settings/`, `core/workflows/` | Shared coercion/default rules, application preferences and workflow compatibility |
 | `core/geometry/`, `core/fdm/` | Mesh/region records, STL geometry kernel, infill and model-owned support |
-| `core/cam/` | Separate setup/reference/operation/topology/stock classes; path, tab, cutting, engagement and material systems |
+| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems |
 | `core/gcode/` | Builder, line/program records, parsing, templates, variables, features, simulation and path arrays |
 | `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
@@ -78,8 +78,12 @@ operation information so Preview preserves execution order across tool changes.
 - Process selection/editing must not change model placement/support state.
 - FDM machine fields define capabilities; process requests speeds; material
   requests temperatures; nozzle supplies geometry/flow limits.
-- CAM operations reference library tool IDs and geometry indices. Re-evaluate
-  coordinates after placement; invalidate references for changed source meshes.
+- CAM operations reference library tool IDs, mesh indices or stable drawn-shape
+  IDs. Re-evaluate mesh coordinates after placement; invalidate references for
+  changed source meshes. Model-owned `ReferenceShape` objects remain in fixed
+  work coordinates like stock; placement must not silently transform them.
+  Ray/plane construction is scalar GUI work; polygon construction, projection
+  picking, highlights and toolpath computation stay in the compute process.
 - Stock is independent of later placement changes unless the user requests
   Auto again. Support/material occupy one shared UI slot.
 - Effective output and validation must match documented implementation,

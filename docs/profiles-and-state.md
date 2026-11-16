@@ -17,6 +17,7 @@
 | CAM setup | Ordered tool groups/operations, part/material boundary selections, linked depth references, allocated stock | Per-model Qt settings |
 | CAM stock | Material description/density, margin, position and blank dimensions | Inside CAM setup, not the FDM material library |
 | CAM holding tabs | Triangle/barycentric side anchors, width, height above stock bottom, XY edge direction, enabled | Inside model CAM setup; shared protection across all operations, not tool/process settings |
+| CAM reference geometry | Circle/rectangle method, two construction points, Z and stable ID | Inside model CAM setup; fixed work coordinates, independent of tool/process and later placement changes |
 
 Selecting a FDM process must **never** move the model or change its support
 mode, support configuration or blocks. A process can still change how those

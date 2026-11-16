@@ -6,6 +6,8 @@ These are tree operations (`core.cam.Operation`), not independent pipeline
 stage presets. They share a tool group, selection system, start/end depth
 sources and execution order. Geometry is generated from the placed STL;
 cutting faces must be horizontal and selected edge chains constant-Z.
+[Drawn reference outlines](reference-geometry.md) are also selectable constant-Z
+boundaries, or can be retained as per-selection height-only references.
 
 ## Shared fields and defaults
 

@@ -455,6 +455,41 @@ def test_gcode_template_box(app):
     assert "{spindle_rpm}" in menu_text and "{nozzle_temp}" not in menu_text
 
 
+def test_draw_reference_geometry_and_pick_it_in_compute_process(win, cube_stl, app):
+    from gcodeproducer.core.cam import Reference
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    editor = win.cam_editor
+    refs = editor.references
+    refs.z.setValue(-3)
+    refs.start()
+    mode = win.model_viewer.cam_pick_mode
+    assert mode == "draw_circle_center"
+    for point in ([150,150,100], [155,150,100]):
+        win._cam_pick((mode, point, [0,0,-1], np.eye(4), [200,200], [100,100]))
+    assert len(editor.setup.reference_shapes) == 1
+    shape = editor.setup.reference_shapes[0]
+    editor.add_tool(); editor.add_operation()
+    editor.pick_source.setCurrentIndex(editor.pick_source.findData("reference"))
+    editor.pick.setCurrentIndex(editor.pick.findData("edge"))
+    assert win.model_viewer.cam_pick_mode == "reference_edge"
+    mvp = np.diag([.1,.1,.01,1.]); mvp[0,3] = mvp[1,3] = -15
+    win._cam_pick(("reference_edge", [155,150,100], [0,0,-1], mvp, [200,200], [150,100]))
+    deadline = time.monotonic()+15
+    while win._cam_pick_task is not None and time.monotonic()<deadline:
+        app.processEvents(); time.sleep(.01)
+    assert win._cam_pick_task is None
+    assert editor.operation().geometry == [Reference("drawing", [shape.id])]
+    win._cam_pick_task = "stale reference pick"
+    editor.references.changed.emit()
+    assert win._cam_pick_task is None
+    editor.use_depth("end")
+    saved = editor.setup.to_dict()
+    win.open_model(cube_stl)
+    assert editor.setup.to_dict() == saved
+    assert editor.references.items.count() == 1
+
+
 def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     from PyQt6.QtCore import Qt
     from gcodeproducer.core.cam import Reference

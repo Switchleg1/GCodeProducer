@@ -347,6 +347,9 @@ class MainWindow(QMainWindow):
         self.cam_editor.changed.connect(self._cam_changed)
         self.cam_editor.selectionChanged.connect(self._cam_highlight)
         self.cam_editor.pickModeChanged.connect(self._cam_pick_mode)
+        self.cam_editor.references.anchorChanged.connect(self.model_viewer.set_reference_anchor)
+        # Ignore picks computed from an older outline list (especially deleted shapes).
+        self.cam_editor.references.changed.connect(lambda: setattr(self, "_cam_pick_task", None))
         self.model_viewer.camPickRequested.connect(self._cam_pick)
         self.model_viewer.camSelectionExited.connect(self._cam_selection_exited)
         self.cam_scroll = QScrollArea()
@@ -1148,6 +1151,7 @@ class MainWindow(QMainWindow):
             setup = CAMSetup()
         setup.fingerprint = current
         self.cam_editor.set_setup(setup)
+        self.model_viewer.set_reference_geometry()
         self.stock_editor.set_stock(setup.stock)
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
@@ -1385,11 +1389,18 @@ class MainWindow(QMainWindow):
 
     def _cam_selection_exited(self):
         self.stock_editor.tabs.end_mode()
+        self.cam_editor.references.end_mode()
         self.cam_editor.pick.setCurrentIndex(0)
         self.model_viewer.set_cam_mode("")
 
     def _cam_pick_mode(self, mode):
         self._cam_pick_task = None
+        if not mode.startswith("draw_"):
+            self.cam_editor.references.end_mode()
+        else:
+            self.cam_editor.pick.blockSignals(True)
+            self.cam_editor.pick.setCurrentIndex(0)
+            self.cam_editor.pick.blockSignals(False)
         if not mode.startswith("tab"):
             self.stock_editor.tabs.end_mode()
         else:
@@ -1406,7 +1417,15 @@ class MainWindow(QMainWindow):
         self.model_viewer.set_cam_mode(mode if self.workflow == wf.CAM else "")
 
     def _cam_pick(self, payload):
-        if self.workflow != wf.CAM or self.placed is None or self._worker is not None:
+        if self.workflow != wf.CAM or self._worker is not None:
+            return
+        if payload[0].startswith("draw_"):
+            if self.placed is None:
+                self.cam_editor.references.status.setText("Import a model before drawing reference geometry.")
+            else:
+                self.cam_editor.references.accept_ray(payload[1],payload[2])
+            return
+        if self.placed is None:
             return
         self._cam_pick_operation = self.cam_editor.operation()
         self._cam_pick_kind = payload[0]
@@ -1416,10 +1435,13 @@ class MainWindow(QMainWindow):
             if self.cam_editor.pick_source.currentData() == "both" and payload[0] in ("face", "edge"):
                 payload = ("mixed_"+payload[0], *payload[1:])
             self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload,
-                                                       copy.deepcopy(self.cam_editor.setup.stock)))
+                                                       copy.deepcopy(self.cam_editor.setup.stock),
+                                                       copy.deepcopy(self.cam_editor.setup.reference_shapes)))
 
     def _cam_highlight(self):
         self.stock_editor.tabs.set_setup(self.cam_editor.setup)
+        if self.workflow != wf.CAM or self.placed is None:
+            self.model_viewer.set_reference_geometry()
         if self.workflow != wf.CAM:
             self.model_viewer.set_tab_bounds([])
             self.viewer.set_tab_bounds([])
@@ -1454,7 +1476,8 @@ class MainWindow(QMainWindow):
             tool=next((t for t in self.cam_editor.tools if t.id==self.cam_editor.setup.groups[gi].tool_id),None)
             context={"tool":tool,"machine":self._machine()} if tool and self._machine() else None
         self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op),
-            copy.deepcopy(self.cam_editor.setup.stock), copy.deepcopy(context), copy.deepcopy(self.cam_editor.setup.tabs)))
+            copy.deepcopy(self.cam_editor.setup.stock), copy.deepcopy(context), copy.deepcopy(self.cam_editor.setup.tabs),
+            copy.deepcopy(self.cam_editor.setup.reference_shapes)))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
@@ -1464,6 +1487,7 @@ class MainWindow(QMainWindow):
         self.support_box.setVisible(self.workflow == wf.FDM)
         self.stock_editor.setVisible(self.workflow == wf.CAM)
         self.stock_editor.auto.setEnabled(self.mesh is not None)
+        self.cam_editor.references.setEnabled(self.mesh is not None)
         self.support_box.setEnabled(self.workflow == wf.FDM)
         widgets = (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes)
         for w in widgets:
@@ -1845,7 +1869,8 @@ class MainWindow(QMainWindow):
             self._cam_highlight_task = None
             if self.workflow == wf.CAM:
                 self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []),
-                                                    result.get('stock_edges', []))
+                                                    result.get('stock_edges', []), result.get('reference_edges', []))
+                self.model_viewer.set_reference_geometry(result.get('reference_geometry', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
                 self.viewer.set_tab_bounds(result.get('tabs', []))
                 if result.get('tab_error'):

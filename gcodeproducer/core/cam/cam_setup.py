@@ -8,6 +8,7 @@ from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.tool_group import ToolGroup
+from .reference_shape import ReferenceShape
 
 @dataclass
 class CAMSetup:
@@ -15,6 +16,7 @@ class CAMSetup:
     fingerprint: str = ""
     stock: Stock = field(default_factory=Stock)
     tabs: list[HoldingTab] = field(default_factory=list)
+    reference_shapes: list[ReferenceShape] = field(default_factory=list)
 
     def to_dict(self):
         return asdict(self)
@@ -37,5 +39,8 @@ class CAMSetup:
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])
                 ops.append(Operation(**d))
             groups.append(ToolGroup(g["tool_id"], ops))
+        shapes = [ReferenceShape(**s) for s in data.get("reference_shapes", [])]
+        if len({s.id for s in shapes}) != len(shapes):
+            raise ValueError("Reference geometry IDs must be unique")
         return cls(groups, data.get("fingerprint", ""), Stock.from_dict(data.get("stock", {})),
-                   [HoldingTab(**t) for t in data.get("tabs", [])])
+                   [HoldingTab(**t) for t in data.get("tabs", [])], shapes)

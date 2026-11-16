@@ -4,7 +4,7 @@
 
 CAM is organized by **ordered tool changes**, not by one global FDM-style
 process preset. A setup belongs to a model and contains tool groups, operations,
-geometry references, depth references and allocated stock.
+geometry/depth references, drawn reference outlines and allocated stock.
 
 ```text
 T1 — large endmill
@@ -109,6 +109,7 @@ if the current blank is no longer suitable.
 Implemented machining is **initial 2.5D** from STL-derived topology:
 
 - [Geometry selection and linked depths](selection-and-depths.md)
+- [Draw circles and rectangles as reference geometry](reference-geometry.md)
 - [SFM, chip load, machining materials and axial defaults](cutting-data.md)
 - [Current material, process outputs and lead-in/out](material-state-and-leads.md)
 - [Holding tabs: click side walls to retain rails to stock XY edges](holding-tabs.md)

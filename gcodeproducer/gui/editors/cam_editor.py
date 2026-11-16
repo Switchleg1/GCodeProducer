@@ -1,6 +1,7 @@
 """Tool-change tree and operation-owned geometry / depth references."""
 from __future__ import annotations
 
+from .reference_geometry_editor import ReferenceGeometryEditor
 from .editors_constants import (
     PICK_MODES,
     DEPTH_ROWS,
@@ -52,6 +53,10 @@ class CAMEditor(QWidget):
         saved = QLabel("CAM setup — automatically saved per model")
         saved.setWordWrap(True)
         layout.addWidget(saved)
+        self.references = ReferenceGeometryEditor(self.setup)
+        self.references.changed.connect(self.changed.emit)
+        self.references.modeRequested.connect(self.pickModeChanged.emit)
+        layout.addWidget(self.references)
         row = QHBoxLayout()
         self.tool_combo = QComboBox()
         row.addWidget(self.tool_combo, 1)
@@ -101,10 +106,12 @@ class CAMEditor(QWidget):
         row.addWidget(clear)
         form.addRow(row)
         self.pick_source = QComboBox()
-        self.pick_source.addItem("Part + material together", "both")
+        self.pick_source.addItem("Part + material + references", "both")
         self.pick_source.addItem("Part only", "part")
         self.pick_source.addItem("Material only", "stock")
-        self.pick_source.setToolTip("By default pick both part and material boundaries in the same operation without switching. "
+        self.pick_source.addItem("Reference geometry only", "reference")
+        self.pick_source.setToolTip("By default pick part, material and drawn reference boundaries together. "
+                                    "Use Reference geometry only to disambiguate overlapping outlines. "
                                     "The other choices are optional picking filters; neither clears existing selections. "
                                     "For an outside pocket, a horizontal material edge defines the blank rim and selected "
                                     "part rims or face footprints are retained inner boundaries.")
@@ -259,8 +266,8 @@ class CAMEditor(QWidget):
 
     def _pick_changed(self, *_):
         mode = self.pick.currentData()
-        if mode and self.pick_source.currentData() == "stock":
-            mode = "stock_"+mode
+        if mode and self.pick_source.currentData() in ("stock", "reference"):
+            mode = self.pick_source.currentData()+"_"+mode
         self.pickModeChanged.emit(mode)
 
     def _pick_source_changed(self, *_):
@@ -286,6 +293,7 @@ class CAMEditor(QWidget):
 
     def set_setup(self, setup):
         self.setup = setup
+        self.references.set_setup(setup)
         self.last_pick = None
         self.pick.setCurrentIndex(0)
         self.pick_source.blockSignals(True)
@@ -387,7 +395,7 @@ class CAMEditor(QWidget):
             self.name.setText(op.name)
             self.enabled.setChecked(op.enabled)
             self.geom_label.setText(f"{len(op.geometry)} geometry references")
-            self.pick_status.setText("Pick part and material boundaries together. For an outside pocket, select a part rim and a material edge.")
+            self.pick_status.setText("Pick part, material or drawn reference boundaries. For an outside pocket, select an inner rim and a material edge.")
             self.depth_summary.setText("")
             for key, (source, val, extreme) in self.depth_controls.items():
                 d = getattr(op, key)
@@ -482,8 +490,11 @@ class CAMEditor(QWidget):
         self.selections.clear()
         for ref in refs:
             machining = ref in op.geometry
-            item = QTreeWidgetItem([ref.kind.replace("stock_", "material ") + " " +
-                                    ", ".join(map(str, ref.indices)), "Machining" if machining else "Height only"])
+            label = ref.kind.replace("stock_", "material ") + " " + ", ".join(map(str, ref.indices))
+            if ref.kind == "drawing":
+                shape = next((s for s in self.setup.reference_shapes if [s.id] == ref.indices), None)
+                label = "Reference: " + (shape.name or shape.kind if shape is not None else "missing")
+            item = QTreeWidgetItem([label, "Machining" if machining else "Height only"])
             item.setData(0, Qt.ItemDataRole.UserRole, ref)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(1, Qt.CheckState.Checked if machining else Qt.CheckState.Unchecked)

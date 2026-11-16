@@ -101,7 +101,7 @@ additional confirmation to export.
 
 ## Material boundary selection
 
-CAM operations default to **Pick from → Part + material together** alongside
+CAM operations default to **Pick from → Part + material + references** alongside
 Select faces/edges. Select a part rim and a material edge in one Pocket to
 clear the space between them, without switching selection types. One horizontal
 material edge identifies the blank rim; selected part loops are retained inner
@@ -110,6 +110,17 @@ faces and vertical edges can supply linked height references; references
 follow blank edits. See
 [material boundaries](cam/selection-and-depths.md#selecting-material-boundaries)
 for stock-envelope Pocket behaviour and 2.5D limits.
+
+## Draw reference geometry
+
+In **CAM setup → Reference geometry**, draw circles by center/rim or diameter
+endpoints and rectangles by center/corner or opposite corners on a chosen Z
+plane. Saved outlines are cyan, selected references magenta; material selection
+remains green. They are selectable boundaries or per-selection height-only
+references. Use **Reference geometry only** to pick through overlaps. Outlines
+stay fixed in CAM work coordinates when the model is moved. See
+[reference geometry](cam/reference-geometry.md) for construction, persistence,
+operation rules and limitations.
 
 ## CAM holding tabs
 
