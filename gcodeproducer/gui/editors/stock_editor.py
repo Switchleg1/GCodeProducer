@@ -3,7 +3,8 @@
 from .editors_constants import STOCK_FIELDS
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QGroupBox,
+    QVBoxLayout,
+    QWidget,
     QFormLayout,
     QLineEdit,
     QDoubleSpinBox,
@@ -13,15 +14,24 @@ from PyQt6.QtWidgets import (
 )
 
 
-class StockEditor(QGroupBox):
+class StockEditor(QWidget):
+    """Two collapsible panes: Material / stock and Holding tabs."""
     changed = pyqtSignal()
     autoRequested = pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__("Material / stock", parent)
+        super().__init__(parent)
+        from .section import Section
         self.stock = None
         self.fields = {}
-        form = QFormLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(3)
+        self.section = Section("Material / stock", key="model.material_stock")
+        outer.addWidget(self.section)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        self.section.body.addLayout(form)
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
         form.addRow("Material description", self.name)
@@ -52,7 +62,7 @@ class StockEditor(QGroupBox):
         form.addRow(self.size_info)
         from gcodeproducer.gui.editors.cam_tabs_editor import CAMTabsEditor
         self.tabs = CAMTabsEditor()
-        form.addRow(self.tabs)
+        outer.addWidget(self.tabs)
 
     def set_stock(self, stock):
         self.stock = stock

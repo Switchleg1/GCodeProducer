@@ -364,16 +364,19 @@ def test_support_section_shows_only_process_settings():
     for moved in ("placement", "overhang_angle", "edge_margin", "fill_holes"):
         assert moved not in names
     ed = ParamEditor(FDMSupport.parameters(), FDMSupport.defaults())
-    titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
-    assert not any("Holes" in t for t in titles) and "Support" not in titles
+    from gcodeproducer.gui.editors.section import Section
+    titles = [b.title() for b in ed.findChildren(Section)]
+    assert titles and not any("Holes" in t for t in titles) and "Support" not in titles
     assert not FDMSupport.optional                          # no 'Enabled' switch in the process
 
 def test_ampersand_group_titles_render_literally():
     from gcodeproducer.gui.widgets import ParamEditor
     from gcodeproducer.core.params import Param
     ed = ParamEditor([Param("feed","float",800,group="Feeds & speeds")], {})
-    titles = [b.title() for b in ed.findChildren(QtWidgets.QGroupBox)]
-    assert "Feeds && speeds" in titles                     # shown as 'Feeds & speeds'
+    from gcodeproducer.gui.editors.section import Section
+    section = ed.findChildren(Section)[0]
+    assert section.title() == "Feeds & speeds"
+    assert section.header.text() == "Feeds && speeds"      # Qt shows '&&' as a literal '&'
 
 
 def test_slice_button_cancels(win, app):
@@ -460,11 +463,11 @@ def test_draw_reference_geometry_and_pick_it_in_compute_process(win, cube_stl, a
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     win.open_model(cube_stl)
     editor = win.cam_editor
-    refs = editor.references
+    refs = win.reference_editor
     refs.z.setValue(-3)
     refs.start()
     mode = win.model_viewer.cam_pick_mode
-    assert mode == "draw_circle_center"
+    assert mode == "sketch_draw_circle_center" and refs.draw.isChecked()
     for point in ([150,150,100], [155,150,100]):
         win._cam_pick((mode, point, [0,0,-1], np.eye(4), [200,200], [100,100]))
     assert len(editor.setup.reference_shapes) == 1
@@ -472,7 +475,7 @@ def test_draw_reference_geometry_and_pick_it_in_compute_process(win, cube_stl, a
     editor.add_tool(); editor.add_operation()
     editor.pick_source.setCurrentIndex(editor.pick_source.findData("reference"))
     editor.pick.setCurrentIndex(editor.pick.findData("edge"))
-    assert win.model_viewer.cam_pick_mode == "reference_edge"
+    assert win.model_viewer.cam_pick_mode == "reference_edge" and not refs.draw.isChecked()
     mvp = np.diag([.1,.1,.01,1.]); mvp[0,3] = mvp[1,3] = -15
     win._cam_pick(("reference_edge", [155,150,100], [0,0,-1], mvp, [200,200], [150,100]))
     deadline = time.monotonic()+15
@@ -481,13 +484,104 @@ def test_draw_reference_geometry_and_pick_it_in_compute_process(win, cube_stl, a
     assert win._cam_pick_task is None
     assert editor.operation().geometry == [Reference("drawing", [shape.id])]
     win._cam_pick_task = "stale reference pick"
-    editor.references.changed.emit()
+    win.reference_editor.changed.emit()
     assert win._cam_pick_task is None
     editor.use_depth("end")
     saved = editor.setup.to_dict()
     win.open_model(cube_stl)
     assert editor.setup.to_dict() == saved
-    assert editor.references.items.count() == 1
+    assert win.reference_editor.items.count() == 1
+    assert win.reference_editor.setup is editor.setup
+
+
+def test_reference_pane_lives_in_model_dock_and_tools_toggle(win, cube_stl, app):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    refs = win.reference_editor
+    model_dock = win.dock_prepare.widget().widget()
+    assert refs.parentWidget() is model_dock and refs.parentWidget() is not win.cam_editor
+    order = [model_dock.layout().itemAt(i).widget() for i in range(model_dock.layout().count())]
+    assert order.index(refs) == order.index(win.model_options)+1      # directly under support / material
+    assert not refs.isVisibleTo(win)                                  # FDM: CAM construction geometry hidden
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    assert refs.isVisibleTo(win) and refs.isEnabled()
+    assert refs.draw.text() == "Draw" and refs.draw.isCheckable()
+    assert not [b for b in refs.findChildren(QtWidgets.QPushButton) if "Stop" in b.text()]
+    # Buttons sit directly under the list, as in the tabs and support panes.
+    body = refs.body
+    items = [body.itemAt(i) for i in range(body.count())]
+    list_index = next(i for i, it in enumerate(items) if it.widget() is refs.items)
+    assert items[list_index+1].layout().indexOf(refs.draw) >= 0
+    # Clicking the highlighted Draw button again cancels; Esc in the view cancels too.
+    refs.draw.click()
+    assert refs.draw.isChecked() and win.model_viewer.cam_pick_mode.startswith("sketch_draw")
+    refs.draw.click()
+    assert not refs.draw.isChecked() and refs.mode == "" and win.model_viewer.cam_pick_mode == ""
+    refs.draw.click()
+    win._cam_pick((win.model_viewer.cam_pick_mode, [150,150,100], [0,0,-1], np.eye(4), [200,200], [100,100]))
+    assert refs.first is not None
+    win.model_viewer.setFocus()
+    QTest.keyClick(win.model_viewer, Qt.Key.Key_Escape)
+    assert not refs.draw.isChecked() and refs.first is None and win.model_viewer.cam_pick_mode == ""
+    assert not win.cam_editor.setup.reference_shapes
+
+
+def test_reference_move_resize_and_remembered_delete(win, cube_stl, app, monkeypatch):
+    from gcodeproducer.core.cam import Depth, Reference
+    from gcodeproducer.core.cam.reference_shape import ReferenceShape
+    import gcodeproducer.gui.messages.popup as popup
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.open_model(cube_stl)
+    refs = win.reference_editor
+    setup = win.cam_editor.setup
+    setup.reference_shapes.append(ReferenceShape("rectangle", "edge", (140, 140), (150, 146), -2, "Pad"))
+    refs.refresh(setup.reference_shapes[0].id)
+    shape = setup.reference_shapes[0]
+    assert refs.fields["x"].value() == 145 and refs.fields["a"].value() == 10 and refs.fields["b"].value() == 6
+    stale = []
+    win._set_stale = lambda *a: stale.append(True)
+    # Numeric move / resize keep the ID and construction method
+    refs.fields["x"].setValue(160)
+    refs.fields["b"].setValue(8)
+    assert shape.dimensions()[0][0] == 160 and np.allclose(shape.dimensions()[1], (5, 4))
+    assert shape.construction == "edge" and stale
+    refs.fields["a"].setValue(0.001)           # degenerate width is rejected, nothing changes
+    refs.fields["a"].setValue(10)
+    assert np.allclose(shape.dimensions()[1], (5, 4))
+    # Click tools: Move puts the centre at the click on the shape's Z plane, Resize keeps the centre
+    refs.buttons["move"].click()
+    assert win.model_viewer.cam_pick_mode == "sketch_move" and refs.buttons["move"].isChecked()
+    win._cam_pick(("sketch_move", [150, 150, 50], [0, 0, -1], np.eye(4), [200, 200], [100, 100]))
+    assert np.allclose(shape.dimensions()[0], (150, 150)) and shape.z == -2
+    refs.buttons["resize"].click()
+    assert refs.buttons["resize"].isChecked() and not refs.buttons["move"].isChecked()
+    win._cam_pick(("sketch_resize", [153, 157, 50], [0, 0, -1], np.eye(4), [200, 200], [100, 100]))
+    assert np.allclose(shape.dimensions()[0], (150, 150)) and np.allclose(shape.dimensions()[1], (3, 7))
+    refs.buttons["resize"].click()
+    assert refs.mode == ""
+    # Deletion asks (default No) and can be remembered in Settings -> Messages
+    asked = []
+
+    def answer(parent, prefs, key, level, title, text, question=False, default_no=False):
+        asked.append((key, question, default_no))
+        prefs.setdefault("messages", {})[key] = False      # "Don't show this again" + Yes
+        return True
+    monkeypatch.setattr("gcodeproducer.gui.application.main_window.show_message", answer)
+    win.cam_editor.add_tool(); win.cam_editor.add_operation()
+    win.cam_editor.operation().end = Depth("geometry", reference=Reference("drawing", [shape.id]))
+    refs.remove()
+    assert setup.reference_shapes == [shape] and not asked          # in use: never asked, never deleted
+    win.cam_editor.operation().end = Depth("bottom")
+    refs.remove()
+    assert asked == [("delete_reference", True, True)] and not setup.reference_shapes
+    assert win.preferences["messages"]["delete_reference"] is False
+    from gcodeproducer.core.settings.preferences import load
+    assert load(win.libset.root)["messages"]["delete_reference"] is False
+    setup.reference_shapes.append(ReferenceShape())
+    refs.refresh(setup.reference_shapes[0].id)
+    refs.remove()                                                     # remembered: no second question
+    assert len(asked) == 1 and not setup.reference_shapes
 
 
 def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):

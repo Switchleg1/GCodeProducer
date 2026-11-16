@@ -61,7 +61,10 @@ For the *outside the build volume — slice anyway?* question, ticking the box
 together with **Yes** means "continue without asking"; a **No** answer is
 never remembered. Confirmations that protect output or data — exporting CAM
 with warnings, deleting profiles/processes, discarding unsaved changes — have
-no such checkbox and always ask. The previous *Show warning dialog after
+no such checkbox and always ask. Deleting **reference geometry** is the one
+deletion that can be remembered: Yes with the box ticked deletes later unused
+references without asking, until *Confirm deleting reference geometry* is
+switched back on here. References still in use are never deleted. The previous *Show warning dialog after
 generation* setting migrates to the *CAM material / engagement warnings*
 message switch.
 

@@ -32,9 +32,12 @@ THEME_STYLESHEET = ("QToolButton#sectionHeader { background: #3a3d44; border: no
         "QToolButton#sectionHeader:hover { background: #454952; }"
         "QToolButton#sectionHeader:checked { background: #34557f; color: white; }"
         "QFrame#sectionBody { background: #2b2d32; border-radius: 3px; }"
+        "QToolButton#subsectionHeader { background: #33363c; border: none; border-radius: 3px;"
+        "  padding: 2px 6px; text-align: left; color: #cdd; }"
+        "QToolButton#subsectionHeader:hover { background: #3d4048; }"
+        "QToolButton#subsectionHeader:checked { background: #2f3f55; color: #e6ecf5; }"
         "QToolButton#modeButton { background: #34373d; border: 1px solid #44474e; padding: 5px 14px;"
         "  font-weight: bold; color: #ccd; }"
         "QToolButton#modeButton:checked { background: #3c78c8; color: white; border-color: #3c78c8; }"
         "QToolButton#modeButton:disabled { color: #666; }"
-        "QPushButton:checked { background: #3c78c8; color: white; border: 1px solid #5a8fd8; }"
-        "QGroupBox { font-weight: bold; } QGroupBox QWidget { font-weight: normal; }")
+        "QPushButton:checked { background: #3c78c8; color: white; border: 1px solid #5a8fd8; }")

@@ -7,6 +7,22 @@ REFERENCE_DRAW_MODES = (
     ("Rectangle — opposite corners", "rectangle", "edge", "first corner", "opposite corner"),
 )
 
+REFERENCE_MODES = {
+    "draw": ("Draw", "Draw a new shape with two clicks in the Prepare view. Click again or press Esc to stop."),
+    "move": ("Move", "Click a new center for the selected shape (on its own Z plane). Click again or Esc to stop."),
+    "resize": ("Resize", "Click a new rim point (circle) or corner (rectangle) for the selected shape; "
+                         "the center stays. Click again or Esc to stop."),
+}
+
+REFERENCE_HINTS = {
+    "idle": "Draw shapes on an XY plane, then pick them in an operation with Select edges/faces. "
+            "Select a shape to move or resize it.",
+    "move": "Click the new center.",
+    "resize": "Click a new rim point / corner.",
+    "leave": "Esc or the highlighted button ends this tool.",
+    "edge_on": "The drawing plane is edge-on or behind the camera; change the view and click again.",
+}
+
 RATE_FIELDS = {
     "rpm": ("Spindle RPM", 100000, "unlock_rpm"),
     "feed": ("Normal cut base feed", 50000, "unlock_feed"),
@@ -61,3 +77,6 @@ STOCK_FIELDS = (
             ("depth", "Depth Y", 0, 10000, " mm"),
             ("height", "Thickness Z", 0, 10000, " mm"),
         )
+
+SECTION_BODY_MARGINS = (6, 4, 4, 6)
+SECTION_STATE_PREFIX = "sections/"

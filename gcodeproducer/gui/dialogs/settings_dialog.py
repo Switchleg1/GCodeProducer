@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QGroupBox,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -16,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 import gcodeproducer.core.settings.preferences as app_settings
 from gcodeproducer.gui.editors.param_editor import ParamEditor
+from gcodeproducer.gui.editors.section import Section
 
 
 class SettingsDialog(QDialog):
@@ -35,11 +35,12 @@ class SettingsDialog(QDialog):
         bl = QVBoxLayout(body)
         bl.setContentsMargins(0, 0, 0, 0)
         bl.addWidget(self.editor)
-        box = QGroupBox("Messages")
-        ml = QVBoxLayout(box)
+        box = Section("Messages", key="settings.messages")
+        ml = box.body
         hint = QLabel("Pop-ups to show. Unchecked messages are still recorded in the Messages panel "
                       "(View → Messages). Confirmations that protect output, such as exporting CAM "
-                      "with warnings or deleting profiles, always ask.")
+                      "with warnings or deleting profiles, always ask. Deleting reference geometry is "
+                      "the exception: its confirmation can be remembered and switched back on here.")
         hint.setWordWrap(True)
         ml.addWidget(hint)
         self.message_checks = {}

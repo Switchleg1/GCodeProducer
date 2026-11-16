@@ -54,6 +54,7 @@ MESSAGES = {
     "no_model": "No model loaded",
     "no_machine": "No machine for this workflow",
     "outside_volume": "Model outside the build volume (continue without asking)",
+    "delete_reference": "Confirm deleting reference geometry (unchecked: delete without asking)",
     "settings_save_failed": "Settings could not be saved",
     "opengl": "OpenGL errors",
 }

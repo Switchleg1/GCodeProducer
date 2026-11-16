@@ -7,24 +7,26 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QPushButton,
 )
 from gcodeproducer.core.cam.holding_tab import HoldingTab
+from .section import Section
 
 
-class CAMTabsEditor(QGroupBox):
+class CAMTabsEditor(Section):
     changed = pyqtSignal()
     modeRequested = pyqtSignal(str)
 
     def __init__(self, parent=None):
-        super().__init__("Holding tabs — model", parent)
+        super().__init__("Holding tabs", parent=parent, key="model.holding_tabs")
         self.setup = None
         self._loading = False
-        form = QFormLayout(self)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        self.body.addLayout(form)
         self.list = QListWidget()
         self.list.setMaximumHeight(90)
         self.list.currentRowChanged.connect(self._selected)

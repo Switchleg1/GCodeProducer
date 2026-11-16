@@ -27,7 +27,6 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -58,6 +57,8 @@ from gcodeproducer.core.pipeline.slice_pipeline import SlicePipeline
 from gcodeproducer.core.jobs.placement import Placement, bed_rect, bed_xy, fits
 from gcodeproducer.core.libraries.process_preset import ProcessPreset
 from gcodeproducer.core.fdm.model_support import ModelSupport
+from gcodeproducer.core.cam.cam_setup import CAMSetup
+from gcodeproducer.gui.editors.section import Section
 from gcodeproducer.core.fdm.support_block import SupportBlock
 from gcodeproducer.core.fdm.support import (
     block_at as support_block_at,
@@ -254,8 +255,10 @@ class MainWindow(QMainWindow):
         mw = QWidget()
         pl = QVBoxLayout(mw)
 
-        setup = QGroupBox("Setup")
-        self.setup_form = QFormLayout(setup)
+        setup = Section("Setup", key="model.setup")
+        self.setup_form = QFormLayout()
+        self.setup_form.setContentsMargins(0, 0, 0, 0)
+        setup.body.addLayout(self.setup_form)
         self.cb_workflow = QComboBox()
         for w in wf.ALL:
             self.cb_workflow.addItem(wf.label(w), w)
@@ -283,8 +286,17 @@ class MainWindow(QMainWindow):
         self.stock_editor.changed.connect(self._stock_changed)
         self.stock_editor.autoRequested.connect(self._auto_stock)
         self.model_options.addWidget(self.stock_editor)
+        self.model_options.currentChanged.connect(self._fit_model_options)
         pl.addWidget(self.model_options)
+        # CAM construction geometry: model-owned, below the support / material panes.
+        from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+        self.reference_editor = ReferenceGeometryEditor(CAMSetup())
+        self.reference_editor.confirm = lambda _parent, text: self.notify(
+            "delete_reference", "warning", "Delete reference geometry", text,
+            question=True, record=False, default_no=True)
+        pl.addWidget(self.reference_editor)
         pl.addStretch(1)
+        pl.setSpacing(3)
         msc = QScrollArea()
         msc.setWidgetResizable(True)
         msc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -294,9 +306,9 @@ class MainWindow(QMainWindow):
         # ------------------------------------------------- process dock (settings + slice)
         pw = QWidget()
         pl = QVBoxLayout(pw)
-        proc = QGroupBox("Process")
+        proc = Section("Process", key="process.preset")
         self.fdm_process_box = proc
-        prl = QVBoxLayout(proc)
+        prl = proc.body
         r1 = QHBoxLayout()
         self.cb_process = QComboBox()
         self.cb_process.setToolTip("Saved workflow options (layer height, walls, infill, adhesion\u2026)")
@@ -347,9 +359,14 @@ class MainWindow(QMainWindow):
         self.cam_editor.changed.connect(self._cam_changed)
         self.cam_editor.selectionChanged.connect(self._cam_highlight)
         self.cam_editor.pickModeChanged.connect(self._cam_pick_mode)
-        self.cam_editor.references.anchorChanged.connect(self.model_viewer.set_reference_anchor)
-        # Ignore picks computed from an older outline list (especially deleted shapes).
-        self.cam_editor.references.changed.connect(lambda: setattr(self, "_cam_pick_task", None))
+        refs = self.reference_editor
+        refs.set_setup(self.cam_editor.setup)
+        refs.anchorChanged.connect(self.model_viewer.set_reference_anchor)
+        refs.modeRequested.connect(self._cam_pick_mode)
+        # Ignore picks computed from an older outline list (especially deleted/moved shapes).
+        refs.changed.connect(lambda: setattr(self, "_cam_pick_task", None))
+        refs.changed.connect(self._cam_changed)
+        refs.selectionChanged.connect(self._cam_highlight)     # show the shape being edited
         self.model_viewer.camPickRequested.connect(self._cam_pick)
         self.model_viewer.camSelectionExited.connect(self._cam_selection_exited)
         self.cam_scroll = QScrollArea()
@@ -386,8 +403,8 @@ class MainWindow(QMainWindow):
         self.legend.setWordWrap(True)
         self.legend.setStyleSheet("color:#9aa;")
         vl.addWidget(self.legend)
-        show = QGroupBox("Show")
-        sg = QVBoxLayout(show)
+        show = Section("Show", key="view.show")
+        sg = show.body
         for attr, lab, what in SHOW_OPTIONS:
             cb = QCheckBox(lab)
             cb.setChecked(getattr(self.state, attr))
@@ -401,14 +418,14 @@ class MainWindow(QMainWindow):
         sg.addWidget(QLabel("Calculated operation output"))
         sg.addWidget(self.material_output)
         vl.addWidget(show)
-        fbox = QGroupBox("Features (click to toggle)")
-        fl = QVBoxLayout(fbox)
+        fbox = Section("Features (click to toggle)", key="view.features")
+        fl = fbox.body
         self.feature_list = QListWidget()
         self.feature_list.itemChanged.connect(self._on_feature_toggled)
         fl.addWidget(self.feature_list)
         vl.addWidget(fbox, 1)
-        cam = QGroupBox("Camera")
-        cl = QVBoxLayout(cam)
+        cam = Section("Camera", key="view.camera")
+        cl = cam.body
         self.ortho_cb = QCheckBox("Orthographic")
         self.ortho_cb.toggled.connect(self._on_ortho)
         cl.addWidget(self.ortho_cb)
@@ -444,10 +461,18 @@ class MainWindow(QMainWindow):
         self.messages = MessagesPanel()
         self.dock_messages = self._dock("Messages", self.messages, Qt.DockWidgetArea.BottomDockWidgetArea, "dock_messages")
 
-    def _build_model_box(self) -> QGroupBox:
+    def _fit_model_options(self, index=None):
+        """The shared Support / Material slot sizes to the visible page only."""
+        for i in range(self.model_options.count()):
+            page = self.model_options.widget(i)
+            policy = QSizePolicy.Policy.Preferred if i == self.model_options.currentIndex() else QSizePolicy.Policy.Ignored
+            page.setSizePolicy(QSizePolicy.Policy.Preferred, policy)
+        self.model_options.adjustSize()
+
+    def _build_model_box(self) -> QWidget:
         """Model: file, placement (position / rotation / scale) and support."""
-        model = QGroupBox("Model")
-        ml = QVBoxLayout(model)
+        model = Section("Model", key="model.placement")
+        ml = model.body
         top = QHBoxLayout()
         self.lbl_model = QLabel("No model \u2014 import an STL or drop it on the window")
         self.lbl_model.setWordWrap(True)
@@ -535,11 +560,11 @@ class MainWindow(QMainWindow):
         self.place_box.setEnabled(False)
         return model
 
-    def _build_support_box(self) -> QGroupBox:
+    def _build_support_box(self) -> QWidget:
         """Support: mode + overhang angle (process settings) and the manual support blocks."""
-        box = QGroupBox("Support")
+        box = Section("Support", key="model.support")
         self.support_box = box
-        v = QVBoxLayout(box)
+        v = box.body
         row = QHBoxLayout()
         self.cb_support = QComboBox()
         self.cb_support.addItem("None", "none")
@@ -638,6 +663,10 @@ class MainWindow(QMainWindow):
         rp.addWidget(self.sp_place_size)
         rp.addStretch(1)
         bl.addLayout(rp)
+        self.lst_blocks = QListWidget()
+        self.lst_blocks.setMaximumHeight(90)
+        self.lst_blocks.currentRowChanged.connect(self._on_block_row)
+        bl.insertWidget(0, self.lst_blocks)     # list first, its actions directly under it (as in every pane)
         r2 = QHBoxLayout()
         for text, tip, fn in (("+ Add", "Add a block under the model", self.add_block),
                               ("Delete selected", "Delete the selected block (Delete key)", self.remove_block),
@@ -646,11 +675,7 @@ class MainWindow(QMainWindow):
             b.setToolTip(tip)
             b.clicked.connect(fn)
             r2.addWidget(b)
-        bl.addLayout(r2)
-        self.lst_blocks = QListWidget()
-        self.lst_blocks.setMaximumHeight(90)
-        self.lst_blocks.currentRowChanged.connect(self._on_block_row)
-        bl.addWidget(self.lst_blocks)
+        bl.insertLayout(1, r2)
         self.block_edit = QWidget()
         ge = QGridLayout(self.block_edit)
         ge.setContentsMargins(0, 0, 0, 0)
@@ -1151,6 +1176,7 @@ class MainWindow(QMainWindow):
             setup = CAMSetup()
         setup.fingerprint = current
         self.cam_editor.set_setup(setup)
+        self.reference_editor.set_setup(setup)
         self.model_viewer.set_reference_geometry()
         self.stock_editor.set_stock(setup.stock)
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
@@ -1389,14 +1415,14 @@ class MainWindow(QMainWindow):
 
     def _cam_selection_exited(self):
         self.stock_editor.tabs.end_mode()
-        self.cam_editor.references.end_mode()
+        self.reference_editor.end_mode()
         self.cam_editor.pick.setCurrentIndex(0)
         self.model_viewer.set_cam_mode("")
 
     def _cam_pick_mode(self, mode):
         self._cam_pick_task = None
-        if not mode.startswith("draw_"):
-            self.cam_editor.references.end_mode()
+        if not mode.startswith("sketch_"):
+            self.reference_editor.end_mode()
         else:
             self.cam_editor.pick.blockSignals(True)
             self.cam_editor.pick.setCurrentIndex(0)
@@ -1419,11 +1445,11 @@ class MainWindow(QMainWindow):
     def _cam_pick(self, payload):
         if self.workflow != wf.CAM or self._worker is not None:
             return
-        if payload[0].startswith("draw_"):
+        if payload[0].startswith("sketch_"):
             if self.placed is None:
-                self.cam_editor.references.status.setText("Import a model before drawing reference geometry.")
+                self.reference_editor.status.setText("Import a model before drawing reference geometry.")
             else:
-                self.cam_editor.references.accept_ray(payload[1],payload[2])
+                self.reference_editor.accept_ray(payload[1],payload[2])
             return
         if self.placed is None:
             return
@@ -1477,7 +1503,8 @@ class MainWindow(QMainWindow):
             context={"tool":tool,"machine":self._machine()} if tool and self._machine() else None
         self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op),
             copy.deepcopy(self.cam_editor.setup.stock), copy.deepcopy(context), copy.deepcopy(self.cam_editor.setup.tabs),
-            copy.deepcopy(self.cam_editor.setup.reference_shapes)))
+            copy.deepcopy(self.cam_editor.setup.reference_shapes),
+            self.reference_editor.current().id if self.reference_editor.current() else None))
 
     # --------------------------------------------------------------- support
     def _sync_support_controls(self):
@@ -1487,7 +1514,9 @@ class MainWindow(QMainWindow):
         self.support_box.setVisible(self.workflow == wf.FDM)
         self.stock_editor.setVisible(self.workflow == wf.CAM)
         self.stock_editor.auto.setEnabled(self.mesh is not None)
-        self.cam_editor.references.setEnabled(self.mesh is not None)
+        self.reference_editor.setVisible(self.workflow == wf.CAM)
+        self.reference_editor.setEnabled(self.mesh is not None)
+        self._fit_model_options()
         self.support_box.setEnabled(self.workflow == wf.FDM)
         widgets = (self.cb_support, self.sp_overhang, self.sp_extend, self.sp_fill_holes)
         for w in widgets:
@@ -1870,7 +1899,8 @@ class MainWindow(QMainWindow):
             if self.workflow == wf.CAM:
                 self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []),
                                                     result.get('stock_edges', []), result.get('reference_edges', []))
-                self.model_viewer.set_reference_geometry(result.get('reference_geometry', []))
+                self.model_viewer.set_reference_geometry(result.get('reference_geometry', []),
+                                                         result.get('reference_focus', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
                 self.viewer.set_tab_bounds(result.get('tabs', []))
                 if result.get('tab_error'):
@@ -2147,7 +2177,7 @@ class MainWindow(QMainWindow):
             if head.strip() not in ("STOCK", "ENGAGEMENT", "REACH", "TOOL", "LEAD"):
                 self.messages.add("warning", body.strip(), head.strip().title())
 
-    def notify(self, key, level, title, text, question=False, record=True):
+    def notify(self, key, level, title, text, question=False, record=True, default_no=False):
         """Record in Messages/log, then pop up unless disabled in Settings > Messages."""
         if record:
             self.messages.add(level, text, title)
@@ -2157,7 +2187,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"{title}: {first} (see Messages)", 8000)
             return True
         before = dict(self.preferences.get("messages") or {})
-        result = show_message(self, self.preferences, key, level, title, text, question=question)
+        result = show_message(self, self.preferences, key, level, title, text, question=question, default_no=default_no)
         if self.preferences.get("messages") != before:
             try:
                 app_settings.save(self.preferences, self.libset.root)

@@ -10,6 +10,7 @@ MODEL_COLOR = (0.30, 0.58, 0.92)
 
 REFERENCE_COLOR = (0.1, 0.85, 1.0, 1.0)
 REFERENCE_SELECTION_COLOR = (1.0, 0.25, 1.0, 1.0)
+REFERENCE_FOCUS_COLOR = (1.0, 0.85, 0.2, 1.0)     # shape selected in the Reference geometry pane
 REFERENCE_ANCHOR_OFFSETS = ((-.5,0,0),(.5,0,0),(0,-.5,0),(0,.5,0))
 
 MATERIAL_SELECTION_COLOR = (0.15, 1.0, 0.35, 1.0)

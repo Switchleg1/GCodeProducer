@@ -106,7 +106,7 @@ class ProcessEditor(QWidget):
         head.addWidget(reset, 0, Qt.AlignmentFlag.AlignTop)
         v.addLayout(head)
 
-        editor = ParamEditor(cls.parameters(), {**cls.defaults(), **step.params})
+        editor = ParamEditor(cls.parameters(), {**cls.defaults(), **step.params}, section_level=1)
         editor.setEnabled(step.enabled)
 
         if cls.optional:

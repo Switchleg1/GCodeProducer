@@ -117,8 +117,10 @@ tool, then click in Prepare:
 **Remove blocks** highlights the hovered block red and deletes on click.
 Both tools stay active for repeated clicks; Esc exits. They are exclusive
 with Place on face. Select a block in the list or view to highlight it yellow;
-drag it in XY or edit centre X/Y, bottom Z, width, depth and height. Add,
-Delete selected and Clear provide list-based editing; Delete in the view
+drag it in XY or edit centre X/Y, bottom Z, width, depth and height. The block
+list comes first in the Support pane with **+ Add**, **Delete selected** and
+**Clear** directly under it, followed by Auto-generate, Place/Remove blocks,
+Block size and the selected block's fields. Delete in the view
 removes the selected block. **+ Add** specifically creates a 10 × 10 mm
 footprint centred beneath the model, from Z0 to its maximum Z; it does not
 use Block size or solve a local vertical gap like pick-and-place does.

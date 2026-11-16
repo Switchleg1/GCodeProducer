@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from .rendering_constants import (HIGHLIGHT_PASSES, MATERIAL_SELECTION_COLOR, MATERIAL_SELECTION_FILL,
-                                  REFERENCE_COLOR, REFERENCE_SELECTION_COLOR, REFERENCE_ANCHOR_OFFSETS)
+                                  REFERENCE_COLOR, REFERENCE_SELECTION_COLOR, REFERENCE_FOCUS_COLOR, REFERENCE_ANCHOR_OFFSETS)
 from gcodeproducer.gui.rendering.model_mesh import _TriMesh
 from gcodeproducer.gui.rendering.rendering_constants import (
     MODEL_COLOR,
@@ -95,6 +95,7 @@ class ModelViewer(QOpenGLWidget):
         self.reference_geometry = np.empty((0, 3))
         self.reference_selection = np.empty((0, 3))
         self.reference_anchor = np.empty((0, 3))
+        self.reference_focus = np.empty((0, 3))
         self._reference_dirty = True
         self._cam_dirty = True
         self.place_on_face = False
@@ -154,8 +155,9 @@ class ModelViewer(QOpenGLWidget):
         self._tool_cursor()
         self._update_info()
 
-    def set_reference_geometry(self, edges=()):
+    def set_reference_geometry(self, edges=(), focus=()):
         self.reference_geometry = np.asarray(edges,float).reshape(-1,3)
+        self.reference_focus = np.asarray(focus,float).reshape(-1,3)
         self._reference_dirty = True
         self.update()
 
@@ -224,7 +226,11 @@ class ModelViewer(QOpenGLWidget):
         elif self.cam_pick_mode.startswith("tab"):
             txt = ("CAM: click a tab rail to remove" if self.cam_pick_mode == "tab_remove" else
                    "CAM: click side walls to place holding tabs to the material edge") + " • Esc = navigate"
-        elif self.cam_pick_mode.startswith("draw_"):
+        elif self.cam_pick_mode == "sketch_move":
+            txt = "CAM: click the new center of the selected reference • Esc = done"
+        elif self.cam_pick_mode == "sketch_resize":
+            txt = "CAM: click a new rim point / corner of the selected reference • Esc = done"
+        elif self.cam_pick_mode.startswith("sketch_"):
             txt = "CAM: draw reference on XY plane • click two points • Esc cancels"
         elif self.cam_pick_mode.startswith("reference_"):
             txt = "CAM: select reference geometry • Esc = navigate"
@@ -262,6 +268,7 @@ class ModelViewer(QOpenGLWidget):
         self.m_cam_stock_edges = _Mesh(False)
         self.m_reference = _Mesh(False)
         self.m_reference_selection = _Mesh(False)
+        self.m_reference_focus = _Mesh(False)
         self._reference_dirty = True
         self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
@@ -371,6 +378,7 @@ class ModelViewer(QOpenGLWidget):
         if self._reference_dirty:
             self.m_reference.upload(self.reference_geometry)
             self.m_reference_selection.upload(np.vstack((self.reference_selection,self.reference_anchor)))
+            self.m_reference_focus.upload(self.reference_focus)
             self._reference_dirty = False
         GL.glUseProgram(self.p_flat)
         GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
@@ -379,6 +387,8 @@ class ModelViewer(QOpenGLWidget):
         self.m_reference.draw(GL.GL_LINES)
         GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_SELECTION_COLOR)
         self.m_reference_selection.draw(GL.GL_LINES)
+        GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_FOCUS_COLOR)
+        self.m_reference_focus.draw(GL.GL_LINES)
         GL.glEnable(GL.GL_DEPTH_TEST)
         self._draw_axes(w, h)
         GL.glBindVertexArray(0)

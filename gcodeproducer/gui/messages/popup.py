@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QCheckBox, QMessageBox
 
 
 def show_message(parent, prefs: dict, key: str, level: str, title: str, text: str,
-                 question: bool = False) -> bool:
+                 question: bool = False, default_no: bool = False) -> bool:
     """Pop-up with "Don't show this again". Returns True for OK/Yes (and when disabled).
 
     Disabled messages are not shown; a disabled *question* is answered Yes, so only
@@ -23,6 +23,7 @@ def show_message(parent, prefs: dict, key: str, level: str, title: str, text: st
     box.setText(text)
     if question:
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.No if default_no else QMessageBox.StandardButton.Yes)
     check = QCheckBox("Don't show this again")
     check.setToolTip("Re-enable it in Settings \u2192 Messages. It is still recorded in the Messages panel.")
     box.setCheckBox(check)

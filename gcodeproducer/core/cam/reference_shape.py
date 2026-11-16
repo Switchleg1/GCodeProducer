@@ -67,6 +67,42 @@ class ReferenceShape:
         xy = np.vstack((xy, xy[0]))
         return np.column_stack((xy, np.full(len(xy), self.z)))
 
+    def set_geometry(self, center=None, size=None, z=None):
+        """Move/resize in place, keeping the construction method and ID.
+
+        ``size`` is a radius for circles and half (width, height) for rectangles,
+        as returned by :meth:`dimensions`. Invalid results raise and leave the
+        shape unchanged.
+        """
+        old_center, old_size = self.dimensions()
+        center = np.asarray(old_center if center is None else center, float)
+        size = old_size if size is None else size
+        a, b = np.asarray(self.first, float), np.asarray(self.second, float)
+        if self.kind == "circle":
+            radius = float(size)
+            direction = (b-a)/max(float(np.linalg.norm(b-a)), 1e-300)
+            if self.construction == "center":
+                first, second = center, center+radius*direction
+            else:
+                first, second = center-radius*direction, center+radius*direction
+        else:
+            half = np.abs(np.asarray(size, float).reshape(2))
+            sign = np.where(b-a < 0, -1., 1.)
+            if self.construction == "center":
+                first, second = center, center+half*sign
+            else:
+                first, second = center-half*sign, center+half*sign
+        previous = (self.first, self.second, self.z)
+        self.first, self.second = tuple(float(v) for v in first), tuple(float(v) for v in second)
+        if z is not None:
+            self.z = float(z)
+        try:
+            self.dimensions()
+            self.segment_count()
+        except (ValueError, TypeError, OverflowError):
+            self.first, self.second, self.z = previous
+            raise ValueError("Reference geometry needs a finite position and positive size") from None
+
     def contains(self, point):
         center, size = self.dimensions()
         delta = np.asarray(point, float)-center

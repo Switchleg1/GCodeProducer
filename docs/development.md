@@ -17,7 +17,7 @@
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
 | `gui/runtime/` | Compute process service and separate queue-reader class |
 | `gui/rendering/` | Cameras, separate GL mesh classes, Prepare/Preview and plate/material rendering |
-| `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/template editors and G-code table/panel |
+| `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/reference/template editors and G-code table/panel; `section.py` is the one collapsible pane used by every panel |
 | `gui/dialogs/`, `gui/messages/` | Libraries/Settings dialogs, message panel and pop-ups |
 | `importers/`, `stages/base/`, `stages/fdm/`, `stages/cam/` | One-class importer/stage implementations and public stage API |
 | `plugins/` | Repository-local optional Python extensions |
@@ -182,6 +182,16 @@ forms use `resolve_params` / `Param.coerce`, not a separate GUI default/coercion
 implementation. Keep table defaults, reset values and constructor fallbacks aligned. If not yet
 implemented, label it reserved/descriptive rather than implying that a field
 is enforced. Update reference generation when adding a new built-in stage.
+
+## Panes and layout conventions
+
+Build every panel group with `gui.editors.section.Section`, never `QGroupBox`
+(a test enforces this for the main window). Pass `key="dock.pane"` to remember
+the expanded state in Qt settings, `level=1` for a pane nested in another pane,
+and either a ready body widget or fill `section.body`. Lists with actions put
+the buttons directly under the list. Checkable viewport tools (Place blocks,
+Place tabs, Draw/Move/Resize) are highlighted while active and end on Esc or a
+second click.
 
 ## Tests and checks
 

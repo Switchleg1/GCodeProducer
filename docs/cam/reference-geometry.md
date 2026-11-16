@@ -2,15 +2,25 @@
 
 # Drawn reference geometry
 
-**CAM setup → Reference geometry (model-owned)** draws circles and axis-aligned
-rectangles on a chosen XY plane. They are saved construction outlines, not new
+The **Reference geometry** pane, at the bottom of the **Model** dock under
+Material / stock and Holding tabs (CAM only), draws circles and axis-aligned
+rectangles on a chosen XY plane. Shapes can then be moved and resized.
+They are owned by the model's CAM setup. They are saved construction outlines, not new
 mesh faces, stock or retained material. Operations can select their boundaries
 or use them only for height references.
 
-![Four construction methods, saved outlines and a selected circle](../pictures/cam-reference-drawing.png)
+![Reference geometry pane in the Model dock, Move active, the selected circle in yellow](../pictures/ui-reference-geometry-pane.png)
 
-This actual Prepare capture uses an isolated library and the example cube.
-Cyan outlines are references; the selected circle is magenta. Some demonstration
+Current actual capture (isolated library, `examples/wedge-pocket.stl`, top view):
+the list with its tool buttons directly underneath, the highlighted **Move**
+tool, and the numeric center/size fields of the selected circle. In the view,
+saved outlines are cyan and the shape selected in this list is **yellow**.
+
+![Four construction methods, saved outlines and an operation-selected circle](../pictures/cam-reference-drawing.png)
+
+This earlier actual capture shows the pane in its previous place inside the CAM
+setup panel, with *Draw reference* and *Stop / cancel* buttons; drawing and
+picking behave as described here. Outlines picked by the current operation are magenta. Some demonstration
 outlines extend beyond the blank: drawing them does not authorise machining
 outside material or prove a safe cutting/workholding plan.
 
@@ -27,14 +37,16 @@ outside material or prove a safe cutting/workholding plan.
 opposite corners for rectangles. Rectangles remain aligned to the work X/Y axes.
 
 1. Import the model and choose CAM. A tool/operation is not required to draw.
-2. Select a construction method and set **Drawing plane Z (mm)**; default is 0.
-3. Press **Draw reference**, then click the two points in Prepare. Top view is
-   often simplest. A magenta cross marks the first point; the status text asks
-   for the second point.
-4. The completed outline appears in cyan and its dimensions/center/Z appear in
-   the saved-reference list. Drawing stays active for another shape.
-5. Press **Stop / cancel** or Escape to leave drawing mode. Changing the method
-   or Z cancels an unfinished shape. Orbit/pan remain available while drawing.
+2. Select a method under **New shape** and set **Drawing plane Z**; default is 0.
+3. Press **Draw**. The button stays highlighted while drawing. Click the two
+   points in Prepare; top view is often simplest. A magenta cross marks the
+   first point and the status text asks for the second.
+4. The completed outline appears in the list (selected) and in the view.
+   Drawing stays active for another shape.
+5. Press **Esc** in the view or click the highlighted **Draw** again to stop.
+   Changing the method or Z cancels an unfinished shape. Orbit/pan remain
+   available while drawing. Starting another tool (Move, Resize, holding tabs,
+   face/edge picking) also ends drawing.
 
 Clicks intersect the camera ray with the selected Z plane; they do **not** snap
 to mesh edges or copy a clicked face's Z. A plane viewed edge-on or behind the
@@ -102,10 +114,36 @@ Pocket selection retains the normal material-surface start fallback. Sketches
 do not automatically allocate or enlarge stock or protect their interior as
 physical material unless the operation's boundary rules explicitly do so.
 
+## Moving and resizing
+
+Select a shape in the list. It is drawn **yellow** in the view, and its center
+and size appear under the buttons:
+
+- **Center X / Y / Z** and **Diameter** (circle) or **Width / Height**
+  (rectangle) can be typed. Values apply when a field is confirmed (Enter, arrow
+  or leaving the field). A zero or invalid size is rejected and the previous
+  values return.
+- **Move** (checkable): click in the view to put the shape's center there. The
+  click is taken on the shape's own Z plane, so Z does not change.
+- **Resize** (checkable): click a new rim point (circle) or corner (rectangle);
+  the center stays.
+
+Move and Resize stay active for repeated clicks until Esc or the highlighted
+button is clicked again; only one of Draw, Move and Resize is active at a time.
+They need a selected shape.
+
+Moving or resizing keeps the shape's ID, name and construction method, so
+operations that machine it or use it for Start/End follow the new position and
+size on the next generation. The CAM output is marked out of date. Inspect the
+changed boundaries and depths before regenerating.
+
 ## Deletion and limitations
 
-Select an unused outline in the saved-reference list and **Delete selected**.
-Confirmation is required. Deletion is blocked while an operation uses that
+Select an unused outline in the list and **Delete selected**. A confirmation
+(default **No**) has **Don't show this again**: answering **Yes** with it ticked
+deletes later unused references without asking. Switch the question back on in
+**Settings → Messages → Confirm deleting reference geometry**. Answering No is
+never remembered. Deletion is blocked while an operation uses that
 outline for machining, height-only picking or an active Start/End link. Remove
 those picks and unlink the depth sources first. Stable IDs mean removing one
 outline cannot redirect another operation to a different shape.
@@ -113,7 +151,7 @@ outline cannot redirect another operation to a different shape.
 Circles are polygonal with a maximum **0.01 mm chord error**, at least 64
 segments and a maximum budget of 8,192 segments; excessive size fails rather
 than silently coarsening. Output is not a fitted G2/G3 circle. There are no
-constraints/snaps, rotated rectangles, trim/segment editing, numeric XY/dimension
-editing, arbitrary sketch planes or full CAD/3D cutter compensation. Redraw an
-outline to change its construction. All usual approximate 2.5D simulation and
+constraints/snaps, drag handles, rotated rectangles, trim/segment editing,
+arbitrary sketch planes or full CAD/3D cutter compensation. Redraw an outline
+to change its construction method or its kind. All usual approximate 2.5D simulation and
 fixture/holder limitations remain.

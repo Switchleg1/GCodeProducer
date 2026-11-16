@@ -113,14 +113,35 @@ for stock-envelope Pocket behaviour and 2.5D limits.
 
 ## Draw reference geometry
 
-In **CAM setup → Reference geometry**, draw circles by center/rim or diameter
-endpoints and rectangles by center/corner or opposite corners on a chosen Z
-plane. Saved outlines are cyan, selected references magenta; material selection
-remains green. They are selectable boundaries or per-selection height-only
+In the **Reference geometry** pane at the bottom of the Model dock (CAM), draw
+circles by center/rim or diameter endpoints and rectangles by center/corner or
+opposite corners on a chosen Z plane, then move or resize the selected shape by
+typing its center/size or with the **Move** / **Resize** click tools. **Draw**,
+Move and Resize are highlighted while active; click again or press Esc to stop.
+Saved outlines are cyan, the shape selected in the pane yellow, outlines picked
+by the operation magenta; material selection remains green. They are selectable boundaries or per-selection height-only
 references. Use **Reference geometry only** to pick through overlaps. Outlines
 stay fixed in CAM work coordinates when the model is moved. See
 [reference geometry](cam/reference-geometry.md) for construction, persistence,
 operation rules and limitations.
+
+## Collapsible panes
+
+Every panel is built from the same collapsible pane as the FDM process sections
+(Layers, Skirt / brim, Walls, …): Setup, Model, Support, Material / stock,
+Holding tabs, Reference geometry, Process, CAM tool changes and Operation, the
+View dock's Show / Features / Camera, Settings → Messages and the groups of
+every generated form (library profiles, global settings). Click a header to
+collapse or expand it; the arrow shows the state. Panes nested inside another
+pane (setting groups within a process section, Engagement feeds within an
+Operation) use a quieter header. Collapsed/expanded state of the named panes
+is remembered with the window layout.
+
+![Collapsible panes in the Model, Process and View docks](pictures/ui-collapsible-panes-fdm.png)
+
+Lists with actions are laid out the same way everywhere: the list first, its
+buttons directly underneath, then the fields of the selected entry (support
+blocks, holding tabs, reference geometry).
 
 ## CAM holding tabs
 

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -21,13 +21,16 @@ from PyQt6.QtWidgets import (
 )
 from gcodeproducer.core.parameters.parameters_constants import ALL_ITEMS, AUTO
 from gcodeproducer.core.parameters.param import Param
+from .section import Section
+from .editors_constants import SECTION_BODY_MARGINS
 from gcodeproducer.core.parameters.resolution import resolve_params
 
 class ParamEditor(QWidget):
     """Builds a form from a list of :class:`Param` and edits a value dict."""
     changed = pyqtSignal(dict)
 
-    def __init__(self, params: list, values: dict, parent=None, context: Optional[dict] = None):
+    def __init__(self, params: list, values: dict, parent=None, context: Optional[dict] = None,
+                 section_level: int = 0):
         super().__init__(parent)
         self.params = params
         self.context = context or {}
@@ -38,15 +41,20 @@ class ParamEditor(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         groups: dict = {}
         rows: dict = {}
+        self.sections: list = []
+        outer.setSpacing(3)
         for p in params:
             if getattr(p, "hidden", False):
                 continue                   # value kept in self.values, edited elsewhere
             if p.group not in groups:
-                box = QGroupBox(p.group.replace("&", "&&"))   # '&' is a mnemonic marker in Qt
-                form = QFormLayout(box)
+                body = QFrame()
+                form = QFormLayout(body)
+                form.setContentsMargins(*SECTION_BODY_MARGINS)
                 form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
                 groups[p.group] = form
-                outer.addWidget(box)
+                section = Section(p.group, body, level=section_level)   # the title escapes Qt's '&' itself
+                self.sections.append(section)
+                outer.addWidget(section)
             form = groups[p.group]
             w = self._make(p)
             if p.row:

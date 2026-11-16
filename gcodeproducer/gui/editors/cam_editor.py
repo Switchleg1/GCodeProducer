@@ -1,7 +1,7 @@
 """Tool-change tree and operation-owned geometry / depth references."""
 from __future__ import annotations
 
-from .reference_geometry_editor import ReferenceGeometryEditor
+from .section import Section
 from .editors_constants import (
     PICK_MODES,
     DEPTH_ROWS,
@@ -10,6 +10,7 @@ from .editors_constants import (
     ENGAGEMENT_CONTROLS,
     RATE_FIELDS,
     DEPTH_SOURCES,
+    SECTION_BODY_MARGINS,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -25,7 +26,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QCheckBox,
-    QGroupBox,
+    QFrame,
 )
 from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.cam.depth import Depth
@@ -53,22 +54,20 @@ class CAMEditor(QWidget):
         saved = QLabel("CAM setup — automatically saved per model")
         saved.setWordWrap(True)
         layout.addWidget(saved)
-        self.references = ReferenceGeometryEditor(self.setup)
-        self.references.changed.connect(self.changed.emit)
-        self.references.modeRequested.connect(self.pickModeChanged.emit)
-        layout.addWidget(self.references)
+        tools = Section("Tool changes & operations", key="cam.tool_changes")
+        layout.addWidget(tools)
         row = QHBoxLayout()
         self.tool_combo = QComboBox()
         row.addWidget(self.tool_combo, 1)
         add = QPushButton("Add tool change")
         add.clicked.connect(self.add_tool)
         row.addWidget(add)
-        layout.addLayout(row)
+        tools.body.addLayout(row)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Tool changes / operations"])
         self.tree.setMinimumHeight(130)
         self.tree.currentItemChanged.connect(self._selected)
-        layout.addWidget(self.tree)
+        tools.body.addWidget(self.tree)
         row = QHBoxLayout()
         self.kind = QComboBox()
         for k in KINDS:
@@ -83,9 +82,11 @@ class CAMEditor(QWidget):
             b.setFixedWidth(60 if text == "Delete" else 28)
             b.clicked.connect(callback)
             row.addWidget(b)
-        layout.addLayout(row)
-        self.details = QGroupBox("Operation")
+        tools.body.addLayout(row)
+        self.details = QFrame()
         form = QFormLayout(self.details)
+        form.setContentsMargins(*SECTION_BODY_MARGINS)
+        self.details_section = Section("Operation", self.details, key="cam.operation")
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
         form.addRow("Name", self.name)
@@ -247,8 +248,11 @@ class CAMEditor(QWidget):
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
         self.feed_controls = {}
-        feeds = QGroupBox("Engagement feeds (% of tool feed)")
-        ff = QFormLayout(feeds)
+        feeds_body = QFrame()
+        ff = QFormLayout(feeds_body)
+        ff.setContentsMargins(*SECTION_BODY_MARGINS)
+        feeds = Section("Engagement feeds (% of tool feed)", feeds_body, expanded=False,
+                        key="cam.engagement_feeds", level=1)
         for key, label in ENGAGEMENT_CONTROLS:
             sb = self.spin(0, 300, 0)
             sb.setDecimals(0)
@@ -263,9 +267,9 @@ class CAMEditor(QWidget):
         feed_note.setWordWrap(True)
         ff.addRow(feed_note)
         form.addRow(feeds)
-        layout.addWidget(self.details)
-        warning = QLabel("2.5D CAM • Conservative original-stock checks only; no stock-removal, "
-                         "holder or fixture simulation. Verify clearance and air-cut before machining.")
+        layout.addWidget(self.details_section)
+        warning = QLabel("Approximate 2.5D / 3-axis checks only; no holder or fixture simulation. "
+                         "Verify clearance and air-cut before machining.")
         warning.setWordWrap(True)
         layout.addWidget(warning)
         self.rebuild()
@@ -299,7 +303,6 @@ class CAMEditor(QWidget):
 
     def set_setup(self, setup):
         self.setup = setup
-        self.references.set_setup(setup)
         self.last_pick = None
         self.pick.setCurrentIndex(0)
         self.pick_source.blockSignals(True)

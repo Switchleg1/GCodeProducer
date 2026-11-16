@@ -4,6 +4,26 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolated_qt_settings(monkeypatch):
+    """Never read or write the user's real window/pane state from tests."""
+    import os
+    if not os.environ.get("GCODEPRODUCER_SETTINGS", "").startswith("pytest"):
+        monkeypatch.setenv("GCODEPRODUCER_SETTINGS", "pytest_default")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _clear_default_test_settings():
+    try:
+        from PyQt6.QtCore import QSettings
+    except ImportError:
+        yield
+        return
+    QSettings("GCodeProducer", "pytest_default").clear()
+    yield
+    QSettings("GCodeProducer", "pytest_default").clear()
+
+
 def _write_cube(path, size=20.0):
     return write_boxes(path, [(0, 0, 0, size, size, size)])
 

@@ -36,7 +36,7 @@ application/test/tool callers or documentation references:
 | `core.profiles` | `LibrarySet.library_kinds` |
 | `core.sim` | `SimResult.travelling` |
 | `gui.camera` | `Camera.copy_from` |
-| `gui.process_editor` | `Section.is_expanded` |
+| `gui.process_editor` | `Section.is_expanded` (re-added later when `Section` became the shared pane) |
 | `gui.widgets` | `Worker` (the application uses the spawned compute service) |
 
 Qt callbacks, discovery hooks and supported public loading/parsing APIs were

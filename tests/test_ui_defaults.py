@@ -167,9 +167,64 @@ def test_reference_drawing_two_clicks_are_saved_not_machining_picks(app, method)
     editor.accept_ray([6,8,10], [0,0,-1])
     assert len(setup.reference_shapes) == 1 and not setup.groups
     assert setup.reference_shapes[0].z == -3 and editor.first is None
-    assert editor.drawing and modes[-1].startswith("draw_")
-    editor.cancel()
-    assert modes[-1] == "" and not editor.drawing
+    assert editor.drawing and modes[-1].startswith("sketch_draw_") and editor.draw.isChecked()
+    assert editor.current() is setup.reference_shapes[0]              # the new shape is selected
+    editor.draw.click()                                                 # the highlighted button toggles off
+    assert modes[-1] == "" and not editor.drawing and not editor.draw.isChecked()
+    editor.close()
+
+
+@pytest.mark.parametrize("kind,construction", [("circle", "center"), ("circle", "edge"),
+                                               ("rectangle", "center"), ("rectangle", "edge")])
+def test_reference_set_geometry_keeps_identity_and_construction(kind, construction):
+    import numpy as np
+    from gcodeproducer.core.cam.reference_shape import ReferenceShape
+    shape = ReferenceShape(kind, construction, (1, 2), (-3, 6), z=-1, name="A")
+    ident = shape.id
+    size = 2.5 if kind == "circle" else (2.5, 1.5)
+    shape.set_geometry((10, 20), size, -4)
+    center, got = shape.dimensions()
+    assert np.allclose(center, (10, 20)) and np.allclose(got, size) and shape.z == -4
+    assert (shape.id, shape.kind, shape.construction, shape.name) == (ident, kind, construction, "A")
+    shape.set_geometry(center=(0, 0))
+    assert np.allclose(shape.dimensions()[0], (0, 0)) and np.allclose(shape.dimensions()[1], size)
+    before = (shape.first, shape.second, shape.z)
+    for bad in (0 if kind == "circle" else (0, 1), float("nan") if kind == "circle" else (1, float("inf"))):
+        with pytest.raises(ValueError):
+            shape.set_geometry(size=bad)
+        assert (shape.first, shape.second, shape.z) == before
+    with pytest.raises(ValueError):
+        shape.set_geometry(z=float("nan"))
+    assert (shape.first, shape.second, shape.z) == before
+
+
+def test_reference_tools_are_exclusive_and_need_a_selection(app):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.core.cam.reference_shape import ReferenceShape
+    from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+    from gcodeproducer.gui.editors.section import Section
+    setup = CAMSetup()
+    editor = ReferenceGeometryEditor(setup)
+    assert isinstance(editor, Section) and editor.title() == "Reference geometry"
+    assert not editor.buttons["move"].isEnabled() and not editor.editor.isEnabled() and not editor.delete.isEnabled()
+    setup.reference_shapes.append(ReferenceShape("circle", "center", (0, 0), (2, 0)))
+    editor.refresh(setup.reference_shapes[0].id)
+    assert editor.buttons["move"].isEnabled() and editor.size_label.text() == "Diameter"
+    assert editor.fields["a"].value() == 4 and editor.fields["b"].isHidden()
+    modes = []
+    editor.modeRequested.connect(modes.append)
+    editor.buttons["move"].click()
+    editor.draw.click()
+    assert editor.mode == "draw" and modes[-1].startswith("sketch_draw")
+    assert [k for k, b in editor.buttons.items() if b.isChecked()] == ["draw"]
+    editor.buttons["resize"].click()
+    assert editor.mode == "resize" and modes[-1] == "sketch_resize"
+    editor.accept_ray([0, 5, 10], [0, 0, -1])
+    assert setup.reference_shapes[0].dimensions()[1] == pytest.approx(5)
+    editor.end_mode()                                   # Esc path: no signal, buttons released
+    assert editor.mode == "" and not any(b.isChecked() for b in editor.buttons.values())
+    editor.items.setCurrentRow(-1)
+    assert not editor.buttons["resize"].isEnabled()
     editor.close()
 
 
@@ -186,6 +241,7 @@ def test_reference_drawing_invalid_click_and_cancel_do_not_save_partial_shape(ap
     assert not setup.reference_shapes and editor.first is not None
     editor.z.setValue(-2)
     assert editor.first is None and not editor.drawing and not setup.reference_shapes
+    assert not editor.draw.isChecked()
     editor.close()
 
 
@@ -202,18 +258,24 @@ def test_reference_used_in_operations_cannot_be_deleted(app, monkeypatch):
     editor.remove()
     assert setup.reference_shapes == [shape] and "used" in editor.status.text()
     operation.end = Depth("bottom")
-    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args: QtWidgets.QMessageBox.StandardButton.No)
+    editor.confirm = lambda *args: False
     editor.remove()
     assert setup.reference_shapes == [shape]
     def picked_during_confirmation(*args):
         operation.geometry.append(ref)
-        return QtWidgets.QMessageBox.StandardButton.Yes
-    monkeypatch.setattr(QtWidgets.QMessageBox, "question", picked_during_confirmation)
+        return True
+    editor.confirm = picked_during_confirmation
     editor.remove()
     assert setup.reference_shapes == [shape] and "now used" in editor.status.text()
     operation.geometry.clear()
-    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args: QtWidgets.QMessageBox.StandardButton.Yes)
+    # The stand-alone default asks with No as the default answer.
+    from gcodeproducer.gui.editors.reference_geometry_editor import default_confirm
+    editor.confirm = default_confirm
+    asked = []
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question",
+                        lambda *args: asked.append(args[-1]) or QtWidgets.QMessageBox.StandardButton.Yes)
     editor.remove()
+    assert asked == [QtWidgets.QMessageBox.StandardButton.No]
     assert not setup.reference_shapes
     editor.close()
 
@@ -248,3 +310,48 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
     assert [o.kind for o in restored.groups[0].operations] == ["waterfall", "contour3d", "pocket"]
     assert restored.groups[0].operations[2].protect_model
     editor.close()
+
+
+def test_section_is_the_shared_collapsible_pane_and_remembers_state(app, monkeypatch):
+    from PyQt6.QtCore import QSettings
+    from gcodeproducer.gui.editors.section import Section
+    monkeypatch.setenv("GCODEPRODUCER_SETTINGS", "pytest_sections")
+    QSettings("GCodeProducer", "pytest_sections").clear()
+    pane = Section("Feeds & speeds", key="test.pane")
+    assert pane.header.objectName() == "sectionHeader" and pane.content.objectName() == "sectionBody"
+    assert pane.title() == "Feeds & speeds" and pane.header.text() == "Feeds && speeds"
+    assert pane.is_expanded() and pane.body is pane.content.layout()
+    pane.set_title("Walls", "2 loops")
+    assert pane.header.text() == "Walls   — 2 loops"
+    seen = []
+    pane.toggled.connect(seen.append)
+    pane.header.click()
+    assert seen == [False] and not pane.is_expanded() and pane.content.isHidden()
+    again = Section("Feeds & speeds", key="test.pane")             # reopened: stays collapsed
+    assert not again.is_expanded()
+    assert Section("Unkeyed", expanded=False).is_expanded() is False
+    assert Section("Unkeyed").is_expanded()
+    QSettings("GCodeProducer", "pytest_sections").clear()
+
+
+def test_every_pane_in_the_window_uses_the_shared_section(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("GCODEPRODUCER_LIBRARY", str(tmp_path / "lib"))
+    monkeypatch.setenv("GCODEPRODUCER_SETTINGS", f"pytest_{tmp_path.name}")
+    from gcodeproducer.gui.main_window import MainWindow
+    from gcodeproducer.gui.editors.section import Section
+    win = MainWindow()
+    try:
+        assert not win.findChildren(QtWidgets.QGroupBox)
+        titles = {s.title() for s in win.findChildren(Section)}
+        for title in ("Setup", "Model", "Support", "Material / stock", "Holding tabs", "Reference geometry",
+                      "Process", "Show", "Features (click to toggle)", "Camera", "Tool changes & operations",
+                      "Operation", "Engagement feeds (% of tool feed)", "Layers", "Walls"):
+            assert title in titles, title
+        # Support block list actions sit directly under the list, as in the other panes.
+        layout = win.blocks_box.layout()
+        assert layout.itemAt(0).widget() is win.lst_blocks
+        assert any(isinstance(w, QtWidgets.QPushButton) and w.text() == "+ Add"
+                   for w in (layout.itemAt(1).layout().itemAt(i).widget() for i in range(layout.itemAt(1).layout().count())))
+    finally:
+        win.dirty = {k: False for k in win.dirty}
+        win.close()

@@ -160,8 +160,10 @@ def highlight_geometry(payload):
     from .reference_geometry import line_segments
     try:
         out["reference_geometry"] = line_segments(shapes)
+        focus = stocks[4] if len(stocks) > 4 else None
+        out["reference_focus"] = line_segments([s for s in shapes if s.id == focus])
     except ValueError as exc:
-        out["reference_geometry"] = np.empty((0, 3))
+        out["reference_geometry"] = out["reference_focus"] = np.empty((0, 3))
         out["geometry_error"] = str(exc)
     out["tabs"] = []
     if len(stocks) > 2 and stocks[2]:
