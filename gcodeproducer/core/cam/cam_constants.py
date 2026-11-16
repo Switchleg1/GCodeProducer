@@ -7,7 +7,19 @@ from gcodeproducer.core.geometry.geometry_constants import (
 from gcodeproducer.core.parameters.param import Param
 import math
 
-KINDS = ("pocket", "profile", "drill", "engrave", "slot")
+KINDS = ("pocket", "profile", "drill", "engrave", "slot", "waterfall", "contour3d")
+
+KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engrave": "Engrave", "slot": "Slot",
+               "waterfall": "3D Waterfall", "contour3d": "3D Contour"}
+
+SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
+
+SURFACE_TOLERANCE = 1e-3       # mm: model material this far above a level blocks the cutter at that level
+SHADOW_SEAL = 1e-5             # mm: closes hairline gaps between projected triangles
+SURFACE_MIN_RESOLUTION = .05   # mm: finest drop-cutter height grid
+SURFACE_CELLS_PER_DIAMETER = 40
+SURFACE_SIMPLIFY = .005        # mm: 3D polyline simplification tolerance
+SURFACE_MAX_POINTS = 2_000_000
 
 REFERENCE_CHORD_ERROR = .01  # mm; circles are polygonal, not fitted G2/G3 arcs
 REFERENCE_MIN_SEGMENTS = 64

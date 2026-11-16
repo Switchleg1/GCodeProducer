@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from gcodeproducer.stages.cam.cam_constants import CAMEMIT_PARAMS, _LINE
 import math, numpy as np
+from gcodeproducer.core.cam.cam_constants import RAMP_TAN
 from gcodeproducer.core.gcode.builder import GCodeBuilder
 from gcodeproducer.core.gcode.parsing import format_number
 from gcodeproducer.stages.base.api import CAM
@@ -136,6 +137,48 @@ class CAMEmit(SliceStage):
             position=target.copy()
             last_feed=None
 
+        def surface_path(pts):
+            """One (n, 3) surface-following path: clear travel, plunge, then XYZ feed moves.
+
+            Descents steeper than the lead-in ramp angle use the lead/plunge feed.
+            """
+            nonlocal position, last_feed
+            first = pts[0]
+            b.set_feature("rapid", comment=False)
+            travel = safe_z
+            if live is not None and short_retracts:
+                travel = min(safe_z, max(live.max_height_along(position[:2], first[:2], active_radius),
+                                         live.height_at(first[:2], active_radius))+travel_clearance)
+            travel = max(travel, float(first[2]))
+            if position[2] < travel-1e-9:
+                b.command(f"G0 Z{format_number(travel,3)}")
+                position[2] = travel
+            b.command(f"G0 X{format_number(first[0],3)} Y{format_number(first[1],3)} F{format_number(rapid_xy,1)}")
+            position[:2] = first[:2]
+            if live is not None and short_retracts:
+                local = live.height_at(first[:2], active_radius)+travel_clearance
+                rapid_to = max(float(first[2]), min(position[2], local))
+                if rapid_to < position[2]-1e-9:
+                    b.command(f"G0 Z{format_number(rapid_to,3)}")
+                    position[2] = rapid_to
+            current = None
+            for index, q in enumerate(pts):
+                target = np.array([q[0], q[1], float(format_number(q[2],3))])
+                if index == 0 and target[2] >= position[2]-1e-9:
+                    continue
+                drop, run = position[2]-target[2], float(np.linalg.norm(target[:2]-position[:2]))
+                steep = drop > 1e-9 and drop > RAMP_TAN*run
+                rate = limited(float(plunge if steep else feed))
+                b.set_feature("plunge" if steep else "cut", comment=False)
+                words = f"G1 X{format_number(target[0],3)} Y{format_number(target[1],3)} Z{format_number(target[2],3)}"
+                line = b.command(words+("" if rate == current else f" F{feed_text(rate)}"))
+                current = rate
+                if live is not None:
+                    line.engagement = 1. if live.contact(position, target, active_radius) else 0.
+                    live.cut(position, target, active_radius)
+                position = target.copy()
+            last_feed = None
+
         self._start(b, job, tool, rpm, safe_z, log=ctx.log, cutting=first_data)
         from gcodeproducer.core.gcode.simulation import simulate
         start_state=simulate(b.program())
@@ -182,6 +225,10 @@ class CAMEmit(SliceStage):
             for path_index,path in enumerate(layer.paths):
                 pts = np.asarray(path.points, float)
                 if len(pts) < (1 if path.feature == "drill" else 2):
+                    continue
+                if pts.shape[1] == 3:
+                    surface_path(pts)
+                    previous_end = None
                     continue
                 loop = np.vstack([pts, pts[0]]) if path.closed else pts
                 start = loop[0]

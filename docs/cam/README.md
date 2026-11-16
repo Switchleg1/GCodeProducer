@@ -52,7 +52,8 @@ Read [stock allocation and safety](stock-and-safety.md) before relying on it.
    maximum Z and every operation start Z.
 3. Choose an allowed tool and **Add tool change**. A group references the tool
    library ID. Check its T number, diameter, feed, plunge feed, RPM and max DOC.
-4. Select the group, choose Pocket/Profile/Drill/Engrave, then **Add operation**.
+4. Select the group, choose the operation kind (Pocket, Profile, Drill, Engrave,
+   Slot, 3D Waterfall or 3D Contour), then **Add operation**.
 5. Select machining faces/edges and define start/end heights. Use height-only
    picking when another face/edge should supply depth but not cutting paths.
 6. Set operation options. Rename operations so logs and output are identifiable.
@@ -106,7 +107,10 @@ if the current blank is no longer suitable.
 
 ## Scope and next topics
 
-Implemented machining is **initial 2.5D** from STL-derived topology:
+Implemented machining is 2.5D from STL-derived topology, plus three 3-axis
+operations limited by the model surface:
+
+- [Sloped-floor Pocket, 3D Waterfall and 3D Contour](3d-operations.md)
 
 - [Geometry selection and linked depths](selection-and-depths.md)
 - [Draw circles and rectangles as reference geometry](reference-geometry.md)
@@ -119,8 +123,10 @@ Implemented machining is **initial 2.5D** from STL-derived topology:
 - [Stock, warnings and verification checklist](stock-and-safety.md)
 
 Model-owned rectangular holding tabs are implemented, including radius-aware
-path splits and protected-tab travel checks. No general 3D surfacing, CAD/STEP
-topology, cutter-holder or fixture simulation is provided. Segmented contour lead ramps and progressive 2.5D
+path splits and protected-tab travel checks. 3D work is limited to flat-cutter
+level roughing, Z-level wall contours and parallel surface-following passes: no
+rest machining, ball/bull-nose compensation, scallop/spiral/adaptive strategies,
+CAD/STEP topology, cutter-holder or fixture simulation is provided. Segmented contour lead ramps and progressive 2.5D
 material outputs/checks are implemented, not a general solid-removal solver. Tool type labels do not implement V-carving
 or ballnose surface compensation. The legacy CLI silhouette profile is a
 separate, narrower workflow; see [CLI scope](../cli.md#legacy-cam-command).

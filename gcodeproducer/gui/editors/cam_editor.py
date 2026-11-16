@@ -31,7 +31,7 @@ from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import KINDS
+from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -72,7 +72,7 @@ class CAMEditor(QWidget):
         row = QHBoxLayout()
         self.kind = QComboBox()
         for k in KINDS:
-            self.kind.addItem(k.title(), k)
+            self.kind.addItem(KIND_LABELS[k], k)
         row.addWidget(self.kind)
         add_op = QPushButton("Add operation")
         add_op.clicked.connect(self.add_operation)
@@ -157,7 +157,7 @@ class CAMEditor(QWidget):
         self.depth_summary = QLabel("")
         self.depth_summary.setWordWrap(True)
         form.addRow(self.depth_summary)
-        self.b_selection_depths = QPushButton("Use pocket selection depths")
+        self.b_selection_depths = QPushButton("Use selection depths")
         self.b_selection_depths.setToolTip("Start at the highest selected face/edge Z; end at the lowest. Replaces both depth definitions. "
                                            "With 'Remove air cutting' (Settings) the start also drops below material removed by earlier operations.")
         self.b_selection_depths.clicked.connect(self.use_selection_depths)
@@ -226,7 +226,7 @@ class CAMEditor(QWidget):
         self.strategy = QComboBox()
         self.strategy.addItem("Wall-parallel contours", "contour")
         self.strategy.addItem("Raster lines", "raster")
-        for label, w in (("Area order", self.area_order), ("Pocket stepover (%)", self.stepover),
+        for label, w in (("Area order", self.area_order), ("Pocket / 3D Contour stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
                          ("Pocket overcut into void (mm)", self.overcut),
                          ("Material boundary limit (mm)", self.material_limit),
@@ -236,6 +236,12 @@ class CAMEditor(QWidget):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
+        self.protect_model = QCheckBox("Stop at model surface (3D floor)")
+        self.protect_model.setToolTip("Pocket: at every depth keep the cutter out of all model material above that depth, so a sloped or "
+                                      "curved bottom is cleared in terraces instead of being cut flat. Always applied when the selected "
+                                      "boundary is not level, and by 3D Waterfall / 3D Contour. Finish terraces with those operations.")
+        self.protect_model.toggled.connect(self._edit)
+        form.addRow(self.protect_model)
         self.stay_down = QCheckBox("Stay down between contours")
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
@@ -324,7 +330,7 @@ class CAMEditor(QWidget):
             if select == (gi, None):
                 self.tree.setCurrentItem(root)
             for oi, op in enumerate(group.operations):
-                item = QTreeWidgetItem([f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else "")])
+                item = QTreeWidgetItem([f"{KIND_LABELS.get(op.kind, op.kind.title())}: {op.name}" + (" (off)" if not op.enabled else "")])
                 item.setData(0, Qt.ItemDataRole.UserRole, (gi, oi))
                 root.addChild(item)
                 if select == (gi, oi):
@@ -347,11 +353,11 @@ class CAMEditor(QWidget):
             return
         kind = self.kind.currentData()
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
-        op = Operation(name=kind.title(), kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
+        op = Operation(name=KIND_LABELS[kind], kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
                        area_order=self.defaults.get("default_area_order", DEFAULTS["default_area_order"]),
                        material_limit=float(self.defaults.get("default_material_limit", DEFAULTS["default_material_limit"])),
                        overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind == "pocket" else 0.0)
-        if kind == "pocket":
+        if kind == "pocket" or kind in SURFACE_KINDS:
             op.start = Depth("selection", extreme="max")
             op.end = Depth("selection", extreme="min")
         elif kind == "engrave":
@@ -390,7 +396,7 @@ class CAMEditor(QWidget):
         self.last_pick = None
         self._refresh_selections()
         self.details.setEnabled(op is not None)
-        self.b_selection_depths.setVisible(op is not None and op.kind == "pocket")
+        self.b_selection_depths.setVisible(op is not None and (op.kind == "pocket" or op.kind in SURFACE_KINDS))
         if op:
             self.name.setText(op.name)
             self.enabled.setChecked(op.enabled)
@@ -428,11 +434,13 @@ class CAMEditor(QWidget):
             self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
-                sb.setEnabled(op.kind != "drill")
+                sb.setEnabled(op.kind not in ("drill", "contour3d"))
             self.strategy.setEnabled(op.kind == "pocket")
-            self.direction_override.setEnabled(op.kind in ("pocket", "profile"))
-            self.direction.setEnabled(op.kind in ("pocket", "profile") and self.direction_override.isChecked())
-            self.stepover.setEnabled(op.kind == "pocket")
+            self.direction_override.setEnabled(op.kind in ("pocket", "profile", "waterfall"))
+            self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
+            self.stepover.setEnabled(op.kind in ("pocket", "contour3d"))
+            self.protect_model.setChecked(op.protect_model or op.kind in SURFACE_KINDS)
+            self.protect_model.setEnabled(op.kind == "pocket")
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
         self.selectionChanged.emit()
@@ -467,13 +475,15 @@ class CAMEditor(QWidget):
             self.direction.setCurrentIndex(0)
             self.direction.blockSignals(False)
         op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
-        self.direction.setEnabled(op.kind in ("pocket", "profile") and self.direction_override.isChecked())
+        self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
+        if op.kind == "pocket":
+            op.protect_model = self.protect_model.isChecked()
         op.stay_down = self.stay_down.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())
         self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
         item = self.tree.currentItem()
-        item.setText(0, f"{op.kind.title()}: {op.name}" + (" (off)" if not op.enabled else ""))
+        item.setText(0, f"{KIND_LABELS.get(op.kind, op.kind.title())}: {op.name}" + (" (off)" if not op.enabled else ""))
         self.changed.emit()
 
     def _refresh_selections(self, selected=None):
@@ -577,7 +587,7 @@ class CAMEditor(QWidget):
 
     def use_selection_depths(self):
         op = self.operation()
-        if op is None or op.kind != "pocket":
+        if op is None or not (op.kind == "pocket" or op.kind in SURFACE_KINDS):
             return
         op.start, op.end = Depth("selection", extreme="max"), Depth("selection", extreme="min")
         self._loading = True

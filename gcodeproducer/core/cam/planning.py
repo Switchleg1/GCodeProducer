@@ -13,7 +13,7 @@ from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.tool_group import ToolGroup
 from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.cam.topology import Topology
-from gcodeproducer.core.cam.cam_constants import KINDS
+from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KINDS, SURFACE_MIN_RESOLUTION, SURFACE_CELLS_PER_DIAMETER
 from dataclasses import asdict
 import hashlib, math, numpy as np, gcodeproducer.core.geometry.kernel as geometry
 
@@ -277,15 +277,153 @@ def _tab_schedule(areas, op, region, tabs, start, end, step, count, radius, log=
     return records
 
 
+def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direction, tabs,
+                       material_history, shadow, skip_air, add_layer):
+    """Operations limited by the model surface (3-axis): sloped-floor Pocket, 3D Waterfall, 3D Contour.
+
+    At each level the cutter stays out of the XY shadow of all model material above
+    that level, so sloped and curved floors become terraces and undercuts are never
+    entered. Holding tabs standing above a level are treated like model material.
+    """
+    from shapely.geometry import box
+    from shapely.ops import unary_union
+    from shapely import BufferJoinStyle
+    from gcodeproducer.core.jobs.path import Path
+    from gcodeproducer.core.cam.paths import machining_areas
+    from gcodeproducer.core.cam.engagement import plan_engagement
+    from gcodeproducer.core.cam.surface_paths import selection_region, waterfall_paths, surface_raster
+    from gcodeproducer.core.settings.preferences import pref
+    setup = job.cam_setup
+    diameter = float(tool.get("diameter", 0))
+    radius = diameter/2
+    label = KIND_LABELS[op.kind]
+    if op.kind != "waterfall" and not 0 < op.stepover <= 100:
+        raise ValueError(f"{op.name}: stepover must be between 0 and 100 percent")
+    if op.stock < 0 or not math.isfinite(op.stock):
+        raise ValueError(f"{op.name}: stock to leave must be zero or positive")
+    region = selection_region(loops, ctx.log, op.name)
+    surface_top = setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
+    reach = float(tool.get("length", 0) or 0)
+    if reach > 0 and surface_top-end > reach+1e-3:
+        warning = (f"{op.name}: {surface_top-end:g} mm below the material surface (Z{surface_top:g}) exceeds the "
+                   f"tool cutting length {reach:g} mm; verify reach, shank and holder clearance.")
+        if warning not in job.warnings:
+            job.warnings.append(warning)
+            ctx.log("REACH WARNING: "+warning)
+    produced = 0
+    if op.kind == "contour3d":
+        from gcodeproducer.core.cam.drop_surface import DropSurface
+        wanted = max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")), diameter/SURFACE_CELLS_PER_DIAMETER))
+        minx, miny, maxx, maxy = region.bounds
+        pad = radius+3*wanted
+        surface = DropSurface(job.mesh, (minx-pad, miny-pad), (maxx+pad, maxy+pad), wanted,
+                              int(pref(job, "stock_max_cells")))
+        if surface.resolution > wanted+1e-9:
+            warning = (f"{op.name}: surface height grid coarsened to {surface.resolution:.3f} mm (cell limit); "
+                       "more material is left on slopes.")
+            job.warnings.append(warning)
+            ctx.log("SURFACE WARNING: "+warning)
+        floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(radius+op.stock+surface.resolution),
+                   math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in tabs]
+        lines = surface_raster(region, surface, radius, diameter*op.stepover/100, end, op.stock, ctx.log, floors, start)
+        if not lines:
+            raise ValueError(f"{op.name}: no model surface below Start Z{start:g} that the cutter can reach in the "
+                             "selected area. Check Start/End Z and the tool diameter.")
+        low = min(float(p[:, 2].min()) for p in lines)
+        add_layer([Path("cut", p, width=diameter) for p in lines], low, step, 0)
+        ctx.log(f"  {op.name}: {label}, {len(lines)} surface-following paths, lowest Z{low:g} "
+                f"(single finishing pass; rough first if the depth exceeds the tool's depth per pass)")
+        return
+    limit = None
+    if setup.stock.allocated and op.kind == "pocket":
+        lo_s, hi_s = setup.stock.bounds
+        limit = box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+        if abs(op.material_limit+op.stock) > 1e-12:
+            limit = limit.buffer(op.material_limit+op.stock, join_style=BufferJoinStyle.mitre)
+    if op.area_order == "area":
+        ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
+    allowed = region.buffer(radius+op.stock+1e-3)
+    for i in range(count):
+        z = max(end, start-(i+1)*step)
+        blocked = shadow.at(z)
+        active = [box(lo[0], lo[1], hi[0], hi[1]) for lo, hi in tabs if z < hi[2]-1e-6]
+        if active:
+            blocked = unary_union([blocked]+active)
+        if op.kind == "pocket":
+            free = region if blocked.is_empty else region.difference(blocked)
+            if limit is not None:
+                free = free.intersection(limit)
+            free = free.buffer(0)
+            if free.is_empty or free.buffer(-(radius+op.stock)).is_empty:
+                ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
+                continue
+            try:
+                paths = _pocket_paths(op, [], free, diameter, direction)
+            except ValueError as exc:
+                if "too small" not in str(exc):
+                    raise
+                continue
+            areas = machining_areas(paths, "pocket", free) if paths else []
+        else:
+            paths = [Path("cut", p, closed=closed, width=diameter)
+                     for p, closed in waterfall_paths(blocked, allowed, radius, op.stock, direction)]
+            areas = [[p] for p in paths]
+        remaining = material_history.at(z) if material_history else None
+        for ai, planned in enumerate(areas):
+            planned[0].stay_down, planned[0].stay_down_from = False, None
+            if skip_air and remaining is not None and op.kind == "pocket":
+                planned = _drop_air_paths(planned, remaining, radius, op.name, ctx.log)
+                if not planned:
+                    continue
+            for warning in plan_engagement(planned, job, op, tool, None, remaining):
+                if warning not in job.warnings:
+                    job.warnings.append(warning)
+            if material_history:
+                material_history.remove(planned, z, radius)
+            add_layer(planned, z, min(step, start-z), ai)
+            produced += 1
+    if not produced:
+        raise ValueError(f"{op.name}: no machinable paths between the selection and the model surface "
+                         f"from Z{start:g} to Z{end:g}. Check that End Z is below the surface to machine "
+                         "(link it to a lower edge/face) and that the cutter fits.")
+    kind = "" if op.kind == "pocket" else label+" "
+    ctx.log(f"  {op.name}: {kind}limited by the model surface, {produced} area/depth passes, Z{start:g} to Z{end:g}")
+
+
+def _pocket_paths(op, loops, region, diameter, direction, log=None):
+    """Wall-parallel or raster clearing paths for one planar pocket region."""
+    from gcodeproducer.core.jobs.path import Path
+    from gcodeproducer.core.geometry.infill import scan_fill
+    from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths
+    paths = []
+    if op.strategy == "contour":
+        contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, log, region=region)
+        linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
+        paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
+                      stay_down_from=tuple(linked[i-1][0][0]) if link else None)
+                 for i, (p, link) in enumerate(linked)]
+    elif op.strategy == "raster":
+        centre_region = region.buffer(-(diameter/2+op.stock))
+        regions = [p for p, _ in boundary_paths(centre_region, direction)]
+        if not regions:
+            raise ValueError(f"{op.name}: pocket is too small for this tool")
+        for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
+            pts = np.array([a, b])
+            if direction == "conventional" or (direction == "meander" and len(paths) % 2):
+                pts = pts[::-1]
+            paths.append(Path("cut", pts, width=diameter))
+        paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
+    else:
+        raise ValueError(f"Unknown pocket strategy '{op.strategy}'")
+    return paths
+
+
 def generate(job, ctx):
     """Generate ordered 2.5D operations. Fail rather than silently machining wrong geometry."""
     from gcodeproducer.core.jobs.layer import Layer
     from gcodeproducer.core.jobs.path import Path
-    from gcodeproducer.core.geometry.infill import scan_fill
-    from gcodeproducer.core.cam.paths import contour_pocket
     from gcodeproducer.core.cam.paths import direction_for
     from gcodeproducer.core.cam.paths import orient_contour
-    from gcodeproducer.core.cam.paths import link_contours
     from gcodeproducer.core.cam.paths import pocket_region
     from gcodeproducer.core.cam.paths import part_section
     from gcodeproducer.core.cam.paths import overcut_region
@@ -305,6 +443,8 @@ def generate(job, ctx):
     if tabs:
         ctx.log(f"  {len(tabs)} holding tabs protected across all operations")
     layers = []
+    model_shadow = None
+    from gcodeproducer.core.cam.model_shadow import ModelShadow
     job.warnings = []
     numbers={}
     for group in setup.groups:
@@ -331,7 +471,7 @@ def generate(job, ctx):
                 raise ValueError(f"{op.name}: select machining geometry first")
             start = op.start.resolve(job.mesh, topo, op.geometry, setup.stock)
             end = op.end.resolve(job.mesh, topo, op.geometry, setup.stock)
-            if (op.kind == "pocket" and op.start.source == "selection" and math.isfinite(start)
+            if ((op.kind == "pocket" or op.kind in SURFACE_KINDS) and op.start.source == "selection" and math.isfinite(start)
                     and math.isfinite(end) and start <= end + 1e-6):
                 # A single flat floor selection has no higher edge: begin at the material
                 # surface (air-cut removal then drops to the current material top).
@@ -397,17 +537,40 @@ def generate(job, ctx):
                         keep_edges.update(tuple(sorted(e)) for e in edges)
                 selected_edges.update(tuple(sorted(e)) for e in edges)
             polys = [cam_vertices[p] for p in chains(selected_edges)]
-            if any(np.ptp(p[:, 2]) > 1e-4 for p in polys):
-                raise ValueError(f"{op.name}: 2.5D operations require constant-Z edges")
+            flat = all(np.ptp(p[:, 2]) <= 1e-4 for p in polys)
+            # A pocket whose selected boundary is not level cannot have a flat floor: it is
+            # cleared in levels down to the model surface instead of being rejected.
+            surface_mode = op.kind in SURFACE_KINDS or (op.kind == "pocket" and (op.protect_model or not flat))
+            if not flat and not surface_mode:
+                raise ValueError(f"{op.name}: {KIND_LABELS[op.kind]} needs constant-Z edges; Pocket, 3D Waterfall "
+                                 "and 3D Contour accept sloped boundaries")
             paths = []
             region = None
             if op.area_order not in ("area", "depth"):
                 raise ValueError(f"{op.name}: unknown area order '{op.area_order}'")
             direction = direction_for(job, op)
-            if op.kind in ("profile", "pocket", "drill"):
+            if op.kind in ("profile", "pocket", "drill") or surface_mode:
                 if any(not np.allclose(p[0], p[-1]) for p in polys):
                     raise ValueError(f"{op.name}: select closed edges or a horizontal face")
             loops = [p[:-1, :2] for p in polys]
+
+            def add_layer(planned, z, height, area):
+                layer = Layer(len(layers), z, height, paths=planned)
+                layer.cam_tool_id = tool.id
+                layer.cam_group = gi
+                layer.cam_operation = op.name
+                layer.cam_operation_key = (gi, oi)
+                layer.cam_area = area
+                layer.cam_operation_config = op
+                layer.cam_cutting = cutting
+                layers.append(layer)
+
+            if surface_mode:
+                if model_shadow is None:
+                    model_shadow = ModelShadow(job.mesh)
+                _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direction, tabs,
+                                   material_history, model_shadow, skip_air, add_layer)
+                continue
             if op.kind == "pocket":
                 if not 0 < op.stepover <= 100:
                     raise ValueError("Pocket stepover must be between 0 and 100 percent")
@@ -462,26 +625,7 @@ def generate(job, ctx):
                     region = region.intersection(limit).buffer(0)
                     if region.is_empty:
                         raise ValueError(f"{op.name}: material boundary limit removes the whole pocket")
-                if op.strategy == "contour":
-                    contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, ctx.log, region=region)
-                    linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
-                    paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
-                                  stay_down_from=tuple(linked[i-1][0][0]) if link else None)
-                             for i, (p, link) in enumerate(linked)]
-                elif op.strategy == "raster":
-                    from gcodeproducer.core.cam.paths import boundary_paths
-                    centre_region = region.buffer(-(diameter/2+op.stock))
-                    regions = [p for p, _ in boundary_paths(centre_region, direction)]
-                    if not regions:
-                        raise ValueError(f"{op.name}: pocket is too small for this tool")
-                    for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
-                        pts = np.array([a, b])
-                        if direction == "conventional" or (direction == "meander" and len(paths) % 2):
-                            pts = pts[::-1]
-                        paths.append(Path("cut", pts, width=diameter))
-                    paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
-                else:
-                    raise ValueError(f"Unknown pocket strategy '{op.strategy}'")
+                paths = _pocket_paths(op, loops, region, diameter, direction, ctx.log)
             elif op.kind == "profile":
                 sign = {"outside": -1, "inside": 1, "on": 0}[op.side]
                 for p, hole in zip(loops, geometry.hole_flags(loops)):
@@ -574,15 +718,7 @@ def generate(job, ctx):
                 if not planned:
                     continue
                 if material_history:material_history.remove(planned,z,diameter/2)
-                layer = Layer(len(layers), z, min(step, start - z), paths=planned)
-                layer.cam_tool_id = tool.id
-                layer.cam_group = gi
-                layer.cam_operation = op.name
-                layer.cam_operation_key = (gi, oi)
-                layer.cam_area = ai
-                layer.cam_operation_config = op
-                layer.cam_cutting = cutting
-                layers.append(layer)
+                add_layer(planned, z, min(step, start - z), ai)
             ctx.log(f"  {op.name}: {len(paths)} base XY paths, {len(layers)-op_layer_start} area/depth passes, Z{start:g} to Z{end:g}")
         ctx.progress((gi + 1) / max(1, len(setup.groups)))
     if not layers:

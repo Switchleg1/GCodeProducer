@@ -1,0 +1,198 @@
+solid wedge_pocket
+ facet normal 0 0 -1
+  outer loop
+   vertex 0 0 0
+   vertex 40 30 0
+   vertex 40 0 0
+  endloop
+ endfacet
+ facet normal 0 0 -1
+  outer loop
+   vertex 0 0 0
+   vertex 0 30 0
+   vertex 40 30 0
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 0 0
+   vertex 40 0 0
+   vertex 40 0 20
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 0 0
+   vertex 40 0 20
+   vertex 0 0 20
+  endloop
+ endfacet
+ facet normal 1 0 0
+  outer loop
+   vertex 40 0 0
+   vertex 40 30 0
+   vertex 40 30 20
+  endloop
+ endfacet
+ facet normal 1 0 0
+  outer loop
+   vertex 40 0 0
+   vertex 40 30 20
+   vertex 40 0 20
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 40 30 0
+   vertex 0 30 0
+   vertex 0 30 20
+  endloop
+ endfacet
+ facet normal 0 1 -0
+  outer loop
+   vertex 40 30 0
+   vertex 0 30 20
+   vertex 40 30 20
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex 0 30 0
+   vertex 0 0 0
+   vertex 0 0 20
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex 0 30 0
+   vertex 0 0 20
+   vertex 0 30 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 0 0 20
+   vertex 40 0 20
+   vertex 30 8 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 0 0 20
+   vertex 30 8 20
+   vertex 10 8 20
+  endloop
+ endfacet
+ facet normal 0 -0 1
+  outer loop
+   vertex 40 0 20
+   vertex 40 30 20
+   vertex 30 22 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 40 0 20
+   vertex 30 22 20
+   vertex 30 8 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 40 30 20
+   vertex 0 30 20
+   vertex 10 22 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 40 30 20
+   vertex 10 22 20
+   vertex 30 22 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 0 30 20
+   vertex 0 0 20
+   vertex 10 8 20
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex 0 30 20
+   vertex 10 8 20
+   vertex 10 22 20
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 10 8 20
+   vertex 30 8 10
+   vertex 10 8 18
+  endloop
+ endfacet
+ facet normal -0 1 0
+  outer loop
+   vertex 10 8 20
+   vertex 30 8 20
+   vertex 30 8 10
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex 30 8 20
+   vertex 30 22 20
+   vertex 30 22 10
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex 30 8 20
+   vertex 30 22 10
+   vertex 30 8 10
+  endloop
+ endfacet
+ facet normal -0 -1 0
+  outer loop
+   vertex 30 22 20
+   vertex 10 22 20
+   vertex 10 22 18
+  endloop
+ endfacet
+ facet normal 0 -1 -0
+  outer loop
+   vertex 30 22 20
+   vertex 10 22 18
+   vertex 30 22 10
+  endloop
+ endfacet
+ facet normal 1 0 0
+  outer loop
+   vertex 10 22 20
+   vertex 10 8 20
+   vertex 10 8 18
+  endloop
+ endfacet
+ facet normal 1 0 0
+  outer loop
+   vertex 10 22 20
+   vertex 10 8 18
+   vertex 10 22 18
+  endloop
+ endfacet
+ facet normal 0.371391 0 0.928477
+  outer loop
+   vertex 10 8 18
+   vertex 30 8 10
+   vertex 30 22 10
+  endloop
+ endfacet
+ facet normal 0.371391 -0 0.928477
+  outer loop
+   vertex 10 8 18
+   vertex 30 22 10
+   vertex 10 22 18
+  endloop
+ endfacet
+endsolid wedge_pocket

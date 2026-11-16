@@ -216,3 +216,35 @@ def test_reference_used_in_operations_cannot_be_deleted(app, monkeypatch):
     editor.remove()
     assert not setup.reference_shapes
     editor.close()
+
+
+def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS
+    from gcodeproducer.core.profiles import Profile
+    from gcodeproducer.gui.cam_editor import CAMEditor
+    editor = CAMEditor()
+    assert [editor.kind.itemText(i) for i in range(editor.kind.count())] == [KIND_LABELS[k] for k in KINDS]
+    editor.set_tools([Profile("tool", "Test cutter")])
+    editor.add_tool()
+    for kind in ("waterfall", "contour3d", "pocket"):
+        editor.kind.setCurrentIndex(editor.kind.findData(kind))
+        editor.add_operation()
+        op = editor.operation()
+        assert op.kind == kind and op.name == KIND_LABELS[kind]
+        assert (op.start.source, op.start.extreme, op.end.source, op.end.extreme) == ("selection", "max", "selection", "min")
+        assert KIND_LABELS[kind] in editor.tree.currentItem().text(0)
+        assert not editor.b_selection_depths.isHidden()
+        assert editor.stepover.isEnabled() == (kind != "waterfall")
+        assert editor.direction_override.isEnabled() == (kind != "contour3d")
+        assert not editor.strategy.isEnabled() or kind == "pocket"
+        # The 3D kinds always stop at the model; a pocket chooses (and is forced when its rim is sloped).
+        assert editor.protect_model.isEnabled() == (kind == "pocket")
+        assert editor.protect_model.isChecked() == (kind != "pocket")
+        assert not op.protect_model
+    editor.protect_model.setChecked(True)
+    assert editor.operation().protect_model
+    restored = CAMSetup.from_dict(editor.setup.to_dict())
+    assert [o.kind for o in restored.groups[0].operations] == ["waterfall", "contour3d", "pocket"]
+    assert restored.groups[0].operations[2].protect_model
+    editor.close()

@@ -11,7 +11,7 @@ from __future__ import annotations
 from gcodeproducer.core.cam.cam_constants import FEED_FIELDS
 from collections import Counter
 import math, numpy as np
-from shapely import intersection, length, linestrings
+from shapely import covers, intersection, intersects, length, linestrings, prepare, total_bounds
 from shapely.geometry import LineString, box
 from gcodeproducer.core.cam.paths import direction_for
 from gcodeproducer.core.jobs.cut_condition import CutCondition
@@ -49,6 +49,32 @@ def feed_factor(regime, operation, tool, machine=None):
     return percent/100
 
 
+def _occupied(lines, material):
+    """Length of each chord inside the material.
+
+    Most chords lie wholly inside or outside; prepared predicates settle those and
+    only boundary-crossing chords need an exact intersection.
+    """
+    result = np.zeros(len(lines))
+    if material.is_empty or not len(lines):
+        return result
+    # Work against the material near these chords only: late in a pocket the full
+    # remaining-material polygon is large while one batch of chords is local.
+    low, high = total_bounds(lines)[:2], total_bounds(lines)[2:]
+    if not np.isfinite(np.r_[low, high]).all():
+        return result
+    material = material.intersection(box(low[0]-1e-6, low[1]-1e-6, high[0]+1e-6, high[1]+1e-6))
+    if material.is_empty:
+        return result
+    prepare(material)
+    inside = covers(material, lines)
+    result[inside] = length(lines[inside])
+    crossing = ~inside & intersects(material, lines)
+    if crossing.any():
+        result[crossing] = length(intersection(lines[crossing], material))
+    return result
+
+
 def measure_segments(points, closed, material, radius):
     """Peak occupied cutter chord at several stations/forward offsets per move.
 
@@ -68,16 +94,16 @@ def measure_segments(points, closed, material, radius):
     forward = radius*np.array([0., .25, .5, .75])
     chord = np.sqrt(np.maximum(radius*radius-forward*forward, 0))
     stations = np.array([.25, .75, 1.])
-    for start in range(0, len(a), 512):
-        end = start+512
+    for start in range(0, len(a), 64):
+        end = start+64
         centres = (a[start:end, None, None, :] + delta[start:end, None, None, :]*stations[None, :, None, None]
                    + tangent[start:end, None, None, :]*forward[None, None, :, None])
         offsets = normal[start:end, None, None, :]*chord[None, None, :, None]
         l = np.stack((centres, centres+offsets), axis=-2).reshape(-1, 2, 2)
         r = np.stack((centres, centres-offsets), axis=-2).reshape(-1, 2, 2)
         count = len(a[start:end])
-        lw = length(intersection(linestrings(l), material)).reshape(count, -1)
-        rw = length(intersection(linestrings(r), material)).reshape(count, -1)
+        lw = _occupied(linestrings(l), material).reshape(count, -1)
+        rw = _occupied(linestrings(r), material).reshape(count, -1)
         best = np.argmax(lw+rw, axis=1)
         left[start:end] = lw[np.arange(count), best]
         right[start:end] = rw[np.arange(count), best]
@@ -131,7 +157,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         material = box(lo[0], lo[1], hi[0], hi[1])
         if log:
             log("  engagement uses a conservative XY blank estimate (stock not allocated)")
-    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot") else None
+    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot", "waterfall") else None
     totals = Counter()
     flipped = slots = handed = conflicts = 0
     previous = None

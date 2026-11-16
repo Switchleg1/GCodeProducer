@@ -1,11 +1,13 @@
 [Documentation](../README.md) / [CAM](README.md)
 
-# Pocket, Profile, Slot, Drill and Engrave
+# Pocket, Profile, Slot, Drill, Engrave and the 3D operations
 
 These are tree operations (`core.cam.Operation`), not independent pipeline
 stage presets. They share a tool group, selection system, start/end depth
 sources and execution order. Geometry is generated from the placed STL;
-cutting faces must be horizontal and selected edge chains constant-Z.
+cutting faces must be horizontal and selected edge chains constant-Z, except
+for Pocket, 3D Waterfall and 3D Contour, which accept sloped boundaries and are
+then limited by the model surface; see [3-axis surface operations](3d-operations.md).
 [Drawn reference outlines](reference-geometry.md) are also selectable constant-Z
 boundaries, or can be retained as per-selection height-only references.
 
@@ -13,7 +15,7 @@ boundaries, or can be retained as per-selection height-only references.
 
 | Field | New-operation behaviour | Meaning |
 |---|---|---|
-| Kind | Chosen in Add operation menu | Pocket, Profile, Slot, Drill or Engrave |
+| Kind | Chosen in Add operation menu | Pocket, Profile, Drill, Engrave, Slot, 3D Waterfall or 3D Contour |
 | Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
@@ -29,6 +31,7 @@ boundaries, or can be retained as per-selection height-only references.
 | Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
+| Stop at model surface (3D floor) | Off | Pocket only: clear in levels down to the model surface instead of a flat floor. Applied automatically when the selected boundary is not level; always on for 3D Waterfall / 3D Contour. See [3D operations](3d-operations.md) |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
@@ -124,6 +127,10 @@ envelope and selected part rims/face footprints are retained inner boundaries;
 one horizontal material edge can identify the whole blank rim. Mixed picking
 is the default. Use height-only picks if a part reference should provide just
 End Z rather than another retained boundary.
+
+A Pocket whose selected edges are not level, or with **Stop at model surface
+(3D floor)** ticked, is cleared in terraces down to the model instead of to one
+flat floor; see [Pocket with a bottom that is not flat](3d-operations.md#pocket-with-a-bottom-that-is-not-flat).
 
 **Purpose:** clear a selected closed XY region to an end depth.
 
@@ -365,6 +372,27 @@ selecting a whole face engraves all its boundary loops.
 
 Not implemented: text/font import, projected curves over 3D surfaces,
 variable-Z engraving, ballnose surface following or collision-aware linking.
+
+## 3D Waterfall
+
+**Purpose:** Z-level wall contours. At each depth the cutter centre runs one
+cutter radius (plus stock to leave) outside all model material standing above
+that depth, inside the selected area.
+
+Select closed outlines, set Start/End and the depth per pass (automatic depth
+uses the tool's Slot axial percentage). Cutting direction and leads apply.
+Stepover, strategy, overcut and material limit do not. Full description,
+example and limits: [3D Waterfall](3d-operations.md#3d-waterfall).
+
+## 3D Contour
+
+**Purpose:** one surface-following finishing pass. Parallel zigzag lines across
+the selected area, with the cutter tip at the highest model point under its
+footprint plus stock to leave, between Start Z (ceiling) and End Z (floor).
+
+Stepover sets the pass spacing. There are no depth levels and no engagement
+feed factors; rough first. Full description, accuracy and limits:
+[3D Contour](3d-operations.md#3d-contour).
 
 ## Output and safety checklist
 

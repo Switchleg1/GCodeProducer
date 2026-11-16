@@ -11,7 +11,7 @@
 | `core/libraries/` | Profile/process records and libraries, schemas and starter specifications |
 | `core/parameters/`, `core/settings/`, `core/workflows/` | Shared coercion/default rules, application preferences and workflow compatibility |
 | `core/geometry/`, `core/fdm/` | Mesh/region records, STL geometry kernel, infill and model-owned support |
-| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems |
+| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems; `model_shadow.py`, `drop_surface.py` and `surface_paths.py` for the model-surface-limited operations |
 | `core/gcode/` | Builder, line/program records, parsing, templates, variables, features, simulation and path arrays |
 | `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
@@ -68,7 +68,10 @@ The emitter applies feed factors/caps and carries engagement/notes into program
 metadata. Depth-tagged planar sweeps now carry removal across operations;
 identical material states reuse engagement plans. Emitted movements additionally
 update a height field and per-operation display meshes in `core/cam/material.py`.
-Do not document these 2.5D representations as complete 3D solid simulation. The emitter marks program lines with layer and
+Surface-limited operations (`_surface_operation` in `core/cam/planning.py`) plan
+each level against `ModelShadow.at(z)`; 3D Contour stores `(n, 3)` path points,
+which the emitter writes as XYZ moves and which the planar material history
+deliberately ignores. Do not document these representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
 ## Ownership invariants

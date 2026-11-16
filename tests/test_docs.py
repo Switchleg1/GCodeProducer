@@ -7,6 +7,7 @@ import re
 from urllib.parse import unquote, urlsplit
 
 from gcodeproducer.core.cam import KINDS
+from gcodeproducer.core.cam.cam_constants import KIND_LABELS
 from tools.generate_reference import STAGES, render_documents
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,7 +101,7 @@ def test_feature_reference_coverage_and_lightweight_readme():
             assert f"`{param.name}`" in stages
     operations = (DOCS / "cam" / "operations.md").read_text(encoding="utf-8")
     for kind in KINDS:
-        assert f"## {kind.title()}\n" in operations
+        assert f"## {KIND_LABELS[kind]}\n" in operations
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert len(readme.splitlines()) <= 100, "Keep detailed instructions in docs/"
     assert "docs/README.md" in readme

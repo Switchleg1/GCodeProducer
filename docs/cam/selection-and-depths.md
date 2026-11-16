@@ -286,7 +286,9 @@ is still semantically correct after remeshing or replacing a model.
 - **Select machining geometry first:** operation has no cutting references.
 - **Select closed edges or a horizontal face:** a required boundary is open.
 - **Horizontal face / constant-Z edges required:** selected cutting geometry
-  does not satisfy 2.5D restrictions.
+  does not satisfy the restrictions of Profile, Slot, Engrave or Drill. Sloped
+  edges are valid boundaries for Pocket, 3D Waterfall and 3D Contour
+  ([3D operations](3d-operations.md)).
 - **Reference no longer exists:** geometry topology/indices no longer match;
   reselect rather than guessing another index.
 - **Depth has no geometry reference:** use a real pick or choose another source.
