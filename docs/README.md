@@ -60,8 +60,10 @@ for a particular printer, material, cutter, or machine.
   legacy CAM scope and library isolation.
 - [Troubleshooting and limitations](troubleshooting.md): diagnosis by symptom,
   migration issues, geometry problems, missing settings and recovery.
-- [Development and extensions](development.md): architecture, stages/importers,
-  compute tasks, tests and documentation maintenance rules.
+- [Development and extensions](development.md): subsystem directories, one-class
+  modules, local configuration tables, stages/importers and compute tasks.
+- [Cleanup and UI audit](cleanup-and-ui-audit.md): shared default loading,
+  removed unused code and retained inactive/overlapping controls.
 
 ## Exact reference
 

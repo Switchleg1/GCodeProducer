@@ -147,6 +147,17 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   selects the tool's SFM/chip-load/axial table, independently of FDM filament.
   Material grade/machinability still need operator-qualified data.
 
+The [UI-options audit](cleanup-and-ui-audit.md#ui-audit--findings-only-controls-retained)
+collects inactive/descriptive fields and intentional overlaps. Those controls
+were not removed by the structural cleanup. Material cutting tables now remain
+in fixed wood → plastic → non-iron metal → steel order; the active table is
+marked without being moved.
+
+Generated library/process/settings forms share backend parameter coercion and
+defaults. Missing/null fields use declared defaults; valid saved strings are
+converted before display rather than showing a different value from the one
+used for generation. See [default loading](cleanup-and-ui-audit.md#material-order-and-default-loading).
+
 ## Backups and migration
 
 Back up both the JSON library root and platform Qt settings if you need the

@@ -1,16 +1,15 @@
 """Command-line interface for GCodeProducer."""
 from __future__ import annotations
 
-import argparse
-import sys
-from pathlib import Path
 
-from . import __version__
-from .core import defaults, plugins
-from .core import workflow as wf
-from .core.pipeline import SlicePipeline, parse_stage_spec
-from .core.profiles import KINDS, LibrarySet
-from .core.session import build_job, load_mesh, slice_job
+import argparse, sys, gcodeproducer.core.libraries.defaults as defaults, gcodeproducer.core.plugins.discovery as plugins, gcodeproducer.core.workflows.validation as wf
+from pathlib import Path
+from gcodeproducer import __version__
+from gcodeproducer.core.pipeline.slice_pipeline import SlicePipeline
+from gcodeproducer.core.pipeline.engine import parse_stage_spec
+from gcodeproducer.core.libraries.libraries_constants import KINDS
+from gcodeproducer.core.libraries.library_set import LibrarySet
+from gcodeproducer.core.jobs.session import build_job, load_mesh, slice_job
 
 
 def _libset(args) -> LibrarySet:
@@ -72,7 +71,7 @@ def cmd_processes(args):
 
 
 def _preferences(args, root):
-    from .core import app_settings
+    import gcodeproducer.core.settings.preferences as app_settings
     prefs = app_settings.load(root)
     for item in getattr(args, "pref", []) or []:
         if "=" not in item:
@@ -86,8 +85,8 @@ def _preferences(args, root):
 
 
 def cmd_settings(args):
-    from .core import app_settings
-    from .core.profiles import default_root
+    import gcodeproducer.core.settings.preferences as app_settings
+    from gcodeproducer.core.libraries.schemas import default_root
     prefs = app_settings.load(default_root())
     for p in app_settings.SCHEMA:
         print(f"{p.name} = {prefs[p.name]!r}  ({p.label}; default {p.default!r})")
@@ -112,7 +111,7 @@ def cmd_slice(args):
     else:
         tools = [_pick(ls["tool"], args.tool, "tool")]
 
-    from .core.placement import Placement
+    from gcodeproducer.core.jobs.placement import Placement
     mesh = load_mesh(args.input)
     placement = Placement(x=args.x, y=args.y, z=args.z, scale=args.scale,
                           z_anchor="top" if workflow == wf.CAM else "bottom")
@@ -125,11 +124,11 @@ def cmd_slice(args):
     blocks = []
     if args.support_blocks:
         import json
-        from .core.support import SupportBlock
+        from gcodeproducer.core.fdm.support_block import SupportBlock
         with open(args.support_blocks, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         blocks = [SupportBlock.from_dict(b) for b in (data.get("blocks", []) if isinstance(data, dict) else data)]
-    from .core.support import ModelSupport
+    from gcodeproducer.core.fdm.model_support import ModelSupport
     model_support = ModelSupport(mode=args.support, overhang_angle=args.overhang_angle,
                                  extend=args.support_extend, fill_holes=args.fill_holes)
     job = build_job(workflow, machine, material=material, nozzle=nozzle, tools=tools,
@@ -201,7 +200,7 @@ def build_parser():
     s.add_argument("-o", "--output")
     s.add_argument("--machine"); s.add_argument("--material")
     s.add_argument("--nozzle"); s.add_argument("--tool")
-    from .core.cam_cutting import MATERIALS
+    from gcodeproducer.core.cam.cam_constants import MATERIALS
     s.add_argument("--cam-material",choices=[m[0] for m in MATERIALS],
                    help="machining category for automatic CAM tool SFM/chip-load calculation")
     s.add_argument("--pref", action="append", default=[], metavar="KEY=VALUE",

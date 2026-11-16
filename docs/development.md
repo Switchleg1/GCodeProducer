@@ -6,30 +6,37 @@
 
 | Area | Responsibility |
 |---|---|
-| `gcodeproducer/core/job.py` | Mutable job, layers and paths passed through stages |
-| `core/session.py` | Importer selection, job construction, placement, pipeline entry point |
-| `core/pipeline.py` | Ordered steps, resolution, workflow checks, results and timing |
-| `core/process.py` | Reusable pipeline presets and their JSON library |
-| `core/profiles.py`, `core/params.py` | Profile schemas, default/coercion rules, allowed consumables |
-| `core/geometry.py` | STL loading/welding, slicing, offsets, raster masks, picking math |
-| `core/placement.py`, `core/support.py` | Model transformation, FDM support masks/blocks |
-| `core/cam.py`, `core/cam_paths.py`, `core/cam_engagement.py`, `core/stock.py` | CAM setup/topology, wall-parallel offsets, remaining-material hand/engagement/feed planning, and conservative stock checks |
-| `core/gcode_template.py`, `core/gcode_vars.py` | Template evaluation, variable registry and defaults |
-| `core/builder.py`, `core/gcode.py` | Emission and G-code line/program representation |
-| `core/sim.py`, `core/toolpath.py` | Modal state simulation and viewer-ready path arrays |
-| `core/compute.py` | Qt-free compute-process tasks and worker loop |
-| `gui/compute_service.py` | Process lifecycle, queue reader and Qt signals |
-| `gui/main_window.py` | Workflow coordination, persistence, docks and actions |
-| `gui/model_viewer.py`, `gui/viewer.py`, `gui/bed.py` | Prepare/Preview and shared plate/stock rendering |
-| `gui/process_editor.py`, `cam_editor.py`, `stock_editor.py` | Workflow-specific editing |
-| `gui/library_dialog.py`, `widgets.py`, `gcode_edit.py` | Profile and generated/template controls |
-| `importers/`, `stages/` | Built-in importer and stage classes |
+| `gcodeproducer/core/jobs/` | Job, layer/path/condition records, model placement, session construction |
+| `core/pipeline/` | Steps, results and ordered pipeline execution |
+| `core/libraries/` | Profile/process records and libraries, schemas and starter specifications |
+| `core/parameters/`, `core/settings/`, `core/workflows/` | Shared coercion/default rules, application preferences and workflow compatibility |
+| `core/geometry/`, `core/fdm/` | Mesh/region records, STL geometry kernel, infill and model-owned support |
+| `core/cam/` | Separate setup/reference/operation/topology/stock classes; path, tab, cutting, engagement and material systems |
+| `core/gcode/` | Builder, line/program records, parsing, templates, variables, features, simulation and path arrays |
+| `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
+| `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
+| `gui/runtime/` | Compute process service and separate queue-reader class |
+| `gui/rendering/` | Cameras, separate GL mesh classes, Prepare/Preview and plate/material rendering |
+| `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/template editors and G-code table/panel |
+| `gui/dialogs/`, `gui/messages/` | Libraries/Settings dialogs, message panel and pop-ups |
+| `importers/`, `stages/base/`, `stages/fdm/`, `stages/cam/` | One-class importer/stage implementations and public stage API |
 | `plugins/` | Repository-local optional Python extensions |
 | `examples/` | Example geometry |
 | `tests/` | Automated regression tests |
 | `docs/`, `tools/generate_reference.py` | Handwritten manual and schema-derived reference |
 
 Paths beginning with `core/` or `gui/` above are under `gcodeproducer/`.
+Each application Python file defines at most one class. Named module constants,
+schemas and dispatch/choice tables belong to the owning directory's local
+`<directory>_constants.py`; for example `core/cam/cam_constants.py` and
+`gui/editors/editors_constants.py`. Stage classes reference shared parameter
+tables instead of embedding a second copy.
+
+Old flat module paths remain thin compatibility exports, not implementations.
+Use the subsystem modules for new internal code; existing plugin imports such
+as `gcodeproducer.stages.base` continue to work. See the
+[cleanup and UI audit](cleanup-and-ui-audit.md) for removed unused definitions,
+default-loading changes and retained inactive/overlapping controls.
 
 ## Pipeline and job contract
 
@@ -51,15 +58,16 @@ CAM currently copies XY paths across depth passes and tags passes with tool,
 group and operation metadata. Wall-parallel pocket paths can carry `stay_down`
 permission and an expected preceding XY endpoint. The planner validates each
 straight connector against the cutter-centre region; the emitter checks the
-endpoint and resets permission at every layer/operation/tool boundary. Do not
-infer safe linking from proximity alone or carry this permission across Z changes.
-`cam_engagement.py` then subtracts completed planar sweeps to choose clearing
+endpoint and resets same-depth permission at every layer/operation/tool boundary.
+Do not infer safe linking from proximity alone. Staying down between depth passes
+is independently checked against current material before a level link and ramp.
+`core/cam/engagement.py` then subtracts completed planar sweeps to choose clearing
 hand (slots are neutral) and attaches per-segment/link `CutCondition` records.
 Closed-loop reversal preserves the seam and therefore valid link endpoints.
 The emitter applies feed factors/caps and carries engagement/notes into program
 metadata. Depth-tagged planar sweeps now carry removal across operations;
 identical material states reuse engagement plans. Emitted movements additionally
-update a height field and per-operation display meshes in `cam_material.py`.
+update a height field and per-operation display meshes in `core/cam/material.py`.
 Do not document these 2.5D representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
@@ -104,7 +112,9 @@ class InspectPaths(SliceStage):
 ```
 
 A nonempty ID and explicit workflow declaration are required. Class discovery
-registers subclasses defined in that module. Choose unique IDs; duplicate IDs
+registers subclasses defined in that module. Built-in package scanning is recursive,
+so stages in `stages/fdm/` and `stages/cam/` are found once; re-export modules are
+not duplicate registrations. Choose unique IDs; duplicate IDs
 can replace registry entries. Plugin load failures are collected and shown in
 the GUI log. Add a discovered stage to a pipeline via the advanced editor or
 pipeline JSON; CLI `-m` edits an existing step and does not insert one.
@@ -159,8 +169,10 @@ workflows), fill it in `job_variables()` or an explicit event override, and
 add tests proving availability, effective values and workflow boundaries.
 Do not expose unsafe arbitrary Python as template evaluation.
 
-For a profile/process field, define ownership first, then schema/default,
-resolution, actual behaviour, persistence/migration and tests. If not yet
+For a profile/process field, define ownership first, then its local constant/schema
+table, resolution, actual behaviour, persistence/migration and tests. Generated
+forms use `resolve_params` / `Param.coerce`, not a separate GUI default/coercion
+implementation. Keep table defaults, reset values and constructor fallbacks aligned. If not yet
 implemented, label it reserved/descriptive rather than implying that a field
 is enforced. Update reference generation when adding a new built-in stage.
 

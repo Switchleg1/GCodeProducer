@@ -617,7 +617,7 @@ def test_new_cam_tool_enables_material_calculation(win,monkeypatch):
     dialog.close()
 
 
-def test_active_material_tool_table_is_first_and_auto_depth_refreshes_after_save(win):
+def test_material_tables_keep_order_mark_active_and_auto_depth_refreshes_after_save(win):
     from gcodeproducer.core.profiles import Profile
     from gcodeproducer.gui.library_dialog import LibraryDialog
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
@@ -631,8 +631,10 @@ def test_active_material_tool_table_is_first_and_auto_depth_refreshes_after_save
     assert "Non-iron metal" in ed.cutting_summary.text() and "Pocket 17.5% D" in ed.cutting_summary.text()
     dlg=LibraryDialog(win.libset,win,"tool",tool.id)
     editor=dlg.editor_area.widget()
-    first_material=next(p.group for p in editor.params if p.group.startswith("Cut data:"))
-    assert "Non-iron metal" in first_material and "active CAM material" in first_material
+    from gcodeproducer.core.cam_cutting import MATERIALS
+    groups=list(dict.fromkeys(p.group for p in editor.params if p.group.startswith("Cut data:")))
+    assert [g.split(" — ")[0] for g in groups]==[f"Cut data: {m[1]}" for m in MATERIALS]
+    assert "Non-iron metal" in groups[-2] and "active CAM material" in groups[-2]
     assert editor._widgets["soft_wood_pocket_axial"].value()==10  # no copying wood values to metal
     assert "Non-iron metal" in dlg.hint.text()
     editor._widgets["non_iron_metal_pocket_axial"].setValue(12)

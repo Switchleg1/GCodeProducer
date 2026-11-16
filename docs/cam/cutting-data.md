@@ -133,11 +133,15 @@ its Pocket percentage. Nothing copies wood data into a metal table.
 
 ![Automatic depth names its material and percentage](../pictures/cam-auto-depth-material-source.png)
 
-When Libraries → Tools is opened from CAM, the active material's cutting
-table is shown **first** and marked **active CAM material**; the library hint
-also names it. The other material tables remain below, separately editable.
+Libraries → Tools always keeps cutting tables in this order: **Soft wood,
+Hard wood, Soft plastic, Hard plastic, Non-iron metal, Steel**. Non-iron metal
+is second from the bottom. When opened from CAM, the active table is marked
+**active CAM material** and named in the hint, but is not moved to the top.
+Every material remains separately editable.
 
-![Active material table is shown first](../pictures/cam-active-material-cutting-table.png)
+![Wood tables begin the fixed material order](../pictures/cam-material-table-order.png)
+
+![Active non-iron table remains above Steel](../pictures/cam-active-material-cutting-table.png)
 
 These captures use illustrative 4 mm tool values, not qualified cutting data.
 

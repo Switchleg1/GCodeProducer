@@ -87,8 +87,8 @@ def test_feature_reference_coverage_and_lightweight_readme():
     from gcodeproducer import stages as builtins
     from gcodeproducer.stages.base import SliceStage
     discovered = set()
-    for info in pkgutil.iter_modules(builtins.__path__):
-        module = importlib.import_module(f"gcodeproducer.stages.{info.name}")
+    for info in pkgutil.walk_packages(builtins.__path__, prefix="gcodeproducer.stages."):
+        module = importlib.import_module(info.name)
         for _, cls in inspect.getmembers(module, inspect.isclass):
             if cls.__module__ == module.__name__ and issubclass(cls, SliceStage) and cls.id:
                 discovered.add(cls.id)

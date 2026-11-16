@@ -12,17 +12,17 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from gcodeproducer.core.gcode_vars import VARIABLES, DEFAULT_START, DEFAULT_END
-from gcodeproducer.core.profiles import schema
-from gcodeproducer.stages.cam_emit import CAMEmit
-from gcodeproducer.stages.cam_profile import CAMProfile
-from gcodeproducer.stages.fdm_emit import FDMEmit
-from gcodeproducer.stages.fdm_infill import FDMInfill
-from gcodeproducer.stages.fdm_perimeters import FDMPerimeters
-from gcodeproducer.stages.fdm_skirt_brim import FDMSkirtBrim
-from gcodeproducer.stages.fdm_slice import FDMSlice
-from gcodeproducer.stages.fdm_support import FDMSupport
-from gcodeproducer.stages.fdm_top_bottom import FDMTopBottom
+from gcodeproducer.core.gcode.gcode_constants import VARIABLES, DEFAULT_START, DEFAULT_END
+from gcodeproducer.core.libraries.schemas import schema
+from gcodeproducer.stages.cam.cam_emit import CAMEmit
+from gcodeproducer.stages.cam.cam_profile import CAMProfile
+from gcodeproducer.stages.fdm.fdm_emit import FDMEmit
+from gcodeproducer.stages.fdm.fdm_infill import FDMInfill
+from gcodeproducer.stages.fdm.fdm_perimeters import FDMPerimeters
+from gcodeproducer.stages.fdm.fdm_skirt_brim import FDMSkirtBrim
+from gcodeproducer.stages.fdm.fdm_slice import FDMSlice
+from gcodeproducer.stages.fdm.fdm_support import FDMSupport
+from gcodeproducer.stages.fdm.fdm_top_bottom import FDMTopBottom
 
 STAGES = (FDMSlice, FDMSkirtBrim, FDMSupport, FDMPerimeters, FDMTopBottom,
           FDMInfill, FDMEmit, CAMProfile, CAMEmit)

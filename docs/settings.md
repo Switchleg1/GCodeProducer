@@ -28,6 +28,10 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 Changing a setting marks an existing CAM result stale; regenerate before
 exporting. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
 or missing settings file silently falls back to defaults at start-up.
+Settings forms and CLI parameters share scalar/choice conversion: for example,
+saved `"false"` is false, not a truthy nonempty string. Null fields use declared
+defaults; invalid preference choices recover to their defaults. See
+[shared default loading](cleanup-and-ui-audit.md#material-order-and-default-loading).
 
 ### Default operation settings
 
