@@ -85,8 +85,10 @@ Each operation has independent checkboxes:
   feed with your own mm/min value.
 - **Unlock Lead / plunge base feed:** replace the independent entry feed.
 
-The calculated summary displays effective RPM, requested base feeds and
-resolved depth/pass. Positive machine `max_feed` caps emitted G1 rates.
+The calculated summary names the **stock machining category**, the actual
+process percentage (for example **Non-iron metal • Pocket 25% D**), effective
+RPM, requested base feeds and resolved depth/pass. A capped depth also shows
+the original request (for example `0.500 mm (capped from 1.400)`). Positive machine `max_feed` caps emitted G1 rates.
 Normal cuts and stay-down links additionally use their engagement modifiers.
 Contacting lead-in segments use the machine Slot modifier on the lead base
 feed; clear lead-out segments use lead base feed. Initial vertical approach
@@ -120,6 +122,24 @@ value stays editable while the summary shows the resolved depth. The old
 been replaced by this inverse checkbox, using the same saved operation
 fields. Existing manual stepdowns reopen with the override checked; existing
 automatic depths reopen unchecked.
+
+### Which saved table is used?
+
+Auto depth selects **tool + machining material + operation kind**, not a
+single tool-wide percentage. For a 4 mm tool with Soft wood Pocket = 10%
+and Non-iron metal Pocket = 25%, a Non-iron metal setup requests **1 mm**,
+not 0.4 mm. A Profile operation uses that material's Profile percentage, not
+its Pocket percentage. Nothing copies wood data into a metal table.
+
+![Automatic depth names its material and percentage](../pictures/cam-auto-depth-material-source.png)
+
+When Libraries → Tools is opened from CAM, the active material's cutting
+table is shown **first** and marked **active CAM material**; the library hint
+also names it. The other material tables remain below, separately editable.
+
+![Active material table is shown first](../pictures/cam-active-material-cutting-table.png)
+
+These captures use illustrative 4 mm tool values, not qualified cutting data.
 
 If a saved Pocket axial percentage appears not to affect the cut, check:
 

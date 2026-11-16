@@ -617,6 +617,34 @@ def test_new_cam_tool_enables_material_calculation(win,monkeypatch):
     dialog.close()
 
 
+def test_active_material_tool_table_is_first_and_auto_depth_refreshes_after_save(win):
+    from gcodeproducer.core.profiles import Profile
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
+    win.cam_editor.setup.stock.category="non_iron_metal"
+    tool=Profile("tool","Different material depths",values={"diameter":4,"max_doc":2,
+                 "soft_wood_pocket_axial":10,"non_iron_metal_pocket_axial":17.5})
+    win.libset["tool"].add(tool)
+    ed=win.cam_editor;ed.set_tools(win.libset["tool"].all())
+    ed.tool_combo.setCurrentIndex(ed.tool_combo.findData(tool.id));ed.add_tool();ed.add_operation()
+    assert ed.stepdown.value()==.7
+    assert "Non-iron metal" in ed.cutting_summary.text() and "Pocket 17.5% D" in ed.cutting_summary.text()
+    dlg=LibraryDialog(win.libset,win,"tool",tool.id)
+    editor=dlg.editor_area.widget()
+    first_material=next(p.group for p in editor.params if p.group.startswith("Cut data:"))
+    assert "Non-iron metal" in first_material and "active CAM material" in first_material
+    assert editor._widgets["soft_wood_pocket_axial"].value()==10  # no copying wood values to metal
+    assert "Non-iron metal" in dlg.hint.text()
+    editor._widgets["non_iron_metal_pocket_axial"].setValue(12)
+    dlg.accept();win.libset.save()
+    win._reload_machines(win.cb_machine.currentData())
+    assert ed.stepdown.value()==.48
+    assert "Pocket 12% D" in ed.cutting_summary.text()
+    tool.values["non_iron_metal_profile_axial"]=30
+    ed.kind.setCurrentIndex(ed.kind.findData("profile"));ed.add_operation()
+    assert ed.stepdown.value()==1.2 and "Profile 30% D" in ed.cutting_summary.text()
+
+
 def test_tool_pocket_axial_pending_text_saves_before_dialog_closes(win):
     from gcodeproducer.gui.library_dialog import LibraryDialog
     from gcodeproducer.core.profiles import LibrarySet

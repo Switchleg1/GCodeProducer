@@ -17,6 +17,30 @@ def fixture():
     return machine,tool,stock
 
 
+def test_saved_axial_values_follow_active_material_and_operation_kind(tmp_path):
+    from gcodeproducer.core.profiles import LibrarySet
+    machine,tool,stock=fixture()
+    tool.values.update(diameter=4, max_doc=2, soft_wood_pocket_axial=10,
+                       soft_wood_profile_axial=30, non_iron_metal_pocket_axial=17,
+                       non_iron_metal_profile_axial=35)
+    lib=LibrarySet(tmp_path);lib["tool"].add(tool);lib.save()
+    saved=LibrarySet(tmp_path).load()["tool"].get(tool.id)
+    for category,kind,percent in (("soft_wood","pocket",10),("soft_wood","profile",30),
+                                   ("non_iron_metal","pocket",17),("non_iron_metal","profile",35)):
+        stock.category=category
+        data=resolve_cutting(machine,saved,stock,Operation(kind=kind,auto_stepdown=True))
+        assert data.stepdown==pytest.approx(4*percent/100)
+        assert data.depth_source==f"{kind.title()} {percent}% D"
+        assert category==data.material
+        assert f"{percent}% D" in data.summary()
+    tool.values["max_doc"]=.5
+    stock.category="non_iron_metal"
+    data=resolve_cutting(machine,tool,stock,Operation(kind="profile",auto_stepdown=True))
+    assert "Profile 35% D" in data.summary() and "capped from 1.400" in data.summary()
+    manual=resolve_cutting(machine,tool,stock,Operation(auto_stepdown=False,stepdown=.3))
+    assert "Operation depth override" in manual.summary() and manual.stepdown==.3
+
+
 def test_sfm_chipload_and_tool_machine_caps():
     machine,tool,stock=fixture()
     op=Operation(kind="pocket",auto_stepdown=True)

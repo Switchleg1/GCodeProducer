@@ -1,6 +1,8 @@
 """Library editor: machines, materials, nozzles and tools (each its own library)."""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout, QInputDialog, QLabel, QListWidget,
                              QListWidgetItem, QMessageBox, QPushButton, QScrollArea, QSplitter,
@@ -116,7 +118,25 @@ class LibraryDialog(QDialog):
         if p.kind == "machine":       # allowed_* multiselects list the consumable libraries
             for k in ("material", "nozzle", "tool"):
                 ctx[k] = [q.id for q in self.libset[k].all()]
-        editor = ParamEditor(schema(p.kind, p.workflow), p.resolved(), context=ctx)
+        params = schema(p.kind, p.workflow)
+        if p.kind == "tool":
+            from ..core.cam_cutting import MATERIALS
+            parent = self.parent()
+            setup = getattr(getattr(parent, "cam_editor", None), "setup", None)
+            active = setup.stock.category if setup is not None and getattr(parent, "workflow", None) == wf.CAM else None
+            labels = {m[0]: m[1] for m in MATERIALS}
+            if active in labels:
+                prefix = active+"_"
+                own = [q for q in params if q.group.startswith("Cut data:") and q.name.startswith(prefix)]
+                base = [q for q in params if not q.group.startswith("Cut data:")]
+                other = [q for q in params if q.group.startswith("Cut data:") and not q.name.startswith(prefix)]
+                params = base + [replace(q, group=q.group+" — active CAM material") for q in own] + other
+                self.hint.setText(_HINT["tool"] + f" Active CAM material: {labels[active]}. Its cutting table is first; "
+                                  "other materials have separate values below. Auto depth uses the stock's machining category.")
+            else:
+                self.hint.setText(_HINT["tool"] + " Cutting tables are per material. Auto depth uses the category "
+                                  "selected in CAM Material / stock, not always the first table.")
+        editor = ParamEditor(params, p.resolved(), context=ctx)
         editor.changed.connect(lambda vals, pr=p: pr.values.update(vals))
         self.editor_area.setWidget(editor)
 

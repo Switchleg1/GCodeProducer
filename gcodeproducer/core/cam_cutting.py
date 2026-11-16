@@ -33,7 +33,8 @@ def material_parameters():
         for process, percent in (("slot",15.),("pocket",25.),("profile",40.)):
             params.append(Param(f"{key}_{process}_axial", "float", percent, min=1, max=200,
                                 unit="% D", group=group, label=f"{process.title()} axial depth",
-                                help="Default stepdown as percentage of tool diameter, capped by max depth/pass."))
+                                help=f"Automatic {process} stepdown for {label} only (choose the machining category in Material / stock). "
+                                     "Percentage of tool diameter, capped by Max depth/pass; the operation depth override takes precedence."))
     return params
 
 
@@ -44,9 +45,15 @@ class CuttingData:
     lead_feed: float
     stepdown: float
     material: str
+    depth_source: str = ""
+    requested_stepdown: float = 0.0
 
     def summary(self):
-        return f"{self.rpm:.0f} rpm • requested cut {self.feed:g} • lead {self.lead_feed:g} mm/min • depth/pass {self.stepdown:.3f} mm"
+        label = next((m[1] for m in MATERIALS if m[0] == self.material), self.material)
+        source = f" • {self.depth_source}" if self.depth_source else ""
+        cap = f" (capped from {self.requested_stepdown:.3f})" if self.requested_stepdown > self.stepdown+1e-9 else ""
+        return (f"{label}{source} • {self.rpm:.0f} rpm • requested cut {self.feed:g} • lead {self.lead_feed:g} mm/min "
+                f"• depth/pass {self.stepdown:.3f} mm{cap}")
 
 
 def resolve_cutting(machine, tool, stock=None, operation=None):
@@ -87,9 +94,13 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
             raise ValueError("Cut and lead/plunge feeds must be positive and finite")
     kind = getattr(operation,"kind","profile")
     axial_kind = kind if kind in ("slot","pocket","profile") else "slot"
-    step = diameter*float(tool.get(f"{key}_{axial_kind}_axial",15))/100
+    percent = float(tool.get(f"{key}_{axial_kind}_axial",15))
+    step = diameter*percent/100
+    depth_source = f"{axial_kind.title()} {percent:g}% D"
     if operation is not None and not operation.auto_stepdown:
         step = float(operation.stepdown)
+        depth_source = "Operation depth override"
+    requested_stepdown = step
     maximum = float(tool.get("max_doc",0) or 0)
     if not math.isfinite(maximum) or maximum<0:
         raise ValueError("Tool maximum depth/pass must be nonnegative and finite")
@@ -97,4 +108,4 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
         step = min(step,maximum)
     if step <= 0 or not math.isfinite(step):
         raise ValueError("Depth per pass must be positive and finite")
-    return CuttingData(rpm,feed,lead,step,key)
+    return CuttingData(rpm,feed,lead,step,key,depth_source,requested_stepdown)
