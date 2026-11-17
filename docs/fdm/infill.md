@@ -57,7 +57,11 @@ as a guarantee of an exact measured solid-volume fraction.
 `connect` orders separate segments; it does **not** join them with extruding
 bridges. Output still travels between disconnected paths and applies its
 retraction policy. Sparse fill is split against the shell mask so it does not
-reprint solid regions.
+reprint solid regions. In **Speed & travel → Travel**, **Print nearby infill
+together** (on by default) considers nearby lines from each infill type instead
+of printing all top surfaces before all sparse fill. It preserves the original
+order if the local search does not shorten XY travel. Walls, support, adhesion,
+and the line geometry and speeds of each infill type are unchanged.
 
 ## Overlap and patterns
 

@@ -19,6 +19,9 @@ from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMEMIT_PARAMS, _FEATURE_SPEED
 import math, numpy as np
+from gcodeproducer.core.fdm.fdm_constants import WALL_FEATURES
+from gcodeproducer.core.fdm.path_order import closed_loop, ordered_paths
+from gcodeproducer.core.fdm.travel_router import TravelRouter
 from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm
 from gcodeproducer.stages.base.api import FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
@@ -56,6 +59,7 @@ class FDMEmit(SliceStage):
             caps["travel"] = f"travel {travel:g} \u2192 {max_travel:g} mm/s (machine max travel speed)"
             travel = max_travel
         travel_f = travel * 60.0
+        detour = travel * params["travel_detour_time"] if params["avoid_open_spaces"] else 0.
         retract_len = job.mat("retract_length", 0.0) or 0.0
         retract_spd = job.mat("retract_speed", 35) or 35
         zhop = job.mat("zhop", 0.0) or 0.0
@@ -88,7 +92,10 @@ class FDMEmit(SliceStage):
             self._cooling(b, job, layer)
             h = flh if layer.index == 0 else lh
             first = layer.index == 0
-            for path in layer.paths:
+            router = TravelRouter(layer.outline, b.dx) if detour > 0 and layer.outline else None
+            paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
+                     if params["optimize_mixed_infill"] else layer.paths)
+            for path in paths:
                 pts = np.asarray(path.points, float)
                 if len(pts) < 2:
                     continue
@@ -101,7 +108,7 @@ class FDMEmit(SliceStage):
                     requested = path.speed or params[_FEATURE_SPEED.get(path.feature, "print_speed")]
                 feed = print_feed("first layer" if first else path.feature, requested, epm)
                 self._print_path(b, path, pts, epm, feed, travel_f, params,
-                                 retract_len, retract_spd, zhop)
+                                 retract_len, retract_spd, zhop, router, detour)
             ctx.progress((li + 1) / n)
 
         self._end_gcode(b, job, temps, log=ctx.log)
@@ -115,26 +122,32 @@ class FDMEmit(SliceStage):
         return f"{len(job.program.lines)} lines, {moves} moves, {len(job.layers)} layers{extra}"
 
     def _print_path(self, b, path, pts, epm, feed, travel_f, params,
-                    rlen, rspd, zhop):
+                    rlen, rspd, zhop, router=None, detour=0.):
+        head = np.array([b.x, b.y])
         if path.closed:
-            # choose a seam point nearest the current head position
-            if params["seam"] == "nearest":
-                d = ((pts - np.array([b.x, b.y])) ** 2).sum(axis=1)
-                s = int(np.argmin(d))
+            seam = params["seam"]
+            if path.feature in WALL_FEATURES and seam != "origin":
+                target = np.array([params["seam_x"], params["seam_y"]]) if seam == "xy" else head
+                pts = closed_loop(pts, target)
+            elif seam != "origin":
+                # Do not aim skirt or support seams at the perimeter XY target.
+                s = int(np.argmin(((pts - head)**2).sum(axis=1)))
                 pts = np.roll(pts, -s, axis=0)
             loop = np.vstack([pts, pts[0]])
         else:
             loop = pts
             # orient so we start from the closer end
-            if ((loop[-1] - [b.x, b.y]) ** 2).sum() < ((loop[0] - [b.x, b.y]) ** 2).sum():
+            if ((loop[-1] - head)**2).sum() < ((loop[0] - head)**2).sum():
                 loop = loop[::-1]
 
         start = loop[0]
-        dist = math.hypot(start[0] - b.x, start[1] - b.y)
+        route = router.route(head, start, detour) if router is not None else [start]
+        dist = sum(math.dist(a, q) for a, q in zip([head, *route], route))
         do_retract = params["retract"] and rlen > 0 and dist >= params["min_travel_retract"]
         if do_retract:
             b.retract(rlen, rspd, zhop)
-        b.travel(float(start[0]), float(start[1]), feed=travel_f)
+        for q in route:
+            b.travel(float(q[0]), float(q[1]), feed=travel_f)
         if do_retract:
             b.unretract(rlen, rspd, zhop)
         for q in loop[1:]:

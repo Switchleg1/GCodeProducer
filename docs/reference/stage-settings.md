@@ -120,7 +120,12 @@ Workflow: fdm. Optional stage: no.
 | `acceleration` — Acceleration | float / mm/s² | `0.0` | minimum 0; maximum 100000 | Speeds. Print acceleration (M204); 0 = leave the firmware setting. Capped at the machine's maximum. |
 | `retract` — Retract on travel | bool | `True` | No schema bound | Travel. Retract on travels between features (length / speed from the material). |
 | `min_travel_retract` — Min travel to retract | float / mm | `1.5` | minimum 0 | Travel. Shorter travels do not retract. |
-| `seam` — Seam position | choice | `nearest` | `nearest` = Nearest to previous move; `origin` = Fixed (loop start) | Travel. Where closed loops start. |
+| `optimize_mixed_infill` — Print nearby infill together | bool | `True` | No schema bound | Travel. Interleave sparse, top and bottom solid fill on the same layer to reduce travel. |
+| `avoid_open_spaces` — Avoid crossing open spaces | bool | `False` | No schema bound | Travel. Prefer a route within the same layer island, around holes or gaps, when within the detour budget. |
+| `travel_detour_time` — Max extra time per travel | float / s | `0.1` | minimum 0 | Travel. Extra XY distance divided by travel speed (ignores acceleration); 0 = no detours. |
+| `seam` — Perimeter start / stop | choice | `nearest` | `nearest` = Fastest (nearest start); `xy` = Toward XY point; `origin` = Fixed (loop start) | Seam. Choose where each perimeter starts and ends. Fastest minimizes the local approach distance. |
+| `seam_x` — Target X | float / mm | `0.0` | No schema bound | Seam. Bed-coordinate target for Toward XY point. May be outside the part. |
+| `seam_y` — Target Y | float / mm | `0.0` | No schema bound | Seam. Bed-coordinate target for Toward XY point. May be outside the part. |
 
 ## cam_profile
 
