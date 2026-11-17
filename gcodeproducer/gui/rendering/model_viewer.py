@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 from .rendering_constants import (HIGHLIGHT_PASSES, MATERIAL_SELECTION_COLOR, MATERIAL_SELECTION_FILL,
-                                  REFERENCE_COLOR, REFERENCE_SELECTION_COLOR, REFERENCE_FOCUS_COLOR, REFERENCE_ANCHOR_OFFSETS)
+                                  REFERENCE_COLOR, REFERENCE_SELECTION_COLOR, REFERENCE_FOCUS_COLOR, REFERENCE_ANCHOR_OFFSETS,
+                                  REFERENCE_SELECTION_FILL, REFERENCE_FOCUS_FILL)
 from gcodeproducer.gui.rendering.model_mesh import _TriMesh
 from gcodeproducer.gui.rendering.rendering_constants import (
     MODEL_COLOR,
@@ -97,6 +98,8 @@ class ModelViewer(QOpenGLWidget):
         self.reference_selection = np.empty((0, 3))
         self.reference_anchor = np.empty((0, 3))
         self.reference_focus = np.empty((0, 3))
+        self.reference_selection_fill = np.empty((0, 3))
+        self.reference_focus_fill = np.empty((0, 3))
         self._reference_dirty = True
         self._cam_dirty = True
         self.place_on_face = False
@@ -156,9 +159,11 @@ class ModelViewer(QOpenGLWidget):
         self._tool_cursor()
         self._update_info()
 
-    def set_reference_geometry(self, edges=(), focus=()):
+    def set_reference_geometry(self, edges=(), focus=(), selection_fill=(), focus_fill=()):
         self.reference_geometry = np.asarray(edges,float).reshape(-1,3)
         self.reference_focus = np.asarray(focus,float).reshape(-1,3)
+        self.reference_selection_fill = np.asarray(selection_fill,float).reshape(-1,3)
+        self.reference_focus_fill = np.asarray(focus_fill,float).reshape(-1,3)
         self._reference_dirty = True
         self.update()
 
@@ -270,6 +275,8 @@ class ModelViewer(QOpenGLWidget):
         self.m_reference = _Mesh(False)
         self.m_reference_selection = _Mesh(False)
         self.m_reference_focus = _Mesh(False)
+        self.m_reference_selection_fill = _Mesh(False)
+        self.m_reference_focus_fill = _Mesh(False)
         self._reference_dirty = True
         self.bed = BedRenderer(_Mesh)
         self.m_bfaces = _Mesh(False)
@@ -380,10 +387,19 @@ class ModelViewer(QOpenGLWidget):
             self.m_reference.upload(self.reference_geometry)
             self.m_reference_selection.upload(np.vstack((self.reference_selection,self.reference_anchor)))
             self.m_reference_focus.upload(self.reference_focus)
+            self.m_reference_selection_fill.upload(self.reference_selection_fill)
+            self.m_reference_focus_fill.upload(self.reference_focus_fill)
             self._reference_dirty = False
         GL.glUseProgram(self.p_flat)
         GL.glUniformMatrix4fv(GL.glGetUniformLocation(self.p_flat, "uMVP"), 1, GL.GL_TRUE, mvp)
         GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_SELECTION_FILL)
+        self.m_reference_selection_fill.draw(GL.GL_TRIANGLES)
+        GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_FOCUS_FILL)
+        self.m_reference_focus_fill.draw(GL.GL_TRIANGLES)
+        GL.glDisable(GL.GL_BLEND)
         GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_COLOR)
         self.m_reference.draw(GL.GL_LINES)
         GL.glUniform4f(GL.glGetUniformLocation(self.p_flat, "uColor"), *REFERENCE_SELECTION_COLOR)

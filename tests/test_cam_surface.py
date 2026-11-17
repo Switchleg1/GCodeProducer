@@ -1,4 +1,4 @@
-"""Model-surface-limited CAM: sloped-floor Pocket, 3D Waterfall and 3D Contour."""
+"""Depth-limited 3D Waterfall clearing and 3D Contour surface passes."""
 import numpy as np
 import pytest
 from shapely.geometry import Point, Polygon, box
@@ -53,7 +53,7 @@ def sloped_floor_edges(mesh):
     return refs
 
 
-def surface_job(libset, kind="pocket", refs=None, **fields):
+def surface_job(libset, kind="waterfall", refs=None, **fields):
     mesh = wedge_pocket()
     job, op = job_for(mesh, refs or sloped_floor_edges(mesh), libset)
     op.kind = kind
@@ -161,14 +161,15 @@ def test_overlapping_selection_boundaries_merge_instead_of_failing():
     assert nested.area == pytest.approx(96)
 
 
-def test_pocket_with_sloped_boundary_follows_the_floor_in_terraces(libset):
+def test_waterfall_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     job, op = surface_job(libset)
     ctx = StageContext()
     generate(job, ctx)
     assert any("limited by the model surface" in message for message in ctx.messages)
     levels = sorted({layer.z for layer in job.layers}, reverse=True)
-    # Start/End come from the selection (Z-2 .. Z-10); Z-10 itself has no cutter-sized area.
-    assert levels[0] == -3 and levels[-1] == -8
+    # The selected Start is Z-2, but the stock ABOVE it must be cleared first.
+    # Z-10 itself has no cutter-sized area.
+    assert levels[0] == -1 and levels[-1] == -8
     assert_clear_of_model(job)
     # Deeper terraces begin further along the slope.
     reach = [min(float(np.asarray(p.points)[:, 0].min()) for p in layer.paths) for layer in job.layers]
@@ -178,39 +179,51 @@ def test_pocket_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     assert_program_clear(job.program)
 
 
-def test_flat_rim_pocket_keeps_legacy_floor_unless_model_protection_is_on(libset):
+def test_flat_pocket_and_legacy_surface_stop_migration(libset):
     rim = ReferenceShape("rectangle", "edge", (10, 8), (30, 22), z=0)
     ref = [Reference("drawing", [rim.id])]
-    legacy, op = surface_job(libset, refs=ref, end=Depth("absolute", -6))
+    legacy, op = surface_job(libset, kind="pocket", refs=ref, end=Depth("absolute", -6))
     legacy.cam_setup.reference_shapes = [rim]
     generate(legacy, StageContext())
     deepest = min(legacy.layers, key=lambda layer: layer.z)
     assert min(float(np.asarray(p.points)[:, 0].min()) for p in deepest.paths) < 12    # flat floor everywhere
-    job, op = surface_job(libset, refs=ref, end=Depth("absolute", -6), protect_model=True)
-    job.cam_setup.reference_shapes = [rim]
+    data = legacy.cam_setup.to_dict()
+    data["groups"][0]["operations"][0]["protect_model"] = True
+    job, op = surface_job(libset, refs=ref, end=Depth("absolute", -6))
+    job.cam_setup = CAMSetup.from_dict(data)
+    assert job.cam_setup.groups[0].operations[0].kind == "waterfall"
     generate(job, StageContext())
     assert_clear_of_model(job)
     assert min(layer.z for layer in job.layers) == -6
     restored = CAMSetup.from_dict(job.cam_setup.to_dict()).groups[0].operations[0]
-    assert restored.protect_model
-    data = job.cam_setup.to_dict()
-    del data["groups"][0]["operations"][0]["protect_model"]
-    assert not CAMSetup.from_dict(data).groups[0].operations[0].protect_model
+    assert restored.kind == "waterfall" and not restored.protect_model
+    assert Operation(kind="pocket", protect_model=True).kind == "waterfall"
+    data["groups"][0]["operations"][0].pop("protect_model")
+    assert CAMSetup.from_dict(data).groups[0].operations[0].kind == "pocket"
 
 
-def test_waterfall_traces_walls_at_each_level(libset):
+def test_waterfall_clears_the_interior_not_just_one_wall_contour(libset):
     job, op = surface_job(libset, kind="waterfall")
     generate(job, StageContext())
     assert_clear_of_model(job)
     levels = sorted({layer.z for layer in job.layers}, reverse=True)
-    assert levels[0] == -3 and levels[-1] <= -8
+    assert levels[0] == -1 and levels[-1] <= -8
+    interior = []
     for layer in job.layers:
         blocked = ModelShadow(job.mesh).at(layer.z)
         for path in layer.paths:
             p = np.asarray(path.points)
             distances = np.array([blocked.distance(Point(q)) for q in p[::max(1, len(p)//25)]])
-            assert np.allclose(distances, RADIUS, atol=.02)        # exactly one cutter radius off the walls
+            assert np.all(distances >= RADIUS-.02)
+            interior.extend(distances)
+    assert max(interior) > 2*RADIUS   # multiple clearing tracks, not just a wall trace
     assert any(path.closed for layer in job.layers for path in layer.paths)
+    from shapely.geometry import LineString
+    from shapely.ops import unary_union
+    first = job.layers[0]
+    sweeps = unary_union([LineString(np.vstack((p.points, p.points[0])) if p.closed else p.points).buffer(RADIUS)
+                         for p in first.paths])
+    assert POCKET.buffer(-RADIUS-.05).difference(sweeps).area < .01
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert job.program is not None
     assert_program_clear(job.program)
@@ -227,12 +240,13 @@ def test_waterfall_clips_to_the_selection_and_honours_stock_to_leave():
     assert waterfall_paths(Polygon(), box(0, 0, 1, 1), 1., 0., "climb") == []
 
 
-def test_contour3d_follows_the_surface_in_one_pass(libset):
+def test_contour3d_clears_in_depth_limited_passes_then_follows_the_surface(libset):
     job, op = surface_job(libset, kind="contour3d")
     generate(job, StageContext())
-    assert len(job.layers) == 1
+    assert len(job.layers) == 10
+    assert np.all(-np.diff([0] + [layer.z for layer in job.layers]) <= 1+1e-9)
     assert_clear_of_model(job)
-    paths = [np.asarray(p.points) for p in job.layers[0].paths]
+    paths = [np.asarray(p.points) for p in job.layers[-1].paths]
     assert all(p.shape[1] == 3 for p in paths)
     points = np.vstack(paths)
     # A planar slope simplifies to a few vertices: check along the segments.
@@ -243,9 +257,8 @@ def test_contour3d_follows_the_surface_in_one_pass(libset):
     assert inside.sum() > 100
     assert np.all(dense[inside, 2] >= exact-.01)              # never below the true floor
     assert np.all(dense[inside, 2] <= exact+.15)              # and close to it
-    # Start is the selection maximum (Z-2): nothing is traced where the cutter would rest on
-    # the top face or the high end of the floor instead of machining below Start.
-    assert points[:, 2].min() >= -10-1e-9 and points[:, 2].max() < -2
+    # The last pass follows the whole reachable floor, including its high end.
+    assert points[:, 2].min() >= -10-1e-9 and points[:, 2].max() <= -2+1e-9
     assert points[:, 1].min() > 8+RADIUS-.3 and points[:, 1].max() < 22-RADIUS+.3
     # Passes are stepover apart across the short side of the area.
     ys = np.unique(np.round(points[:, 1], 3))
@@ -281,23 +294,54 @@ def test_rough_then_finish_sequence_shares_one_setup(libset):
     job, op = surface_job(libset)
     refs = list(op.geometry)
     group = job.cam_setup.groups[0]
-    for kind in ("waterfall", "contour3d"):
+    for kind in ("contour3d",):
         group.operations.append(Operation(name=KIND_LABELS[kind], kind=kind, geometry=list(refs), stepdown=1,
                                           start=Depth("selection", extreme="max"), end=Depth("selection", extreme="min")))
     generate(job, StageContext())
-    assert {layer.cam_operation for layer in job.layers} == {"Profile", "3D Waterfall", "3D Contour"} or \
-           len({layer.cam_operation_key for layer in job.layers}) == 3
+    assert len({layer.cam_operation_key for layer in job.layers}) == 2
     assert_clear_of_model(job)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert job.program is not None
     assert_program_clear(job.program)
 
 
-@pytest.mark.parametrize("kind", ["profile", "slot", "engrave"])
+@pytest.mark.parametrize("kind", ["profile", "slot", "engrave", "pocket"])
 def test_planar_operations_still_reject_sloped_edges_clearly(libset, kind):
     job, op = surface_job(libset, kind=kind)
-    with pytest.raises(ValueError, match="constant-Z edges; Pocket, 3D Waterfall"):
+    with pytest.raises(ValueError, match="constant-Z edges; 3D Waterfall"):
         generate(job, StageContext())
+
+
+@pytest.mark.parametrize("kind", ["waterfall", "contour3d"])
+def test_3d_depth_of_cut_clears_stock_above_start_and_obeys_tool_cap(libset, kind):
+    job, op = surface_job(libset, kind=kind, stepdown=.8)
+    job.tools[0].values["max_doc"] = .5
+    job.cam_setup.stock.top = 2
+    op.end = Depth("absolute", -6)
+    generate(job, StageContext())
+    levels = [2.] + [layer.z for layer in job.layers]
+    assert levels[1] == pytest.approx(1.5)
+    assert min(levels) == pytest.approx(-6)
+    assert np.all(-np.diff(levels) <= .5+1e-9)
+    for i, layer in enumerate(job.layers):
+        for path in layer.paths:
+            points = np.asarray(path.points)
+            if points.shape[1] == 3:
+                assert points[:, 2].min() >= 2-(i+1)*.5-1e-9
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert not any("uncleared entry depth" in warning for warning in job.warnings)
+
+
+def test_waterfall_removes_air_already_cleared_by_an_earlier_operation(libset):
+    import copy
+    job, op = surface_job(libset)
+    duplicate = copy.deepcopy(op)
+    duplicate.name = "Already cleared"
+    job.cam_setup.groups[0].operations.append(duplicate)
+    ctx = StageContext()
+    generate(job, ctx)
+    assert {layer.cam_operation_key for layer in job.layers} == {(0, 0)}
+    assert any("already cleared by earlier operations" in message for message in ctx.messages)
 
 
 def test_surface_operation_reports_when_nothing_is_reachable(libset):

@@ -15,9 +15,9 @@ setup** (**Tool changes & operations** and **Operation** panes), with the
 expose view options, G-code, statistics and the log. Every pane collapses from
 its header; see [collapsible panes](#collapsible-panes).
 
-The **Messages** dock at the bottom keeps to the list: its counts appear in the
-dock title (*Messages — 0 errors, 1 warnings*) and **Clear** sits beside the
-list, so no row is spent below it.
+The **Messages** dock at the bottom shows counts in its title
+(*Messages — 0 errors, 1 warnings*). **Clear** is at the bottom right, with
+the generation progress bar directly to its left.
 
 Move, float or close docks using their title bars. Restore hidden docks through
 **View**. Layout and window geometry are remembered using Qt settings. A
@@ -164,8 +164,9 @@ circles by center/rim or diameter endpoints and rectangles by center/corner or
 opposite corners on a chosen Z plane, then move or resize the selected shape by
 typing its center/size or with the **Move** / **Resize** click tools. **Draw**,
 Move and Resize are highlighted while active; click again or press Esc to stop.
-Saved outlines are cyan, the shape selected in the pane yellow, outlines picked
-by the operation magenta; material selection remains green. They are selectable boundaries or per-selection height-only
+Saved outlines are cyan. The pane-selected shape has a bright lime outline
+and translucent fill; operation-picked shapes have magenta outlines and fill.
+Material selection remains green. They are selectable boundaries or per-selection height-only
 references. Use **Reference geometry only** to pick through overlaps. Outlines
 stay fixed in CAM work coordinates when the model is moved. See
 [reference geometry](cam/reference-geometry.md) for construction, persistence,

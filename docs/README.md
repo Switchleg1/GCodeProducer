@@ -50,7 +50,7 @@ for a particular printer, material, cutter, or machine.
 | [Holding tabs](cam/holding-tabs.md) | Side-click rails to stock XY edges, retained tab height, path splitting, area order and preserved leads |
 | [Engagement, cutting hand and feeds](cam/engagement-and-feeds.md) | Slot, High engagement, Cut and HSM; machine thresholds/modifiers and feed caps |
 | [Toolpath strategy and direction](cam/toolpaths.md) | Wall-parallel offsets, square/circle transitions, climb/conventional/meander and machine defaults |
-| [Sloped-floor Pocket, 3D Waterfall and 3D Contour](cam/3d-operations.md) | Model-surface-limited roughing in levels, Z-level wall contours, surface-following finishing, accuracy and limits |
+| [3D Waterfall and 3D Contour](cam/3d-operations.md) | Full-area surface-limited clearing, depth-limited surface passes, Pocket migration, accuracy and limits |
 | [Pocket, Profile, Slot, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |
 | [Stock allocation and safety](cam/stock-and-safety.md) | Material properties, Auto margin, bounds, warning interpretation, verification |
 
@@ -77,7 +77,7 @@ tables alone cannot express.
 ## Status and safety
 
 The application supports one STL model at a time. STL/FDM geometry uses a
-minimal NumPy kernel; CAM pocket offsets use Shapely/GEOS. FDM, 2.5D CAM and three flat-cutter 3-axis surface operations are implemented; robust general polygon operations,
+minimal NumPy kernel; CAM pocket offsets use Shapely/GEOS. FDM, 2.5D CAM and two flat-cutter 3-axis surface operations are implemented; robust general polygon operations,
 general 3D machining (rest machining, ball-nose compensation, 4/5-axis) and CAD topology are not. Preview is an inspection aid,
 not a machine-accurate material-removal simulator. Time estimates omit machine
 acceleration and controller effects. Never interpret a successful generation,

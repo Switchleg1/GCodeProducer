@@ -181,10 +181,14 @@ def test_action_buttons_share_height_and_split_70_30(app, tmp_path, monkeypatch)
         assert win.slice_btn.height() == win.save_btn.height()
         total = win.slice_btn.width()+win.save_btn.width()
         assert win.slice_btn.width()/total == pytest.approx(.7, abs=.03)
-        # Messages: Clear sits beside the list; counts move to the dock title (no row below the list)
+        # Messages: progress sits left of Clear on the bottom action row.
         panel = win.messages
         assert panel.layout().indexOf(panel.tree) == 0
-        assert panel.clear_button.geometry().bottom() < panel.tree.geometry().bottom()
+        assert panel.clear_button.geometry().top() > panel.tree.geometry().bottom()
+        panel.progress.show()
+        panel.layout().activate()
+        assert panel.progress.geometry().right() < panel.clear_button.geometry().left()
+        assert win.progress is panel.progress
         panel.add("warning", "Something to check")
         assert win.dock_messages.windowTitle() == "Messages \u2014 0 errors, 1 warnings"
         panel.clear()

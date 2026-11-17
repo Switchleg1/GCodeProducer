@@ -46,7 +46,7 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
         if value <= 0 or not math.isfinite(value):
             raise ValueError("Cut and lead/plunge feeds must be positive and finite")
     kind = getattr(operation,"kind","profile")
-    axial_kind = kind if kind in ("slot","pocket","profile") else "slot"
+    axial_kind = "pocket" if kind == "waterfall" else kind if kind in ("slot","pocket","profile") else "slot"
     percent = float(tool.get(f"{key}_{axial_kind}_axial",15))
     step = diameter*percent/100
     depth_source = f"{axial_kind.title()} {percent:g}% D"

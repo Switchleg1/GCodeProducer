@@ -19,6 +19,16 @@ def line_segments(shapes):
     return np.asarray(segments, float).reshape(-1,3)
 
 
+def filled_shapes(shapes):
+    """Triangle fans for the supported convex circle/rectangle reference shapes."""
+    triangles = []
+    for shape in shapes:
+        p = shape.polyline()
+        center = p[:-1].mean(axis=0)
+        triangles.extend(np.stack((np.tile(center, (len(p)-1, 1)), p[:-1], p[1:]), axis=1).reshape(-1, 3))
+    return np.asarray(triangles, float).reshape(-1, 3)
+
+
 def pick(shapes, mode, origin, direction, mvp, viewport, mouse):
     best, result = 10., None
     for shape in shapes:

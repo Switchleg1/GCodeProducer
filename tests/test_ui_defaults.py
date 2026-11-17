@@ -297,18 +297,14 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
         assert (op.start.source, op.start.extreme, op.end.source, op.end.extreme) == ("selection", "max", "selection", "min")
         assert KIND_LABELS[kind] in editor.tree.currentItem().text(0)
         assert not editor.b_selection_depths.isHidden()
-        assert editor.stepover.isEnabled() == (kind != "waterfall")
+        assert editor.stepover.isEnabled()
         assert editor.direction_override.isEnabled() == (kind != "contour3d")
-        assert not editor.strategy.isEnabled() or kind == "pocket"
-        # The 3D kinds always stop at the model; a pocket chooses (and is forced when its rim is sloped).
-        assert editor.protect_model.isEnabled() == (kind == "pocket")
-        assert editor.protect_model.isChecked() == (kind != "pocket")
+        assert editor.strategy.isEnabled() == (kind in ("pocket", "waterfall"))
+        assert not hasattr(editor, "protect_model")
         assert not op.protect_model
-    editor.protect_model.setChecked(True)
-    assert editor.operation().protect_model
     restored = CAMSetup.from_dict(editor.setup.to_dict())
     assert [o.kind for o in restored.groups[0].operations] == ["waterfall", "contour3d", "pocket"]
-    assert restored.groups[0].operations[2].protect_model
+    assert not restored.groups[0].operations[2].protect_model
     editor.close()
 
 

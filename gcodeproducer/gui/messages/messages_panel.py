@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QProgressBar,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -16,15 +17,14 @@ from gcodeproducer.gui.messages.messages_constants import LEVEL_COLORS
 class MessagesPanel(QWidget):
     """Every warning/error the application reports, including ones whose pop-up is disabled.
 
-    Kept to a single row band: the counts go to the dock title (``summaryChanged``)
-    and Clear sits beside the list, so nothing is wasted below it.
+    Counts go to the dock title; progress and Clear share the bottom action row.
     """
     MAX = 2000
     summaryChanged = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
         self.tree = QTreeWidget()
@@ -35,18 +35,23 @@ class MessagesPanel(QWidget):
         self.tree.setColumnWidth(1, 70)
         self.tree.setWordWrap(False)
         layout.addWidget(self.tree, 1)
-        side = QVBoxLayout()
-        side.setContentsMargins(0, 0, 0, 0)
-        side.setSpacing(2)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(4)
+        actions.addStretch(1)
+        self.progress = QProgressBar()
+        self.progress.setMaximumWidth(240)
+        self.progress.setRange(0, 100)
+        self.progress.setVisible(False)
+        actions.addWidget(self.progress)
         self.clear_button = QPushButton("Clear")
         self.clear_button.setToolTip("Remove all messages from the list")
         self.clear_button.clicked.connect(self.clear)
-        side.addWidget(self.clear_button)
+        actions.addWidget(self.clear_button)
         self.summary = QLabel("No messages")
         self.summary.setVisible(False)              # shown in the dock title instead
-        side.addWidget(self.summary)
-        side.addStretch(1)
-        layout.addLayout(side)
+        layout.addWidget(self.summary)
+        layout.addLayout(actions)
         self.counts = {"error": 0, "warning": 0, "info": 0}
 
     def add(self, level: str, text: str, source: str = ""):

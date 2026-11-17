@@ -157,13 +157,18 @@ def highlight_geometry(payload):
         out = topo.highlight(refs, op_stock) if op is not None else {"faces": [], "edges": np.empty((0, 3)), "depths": ""}
     except ValueError as exc:
         out = {"faces": [], "edges": np.empty((0, 3)), "depths": str(exc), "geometry_error": str(exc)}
-    from .reference_geometry import line_segments
+    from .reference_geometry import line_segments, filled_shapes
     try:
         out["reference_geometry"] = line_segments(shapes)
         focus = stocks[4] if len(stocks) > 4 else None
-        out["reference_focus"] = line_segments([s for s in shapes if s.id == focus])
+        focused = [s for s in shapes if s.id == focus]
+        out["reference_focus"] = line_segments(focused)
+        out["reference_focus_fill"] = filled_shapes(focused)
+        selected_ids = {ref.indices[0] for ref in refs if ref.kind == "drawing" and ref.indices}
+        out["reference_selection_fill"] = filled_shapes([s for s in shapes if s.id in selected_ids])
     except ValueError as exc:
         out["reference_geometry"] = out["reference_focus"] = np.empty((0, 3))
+        out["reference_focus_fill"] = out["reference_selection_fill"] = np.empty((0, 3))
         out["geometry_error"] = str(exc)
     out["tabs"] = []
     if len(stocks) > 2 and stocks[2]:
@@ -281,7 +286,7 @@ def _tab_schedule(areas, op, region, tabs, start, end, step, count, radius, log=
 
 def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direction, tabs,
                        material_history, shadow, skip_air, add_layer):
-    """Operations limited by the model surface (3-axis): sloped-floor Pocket, 3D Waterfall, 3D Contour.
+    """Depth-limited model-surface clearing: 3D Waterfall and 3D Contour.
 
     At each level the cutter stays out of the XY shadow of all model material above
     that level, so sloped and curved floors become terraces and undercuts are never
@@ -293,18 +298,24 @@ def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direc
     from gcodeproducer.core.jobs.path import Path
     from gcodeproducer.core.cam.paths import machining_areas
     from gcodeproducer.core.cam.engagement import plan_engagement
-    from gcodeproducer.core.cam.surface_paths import selection_region, waterfall_paths, surface_raster
+    from gcodeproducer.core.cam.surface_paths import selection_region, surface_raster
     from gcodeproducer.core.settings.preferences import pref
     setup = job.cam_setup
     diameter = float(tool.get("diameter", 0))
     radius = diameter/2
     label = KIND_LABELS[op.kind]
-    if op.kind != "waterfall" and not 0 < op.stepover <= 100:
+    if not 0 < op.stepover <= 100:
         raise ValueError(f"{op.name}: stepover must be between 0 and 100 percent")
     if op.stock < 0 or not math.isfinite(op.stock):
         raise ValueError(f"{op.name}: stock to leave must be zero or positive")
     region = selection_region(loops, ctx.log, op.name)
-    surface_top = setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
+    surface_top = max(float(job.mesh.bounds[1][2]), setup.stock.top if setup.stock.allocated else -math.inf)
+    if start < surface_top-1e-6:
+        ctx.log(f"  {op.name}: clearing above selected Start Z{start:g} from material surface Z{surface_top:g}")
+        start = surface_top
+        count = max(1, math.ceil((start-end)/step))
+        if count > 10000:
+            raise ValueError(f"{op.name}: too many depth passes from the material surface")
     reach = float(tool.get("length", 0) or 0)
     if reach > 0 and surface_top-end > reach+1e-3:
         warning = (f"{op.name}: {surface_top-end:g} mm below the material surface (Z{surface_top:g}) exceeds the "
@@ -312,7 +323,7 @@ def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direc
         if warning not in job.warnings:
             job.warnings.append(warning)
             ctx.log("REACH WARNING: "+warning)
-    produced = 0
+    produced = reachable = 0
     if op.kind == "contour3d":
         from gcodeproducer.core.cam.drop_surface import DropSurface
         wanted = max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")), diameter/SURFACE_CELLS_PER_DIAMETER))
@@ -327,53 +338,60 @@ def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direc
             ctx.log("SURFACE WARNING: "+warning)
         floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(radius+op.stock+surface.resolution),
                    math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in tabs]
-        lines = surface_raster(region, surface, radius, diameter*op.stepover/100, end, op.stock, ctx.log, floors, start)
-        if not lines:
+        for i in range(count):
+            z = max(end, start-(i+1)*step)
+            if z >= surface_top-1e-6:
+                continue
+            lines = surface_raster(region, surface, radius, diameter*op.stepover/100, z, op.stock,
+                                   ctx.log, floors, min(start, surface_top))
+            if not lines:
+                continue
+            low = min(float(p[:, 2].min()) for p in lines)
+            # Clamp to successive floors: never drop straight to the final
+            # surface through uncleared material above it.
+            add_layer([Path("cut", p, width=diameter) for p in lines], low, min(step, start-z), 0)
+            produced += 1
+        if not produced:
             raise ValueError(f"{op.name}: no model surface below Start Z{start:g} that the cutter can reach in the "
                              "selected area. Check Start/End Z and the tool diameter.")
-        low = min(float(p[:, 2].min()) for p in lines)
-        add_layer([Path("cut", p, width=diameter) for p in lines], low, step, 0)
-        ctx.log(f"  {op.name}: {label}, {len(lines)} surface-following paths, lowest Z{low:g} "
-                f"(single finishing pass; rough first if the depth exceeds the tool's depth per pass)")
+        ctx.log(f"  {op.name}: {label}, {produced} depth-limited surface passes, "
+                f"maximum depth per pass {step:g} mm, Z{start:g} to Z{end:g}")
         return
     limit = None
-    if setup.stock.allocated and op.kind == "pocket":
+    if setup.stock.allocated:
         lo_s, hi_s = setup.stock.bounds
         limit = box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
         if abs(op.material_limit+op.stock) > 1e-12:
             limit = limit.buffer(op.material_limit+op.stock, join_style=BufferJoinStyle.mitre)
     if op.area_order == "area":
         ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
-    allowed = region.buffer(radius+op.stock+1e-3)
     for i in range(count):
         z = max(end, start-(i+1)*step)
         blocked = shadow.at(z)
         active = [box(lo[0], lo[1], hi[0], hi[1]) for lo, hi in tabs if z < hi[2]-1e-6]
         if active:
             blocked = unary_union([blocked]+active)
-        if op.kind == "pocket":
-            free = region if blocked.is_empty else region.difference(blocked)
-            if limit is not None:
-                free = free.intersection(limit)
-            free = free.buffer(0)
-            if free.is_empty or free.buffer(-(radius+op.stock)).is_empty:
-                ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
-                continue
-            try:
-                paths = _pocket_paths(op, [], free, diameter, direction)
-            except ValueError as exc:
-                if "too small" not in str(exc):
-                    raise
-                continue
-            areas = machining_areas(paths, "pocket", free) if paths else []
-        else:
-            paths = [Path("cut", p, closed=closed, width=diameter)
-                     for p, closed in waterfall_paths(blocked, allowed, radius, op.stock, direction)]
-            areas = [[p] for p in paths]
+        if z >= surface_top-1e-6:
+            continue
+        free = region if blocked.is_empty else region.difference(blocked)
+        if limit is not None:
+            free = free.intersection(limit)
+        free = free.buffer(0)
+        if free.is_empty or free.buffer(-(radius+op.stock)).is_empty:
+            ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
+            continue
+        try:
+            paths = _pocket_paths(op, [], free, diameter, direction)
+        except ValueError as exc:
+            if "too small" not in str(exc):
+                raise
+            continue
+        areas = machining_areas(paths, "pocket", free) if paths else []
+        reachable += len(areas)
         remaining = material_history.at(z) if material_history else None
         for ai, planned in enumerate(areas):
             planned[0].stay_down, planned[0].stay_down_from = False, None
-            if skip_air and remaining is not None and op.kind == "pocket":
+            if skip_air and remaining is not None:
                 planned = _drop_air_paths(planned, remaining, radius, op.name, ctx.log)
                 if not planned:
                     continue
@@ -384,6 +402,9 @@ def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direc
                 material_history.remove(planned, z, radius)
             add_layer(planned, z, min(step, start-z), ai)
             produced += 1
+    if not produced and reachable:
+        ctx.log(f"  {op.name}: selected area already cleared by earlier operations; no cutting needed")
+        return
     if not produced:
         raise ValueError(f"{op.name}: no machinable paths between the selection and the model surface "
                          f"from Z{start:g} to Z{end:g}. Check that End Z is below the surface to machine "
@@ -495,6 +516,7 @@ def generate(job, ctx):
             if safe <= max(float(job.mesh.bounds[1][2]), start,
                            setup.stock.top if setup.stock.allocated else -math.inf):
                 raise ValueError("Safe Z must be above the model and all operation start heights")
+            clearing = op.kind in ("pocket", "waterfall")
             selected_edges, stock_edges, keep_edges = set(), set(), set()
             cam_vertices = topo.vertices
             has_stock_bounds = any(ref.kind.startswith("stock_") for ref in op.geometry)
@@ -512,7 +534,7 @@ def generate(job, ctx):
                     from gcodeproducer.core.cam.stock_geometry import indices as stock_indices
                     from gcodeproducer.core.cam.cam_constants import FACES
                     local_ids = stock_indices(ref)
-                    if ref.kind == "stock_edge" and op.kind == "pocket":
+                    if ref.kind == "stock_edge" and clearing:
                         if np.ptp(cam_vertices[[len(topo.vertices)+i for i in local_ids], 2]) > 1e-4:
                             raise ValueError(f"{op.name}: select a horizontal material edge for a pocket rim")
                         # One straight stock edge identifies the whole top/bottom rim.
@@ -528,24 +550,23 @@ def generate(job, ctx):
                     pts = topo.vertices[topo.triangles[topo.face(ref.indices[0])]].reshape(-1, 3)
                     if np.ptp(pts[:, 2]) > 1e-4:
                         raise ValueError(f"{op.name}: 2.5D operations require a horizontal face")
-                    edges = (topo.pocket_face_edges(ref.indices[0]) if op.kind == "pocket"
+                    edges = (topo.pocket_face_edges(ref.indices[0]) if clearing
                              else topo.face_edges(ref.indices[0]))
-                    if op.kind == "pocket" and has_stock_bounds:
+                    if clearing and has_stock_bounds:
                         keep_edges.update(tuple(sorted(e)) for e in edges)
                 else:
-                    chain = topo.pocket_boundary(ref) if op.kind == "pocket" and has_stock_bounds else topo.edge_chain(ref)
+                    chain = topo.pocket_boundary(ref) if clearing and has_stock_bounds else topo.edge_chain(ref)
                     edges = list(zip(chain, chain[1:]))
                     if ref.kind == "edge":
                         keep_edges.update(tuple(sorted(e)) for e in edges)
                 selected_edges.update(tuple(sorted(e)) for e in edges)
             polys = [cam_vertices[p] for p in chains(selected_edges)]
             flat = all(np.ptp(p[:, 2]) <= 1e-4 for p in polys)
-            # A pocket whose selected boundary is not level cannot have a flat floor: it is
-            # cleared in levels down to the model surface instead of being rejected.
-            surface_mode = op.kind in SURFACE_KINDS or (op.kind == "pocket" and (op.protect_model or not flat))
+            # Surface clearing is explicit, not a hidden Pocket mode.
+            surface_mode = op.kind in SURFACE_KINDS
             if not flat and not surface_mode:
-                raise ValueError(f"{op.name}: {KIND_LABELS[op.kind]} needs constant-Z edges; Pocket, 3D Waterfall "
-                                 "and 3D Contour accept sloped boundaries")
+                raise ValueError(f"{op.name}: {KIND_LABELS[op.kind]} needs constant-Z edges; 3D Waterfall "
+                                 "and 3D Contour accept sloped boundaries; use 3D Waterfall for surface-limited clearing")
             paths = []
             region = None
             if op.area_order not in ("area", "depth"):

@@ -86,9 +86,15 @@ def test_drawing_highlights_include_unselected_outlines_and_selected_edges():
     mesh=stepped_part();a=ReferenceShape();b=ReferenceShape(kind="rectangle",z=-4)
     from gcodeproducer.core.cam import Operation
     ref=Reference("drawing",[b.id]);op=Operation(geometry=[ref],end=Depth("geometry",reference=ref))
-    output=highlight_geometry((mesh,op,None,None,[],[a,b]))
+    output=highlight_geometry((mesh,op,None,None,[],[a,b],a.id))
     assert len(output['reference_geometry'])==2*a.segment_count()+8
     assert len(output['reference_edges'])==8
+    assert len(output['reference_selection_fill']) == 12
+    assert len(output['reference_focus_fill']) == 3*a.segment_count()
+    assert np.all(output['reference_selection_fill'][:, 2] == -4)
+    from gcodeproducer.gui.rendering.rendering_constants import REFERENCE_COLOR, REFERENCE_FOCUS_COLOR, REFERENCE_SELECTION_FILL
+    assert np.linalg.norm(np.array(REFERENCE_COLOR[:3])-REFERENCE_FOCUS_COLOR[:3]) > .5
+    assert REFERENCE_SELECTION_FILL[3] >= .25
     assert 'end -4.000' in output['depths']
     assert not output['faces'] and not len(output['stock_edges'])
 

@@ -23,7 +23,7 @@ G-code fix by immediately running it on hardware.
 | UI stalls or task never finishes | Check Log, memory and compute-process errors; Cancel and retry with a smaller model; avoid repeated huge queued tasks |
 | A pane seems empty or missing | Its header may be collapsed: click the header. Panes remember their state |
 | Space / arrow keys do not play or step the Preview | Click the 3D Preview or the playback bar first; the keys act there so text fields keep them |
-| Messages counts are not shown under the list | They are in the Messages dock title; **Clear** is beside the list |
+| Messages counts are not shown under the list | They are in the Messages dock title; **Clear** is at bottom right, beside progress |
 
 Offscreen Qt is useful for tests, not a guarantee that a real OpenGL viewport
 works. CPU tests passing does not validate your graphics driver.
@@ -72,12 +72,12 @@ works. CPU tests passing does not validate your graphics driver.
   face boundary. One cube edge is not a closed profile. Use Engrave for a
   suitable open line, not to bypass an unsafe profile plan.
 - **Horizontal/constant-Z error:** Profile, Slot, Engrave and Drill require
-  horizontal faces or constant-Z edge chains. Pocket, 3D Waterfall and 3D
-  Contour accept sloped edges and stop at the model surface instead; see
+  horizontal faces or constant-Z edge chains, as does Pocket. 3D Waterfall and
+  3D Contour accept sloped edges and stop at the model surface instead; see
   [3D operations](cam/3d-operations.md). A height reference may be nonhorizontal.
 - **Pocket cut a flat floor through a contoured bottom:** the selected rim is
-  level, so the Pocket used End Z everywhere. Tick **Stop at model surface**
-  or include the sloped edges in the selection.
+  level, so the Pocket used End Z everywhere. Use **3D Waterfall** to clear
+  the full reachable region in depth-limited bands down to the model surface.
 - **Staircase left on a slope:** expected after level roughing. Finish with 3D
   Waterfall (steep) or 3D Contour (shallow), or reduce the depth of cut.
 - **"No machinable paths between the selection and the model surface":** End Z
@@ -138,8 +138,8 @@ generic template, not a verified machine post. See [templates](gcode-templates.m
 
 One STL model at a time; minimal contour/offset/raster geometry; no guarantee
 for nonmanifold/self-intersecting/thin geometry; no general CAD/STEP support;
-3D CAM limited to flat-cutter level roughing, Z-level contours and
-surface-following passes (no rest machining, ball-nose compensation or 4/5-axis);
+3D CAM limited to flat-cutter full-area level roughing and
+depth-limited surface-following passes (no rest machining, ball-nose compensation or 4/5-axis);
 no general collision certification. Advanced
 pipeline editing and custom G-code can invalidate otherwise sensible defaults.
 Report reproducible issues with a small model and sanitized settings.

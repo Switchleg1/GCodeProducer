@@ -229,34 +229,28 @@ class CAMEditor(QWidget):
         for k in OPERATION_SIDES:
             self.side.addItem(k.title(), k)
         self.stock = self.spin(0, 100, 0)
-        self.stock.setToolTip("Roughing clearance: material left on every selected wall/island for a later finishing pass.")
+        self.stock.setToolTip("Pocket/Profile/Waterfall: radial material left on walls/islands. 3D Contour: axial stock above the surface.")
         self.overcut = self.spin(0, 1000, 0)
         self.overcut.setToolTip("Pocket only: grow the removal region outward by this distance into void material (stock that is not "
                                 "part of the model at any pass depth). Part cross-sections plus roughing clearance are never entered. "
                                 "Lets this pocket overlap the next operation so no thin wall remains between them.")
         self.material_limit = self.spin(-1000, 1000, 0)
-        self.material_limit.setToolTip("Pocket only, where the region reaches the blank edge: how far the cutter's outer edge may go "
+        self.material_limit.setToolTip("Pocket / Waterfall, where the region reaches the blank edge: how far the cutter's outer edge may go "
                                        "relative to that edge. 0 touches it, -1 leaves 1 mm of material, +1 passes 1 mm beyond. "
                                        "Default comes from Settings → Default operation settings.")
         self.strategy = QComboBox()
         self.strategy.addItem("Wall-parallel contours", "contour")
         self.strategy.addItem("Raster lines", "raster")
-        for label, w in (("Area order", self.area_order), ("Pocket / 3D Contour stepover (%)", self.stepover),
+        for label, w in (("Area order", self.area_order), ("Clearing / 3D Contour stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
                          ("Pocket overcut into void (mm)", self.overcut),
                          ("Material boundary limit (mm)", self.material_limit),
-                         ("Pocket strategy", self.strategy)):
+                         ("Pocket / Waterfall strategy", self.strategy)):
             form.addRow(label, w)
             if isinstance(w, QComboBox):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
-        self.protect_model = QCheckBox("Stop at model surface")
-        self.protect_model.setToolTip("Pocket: at every depth keep the cutter out of all model material above that depth, so a sloped or "
-                                      "curved bottom is cleared in terraces instead of being cut flat. Always applied when the selected "
-                                      "boundary is not level, and by 3D Waterfall / 3D Contour. Finish terraces with those operations.")
-        self.protect_model.toggled.connect(self._edit)
-        form.addRow(self.protect_model)
         self.stay_down = QCheckBox("Stay down between contours")
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
@@ -448,21 +442,19 @@ class CAMEditor(QWidget):
             self.overcut.setValue(op.overcut)
             self.overcut.setEnabled(op.kind == "pocket")
             self.material_limit.setValue(op.material_limit)
-            self.material_limit.setEnabled(op.kind == "pocket")
+            self.material_limit.setEnabled(op.kind in ("pocket", "waterfall"))
             self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
-            self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
+            self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy == "contour")
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
                 sb.setEnabled(op.kind not in ("drill", "contour3d"))
-            self.strategy.setEnabled(op.kind == "pocket")
+            self.strategy.setEnabled(op.kind in ("pocket", "waterfall"))
             self.direction_override.setEnabled(op.kind in ("pocket", "profile", "waterfall"))
             self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
-            self.stepover.setEnabled(op.kind in ("pocket", "contour3d"))
-            self.protect_model.setChecked(op.protect_model or op.kind in SURFACE_KINDS)
-            self.protect_model.setEnabled(op.kind == "pocket")
+            self.stepover.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
         self.selectionChanged.emit()
@@ -498,12 +490,10 @@ class CAMEditor(QWidget):
             self.direction.blockSignals(False)
         op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
         self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
-        if op.kind == "pocket":
-            op.protect_model = self.protect_model.isChecked()
         op.stay_down = self.stay_down.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())
-        self.stay_down.setEnabled(op.kind == "pocket" and op.strategy == "contour")
+        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy == "contour")
         item = self.tree.currentItem()
         item.setText(0, f"{KIND_LABELS.get(op.kind, op.kind.title())}: {op.name}" + (" (off)" if not op.enabled else ""))
         self.changed.emit()

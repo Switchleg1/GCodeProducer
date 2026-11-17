@@ -46,7 +46,7 @@ Every warning and error — pop-up or not — is recorded in the **Messages**
 panel, docked at the bottom of the window a few lines tall. Hide or show it
 with **View → Messages**; drag it elsewhere like any dock (the layout is
 remembered). Rows are coloured by level, hover for the full text, and
-**Clear** (beside the list) empties it. The error/warning counts are shown in
+**Clear** (bottom right, beside the generation progress bar) empties it. The error/warning counts are shown in
 the dock title, e.g. *Messages — 1 errors, 2 warnings*. CAM job warnings (stock, engagement, reach, tool,
 lead) are listed once per generation; pipeline log lines containing
 `WARNING:` are added too. The full detail remains in the **Log** dock.

@@ -117,7 +117,7 @@ if the current blank is no longer suitable.
 Implemented machining is 2.5D from STL-derived topology, plus three 3-axis
 operations limited by the model surface:
 
-- [Sloped-floor Pocket, 3D Waterfall and 3D Contour](3d-operations.md)
+- [3D Waterfall clearing and depth-limited 3D Contour](3d-operations.md)
 
 - [Geometry selection and linked depths](selection-and-depths.md)
 - [Draw circles and rectangles as reference geometry](reference-geometry.md)
@@ -131,7 +131,7 @@ operations limited by the model surface:
 
 Model-owned rectangular holding tabs are implemented, including radius-aware
 path splits and protected-tab travel checks. 3D work is limited to flat-cutter
-level roughing, Z-level wall contours and parallel surface-following passes: no
+full-area level roughing and depth-limited parallel surface-following passes: no
 rest machining, ball/bull-nose compensation, scallop/spiral/adaptive strategies,
 CAD/STEP topology, cutter-holder or fixture simulation is provided. Segmented contour lead ramps and progressive 2.5D
 material outputs/checks are implemented, not a general solid-removal solver. Tool type labels do not implement V-carving

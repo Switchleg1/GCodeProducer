@@ -146,9 +146,10 @@ Every material remains separately editable.
 
 These captures use illustrative 4 mm tool values, not qualified cutting data.
 
-3D Waterfall and 3D Contour have no axial column of their own: their automatic
-depth per pass uses the material's **Slot** percentage. Unlock *depth of cut*
-on the operation to choose the level spacing directly.
+3D Waterfall and 3D Contour have no axial column of their own: Waterfall uses
+the material's **Pocket** percentage and Contour uses **Slot**. Both generate
+successive depth-limited passes. Unlock *depth of cut* to choose the increment
+directly; the tool's positive Max depth/pass still caps it.
 
 If a saved Pocket axial percentage appears not to affect the cut, check:
 

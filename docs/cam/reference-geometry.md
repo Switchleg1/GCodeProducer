@@ -9,12 +9,14 @@ They are owned by the model's CAM setup. They are saved construction outlines, n
 mesh faces, stock or retained material. Operations can select their boundaries
 or use them only for height references.
 
-![Reference geometry pane in the Model dock, Move active, the selected circle in yellow](../pictures/ui-reference-geometry-pane.png)
+![Noticeable reference selection: lime editor focus and magenta machining region](../pictures/ui-reference-selection-fill.png)
 
 Current actual capture (isolated library, `examples/wedge-pocket.stl`, top view):
-the list with its tool buttons directly underneath, the highlighted **Move**
-tool, and the numeric center/size fields of the selected circle. In the view,
-saved outlines are cyan and the shape selected in this list is **yellow**.
+saved outlines are cyan. The shape selected in this pane is **bright lime with
+a translucent filled interior**; operation-selected outlines are **magenta with
+a filled interior**. The overlays draw above model/stock shading so selection
+is visible even when an outline lies on a model face. Earlier captures with
+a yellow, outline-only editor focus show the previous highlight style.
 
 ![Four construction methods, saved outlines and an operation-selected circle](../pictures/cam-reference-drawing.png)
 

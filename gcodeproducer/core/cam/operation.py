@@ -36,5 +36,10 @@ class Operation:
     overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
     area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
-    protect_model: bool = False        # pocket: stop at the model surface (forced when the selection is not level)
+    protect_model: bool = False        # legacy input: migrates a surface-limited Pocket to Waterfall
     height_references: list[Reference] = field(default_factory=list)  # picked but excluded from machining
+
+    def __post_init__(self):
+        if self.kind == "pocket" and self.protect_model:
+            self.kind = "waterfall"
+            self.protect_model = False

@@ -36,7 +36,6 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -139,12 +138,8 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._build_menu()
         self.status_line = QLabel("")
-        self.progress = QProgressBar()
-        self.progress.setMaximumWidth(180)
-        self.progress.setRange(0, 100)
-        self.progress.setVisible(False)
+        self.progress = self.messages.progress
         self.statusBar().addWidget(self.status_line, 1)
-        self.statusBar().addPermanentWidget(self.progress)
         for key, fn in (("PgUp", lambda: self.step_layer(1)), ("PgDown", lambda: self.step_layer(-1)),
                         ("Home", lambda: self.step_layer(-10 ** 6)), ("End", lambda: self.step_layer(10 ** 6))):
             QShortcut(QKeySequence(key), self, activated=fn)
@@ -1960,7 +1955,9 @@ class MainWindow(QMainWindow):
                 self.model_viewer.set_cam_selection(result['faces'], result['edges'], result.get('stock_faces', []),
                                                     result.get('stock_edges', []), result.get('reference_edges', []))
                 self.model_viewer.set_reference_geometry(result.get('reference_geometry', []),
-                                                         result.get('reference_focus', []))
+                                                         result.get('reference_focus', []),
+                                                         result.get('reference_selection_fill', []),
+                                                         result.get('reference_focus_fill', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
                 self.viewer.set_tab_bounds(result.get('tabs', []))
                 if result.get('tab_error'):

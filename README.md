@@ -20,8 +20,8 @@ output before operating a machine.
 - **FDM:** walls, top/bottom shells, sparse infill, skirt/brim, automatic support,
   editable support blocks, and reusable process presets.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave
-  operations, plus model-surface-limited sloped-floor pockets, 3D Waterfall
-  (Z-level) and 3D Contour (surface-following) passes; part/material picking, drawn reference circles/rectangles,
+  operations, plus model-surface-limited 3D Waterfall full-area clearing
+  and depth-limited 3D Contour (surface-following) passes; part/material picking, drawn reference circles/rectangles,
   geometry-linked depths and wall-following pockets,
   machine-default climb/conventional/meander direction, and Slot/High/Cut/HSM feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
