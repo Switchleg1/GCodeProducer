@@ -17,7 +17,7 @@ from gcodeproducer.gui.messages.messages_constants import LEVEL_COLORS
 class MessagesPanel(QWidget):
     """Every warning/error the application reports, including ones whose pop-up is disabled.
 
-    Counts go to the dock title; progress and Clear share the bottom action row.
+    Counts go to the dock title; main-window progress/Clear share its status row.
     """
     MAX = 2000
     summaryChanged = pyqtSignal(str)
@@ -35,7 +35,7 @@ class MessagesPanel(QWidget):
         self.tree.setColumnWidth(1, 70)
         self.tree.setWordWrap(False)
         layout.addWidget(self.tree, 1)
-        actions = QHBoxLayout()
+        self.actions = actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(4)
         actions.addStretch(1)
@@ -53,6 +53,13 @@ class MessagesPanel(QWidget):
         layout.addWidget(self.summary)
         layout.addLayout(actions)
         self.counts = {"error": 0, "warning": 0, "info": 0}
+
+    def attach_status_bar(self, status_bar):
+        """Use the existing status row instead of spending a second bottom row."""
+        self.layout().removeItem(self.actions)
+        status_bar.addPermanentWidget(self.progress)
+        status_bar.addPermanentWidget(self.clear_button)
+        self.progress.hide()
 
     def add(self, level: str, text: str, source: str = ""):
         level = level if level in LEVEL_COLORS else "info"

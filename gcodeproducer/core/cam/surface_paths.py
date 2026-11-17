@@ -100,19 +100,25 @@ def simplify3d(points, tolerance=SURFACE_SIMPLIFY):
     return points[keep]
 
 
-def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf):
-    """Zigzag passes over ``region`` whose Z follows the model: list of (n, 3) polylines.
+def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
+                   strategy="meander"):
+    """Depth-clamped XYZ rasters, as meander or independent X/Y cutting lines.
 
-    Passes run along the longer side of the region. Neighbouring passes are
-    joined along the surface when the joining move stays inside the region.
+    Meander alternates along the longer side and joins neighbouring passes
+    along the surface when the joining move stays inside the region. X/Y
+    raster lines run in one direction and retract between cutting lines.
     Stretches where the cutter would sit at or above ``ceiling`` (it rests on
     material that is not being machined, e.g. the top face beside a wall) are
     left out instead of being traced in the air.
     """
     if region.is_empty or spacing <= 0:
         return []
+    from .strategy import cutting_strategy
+    strategy = cutting_strategy("contour3d", strategy)
+    if strategy not in ("meander", "raster_x", "raster_y"):
+        raise ValueError(f"Unknown 3D Contour cutting strategy '{strategy}'")
     minx, miny, maxx, maxy = region.bounds
-    along_x = (maxx-minx) >= (maxy-miny)
+    along_x = strategy == "raster_x" or (strategy == "meander" and (maxx-minx) >= (maxy-miny))
     lo, hi = (miny, maxy) if along_x else (minx, maxx)
     count = max(1, int(math.ceil((hi-lo)/spacing-1e-9)))
     step = surface.resolution
@@ -150,6 +156,9 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
                 run = whole[first:last]
                 if len(run) < 2:
                     continue
+                if strategy != "meander":
+                    paths.append(run)
+                    continue
                 if current is not None:
                     link = LineString((current[-1][:2], run[0, :2]))
                     if link.length <= 2.5*spacing+1e-9 and cover.covers(link):
@@ -159,7 +168,7 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
                             continue
                     paths.append(current)
                 current = run
-        if pieces:
+        if pieces and strategy == "meander":
             reverse = not reverse
     if current is not None:
         paths.append(current)

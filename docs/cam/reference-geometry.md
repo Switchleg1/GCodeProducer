@@ -101,7 +101,7 @@ do not affect *Machining selection* maximum/minimum depths.
 
 - **Pocket:** a drawn closed boundary defines the removal region, subject to
   normal cutter clearance, stock limits, depth/air-cut planning and tabs.
-- **Profile:** Outside/Inside/On and roughing clearance apply as with other rims.
+- **Profile:** Outside/Inside and roughing clearance apply as with other rims.
 - **Slot / Engrave:** follow the closed outline at the operation depths.
 - **Drill:** circular references can locate hole centers under the existing
   circular-rim checks. Rectangles are rejected as drill geometry.

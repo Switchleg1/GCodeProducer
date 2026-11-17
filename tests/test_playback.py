@@ -181,14 +181,27 @@ def test_action_buttons_share_height_and_split_70_30(app, tmp_path, monkeypatch)
         assert win.slice_btn.height() == win.save_btn.height()
         total = win.slice_btn.width()+win.save_btn.width()
         assert win.slice_btn.width()/total == pytest.approx(.7, abs=.03)
-        # Messages: progress sits left of Clear on the bottom action row.
+        # Status, progress and Clear share the existing bottom status row.
+        from PyQt6.QtCore import QPoint
         panel = win.messages
         assert panel.layout().indexOf(panel.tree) == 0
-        assert panel.clear_button.geometry().top() > panel.tree.geometry().bottom()
         panel.progress.show()
-        panel.layout().activate()
+        app.processEvents()
+        assert panel.layout().indexOf(panel.actions) == -1
+        assert panel.clear_button.parentWidget() is win.statusBar()
+        assert panel.progress.parentWidget() is win.statusBar()
         assert panel.progress.geometry().right() < panel.clear_button.geometry().left()
+        centers = [widget.mapTo(win, QPoint(0, 0)).y()+widget.height()/2
+                   for widget in (win.status_line, panel.progress, panel.clear_button)]
+        assert max(centers)-min(centers) <= 2
         assert win.progress is panel.progress
+        win.statusBar().showMessage("Generating paths")
+        assert panel.clear_button.isVisible() and panel.progress.isVisible()
+        win.statusBar().clearMessage()
+        win.status_line.setText('A long G-code status message ' * 100)
+        app.processEvents()
+        assert panel.clear_button.geometry().right() <= win.statusBar().width()
+        assert panel.progress.geometry().right() < panel.clear_button.geometry().left()
         panel.add("warning", "Something to check")
         assert win.dock_messages.windowTitle() == "Messages \u2014 0 errors, 1 warnings"
         panel.clear()

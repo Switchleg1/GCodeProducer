@@ -299,7 +299,7 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
         assert not editor.b_selection_depths.isHidden()
         assert editor.stepover.isEnabled()
         assert editor.direction_override.isEnabled() == (kind != "contour3d")
-        assert editor.strategy.isEnabled() == (kind in ("pocket", "waterfall"))
+        assert editor.strategy.isEnabled()
         assert not hasattr(editor, "protect_model")
         assert not op.protect_model
     restored = CAMSetup.from_dict(editor.setup.to_dict())

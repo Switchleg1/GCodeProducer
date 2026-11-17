@@ -48,7 +48,7 @@ cutter-accessible region**, not just one contour along its wall.
    identifies its complete stock rim, as in Pocket.
 2. Set Start/End. Selection-linked defaults use the selection's extrema. A
    flat rim needs End linked to a lower feature or set explicitly.
-3. Choose **Wall-parallel contours** or **Raster lines**, stepover, radial
+3. Choose **Cutting strategy → Wall-parallel contours / Raster lines X / Raster lines Y**, stepover, radial
    stock to leave and depth of cut. Stay-down links, lead ramps, cutting hand,
    engagement feeds and the material boundary limit work as for clearing.
 4. Generate and inspect each depth and the calculated material outputs.
@@ -87,8 +87,10 @@ uncleared stock.
 
 - **Area:** selected closed XY outlines; the cutter centre stays inside them.
 - **Stepover:** raster spacing as a percentage of cutter diameter.
-- **Direction:** zigzag along the longer side; short in-region links follow
-  the surface. Climb/conventional is mixed, not a selectable hand.
+- **Cutting strategy:** **Meander** zigzags along the longer side with short
+  in-region surface links. **Raster lines X / Y** cuts separate single-direction
+  lines along the chosen work-coordinate axis, with retract/travel between them.
+  Climb/conventional is not a selectable hand for these XYZ paths.
 - **Ceiling:** stretches resting at or above the original material surface
   are omitted. Raised model surfaces and tabs still constrain every band.
 - **Feeds:** normal cutting feed; descents steeper than 10° use lead/plunge

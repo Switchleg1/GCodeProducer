@@ -343,7 +343,7 @@ def _surface_operation(job, ctx, op, tool, loops, start, end, step, count, direc
             if z >= surface_top-1e-6:
                 continue
             lines = surface_raster(region, surface, radius, diameter*op.stepover/100, z, op.stock,
-                                   ctx.log, floors, min(start, surface_top))
+                                   ctx.log, floors, min(start, surface_top), strategy=op.strategy)
             if not lines:
                 continue
             low = min(float(p[:, 2].min()) for p in lines)
@@ -418,19 +418,23 @@ def _pocket_paths(op, loops, region, diameter, direction, log=None):
     from gcodeproducer.core.jobs.path import Path
     from gcodeproducer.core.geometry.infill import scan_fill
     from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths
+    from gcodeproducer.core.cam.strategy import cutting_strategy
+    strategy = cutting_strategy(op.kind, op.strategy)
     paths = []
-    if op.strategy == "contour":
+    if strategy == "contour":
         contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, log, region=region)
         linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
         paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
                       stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                  for i, (p, link) in enumerate(linked)]
-    elif op.strategy == "raster":
+    elif strategy in ("raster_x", "raster_y"):
         centre_region = region.buffer(-(diameter/2+op.stock))
         regions = [p for p, _ in boundary_paths(centre_region, direction)]
         if not regions:
             raise ValueError(f"{op.name}: pocket is too small for this tool")
-        for a, b in scan_fill(regions, 0, diameter * op.stepover / 100, 0, 0, 0.01):
+        # scan_fill's angle is the line NORMAL, not its travel direction.
+        normal = math.pi/2 if strategy == "raster_x" else 0.
+        for a, b in scan_fill(regions, normal, diameter * op.stepover / 100, 0, 0, 0.01):
             pts = np.array([a, b])
             if direction == "conventional" or (direction == "meander" and len(paths) % 2):
                 pts = pts[::-1]

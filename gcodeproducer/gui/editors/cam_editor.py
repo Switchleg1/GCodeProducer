@@ -6,6 +6,7 @@ from .editors_constants import (
     PICK_MODES,
     DEPTH_ROWS,
     OPERATION_SIDES,
+    CUTTING_STRATEGIES,
     CUT_DIRECTIONS,
     ENGAGEMENT_CONTROLS,
     RATE_FIELDS,
@@ -31,6 +32,7 @@ from PyQt6.QtWidgets import (
 from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
+from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
 from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
@@ -84,7 +86,7 @@ class CAMEditor(QWidget):
             row.addWidget(b)
         tools.body.addLayout(row)
         self.details = QFrame()
-        form = QFormLayout(self.details)
+        self.operation_form = form = QFormLayout(self.details)
         form.setContentsMargins(*SECTION_BODY_MARGINS)
         # Narrow docks: long labels put their field on the next line instead of forcing a scrollbar.
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
@@ -226,6 +228,8 @@ class CAMEditor(QWidget):
                                    "Finish one area before moving to the next, or visit all areas at each depth. "
                                    "Default for new operations comes from Settings → Default operation settings.")
         self.side = QComboBox()
+        self.side.setPlaceholderText("Legacy: On")
+        self.side.setToolTip("Profile only: Outside or Inside. A legacy On value keeps its saved centreline until you explicitly choose a side.")
         for k in OPERATION_SIDES:
             self.side.addItem(k.title(), k)
         self.stock = self.spin(0, 100, 0)
@@ -239,13 +243,12 @@ class CAMEditor(QWidget):
                                        "relative to that edge. 0 touches it, -1 leaves 1 mm of material, +1 passes 1 mm beyond. "
                                        "Default comes from Settings → Default operation settings.")
         self.strategy = QComboBox()
-        self.strategy.addItem("Wall-parallel contours", "contour")
-        self.strategy.addItem("Raster lines", "raster")
-        for label, w in (("Area order", self.area_order), ("Clearing / 3D Contour stepover (%)", self.stepover),
-                         ("Profile side", self.side), ("Roughing clearance / stock to leave (mm)", self.stock),
-                         ("Pocket overcut into void (mm)", self.overcut),
-                         ("Material boundary limit (mm)", self.material_limit),
-                         ("Pocket / Waterfall strategy", self.strategy)):
+        self.strategy.setPlaceholderText("Choose a cutting strategy")
+        for label, w in (("Area order", self.area_order), ("Stepover (%)", self.stepover),
+                         ("Profile side", self.side), ("Roughing clearance (mm)", self.stock),
+                         ("Pocket overcut (mm)", self.overcut),
+                         ("Material boundary (mm)", self.material_limit),
+                         ("Cutting strategy", self.strategy)):
             form.addRow(label, w)
             if isinstance(w, QComboBox):
                 w.currentIndexChanged.connect(self._edit)
@@ -412,6 +415,12 @@ class CAMEditor(QWidget):
         self.last_pick = None
         self._refresh_selections()
         self.details.setEnabled(op is not None)
+        choices = CUTTING_STRATEGIES.get(op.kind, ()) if op else ()
+        self.operation_form.setRowVisible(self.strategy, bool(choices))
+        self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
+        self.strategy.clear()
+        for label, value in choices:
+            self.strategy.addItem(label, value)
         self.b_selection_depths.setVisible(op is not None and (op.kind == "pocket" or op.kind in SURFACE_KINDS))
         if op:
             self.name.setText(op.name)
@@ -443,7 +452,7 @@ class CAMEditor(QWidget):
             self.overcut.setEnabled(op.kind == "pocket")
             self.material_limit.setValue(op.material_limit)
             self.material_limit.setEnabled(op.kind in ("pocket", "waterfall"))
-            self.strategy.setCurrentIndex(self.strategy.findData(op.strategy))
+            self.strategy.setCurrentIndex(self.strategy.findData(cutting_strategy(op.kind, op.strategy)))
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
@@ -451,7 +460,7 @@ class CAMEditor(QWidget):
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
                 sb.setEnabled(op.kind not in ("drill", "contour3d"))
-            self.strategy.setEnabled(op.kind in ("pocket", "waterfall"))
+            self.strategy.setEnabled(bool(choices))
             self.direction_override.setEnabled(op.kind in ("pocket", "profile", "waterfall"))
             self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
             self.stepover.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
@@ -480,10 +489,13 @@ class CAMEditor(QWidget):
             value.setEnabled(unlock.isChecked())
         op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
         op.lead_length = self.lead_length.value()
-        op.side, op.stock = self.side.currentData(), self.stock.value()
+        if op.kind == "profile" and self.side.currentData() is not None:
+            op.side = self.side.currentData()
+        op.stock = self.stock.value()
         op.overcut = self.overcut.value()
         op.material_limit = self.material_limit.value()
-        op.strategy = self.strategy.currentData()
+        if op.kind in CUTTING_STRATEGIES and self.strategy.currentData() is not None:
+            op.strategy = self.strategy.currentData()
         if self.direction_override.isChecked() and self.direction.currentIndex() < 0:
             self.direction.blockSignals(True)
             self.direction.setCurrentIndex(0)

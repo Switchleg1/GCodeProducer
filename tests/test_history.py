@@ -111,6 +111,22 @@ def test_cam_overrides_lists_and_operation_deletion(win):
     assert len(ed.setup.groups[0].operations) == 0
 
 
+@pytest.mark.parametrize('kind,default', [('pocket', 'contour'), ('waterfall', 'contour'), ('contour3d', 'meander')])
+def test_cutting_strategy_changes_undo_redo_across_rebuilt_forms(win, kind, default):
+    ed = cam(win)
+    if kind != 'pocket':
+        ed.kind.setCurrentIndex(ed.kind.findData(kind))
+        ed.add_operation()
+        flush(win)
+    assert ed.strategy.currentData() == default
+    ed.strategy.setCurrentIndex(ed.strategy.findData('raster_y'))
+    flush(win)
+    win.history.undo()
+    assert ed.operation().strategy == default and ed.strategy.currentData() == default
+    win.history.redo()
+    assert ed.operation().strategy == 'raster_y' and ed.strategy.currentData() == 'raster_y'
+
+
 def test_geometry_picks_purpose_clear_and_undo(win):
     from gcodeproducer.core.cam.reference import Reference
     ed = cam(win)

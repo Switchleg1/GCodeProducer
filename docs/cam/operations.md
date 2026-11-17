@@ -29,11 +29,11 @@ boundaries, or can be retained as per-selection height-only references.
 | Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
 | Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
-| Pocket / Waterfall strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
+| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
-| Profile side | Outside | Outside, Inside or On |
+| Profile side | Outside | Outside or Inside; row visible only for Profile |
 | Roughing clearance / stock to leave | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
 | Pocket overcut into void | 0 mm (global default) | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
 | Material boundary limit | 0 mm (global default) | Pocket / Waterfall: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
@@ -204,7 +204,8 @@ passes clearance checks. Depth/operation/tool changes and blocked/disconnected
 links retain safe-Z entries. These are not a continuous spiral or fitted
 `G2/G3` controller arcs.
 
-**Raster lines** retains straight-line clearing plus wall boundary passes.
+**Raster lines X / Y** retains straight-line clearing along the chosen axis
+plus wall boundary passes.
 It honours its full stepover range. Operation-driven scan lines are oriented
 using estimated remaining material, rather than assuming fixed +X is always
 climb. Meander alternates successive one-sided cutting hands; neutral slots do
@@ -278,6 +279,32 @@ automatic rough/finish stock tracking, helical entry or machining from a full
 in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) and
 [global settings](../settings.md).
 
+## Cutting strategy
+
+The operation's **Cutting strategy** field has operation-specific choices:
+
+| Operation | Choices |
+|---|---|
+| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y |
+| 3D Contour | Meander, Raster lines X, Raster lines Y |
+| Profile, Slot, Drill, Engrave | Row hidden (no strategy control) |
+
+X/Y means the cutting-line axis in CAM work coordinates. Pocket/Waterfall
+rasters still use remaining-material hand/feed planning and finish their wall
+boundaries. Contour X/Y runs separate lines in +X/+Y, retracting/travelling
+between them. Contour **Meander** alternates along the area's longer axis and
+uses validated surface links. This motion pattern is distinct from the machine's
+Meander *cutting direction*, which alternates one-sided cutting hands.
+All Contour strategies retain the same depth bands and model protection.
+
+![Clearing strategy choices](../pictures/cam-cutting-strategy-clearing.png)
+
+![Contour strategy choices](../pictures/cam-cutting-strategy-contour.png)
+
+Old saved clearing `raster` strategies reopen as **Raster lines Y**, preserving
+the old scan-line axis. Old Contour `contour`/`raster` values reopen as **Meander**,
+which was its previous surface-raster behaviour.
+
 ## Profile
 
 **Purpose:** follow closed boundaries with optional radial cutter compensation.
@@ -286,7 +313,13 @@ in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) an
 |---|---|
 | Outside | Away from material by radius + radial stock; outer boundaries grow, holes shrink |
 | Inside | Into material by radius + radial stock; outer boundaries shrink, holes grow |
-| On | Follow selected line directly; radial stock is not applied |
+
+The **Profile side** row is hidden for every other operation. Legacy saved
+`On` profiles remain readable and retain their original centreline behaviour;
+the field shows a legacy placeholder until Outside or Inside is explicitly
+chosen. Editing another field never silently offsets those saved paths.
+
+![Profile side offers Outside and Inside](../pictures/cam-profile-side-choices.png)
 
 The outside/inside meaning is based on loop nesting/material, not merely
 clockwise versus counterclockwise input. Multiple selected cube edges can

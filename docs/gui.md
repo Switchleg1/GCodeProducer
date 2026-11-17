@@ -16,8 +16,9 @@ expose view options, G-code, statistics and the log. Every pane collapses from
 its header; see [collapsible panes](#collapsible-panes).
 
 The **Messages** dock at the bottom shows counts in its title
-(*Messages — 0 errors, 1 warnings*). **Clear** is at the bottom right, with
-the generation progress bar directly to its left.
+(*Messages — 0 errors, 1 warnings*). Status text, generation progress and
+**Clear** share the existing bottom status-bar row: text on the left, progress
+immediately left of Clear on the right. There is no second action row above it.
 
 Move, float or close docks using their title bars. Restore hidden docks through
 **View**. Layout and window geometry are remembered using Qt settings. A

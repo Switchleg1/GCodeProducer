@@ -16,7 +16,7 @@ class Operation:
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
-    strategy: str = "contour"          # pocket: contour-parallel or legacy raster
+    strategy: str = "contour"          # clearing: contour/raster_x/raster_y; 3D: meander/raster_x/raster_y
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
     low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults
@@ -43,3 +43,5 @@ class Operation:
         if self.kind == "pocket" and self.protect_model:
             self.kind = "waterfall"
             self.protect_model = False
+        from .strategy import cutting_strategy
+        self.strategy = cutting_strategy(self.kind, self.strategy)

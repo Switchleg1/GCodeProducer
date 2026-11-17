@@ -138,8 +138,11 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._build_menu()
         self.status_line = QLabel("")
+        self.status_line.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.status_line.setMinimumWidth(0)
         self.progress = self.messages.progress
         self.statusBar().addWidget(self.status_line, 1)
+        self.messages.attach_status_bar(self.statusBar())
         for key, fn in (("PgUp", lambda: self.step_layer(1)), ("PgDown", lambda: self.step_layer(-1)),
                         ("Home", lambda: self.step_layer(-10 ** 6)), ("End", lambda: self.step_layer(10 ** 6))):
             QShortcut(QKeySequence(key), self, activated=fn)

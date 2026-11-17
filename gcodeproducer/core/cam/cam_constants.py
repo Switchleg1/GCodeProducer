@@ -14,6 +14,12 @@ KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engr
 
 SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
 
+STRATEGY_ALIASES = {
+    "pocket": {"raster": "raster_y"},
+    "waterfall": {"raster": "raster_y"},
+    "contour3d": {"contour": "meander", "raster": "meander"},
+}
+
 SURFACE_TOLERANCE = 1e-3       # mm: model material this far above a level blocks the cutter at that level
 SHADOW_SEAL = 1e-5             # mm: closes hairline gaps between projected triangles
 SURFACE_MIN_RESOLUTION = .05   # mm: finest drop-cutter height grid

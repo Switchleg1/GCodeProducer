@@ -52,7 +52,15 @@ PICK_MODES = (("Navigate / place model", ""), ("Select faces", "face"), ("Select
 
 DEPTH_ROWS = (("start", "Start Z"), ("end", "End Z"))
 
-OPERATION_SIDES = ("outside", "inside", "on")
+OPERATION_SIDES = ("outside", "inside")
+
+CLEARING_STRATEGIES = (("Wall-parallel contours", "contour"), ("Raster lines X", "raster_x"),
+                       ("Raster lines Y", "raster_y"))
+CUTTING_STRATEGIES = {
+    "pocket": CLEARING_STRATEGIES,
+    "waterfall": CLEARING_STRATEGIES,
+    "contour3d": (("Meander", "meander"), ("Raster lines X", "raster_x"), ("Raster lines Y", "raster_y")),
+}
 
 CUT_DIRECTIONS = (("Climb", "climb"), ("Conventional", "conventional"), ("Meander", "meander"))
 

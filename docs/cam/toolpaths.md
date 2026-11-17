@@ -6,7 +6,7 @@ Pocket **strategy** determines the XY geometry of clearing passes. **Cutting
 direction** determines how those paths are traversed. They are separate
 settings: selecting Climb does not by itself convert raster lines to contours.
 
-## Wall-parallel contours (default Pocket strategy)
+## Wall-parallel contours (default clearing strategy)
 
 The selected closed removal area includes an outer boundary and any retained
 islands. The generator:
@@ -145,7 +145,8 @@ compensated**. Verify controller orientation, rotation and material side.
 
 ### Raster and other operations
 
-Raster mode keeps parallel scan lines plus contour boundary passes. In an
+**Cutting strategy → Raster lines X / Y** keeps parallel scan lines along
+the chosen work-coordinate axis plus contour boundary passes. In an
 operation-driven setup, the same remaining-material analysis can reverse open
 scan lines when the next uncut side requires it. A scan's label or initial
 ordering alone is not a proof of climb engagement.
@@ -159,8 +160,8 @@ the operation removal/engagement plan; they do not claim slot-aware clearing.
 ## Existing projects and migration
 
 Older saved setups without a strategy field use the new **Wall-parallel
-contours** default after updating. Select Raster lines explicitly if you want
-the previous behaviour. Missing cutting-direction fields inherit the machine;
+contours** default after updating. Legacy `raster` reopens as **Raster lines Y**,
+preserving its previous axis; Raster lines X is also available. Missing cutting-direction fields inherit the machine;
 old machine profiles without the new field resolve to Climb. Existing depth
 definitions are retained independently of the new path strategy.
 

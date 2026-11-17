@@ -23,7 +23,7 @@ G-code fix by immediately running it on hardware.
 | UI stalls or task never finishes | Check Log, memory and compute-process errors; Cancel and retry with a smaller model; avoid repeated huge queued tasks |
 | A pane seems empty or missing | Its header may be collapsed: click the header. Panes remember their state |
 | Space / arrow keys do not play or step the Preview | Click the 3D Preview or the playback bar first; the keys act there so text fields keep them |
-| Messages counts are not shown under the list | They are in the Messages dock title; **Clear** is at bottom right, beside progress |
+| Messages counts are not shown under the list | They are in the Messages dock title; **Clear** and progress share the bottom status row with status text |
 
 Offscreen Qt is useful for tests, not a guarantee that a real OpenGL viewport
 works. CPU tests passing does not validate your graphics driver.
