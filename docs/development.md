@@ -100,7 +100,9 @@ be slotting. They should not be forced into one mutually exclusive classifier.
 A future shared motion-policy resolver should combine phase and `CutCondition`
 for feed caps, overrides, feature/metadata and material-contact decisions,
 while retaining separate planar/XYZ sampling and validated lead geometry.
-The architecture review did not change machining behaviour.
+The architecture review did not change machining behaviour. Function diagrams
+of the current flow and the proposed planner section, with a migration order,
+are in [CAM pipeline architecture](cam/architecture.md).
 
 ## Editor history and versions
 

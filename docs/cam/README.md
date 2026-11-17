@@ -128,6 +128,7 @@ operations limited by the model surface:
 - [Wall-following strategies and cutting direction](toolpaths.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)
+- [Pipeline architecture and the proposed motion planner](architecture.md)
 
 Model-owned rectangular holding tabs are implemented, including radius-aware
 path splits and protected-tab travel checks. 3D work is limited to flat-cutter
