@@ -173,6 +173,15 @@ stay fixed in CAM work coordinates when the model is moved. See
 [reference geometry](cam/reference-geometry.md) for construction, persistence,
 operation rules and limitations.
 
+## CAM form labels
+
+Short CAM labels such as **Roughing clearance (mm)** and **Material boundary
+(mm)** stay on one line when space is available. In a genuinely narrow dock,
+the form moves the field below the label instead of splitting these labels
+inside an unnecessarily narrow column.
+
+![Single-line CAM clearance and material labels](pictures/cam-operation-label-widths.png)
+
 ## Collapsible panes
 
 Every panel is built from the same collapsible pane as the FDM process sections

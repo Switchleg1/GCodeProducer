@@ -288,6 +288,11 @@ class CAMEditor(QWidget):
             combo.setMinimumContentsLength(8)
         for label in self.details.findChildren(QLabel):
             label.setWordWrap(True)
+        # Wrapped QLabel size hints can reserve a needlessly narrow label column
+        # despite spare room before the field. Keep these short labels intact;
+        # WrapLongRows can still move their fields below them in a narrow dock.
+        for field in (self.stock, self.material_limit):
+            form.labelForField(field).setWordWrap(False)
         self.rebuild()
 
     def _pick_changed(self, *_):

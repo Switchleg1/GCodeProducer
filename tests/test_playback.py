@@ -213,6 +213,47 @@ def test_action_buttons_share_height_and_split_70_30(app, tmp_path, monkeypatch)
         QSettings("GCodeProducer", f"pytest_playback_{tmp_path.name}").clear()
 
 
+def test_short_cam_clearance_labels_use_available_width(app):
+    from PyQt6.QtWidgets import QFormLayout, QWidget, QLabel, QDoubleSpinBox
+    from gcodeproducer.core.profiles import Profile
+    from gcodeproducer.gui.cam_editor import CAMEditor
+    editor = CAMEditor()
+    editor.set_tools([Profile('tool', 'Test cutter')])
+    editor.add_tool(); editor.add_operation()
+    editor.resize(560, 1600)
+    editor.show()
+    app.processEvents()
+    form = editor.operation_form
+    try:
+        labels = [form.labelForField(field) for field in (editor.stock, editor.material_limit)]
+        assert [label.text() for label in labels] == ['Roughing clearance (mm)', 'Material boundary (mm)']
+        assert form.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapLongRows
+        for label, field in zip(labels, (editor.stock, editor.material_limit)):
+            assert not label.wordWrap()
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+            assert abs(label.geometry().center().y()-field.geometry().center().y()) <= 2
+
+        # At genuinely narrow widths the field moves down; the label itself
+        # must not split while leaving unused space in its column.
+        narrow = QWidget()
+        narrow_form = QFormLayout(narrow)
+        narrow_form.setRowWrapPolicy(form.rowWrapPolicy())
+        text = labels[0].text()
+        label = QLabel(text)
+        label.setWordWrap(labels[0].wordWrap())
+        field = QDoubleSpinBox()
+        field.setMinimumWidth(100)
+        narrow_form.addRow(label, field)
+        narrow.resize(label.fontMetrics().horizontalAdvance(text)+30, 100)
+        narrow.show()
+        app.processEvents()
+        assert field.geometry().top() > label.geometry().bottom()
+        assert label.width() >= label.fontMetrics().horizontalAdvance(text)
+        narrow.close()
+    finally:
+        editor.close()
+
+
 def test_operation_reference_list_is_full_width_with_actions_under_it(app):
     from PyQt6.QtCore import Qt
     from gcodeproducer.core.cam import Depth, Reference
