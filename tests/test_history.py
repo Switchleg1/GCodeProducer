@@ -420,6 +420,87 @@ def test_history_is_bounded_and_new_edit_drops_redo(app):
         root.close()
 
 
+@pytest.mark.parametrize('workflow', ['fdm', 'cam'])
+def test_face_click_undo_redo_survives_deferred_ui_updates(win, app, monkeypatch, workflow):
+    from PyQt6.QtCore import QPoint, QTimer
+    from gcodeproducer.core.runtime.compute import run_placement_face
+    # Headless OpenGL failures must not open modal dialogs while pumping events.
+    monkeypatch.setattr(win, 'notify', lambda *args, **kwargs: True)
+    model(win)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData(workflow))
+    win.rotate_model('x', 32)
+    win.fit_view()
+    win.show()
+    QTest.qWait(40)
+    flush(win)
+    before = win.placement.to_dict()
+
+    picks = []
+    def submit(kind, payload):
+        result = run_placement_face(payload)
+        picks.append((kind, result))
+        QTimer.singleShot(10, lambda: win._on_compute_done(789, result))
+        return 789
+    monkeypatch.setattr(win.compute, 'submit', submit)
+    win.act_place_face.trigger()
+    QTest.qWait(20)
+    QTest.mouseClick(win.model_viewer, Qt.MouseButton.LeftButton,
+                    pos=QPoint(win.model_viewer.width() // 2, win.model_viewer.height() // 2))
+    QTest.qWait(50)
+    flush(win)
+    after = win.placement.to_dict()
+    assert picks and picks[0][0] == 'placement_face' and picks[0][1] is not None
+    assert after != before
+    placed_index = win.history.index
+    for _ in range(3):
+        QTest.keyClick(win.model_viewer, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        # Qt dock tabs and geometry updates are deferred: immediate assertions
+        # missed the phantom transaction that used to discard the redo branch.
+        QTest.qWait(50)
+        flush(win)
+        assert win.placement.to_dict() == before
+        assert win.history.index == placed_index - 1
+        assert win.history.redo_action.isEnabled()
+        QTest.keyClick(win.model_viewer, Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+        QTest.qWait(50)
+        flush(win)
+        assert win.placement.to_dict() == after
+        assert win.history.index == placed_index
+
+
+def test_native_dock_tabs_are_not_editor_state(app):
+    from PyQt6.QtWidgets import QMainWindow, QTabBar, QWidget, QVBoxLayout
+    from PyQt6.QtCore import QCoreApplication, QEvent
+    from gcodeproducer.gui.history.edit_history import EditHistory
+    root = QMainWindow()
+    body = QWidget()
+    root.setCentralWidget(body)
+    layout = QVBoxLayout(body)
+    # Application-owned tabs remain undoable; only QMainWindow's native dock
+    # bars are excluded (Qt may replace those during restoreState).
+    tabs = QTabBar()
+    tabs.addTab('First')
+    tabs.addTab('Second')
+    layout.addWidget(tabs)
+    root.history = EditHistory(root)
+    try:
+        transient = QTabBar(root)
+        transient.addTab('Dock tab')
+        baseline = root.history.snapshot()
+        transient.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert root.history.snapshot() == baseline
+        tabs.setCurrentIndex(1)
+        flush(root)
+        root.history.undo()
+        assert tabs.currentIndex() == 0
+        root.history.redo()
+        assert tabs.currentIndex() == 1
+    finally:
+        root.history.dispose()
+        root.close()
+
+
 def test_compute_face_pick_hits_and_misses():
     from gcodeproducer.core.jobs.session import load_mesh
     from gcodeproducer.core.runtime.compute import run_placement_face

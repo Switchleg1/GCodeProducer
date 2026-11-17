@@ -97,7 +97,9 @@ not an analytic CAD surface. A recessed/concave face may not touch the plane;
 the whole part is anchored by its extreme so it does not cross the bed/cutting
 surface. Check the result, workholding and CAM geometry/depths after rotating.
 Stock and drawn reference outlines do not move with the part. Undo restores
-the prior placement and any support blocks invalidated by the rotation.
+the prior placement and any support blocks invalidated by the rotation;
+Redo reapplies the face placement. Queued dock redraws do not create edits or
+consume this redo history.
 
 ## Undo and redo
 

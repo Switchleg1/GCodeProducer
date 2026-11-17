@@ -83,6 +83,10 @@ Undo/Redo own their shortcuts even inside Qt text/spin editors. Modal editors
 have independent histories. Widget addresses are structural, so rebuilt forms
 can restore selections without keeping obsolete widgets alive. Child dialogs
 and control internals are excluded from their parent's widget memento.
+QMainWindow-owned dock tab bars are also excluded: Qt replaces these using
+deferred deletion during layout restoration. Recording them can create a
+phantom edit after Undo and incorrectly discard Redo. Unchanged dock layouts
+are not restored again.
 `WindowState` restores model-owned data, both pipelines, owned profile/process
 files and preferences, then rebinds the editors. Source meshes are shared,
 not copied per edit, and released when no bounded history entry uses them.

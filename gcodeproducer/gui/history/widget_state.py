@@ -2,7 +2,7 @@
 from PyQt6.QtCore import QSignalBlocker, Qt, QModelIndex, QItemSelectionModel
 from PyQt6.QtWidgets import (QWidget, QAbstractButton, QComboBox, QSpinBox, QDoubleSpinBox,
                             QLineEdit, QPlainTextEdit, QTextEdit, QListWidget, QTreeWidget,
-                            QTabBar, QSlider, QScrollBar, QMenu, QDialog, QAbstractItemView)
+                            QTabBar, QSlider, QScrollBar, QMenu, QDialog, QMainWindow, QAbstractItemView)
 
 
 def widgets(root):
@@ -13,6 +13,11 @@ def widgets(root):
             if not isinstance(child, QWidget) or isinstance(child, (QMenu, QScrollBar, QDialog)):
                 continue
             if child.property('historyIgnore'):
+                continue
+            # Dock tab bars are QMainWindow implementation details. restoreState()
+            # replaces them using deferred deletion; recording the obsolete bars
+            # would invent an edit on the next event-loop turn and destroy Redo.
+            if isinstance(parent, QMainWindow) and isinstance(child, QTabBar):
                 continue
             tag = (type(child).__name__, child.objectName())
             index = counts.get(tag, 0)

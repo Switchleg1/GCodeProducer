@@ -88,7 +88,8 @@ class WindowState:
             w.playback._apply_layers(update_cursor=False)
             w.playback.set_cursor(state['cursor'], follow=False)
         w.viewer.set_selected(state['selected_line'])
-        w.restoreState(QByteArray(state['layout']))
+        if bytes(w.saveState()) != state['layout']:
+            w.restoreState(QByteArray(state['layout']))
         w.set_mode(state['mode'])
 
     def prune(self, history):
