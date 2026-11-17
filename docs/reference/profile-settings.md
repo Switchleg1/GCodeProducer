@@ -42,7 +42,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `work_z` — Work z | float / mm | `100.0` | No schema bound | Work area.  |
 | `origin` — Origin | choice | `front-left-bottom` | `front-left-bottom` = front-left-bottom; `center` = center; `front-left-top` = front-left-top | Work area.  |
 | `safe_z` — Safe z | float / mm | `15.0` | No schema bound | Clearance. Retract height for rapids between features. |
-| `clearance_z` — Clearance z | float / mm | `5.0` | No schema bound | Clearance.  |
+| `clearance_z` — Clearance z | float / mm | `5.0` | No schema bound | Clearance. Stored only: entries use the global lead-in and short-retract clearances (Settings). |
 | `rapid_xy` — Rapid xy | float / mm/min | `3000.0` | No schema bound | Speeds & feeds.  |
 | `rapid_z` — Rapid z | float / mm/min | `1000.0` | No schema bound | Speeds & feeds.  |
 | `max_feed` — Max feed | float / mm/min | `2000.0` | minimum 0 | Speeds & feeds. Caps cutting, engagement-adjusted/link and plunge G1 feeds; 0 = no cap. Not a spindle or G0 limit. |

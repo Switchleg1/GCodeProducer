@@ -103,15 +103,17 @@ has valid engagement or follows a valid machining strategy.
 Current height-field removal persists across paths, passes and operations,
 including leads. Entry checks compare with current local material. Planning
 also retains depth-tagged planar sweeps for later engagement/direction.
-Both representations have 2.5D/resolution limits; uncertainty still requires
+Both representations have 2.5D/resolution limits; 3D Contour moves update the
+height field but not the planar history. Uncertainty still requires
 independent review.
 
 ## Warnings, generation errors and export
 
 Some invalid setups fail before output: missing tool/selection, invalid
-start/end ordering, nonhorizontal cutting geometry, invalid stepdown or
-insufficient safe Z. Other stock findings are **advisory warnings** attached
-to generated output, logged as `STOCK WARNING`, and shown in a dialog. The
+start/end ordering, nonhorizontal cutting geometry for Profile / Slot /
+Engrave / Drill, invalid stepdown or insufficient safe Z. Other stock findings
+are **advisory warnings** attached to generated output, logged as
+`STOCK WARNING`, listed in the Messages dock and shown in a dialog. The
 dialog displays a limited number; inspect the full Log too. The checker caps
 its stored findings to avoid unbounded repetitive output.
 

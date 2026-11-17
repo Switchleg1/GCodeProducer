@@ -15,7 +15,7 @@ setups without tabs load unchanged.
 ## Place and edit tabs
 
 1. Allocate material in **Material / stock** (Auto or explicit dimensions).
-2. Expand **Holding tabs — model** beneath the stock controls.
+2. Expand the **Holding tabs** pane below **Material / stock** in the Model dock.
 3. Set **Width** and **Height above stock bottom** (both initially 4 mm), and
    optionally choose a direction. These values also set the next tab.
 4. Click **Place tabs**, then click a visible **side wall**. Placement repeats;

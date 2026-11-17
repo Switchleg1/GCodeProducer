@@ -46,7 +46,8 @@ Every warning and error — pop-up or not — is recorded in the **Messages**
 panel, docked at the bottom of the window a few lines tall. Hide or show it
 with **View → Messages**; drag it elsewhere like any dock (the layout is
 remembered). Rows are coloured by level, hover for the full text, and
-**Clear** empties the list. CAM job warnings (stock, engagement, reach, tool,
+**Clear** (beside the list) empties it. The error/warning counts are shown in
+the dock title, e.g. *Messages — 1 errors, 2 warnings*. CAM job warnings (stock, engagement, reach, tool,
 lead) are listed once per generation; pipeline log lines containing
 `WARNING:` are added too. The full detail remains in the **Log** dock.
 
@@ -79,7 +80,8 @@ lead ramps. An operation lowered to a later start therefore relies on the
 earlier operations actually having run. A path is dropped only when its
 **entire** cutter sweep meets no remaining material; partially engaged paths
 are kept and their engagement classified normally. When a dropped path broke
-a stay-down chain the next path re-enters from safe height.
+a stay-down chain the next path makes its own entry (short retract above the
+current material, or safe Z when short retracts are off).
 
 ## Material grid resolution
 

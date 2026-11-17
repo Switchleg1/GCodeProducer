@@ -114,8 +114,9 @@ stepdown. It does not unlock or change cut feed, plunge/lead feed or RPM.
 
 ![Operation depth-of-cut override beside feed overrides](../pictures/cam-depth-of-cut-override.png)
 
-The capture requests 0.4 mm/pass while keeping the normal feed, RPM and lead
-feed inherited. Values are illustrative, not a qualified cutting recipe.
+The capture requests 0.4 mm/pass (and unlocks Climb as the cutting direction)
+while keeping the normal feed, RPM and lead feed inherited; the summary line
+reads *Operation depth override*. Values are illustrative, not a qualified cutting recipe.
 A checked override is still capped by tool Max depth/pass; the requested
 value stays editable while the summary shows the resolved depth. The old
 *Tool/material axial depth default* checkbox and separate Stepdown row have

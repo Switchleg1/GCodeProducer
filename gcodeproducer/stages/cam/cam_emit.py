@@ -1,8 +1,11 @@
 """CAM stage: emit G-code from the milling toolpaths.
 
-Rapids at safe Z, plunges at the tool plunge feed, cuts at the tool feed, with
-spindle control.  Feeds and speeds come from the tool; clearances and rapids
-from the machine profile.
+Safe Z for start-up / tool changes, otherwise stay-down links or short retracts
+above the current material, contour lead-in ramps, engagement-adjusted cutting
+feeds and spindle control. Rates come from the tool (fixed or SFM / chip-load
+calculated per machining material) and operation unlocks; safe Z, XY rapid,
+feed caps and engagement thresholds from the machine; lead and retract
+clearances from the global settings.
 """
 from __future__ import annotations
 
@@ -238,7 +241,6 @@ class CAMEmit(SliceStage):
                     cut_move(start, path.link_condition, "stay-down link", force=True)
                 else:
                     lead=None
-                    clearance=max(.1,float(job.m("clearance_z",1)))
                     if config is not None and config.lead_in and len(pts)>1 and live is not None:
                         surface=live.height_at(start,active_radius)
                         for _ in range(3):

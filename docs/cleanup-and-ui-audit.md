@@ -95,6 +95,7 @@ options. **No option below was automatically removed, hidden or implemented.**
 |---|---|---|
 | CAM machine → `units` | Stored `inch` does not convert geometry, rates or output; default output is millimetres / G21. | Highest-priority clarification or a qualified unit-conversion implementation. Do not rely on this selector for inch output. |
 | CAM machine → `rapid_z` | Stored, but does not control emitted Z rapid feed. G0 behaviour remains controller-owned. | Label as reserved, or implement a clearly defined motion policy. |
+| CAM machine → `clearance_z` | Stored, but no longer read: entries use the global *Lead-in start above material* and *Short retract clearance* settings (a leftover unused read was removed in a later documentation pass). | Remove from the schema, or make it the per-machine default for those global clearances. |
 | CAM machine → `origin`: `front-left-bottom` / `front-left-top` | Both currently use the same XY rectangle; neither sets controller offsets or changes the top-at-Z0 model convention. | Clarify or consolidate only after deciding intended origin semantics. |
 | CAM tool → `stepover` | Stored; tree operations start at their own 40% value rather than inheriting this field. | Decide whether new operations should inherit it or whether it should be descriptive. |
 | CAM tool → `type`, `vangle` | Stored classification/angle; no full ball/conical cutter geometry, V-carving depth or shape-aware compensation. | Keep metadata clearly distinguished from implemented cutter-shape support. |

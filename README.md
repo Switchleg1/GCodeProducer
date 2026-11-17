@@ -11,7 +11,10 @@ output before operating a machine.
 ## Features
 
 - **Prepare and Preview:** shared camera and machine dimensions, model placement,
-  rotation/scaling, layer inspection, feature colours, and linked G-code selection.
+  rotation/scaling, layer inspection, feature colours, linked G-code selection,
+  and a playback bar (play/pause, step by move or layer, speed) shared by FDM and CAM.
+- **Consistent panels:** every dock is built from the same collapsible panes,
+  which remember whether they are open; a compact Messages dock records all warnings.
 - **FDM:** walls, top/bottom shells, sparse infill, skirt/brim, automatic support,
   editable support blocks, and reusable process presets.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave

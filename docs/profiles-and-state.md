@@ -13,8 +13,8 @@
 | Model support | Mode, angle, edge extension, hole filling, manual blocks | Per-model Qt settings, independent of presets |
 | Placement | Translation, rotation, scale, Z anchor | Per-model Qt settings, separately for FDM and CAM |
 | CAM machine | Work area, safe Z, rapid/feed/spindle fields, default cutting direction, allowed tools, templates | Machine JSON |
-| CAM tool | T number, cutter dimensions/type, feeds/RPM, maximum depth/pass | Tool JSON |
-| CAM setup | Ordered tool groups/operations, part/material boundary selections, linked depth references, allocated stock | Per-model Qt settings |
+| CAM tool | T number, cutter dimensions/type, fixed feeds/RPM, SFM calculation settings, per-machining-material SFM/chip-load/axial tables, maximum depth/pass | Tool JSON |
+| CAM setup | Ordered tool groups/operations (including 3D Waterfall / 3D Contour), per-operation selection lists with machining or height-only purpose, linked depth references, allocated stock | Per-model Qt settings |
 | CAM stock | Material description/density, margin, position and blank dimensions | Inside CAM setup, not the FDM material library |
 | CAM holding tabs | Triangle/barycentric side anchors, width, height above stock bottom, XY edge direction, enabled | Inside model CAM setup; shared protection across all operations, not tool/process settings |
 | CAM reference geometry | Circle/rectangle method, two construction points, Z and stable ID | Inside model CAM setup; fixed work coordinates, independent of tool/process and later placement changes |
@@ -45,8 +45,11 @@ selects a root for commands that accept it. The plugin home search path remains
 Starter profiles are seeded into empty libraries. Existing nonempty libraries
 are not overwritten to introduce new starter entries.
 
-Window layout, recent models, selections, dirty working pipelines, model
-placements/support, and CAM setups use **Qt QSettings**, not those JSON folders.
+Window layout, collapsed/expanded panes, recent models, selections, dirty
+working pipelines, model placements/support, and CAM setups use **Qt
+QSettings**, not those JSON folders. Global preferences (Settings dialog,
+message switches) are `settings.json` in the library root; see
+[global settings](settings.md).
 The organization is `GCodeProducer`; the application name defaults to
 `GCodeProducer`. `GCODEPRODUCER_SETTINGS` selects another settings namespace,
 which is useful for isolated experiments. The physical backing store depends
@@ -116,15 +119,20 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   cutting length and V angle still do not provide full cutter-shape/holder
   collision geometry or automatic V-carving depth. Per-material cutting tables
   need calibration; see [cutting data](cam/cutting-data.md).
-- CAM machine `cut_direction` defaults to Climb; Pocket/Profile inherit it
-  unless overridden. Operation-driven paths now choose the hand from estimated
+- CAM machine `cut_direction` defaults to Climb; Pocket/Profile/3D Waterfall
+  inherit it unless **Unlock cutting direction** is ticked on the operation. Operation-driven paths now choose the hand from estimated
   remaining material, not a neutral first slot. Meander alternates one-sided
   passes; the convention assumes M3. See [direction and engagement](cam/engagement-and-feeds.md).
-- CAM tool feed/plunge feed/RPM drive output; stepdown is capped at tool
-  `max_doc`. Tree operation stepover currently starts at 40%, independently
-  of the tool profile's stored stepover field.
-- CAM `safe_z`, XY rapid feed and lead-entry `clearance_z` are used.
-  `rapid_z` still does not provide explicit Z rapid feed control. The old
+- CAM rates come from the tool: fixed feed/plunge feed/RPM, or (with
+  calculation on) SFM and chip load of the stock's machining material; each
+  can be unlocked per operation. Depth per pass comes from the material's
+  Slot/Pocket/Profile axial percentage or the operation's depth unlock, and is
+  always capped at tool `max_doc`. Tree operation stepover currently starts at
+  40%, independently of the tool profile's stored stepover field.
+- CAM `safe_z` and XY rapid feed are used. Lead-in start height and short
+  retract height come from the [global settings](settings.md); the machine's
+  stored `clearance_z` is **not** used by the current emitter, and `rapid_z`
+  does not provide explicit Z rapid feed control. The old
   reserved pipeline ramp flag was removed; actual lead-in/out settings belong
   to operations. See [material state/leads](cam/material-state-and-leads.md).
 - A positive CAM machine `max_feed` caps cutting/link and plunge feed requests,
@@ -137,7 +145,8 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   default to 40/80/95%; High is above 80%. HSM/Cut inherit tool factors,
   High/Slot inherit machine factors. Operation overrides accept 1–300%; 0
   inherits. Prior depth-tagged removal now carries across operations; the
-  height-field display/checks remain approximate 2.5D, not a full solid simulator.
+  height-field display/checks remain approximate, not a full solid simulator.
+  3D Contour passes update the height field but not the planar removal history.
 - CAM output is currently millimetres (`G21` in the default template). The
   stored machine `units` field is not an automatic inch postprocessor.
 - CAM origin choices affect placement only as implemented: centre origin

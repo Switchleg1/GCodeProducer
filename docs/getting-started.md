@@ -77,24 +77,33 @@ Continue with [FDM processes](fdm/README.md) and [support](fdm/support.md).
    tools and controller-specific start/end G-code.
 3. Import a simple prismatic STL. The **top defaults to Z0** and the body
    extends in negative Z; X/Y position fields describe the model centre.
-4. In **Material / stock** enter the material name and density if known.
-   Set a small margin and press **Auto — fit material to part**. Confirm
-   dimensions, amber outline and stock bottom Z.
-5. In CAM setup choose a permitted tool and **Add tool change**. Select the
-   tool node, choose **Profile**, and **Add operation**.
-6. Select a horizontal face or a closed chain of feature edges. For a first
+4. In **Model → Material / stock** enter the material description, choose the
+   **Machining material** (it selects the tool's cutting table) and set the
+   density if known. Set a small margin and press **Auto — fit material to
+   part**. Confirm dimensions, amber outline and stock bottom Z.
+5. In **CAM setup → Tool changes & operations** choose a permitted tool and
+   **Add tool change**. Select the tool node, choose **Profile**, and **Add
+   operation**.
+6. Select a horizontal face or a closed chain of feature edges; each pick
+   becomes a row of the operation's selection list. For a first
    inspection-only example, set start to Model top and end to Model top with
-   a shallow negative offset. Choose Outside and a conservative stepdown.
+   a shallow negative offset. Choose Outside. Depth per pass comes from the
+   tool's table for the machining material; tick **Unlock depth of cut** to
+   choose a smaller one.
 7. Ensure machine safe Z is strictly above the model, stock and operation
-   start heights. Generate paths.
-8. Inspect every depth pass, tool number, spindle/feed command, entry and
-   retract. Read all warnings. A lack of warnings is not a clearance proof.
+   start heights. **Generate paths**.
+8. In Preview, step or play through the program with the playback bar
+   (Space plays/pauses). Inspect every depth pass, tool number, spindle/feed
+   command, entry and retract. Read all warnings in the Messages dock. A lack
+   of warnings is not a clearance proof.
 9. Independently simulate with your actual controller, work offset, tooling
    and fixtures. Establish offsets and clearance, then air-cut before cutting.
 
 The supplied cube is suitable for learning the interface, not a ready-to-run
-machining project. An outside profile may need tabs, workholding and lead-ins
-that the current generator does not provide.
+machining project. An outside profile through the part needs workholding;
+[holding tabs](cam/holding-tabs.md) and [lead-ins](cam/material-state-and-leads.md)
+are available but are not a qualified fixturing plan. For sloped or contoured
+floors, see [3-axis surface operations](cam/3d-operations.md).
 
 ## Updating or troubleshooting
 

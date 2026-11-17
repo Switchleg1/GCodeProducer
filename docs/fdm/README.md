@@ -29,7 +29,8 @@ off/zero behaviour. Exact defaults/ranges are in the
 
 A preset contains an ordered pipeline and stage parameters. Choose one from
 the Process combo, then expand the relevant sections; collapsed headers show
-summaries. A modified marker means the current working pipeline differs from
+summaries. Inside a section, setting groups are smaller nested panes that can
+be collapsed too ([collapsible panes](../gui.md#collapsible-panes)). A modified marker means the current working pipeline differs from
 the saved preset.
 
 - **Save:** overwrite the selected preset; without a selected saved entry,

@@ -20,22 +20,22 @@ boundaries, or can be retained as per-selection height-only references.
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
 | Selection list | New picks checked | One row per pick: uncheck to keep it height-only, outside machining boundaries; select a row to link Start/End or **Remove** it |
-| Start | Pocket: machining selection maximum Z + 0; others: Model top + 0 | A flat Pocket selection falls back to material surface (model top without allocated stock); not safe approach height |
-| End | Pocket: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
-| Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter; on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
+| Start | Pocket, 3D Waterfall, 3D Contour: machining selection maximum Z + 0; others: Model top + 0 | A flat Pocket selection falls back to material surface (model top without allocated stock); not safe approach height |
+| End | Pocket, 3D Waterfall, 3D Contour: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
+| Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter (Drill, Engrave and the 3D operations use the Slot value); on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
 | Depth of cut (mm/pass) | Calculated while locked; editable while unlocked | Existing manual stepdowns reopen unlocked; automatic depths reopen locked |
 | Area order | Each area to full depth | Finish one area before moving to the next, or visit all areas at each depth. New-operation default is in Settings → Default operation settings; saved operations own their choice |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
 | Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
-| Pocket stepover | 40% | Offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage |
+| Pocket / 3D Contour stepover | 40% | Pocket: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
 | Pocket strategy | Wall-parallel contours | Topology-aware offsets; Raster lines remains available |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
 | Stop at model surface | Off | Pocket only: clear in levels down to the model surface instead of a flat floor. Applied automatically when the selected boundary is not level; always on for 3D Waterfall / 3D Contour. See [3D operations](3d-operations.md) |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside, Inside or On |
-| Roughing clearance / stock to leave | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile; not axial depth allowance |
+| Roughing clearance / stock to leave | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
 | Pocket overcut into void | 0 mm (global default) | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
 | Material boundary limit | 0 mm (global default) | Pocket only: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
 
@@ -128,8 +128,8 @@ one horizontal material edge can identify the whole blank rim. Mixed picking
 is the default. Use height-only picks if a part reference should provide just
 End Z rather than another retained boundary.
 
-A Pocket whose selected edges are not level, or with **Stop at model surface
-(3D floor)** ticked, is cleared in terraces down to the model instead of to one
+A Pocket whose selected edges are not level, or with **Stop at model surface**
+ticked, is cleared in terraces down to the model instead of to one
 flat floor; see [Pocket with a bottom that is not flat](3d-operations.md#pocket-with-a-bottom-that-is-not-flat).
 
 **Purpose:** clear a selected closed XY region to an end depth.
@@ -163,7 +163,7 @@ bottom at Z-30, the selected region is cleared only to **Z-15**. Depths update
 as the selection or placement changes. Numeric offsets allow axial allowance;
 changing to an explicit source allows a deliberate manual override. Existing
 saved operations retain their original sources rather than silently changing
-cutting depths; click **Use pocket selection depths** to set both sources at
+cutting depths; click **Use selection depths** to set both sources at
 once, or choose the new sources individually. This button replaces both depth
 definitions and resets their offsets to zero.
 

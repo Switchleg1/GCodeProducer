@@ -17,7 +17,7 @@
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
 | `gui/runtime/` | Compute process service and separate queue-reader class |
 | `gui/rendering/` | Cameras, separate GL mesh classes, Prepare/Preview and plate/material rendering |
-| `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/reference/template editors and G-code table/panel; `section.py` is the one collapsible pane used by every panel |
+| `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/reference/template editors (`section.py` is the one collapsible pane used by every panel); G-code table/panel and `playback_bar.py`, the Preview cursor/layer/transport controller shared by FDM and CAM |
 | `gui/dialogs/`, `gui/messages/` | Libraries/Settings dialogs, message panel and pop-ups |
 | `importers/`, `stages/base/`, `stages/fdm/`, `stages/cam/` | One-class importer/stage implementations and public stage API |
 | `plugins/` | Repository-local optional Python extensions |
@@ -88,7 +88,11 @@ operation information so Preview preserves execution order across tool changes.
   Ray/plane construction is scalar GUI work; polygon construction, projection
   picking, highlights and toolpath computation stay in the compute process.
 - Stock is independent of later placement changes unless the user requests
-  Auto again. Support/material occupy one shared UI slot.
+  Auto again. Support/material occupy one shared UI slot; CAM reference
+  geometry is a separate Model-dock pane below it.
+- Preview cursor and layer range belong to `PlaybackBar`; the window only
+  applies its `cursorChanged` / `layersChanged` signals to the viewer, text
+  panel, vertical layer slider and status line.
 - Effective output and validation must match documented implementation,
   including reserved/descriptive fields and missing capability checks.
 

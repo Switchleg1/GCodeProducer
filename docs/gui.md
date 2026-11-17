@@ -5,12 +5,15 @@
 ## Workspace and docks
 
 The toolbar provides import, workflow actions, Prepare/Preview switching,
-camera views and Libraries. The **Model** dock contains setup, import,
-placement and one workflow-specific options slot. That slot displays **Support**
-for FDM or **Material / stock** for CAM; moving its containing UI area preserves
-the relationship. The second left dock contains FDM **Process** settings or
-the **CAM setup** tree. Right-hand docks expose view options, G-code,
-statistics and the log.
+camera views and Libraries. The **Model** dock contains the **Setup**, **Model**
+(import and placement) panes and one workflow-specific options slot. That slot
+displays **Support** for FDM, or **Material / stock** and **Holding tabs** for
+CAM, followed in CAM by **Reference geometry**; moving the dock keeps them
+together. The second left dock contains the FDM **Process** pane or the **CAM
+setup** (**Tool changes & operations** and **Operation** panes), with the
+**Slice** / **Generate paths** and **Save G-code** buttons. Right-hand docks
+expose view options, G-code, statistics and the log. Every pane collapses from
+its header; see [collapsible panes](#collapsible-panes).
 
 The **Messages** dock at the bottom keeps to the list: its counts appear in the
 dock title (*Messages — 0 errors, 1 warnings*) and **Clear** sits beside the
@@ -33,8 +36,9 @@ this again*, switchable back in Settings → Messages; see
 [messages](settings.md#messages-and-the-messages-panel).
 
 **File → Settings… (Ctrl+,)** holds [global preferences](settings.md) that
-affect generated output for every model: air-cut removal, material grid
-resolution and cell limit, conflict colouring and the warning dialog.
+affect generated output for every model: air-cut removal, short retracts and
+lead clearances, material grid resolution and cell limit, conflict colouring,
+default operation settings and which message pop-ups appear.
 
 Choose the workflow before configuring a machine. FDM offers allowed material
 and nozzle profiles. CAM tools are added in the tool-change tree rather than
@@ -149,7 +153,7 @@ blocks, holding tabs, reference geometry).
 
 ## CAM holding tabs
 
-In **Material / stock → Holding tabs — model**, choose **Place tabs** and
+In the **Holding tabs** pane (Model dock, CAM), choose **Place tabs** and
 click side walls to retain rectangular rails to the stock's X/Y edges.
 **Remove tabs** repeatedly removes clicked rails; selecting a row edits its
 width, height or direction. Esc returns to navigation. No operation needs to
@@ -216,7 +220,7 @@ cutter clearance or successful workholding.
 | Space (Preview) | Play / pause playback |
 | Left / Right (Preview) | Previous / next move |
 | Home / End | First / last layer index |
-| Esc | Exit active picking/placement tool |
+| Esc | Exit the active picking, placement or reference Draw / Move / Resize tool |
 | Delete / Backspace | Delete selected manual support block in its editing context |
 
 ## Generation, progress and cancellation
@@ -228,6 +232,6 @@ run in a persistent spawned compute process. The GUI receives progress/log
 signals and chunked program results. Cancelling stops the compute process;
 a later task starts it again. Cancellation does not undo settings edits.
 
-Read the Log after each generation. Caps, ignored settings, template problems,
+Read the Messages dock and the Log after each generation. Caps, ignored settings, template problems,
 unsupported geometry and stock warnings are explained there. For failure
 recovery see [troubleshooting](troubleshooting.md).

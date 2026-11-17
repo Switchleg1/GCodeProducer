@@ -54,8 +54,10 @@ Read [stock allocation and safety](stock-and-safety.md) before relying on it.
    library ID. Check its T number, diameter, feed, plunge feed, RPM and max DOC.
 4. Select the group, choose the operation kind (Pocket, Profile, Drill, Engrave,
    Slot, 3D Waterfall or 3D Contour), then **Add operation**.
-5. Select machining faces/edges and define start/end heights. Use height-only
-   picking when another face/edge should supply depth but not cutting paths.
+5. Select machining faces/edges (part, material blank or
+   [drawn reference geometry](reference-geometry.md)) and define start/end
+   heights. Uncheck a row's **Use for machining** when it should supply depth
+   but not cutting paths; **Remove** drops a row.
 6. Set operation options. Rename operations so logs and output are identifiable.
 7. Use the up/down arrows to move an operation within its group or a whole
    group in the setup. Delete removes the selected operation or entire group.
@@ -69,15 +71,20 @@ setups without enabled operations fail generation.
 ## Output order
 
 `cam_profile` generates the ordered paths for a setup, and `cam_emit` emits
-motion. It enters each depth pass from safe Z with XY positioning and a plunge
-at tool plunge feed. Wall-parallel pockets can then follow nearby contours
+motion. The first entry after start-up or a tool change comes from safe Z.
+Later entries stay at depth across cleared material when that is verified,
+or use a short retract above the current material, then a rapid to just above
+the material and a ≤10° lead-in ramp (or a plunge at lead/plunge feed when
+lead-in is off); see [material state and leads](material-state-and-leads.md).
+Wall-parallel pockets can then follow nearby contours
 using clearance-checked same-depth feed links. Blocked/disconnected links and
 other path strategies retain retract/position/plunge handling. Cuts and links
 use tool cutting feed adjusted by estimated engagement (including heavier
 entry links), capped by a positive machine max feed. The first full-width
 slot is neutral; later pass direction follows remaining material. Enabled
 contour-constrained leads ramp into the path and exit through calculated
-cleared material; no controller helix is implied.
+cleared material; no controller helix is implied. 3D Contour paths are written
+as XYZ feed moves; see [3-axis surface operations](3d-operations.md).
 
 Between tool groups, output retracts to safe Z, stops the spindle (`M5`),
 issues `T… M6`, and restarts the spindle (`M3 S…`). A real controller may need
@@ -99,7 +106,7 @@ IDs, not copied tool definitions; editing a tool library changes the tool
 values used on subsequent generation.
 
 Changing the source mesh fingerprint resets the saved CAM setup, including
-tool groups, selections and stock, instead of applying references to unrelated
+tool groups, selections, stock, holding tabs and reference geometry, instead of applying references to unrelated
 triangles. This is logged when reopening the changed source. Moving the file to another path may
 start with a fresh setup. See [persistent state](../profiles-and-state.md).
 Stock does not silently move or resize when the part is moved—use Auto again

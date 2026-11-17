@@ -21,7 +21,7 @@ for a particular printer, material, cutter, or machine.
 ## Start here
 
 1. [Installation and first jobs](getting-started.md)
-2. [GUI, placement, preview and keyboard controls](gui.md)
+2. [GUI, panes, placement, preview playback and keyboard controls](gui.md)
 3. [Settings ownership, libraries and saved state](profiles-and-state.md) and [global settings](settings.md)
 4. Choose [FDM printing](fdm/README.md) or [CAM machining](cam/README.md).
 5. Before machining, read [stock checks and their limitations](cam/stock-and-safety.md).
@@ -84,9 +84,11 @@ acceleration and controller effects. Never interpret a successful generation,
 an empty warning list, or a green-looking preview as certification that output
 is physically safe.
 
-Screenshots illustrate UI concepts and may show older labels or layouts:
-[Prepare](pictures/prepare.jpg), [Preview](pictures/preview.jpg),
-[Support panel](pictures/support_panel.jpg). All documentation images live in
+Current workspace captures: [collapsible panes](pictures/ui-collapsible-panes-fdm.png)
+and [Preview playback](pictures/ui-preview-playback.png). Older screenshots show
+earlier labels or layouts and are labelled as such in the
+[picture inventory](pictures/README.md): [Prepare](pictures/prepare.jpg),
+[Preview](pictures/preview.jpg), [Support panel](pictures/support_panel.jpg). All documentation images live in
 [`docs/pictures/`](pictures/README.md); add feature illustrations there and link
 them from the relevant guide.
 

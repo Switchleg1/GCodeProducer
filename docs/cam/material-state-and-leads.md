@@ -12,7 +12,8 @@ than treating every operation as starting in the original blank.
    removal; a deeper level still sees material below the previous cut. This
    planar history guides engagement, direction and feed planning across
    operations/tool changes. It is exact 2D polygon geometry at represented
-   depth levels, not a general solid model.
+   depth levels, not a general solid model. 3D Contour passes (varying Z) are
+   not recorded in it.
 2. **Emitted-motion simulation:** generated G1 movements remove material from
    a rectangular height field in execution order. Current-state rapid/contact
    checks and the material display use this representation, including lead
@@ -37,10 +38,11 @@ After generation, **Calculated operation output** offers:
 
 The latest output is selected initially. Selecting an earlier result shows
 that material surface and limits visible path layers to its operation boundary.
-Initial material hides generated paths/tool marker and disables the layer/line
-sliders until a machined result is selected. For other results the standard
-slider can subsequently inspect different paths; it does **not** recompute
-material for every cursor movement.
+Initial material hides generated paths/tool marker and disables the layer
+slider and [playback bar](../gui.md#inspecting-generated-paths) until a machined
+result is selected. For other results the layer slider and playback can
+subsequently inspect different paths; they do **not** recompute material for
+every cursor movement.
 The displayed material is the selected operation snapshot, not a live per-line
 removal animation. Snapshot labels include group/operation indices so repeated
 operation names are distinguishable.
@@ -68,7 +70,9 @@ uses demonstration non-iron-metal data (3 mm diameter, 200 SFM, 0.025 mm/tooth)
 and automatic Pocket axial depth 25% D. It is not a manufacturer-qualified
 recipe. All images are actual application captures with isolated settings;
 the checking grid was 0.5 mm at capture time (the default is now 0.2 mm) and
-the visible surface is display-decimated.
+the visible surface is display-decimated. This capture predates short retracts
+and stay-down entries, so its entry/travel moves still rise to safe Z; current
+output enters as described under [Lead-in](#lead-in).
 
 ## Resolution and display limits
 
@@ -89,7 +93,9 @@ from a smooth-looking or warning-free display.
 
 Operations expose **Lead-in ramp along contour**, **Lead-out along
 cleared contour**, and a lead length. Zero length requests an automatic lead.
-Drill/one-point paths keep their vertical drilling entry.
+Drill/one-point paths keep their vertical drilling entry. 3D Contour passes
+have no lead-in: each pass is reached by a short retract/travel and fed down
+to its first surface point (lead/plunge feed when steeper than 10°).
 
 For each entry (start of a pass, or a path that cannot stay down), the emitter:
 

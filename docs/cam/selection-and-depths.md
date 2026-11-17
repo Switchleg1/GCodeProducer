@@ -53,8 +53,7 @@ selecting another tree node does not copy geometry between operations.
 ![Per-selection machining checkbox and green material edge](../pictures/cam-per-selection-purpose.png)
 
 This capture shows one checked part edge and an unchecked material edge
-used only for End Z. Reference-drawing controls and the expanded default filter
-label were added later; these per-selection checkboxes are unchanged.
+(green in the view) used only for End Z, with the illustrative 4 mm tool.
 Older flange examples below show the previous global-purpose
 dropdown and yellow material highlights; their boundary examples still apply.
 
@@ -242,9 +241,9 @@ Actual capture: the counterbore pocket (selected from its Z-15 and Z-21 rims)
 stacks its passes from Z-15 downward after the flange pocket; nothing is
 cut in the air above it.
 
-Existing saved depth definitions are preserved. **Use pocket selection depths**
+Existing saved depth definitions are preserved. **Use selection depths**
 explicitly switches both fields to these defaults and resets offsets; it is
-available on Pocket operations. See the
+available on Pocket, 3D Waterfall and 3D Contour operations. See the
 [illustrated annular pocket example](operations.md#bounds-and-automatic-removal-height).
 
 The minimum/maximum selector affects geometry references and the machining
