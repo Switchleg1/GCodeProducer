@@ -15,6 +15,8 @@ output before operating a machine.
   and a playback bar (play/pause, step by move or layer, speed) shared by FDM and CAM.
 - **Consistent panels:** every dock is built from the same collapsible panes,
   which remember whether they are open; a compact Messages dock records all warnings.
+- **Editing:** shared FDM/CAM undo/redo, including control values and selections;
+  Ctrl+L aligns a chosen face to the bed or CAM cutting surface.
 - **FDM:** walls, top/bottom shells, sparse infill, skirt/brim, automatic support,
   editable support blocks, and reusable process presets.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave

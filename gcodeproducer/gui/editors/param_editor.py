@@ -186,6 +186,7 @@ class ParamEditor(QWidget):
         le = QLineEdit(str(v or ""))
         le.setToolTip(p.help)
         le.editingFinished.connect(lambda n=p.name, le=le: self._set(n, le.text()))
+        le.textEdited.connect(lambda text, n=p.name: self._set(n, text))
         self._widgets[p.name] = le
         self._setters[p.name] = le.setText
         return le

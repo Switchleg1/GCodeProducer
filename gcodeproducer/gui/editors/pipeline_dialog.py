@@ -68,6 +68,8 @@ class PipelineDialog(QDialog):
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
         self._reload(0)
+        from gcodeproducer.gui.history.dialog_state import pipeline_history
+        self.history = pipeline_history(self)
 
     def _reload(self, row=0):
         from gcodeproducer.gui.editors.process_forms import _stage

@@ -16,6 +16,7 @@
 | `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
 | `gui/runtime/` | Compute process service and separate queue-reader class |
+| `gui/history/` | Bounded transactional history, structural widget mementos, main-window and modal domain adapters; shared Help shortcut table |
 | `gui/rendering/` | Cameras, separate GL mesh classes, Prepare/Preview and plate/material rendering |
 | `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/reference/template editors (`section.py` is the one collapsible pane used by every panel); G-code table/panel and `playback_bar.py`, the Preview cursor/layer/transport controller shared by FDM and CAM |
 | `gui/dialogs/`, `gui/messages/` | Libraries/Settings dialogs, message panel and pop-ups |
@@ -73,6 +74,30 @@ each level against `ModelShadow.at(z)`; 3D Contour stores `(n, 3)` path points,
 which the emitter writes as XYZ moves and which the planar material history
 deliberately ignores. Do not document these representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
+
+## Editor history and versions
+
+`EditHistory` snapshots domain records and editable widget values/selections.
+Input boundaries and change signals batch a complete drag or control action;
+Undo/Redo own their shortcuts even inside Qt text/spin editors. Modal editors
+have independent histories. Widget addresses are structural, so rebuilt forms
+can restore selections without keeping obsolete widgets alive. Child dialogs
+and control internals are excluded from their parent's widget memento.
+`WindowState` restores model-owned data, both pipelines, owned profile/process
+files and preferences, then rebinds the editors. Source meshes are shared,
+not copied per edit, and released when no bounded history entry uses them.
+Content changes invalidate output and cancel pending compute results; view-only
+restoration does not. New editor-owned state must be added to its adapter;
+new ordinary Qt controls join automatically at their next input event.
+
+`placement_face` is a compute task: a ray picks the nearest triangle normal.
+The GUI composes that alignment with the existing rotation, retaining XY/scale,
+then anchors the entire mesh below the CAM stock top or above the FDM bed.
+
+Versions use **major.minor.build**. Increment the build once per user-request
+turn; change minor/major only on explicit
+operator instruction. Keep `pyproject.toml` and `gcodeproducer/__init__.py` in
+sync; template-variable examples use `__version__`. See root `AGENTS.md`.
 
 ## Ownership invariants
 

@@ -74,5 +74,24 @@ class MessagesPanel(QWidget):
         self.summary.setText(f"{c['error']} errors, {c['warning']} warnings" if any(c.values()) else "No messages")
         self.summaryChanged.emit(self.summary.text())
 
+    def snapshot(self):
+        return {'counts': dict(self.counts), 'rows': [
+            ([item.text(c) for c in range(3)], item.toolTip(2))
+            for item in (self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount()))]}
+
+    def restore(self, state):
+        if self.snapshot() == state:
+            return
+        self.tree.clear()
+        for columns, tooltip in state['rows']:
+            item = QTreeWidgetItem(columns)
+            item.setToolTip(2, tooltip)
+            color = LEVEL_COLORS.get(columns[1].lower(), LEVEL_COLORS['info'])
+            item.setForeground(1, color)
+            item.setForeground(2, color)
+            self.tree.addTopLevelItem(item)
+        self.counts = dict(state['counts'])
+        self._summary()
+
     def texts(self):
         return [self.tree.topLevelItem(i).toolTip(2) for i in range(self.tree.topLevelItemCount())]

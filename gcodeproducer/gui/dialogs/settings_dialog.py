@@ -69,6 +69,8 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         buttons.button(QDialogButtonBox.StandardButton.RestoreDefaults).clicked.connect(self._defaults)
         layout.addWidget(buttons)
+        from gcodeproducer.gui.history.dialog_state import settings_history
+        self.history = settings_history(self)
 
     def _messages_changed(self, *_):
         self.values["messages"] = {k: c.isChecked() for k, c in self.message_checks.items()}

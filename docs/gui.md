@@ -64,7 +64,7 @@ are not self-describing, so verify displayed dimensions in millimetres.
 | Rotate X/Y/Z | Euler angles; buttons rotate ±90° about world axes |
 | Scale | Uniform percentage; displayed size updates from the transformed mesh |
 | Lay flat | Uses the largest grouped planar area to choose a downward orientation |
-| Place on face | Activates picking; click a face to rotate its normal downward; Esc cancels |
+| Place on face (Ctrl+L) | Click a face: point it down onto the FDM bed, or up toward the CAM cutting surface. Rotation and Z placement are applied together; Esc cancels |
 | Reset | Restores rotation, scale and Z, then centres XY using the active workflow convention |
 
 Placement is model state, not FDM process state. FDM and CAM placements are
@@ -82,6 +82,42 @@ orbits instead of moving it; leave selection mode before dragging the part. Mode
 the work volume are orange and show a warning. The CAM volume extends below
 Z0; the FDM volume extends above it. Stock and extra adhesion paths are not
 made safe merely because the model itself fits.
+
+### Placing a chosen face flat
+
+Press **Ctrl+L** (or **Edit → Place on face** / the Model button), then click a
+visible model face in Prepare. This is available in both workflows. FDM aligns
+the clicked triangle's normal downward and puts the lowest model point on Z0.
+CAM aligns it upward and puts the highest point at the allocated stock's top
+(or Z0 without stock). XY centre and scale are retained. Picking runs in the
+background compute process; a miss leaves the tool active, and Esc cancels.
+
+STL faces are triangles: on a curved surface this aligns the clicked facet,
+not an analytic CAD surface. A recessed/concave face may not touch the plane;
+the whole part is anchored by its extreme so it does not cross the bed/cutting
+surface. Check the result, workholding and CAM geometry/depths after rotating.
+Stock and drawn reference outlines do not move with the part. Undo restores
+the prior placement and any support blocks invalidated by the rotation.
+
+## Undo and redo
+
+Use **Edit → Undo / Redo**, **Ctrl+Z**, **Ctrl+Shift+Z** or **Ctrl+Y**. The shared
+history covers FDM and CAM model edits, process/operation settings, picking,
+stock/tabs/references, and control values and selections—including spinners,
+dropdowns, lists, checkboxes, text, collapsible panes and view controls. A drag
+is one edit. A new edit after Undo discards the redo branch.
+
+Libraries, Settings and the pipeline dialog have local undo/redo shortcuts;
+**Cancel** still discards the dialog as usual. Accepted changes join the main
+history, including saved profile/process changes. History is bounded to 100
+transactions and lasts for this application session, not across restarts.
+
+Undoing a machining/printing input invalidates generated output; regenerate
+before export. View-only undo does not make paths stale. Undo also ignores
+late results computed from an undone setup. History restores editor state,
+not exported files or a physical machine: exporting G-code, running/cancelling
+computation, and quitting are not reversible execution commands. Automatic
+playback ticks are not individual history entries.
 
 ## Prepare and Preview
 
@@ -206,6 +242,11 @@ cutter clearance or successful workholding.
 
 | Input | Action |
 |---|---|
+| Ctrl+Z | Undo, including edits in text/spin fields |
+| Ctrl+Shift+Z / Ctrl+Y | Redo |
+| Ctrl+L | Activate Place on face; then click the face |
+| Ctrl+, | Settings |
+| Ctrl+Q | Quit |
 | Ctrl+O | Import model |
 | Ctrl+R | Slice / generate paths |
 | Ctrl+S | Save generated G-code (subject to CAM checks) |
@@ -222,6 +263,11 @@ cutter clearance or successful workholding.
 | Home / End | First / last layer index |
 | Esc | Exit the active picking, placement or reference Draw / Move / Resize tool |
 | Delete / Backspace | Delete selected manual support block in its editing context |
+
+The same shortcut list is available offline under **Help → Controls**, with
+context notes for viewport-only and Preview-only keys.
+
+![Help Controls with the full shortcut list](pictures/ui-controls-and-shortcuts.png)
 
 ## Generation, progress and cancellation
 

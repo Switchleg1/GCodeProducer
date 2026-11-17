@@ -2,6 +2,7 @@
 from __future__ import annotations
 import re, ast, operator, gcodeproducer.core.workflows.validation as wf
 from gcodeproducer.core.gcode.template_variable import Var
+from gcodeproducer import __version__
 
 FEATURE_TABLE = [
     ("outer_perimeter",   "Outer perimeter",      (1.00, 0.50, 0.10)),
@@ -87,7 +88,7 @@ VARIABLES = [
     Var("model", "General", "Model file name", "bracket.stl"),
     Var("date", "General", "Date the G-code was produced (YYYY-MM-DD)", "2025-01-31"),
     Var("time", "General", "Time the G-code was produced (HH:MM)", "14:05"),
-    Var("version", "General", "GCodeProducer version", "0.1.0"),
+    Var("version", "General", "GCodeProducer version", __version__),
     # ---- machine
     Var("bed_x", "Machine", "Bed / work area size X (mm)", 220.0),
     Var("bed_y", "Machine", "Bed / work area size Y (mm)", 220.0),

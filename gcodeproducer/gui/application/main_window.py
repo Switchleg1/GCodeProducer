@@ -117,6 +117,7 @@ class MainWindow(QMainWindow):
         self._cam_pick_task = None
         self._cam_highlight_task = None
         self._cam_pick_operation = None
+        self._face_task = None
         self._blocks_task = None        # id of the running Auto-generate task
         self._filament_mm = 0.0
         self.cam_warnings = []
@@ -158,6 +159,18 @@ class MainWindow(QMainWindow):
         for e in plugins.load_errors():
             self.log(f"Plugin load error: {e}")
         self._update_enabled()
+        from gcodeproducer.gui.history.edit_history import EditHistory
+        from gcodeproducer.gui.history.window_state import WindowState
+        self._history_state = WindowState(self)
+        self.history = EditHistory(self, self._history_state.capture, self._history_state.restore,
+                                   restore_widgets=False)
+        self.edit_menu.addAction(self.history.undo_action)
+        self.edit_menu.addAction(self.history.redo_action)
+        self.edit_menu.addSeparator()
+        self.edit_menu.addAction(self.act_place_face)
+        self.camera.changed.connect(self.history.schedule)
+        self.menuBar().triggered.connect(self.history.schedule)
+        self.history.changed.connect(lambda: self._history_state.prune(self.history))
 
     # UI construction
     def _build_central(self):
@@ -196,6 +209,7 @@ class MainWindow(QMainWindow):
         self.model_viewer.moved.connect(self._on_model_dragged)
         self.model_viewer.moveFinished.connect(self._save_placement)
         self.model_viewer.faceClicked.connect(self._on_face_clicked)
+        self.model_viewer.facePickRequested.connect(self._pick_placement_face)
         self.model_viewer.blockPressed.connect(self._on_block_pressed)
         self.model_viewer.blockDragged.connect(self._on_block_dragged)
         self.model_viewer.blockReleased.connect(self._on_block_released)
@@ -559,7 +573,7 @@ class MainWindow(QMainWindow):
         g.addWidget(self.lbl_size, 5, 2, 1, 2)
         # orientation helpers
         g.addWidget(button("Lay flat", "Rest the largest flat face on the bed", self.lay_flat), 6, 1)
-        self.b_face = button("Place on face", "Then click a face of the model in the Prepare view",
+        self.b_face = button("Place on face", "Ctrl+L, then click a face: down on the FDM bed / up at the CAM surface",
                              self._on_place_on_face, checkable=True)
         g.addWidget(self.b_face, 6, 2)
         g.addWidget(button("Reset", "Reset rotation, scale and Z and centre the model", self.reset_placement), 6, 3)
@@ -782,6 +796,8 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_settings)
         m.addSeparator()
         m.addAction(self._act("Exit", self.close, "Ctrl+Q"))
+        self.edit_menu = self.menuBar().addMenu("&Edit")
+        self.act_place_face = self._act("Place on face", lambda: self.b_face.toggle(), "Ctrl+L")
         p = self.menuBar().addMenu("&Process")
         self.process_menu = p
         p.addAction(self._act("Save", lambda: self.process_save()))
@@ -843,6 +859,9 @@ class MainWindow(QMainWindow):
         self.resizeDocks([self.dock_prepare, self.dock_process], [430, 520], Qt.Orientation.Vertical)
 
     def closeEvent(self, ev):
+        from gcodeproducer.gui.history.edit_history import EditHistory
+        for history in self.findChildren(EditHistory):
+            history.dispose()
         self._cam_highlight_timer.stop()
         s = self.settings
         s.setValue("geometry", self.saveGeometry())
@@ -1171,6 +1190,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.notify("import_failed", "error", "Import failed", str(exc))
             return
+        self._face_task = None
         self._reset_material_outputs()
         self.mesh, self.model_path = mesh, path
         from gcodeproducer.core.cam.cam_setup import CAMSetup
@@ -1358,17 +1378,33 @@ class MainWindow(QMainWindow):
     def _on_place_on_face(self, on):
         if on and self.mode != "prepare":
             self.set_mode("prepare")
+        self._face_task = None
         if on:
+            self._cam_pick_mode("")
             self.cam_editor.pick.setCurrentIndex(0)
             self._end_block_tools()
+            self.model_viewer.setFocus()
+            self.statusBar().showMessage("Click a model face to place flat; Esc cancels", 6000)
         self.model_viewer.set_place_on_face(on)
 
+    def _pick_placement_face(self, ray):
+        if self.placed is not None and self._worker is None:
+            self._face_task = self.compute.submit("placement_face", (self.placed, *ray))
+
     def _on_face_clicked(self, normal):
+        self._face_task = None
         if normal is not None:
-            self.placement.place_on_face(normal)
+            cam = self.workflow == wf.CAM
+            self.placement.place_on_face(normal, upward=cam)
+            self.placement.drop = True
+            self.placement.z_anchor = "top" if cam else "bottom"
+            stock = self.cam_editor.setup.stock
+            self.placement.z = stock.top if cam and stock.allocated else 0.0
             self._sync_placement_controls()
             self._placement_changed()
         self.b_face.setChecked(False)
+        if hasattr(self, "history"):
+            self.history.schedule()
 
     def _support_step(self):
         """The process' support step (printing style only)."""
@@ -1800,6 +1836,9 @@ class MainWindow(QMainWindow):
         self.viewer.set_info(f"{result['label']} • calculated material grid {result['resolution']:.3f} mm")
 
     def _set_stale(self):
+        self._face_task = None
+        if hasattr(self, "history"):
+            self.history.schedule()
         if self.workflow==wf.CAM and self.material_results:self._reset_material_outputs()
         if self.program is not None and not self.stale:
             self.stale = True
@@ -1830,6 +1869,7 @@ class MainWindow(QMainWindow):
         self.save_btn.setEnabled(self.program is not None and not busy)
         self.act_save.setEnabled(self.program is not None and not busy)
         self.act_preview.setEnabled(self.program is not None)
+        self.act_place_face.setEnabled(self.mesh is not None and not busy)
         self._update_stale_label()
 
     def run_slice(self):
@@ -1901,6 +1941,11 @@ class MainWindow(QMainWindow):
             self.progress.setValue(int(f * 100))
 
     def _on_compute_done(self, tid, result):
+        if tid == self._face_task:
+            self._face_task = None
+            if result is not None and self.b_face.isChecked():
+                self._on_face_clicked(result)
+            return
         if tid == self._cam_pick_task:
             self._cam_pick_task = None
             if self.workflow == wf.CAM:
@@ -1933,6 +1978,11 @@ class MainWindow(QMainWindow):
             self._blocks_done(result)
 
     def _on_compute_failed(self, tid, tb):
+        if tid == self._face_task:
+            self._face_task = None
+            self.log(tb)
+            self.statusBar().showMessage("Face selection failed; see Log", 5000)
+            return
         if tid in (self._cam_pick_task, self._cam_highlight_task):
             self._cam_pick_task = self._cam_highlight_task = None
             self.log(tb)
@@ -2207,12 +2257,9 @@ class MainWindow(QMainWindow):
         return result
 
     def _show_help(self):
+        from gcodeproducer.gui.history.history_constants import SHORTCUTS
         QMessageBox.information(self, "Controls", (
-            "Left drag: orbit    Right / middle drag: pan    Wheel: zoom\n"
-            "Double-click: select the line under the cursor\n"
-            "F / 1 2 3 4: fit / iso, top, front, right view\n"
-            "Prepare view: drag the model to move it; 'Place on face', then click a face\n"
-            "Ctrl+1 / Ctrl+2: Prepare / Preview view\n"
-            "PgUp / PgDn: next / previous layer    Home / End: first / last layer\n"
-            "Preview: Space play / pause    Left / Right previous / next move\n"
-            "Ctrl+O import model    Ctrl+R slice    Ctrl+S save G-code"))
+            "Mouse\nLeft drag: orbit (drag model in Prepare to move it)\n"
+            "Right / middle / Shift+left drag: pan    Wheel: zoom\n"
+            "Double-click in Preview: select G-code line\n\nKeyboard shortcuts\n" +
+            "\n".join(f"{key}: {description}" for key, description in SHORTCUTS)))

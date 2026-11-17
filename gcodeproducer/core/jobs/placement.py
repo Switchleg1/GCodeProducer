@@ -134,12 +134,18 @@ class Placement:
         normal = (normal * area[inv.ravel() == best][:, None]).sum(axis=0)
         self.place_on_face(normal)
 
-    def place_on_face(self, world_normal) -> None:
-        """Rotate so a face with (current, world-space) ``world_normal`` points down onto the bed."""
+    def place_on_face(self, world_normal, *, upward=False) -> None:
+        """Align a world-space face normal down to the bed, or up to the CAM surface.
+
+        Anchoring the whole mesh is separate: on a concave model the selected
+        triangle may not be an extreme face, so it cannot always touch the plane.
+        """
         n = np.asarray(world_normal, float)
         if np.linalg.norm(n) < 1e-12:
             return
-        A = align_matrix(n, [0.0, 0.0, -1.0])
+        if not np.isfinite(n).all():
+            return
+        A = align_matrix(n, [0.0, 0.0, 1.0 if upward else -1.0])
         self.set_rotation(A @ self.rotation())
 
     def rotate_by(self, axis: str, degrees: float) -> None:

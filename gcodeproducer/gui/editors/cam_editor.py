@@ -92,6 +92,7 @@ class CAMEditor(QWidget):
         self.details_section = Section("Operation", self.details, key="cam.operation")
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
+        self.name.textEdited.connect(self._edit)
         form.addRow("Name", self.name)
         self.enabled = QCheckBox("Enabled")
         self.enabled.toggled.connect(self._edit)

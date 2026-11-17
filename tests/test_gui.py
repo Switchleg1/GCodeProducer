@@ -853,7 +853,8 @@ def test_messages_dock_records_and_dont_show_again(win, monkeypatch):
     from PyQt6.QtWidgets import QMessageBox
     from gcodeproducer.core import app_settings
     assert win.dockWidgetArea(win.dock_messages) == Qt.DockWidgetArea.BottomDockWidgetArea
-    assert win.dock_messages.toggleViewAction() in win.menuBar().actions()[2].menu().actions()
+    assert any(win.dock_messages.toggleViewAction() in a.menu().actions()
+               for a in win.menuBar().actions() if a.menu())
     shown = []
 
     def fake_exec(box):

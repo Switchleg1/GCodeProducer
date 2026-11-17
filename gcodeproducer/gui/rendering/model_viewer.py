@@ -64,7 +64,8 @@ class ModelViewer(QOpenGLWidget):
     camSelectionExited = pyqtSignal()
     moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
     moveFinished = pyqtSignal()
-    faceClicked = pyqtSignal(object)          # world-space normal of the clicked face
+    facePickRequested = pyqtSignal(object)    # ray; triangle work runs in compute process
+    faceClicked = pyqtSignal(object)          # world-space normal, or None to cancel
     blockPressed = pyqtSignal(int)            # a support block was clicked (selected)
     blockDragged = pyqtSignal(int, float, float)   # block index, total dX, dY since the press
     blockReleased = pyqtSignal(int)
@@ -509,6 +510,9 @@ class ModelViewer(QOpenGLWidget):
                 self.hover_block = -1
                 self.blockDeleteRequested.emit(bi)
             return                                   # a miss just orbits
+        if self.place_on_face:
+            self.facePickRequested.emit(self.ray(mx, my))
+            return
         pt, tri = self.pick(mx, my)
         if self.place_block:
             if tri >= 0:
@@ -530,10 +534,6 @@ class ModelViewer(QOpenGLWidget):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return
         if tri < 0:
-            return
-        if self.place_on_face:
-            n, _ = face_normals(self.vertices, self.triangles[tri:tri + 1])
-            self.faceClicked.emit(n[0])
             return
         self._drag = (float(pt[2]), pt, tuple(self.center_xy))
         self.setCursor(Qt.CursorShape.ClosedHandCursor)

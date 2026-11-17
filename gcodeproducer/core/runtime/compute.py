@@ -58,6 +58,18 @@ def run_cam_pick(payload):
     return pick_geometry(payload)
 
 
+def run_placement_face(payload):
+    """Return the hit triangle's world normal without doing mesh picking on the GUI thread."""
+    from gcodeproducer.core.geometry.kernel import ray_triangles
+    from gcodeproducer.core.jobs.placement import face_normals
+    mesh, origin, direction = payload
+    _, index = ray_triangles(origin, direction, mesh.vertices[mesh.triangles])
+    if index < 0:
+        return None
+    normals, _ = face_normals(mesh.vertices, mesh.triangles[index:index + 1])
+    return normals[0]
+
+
 def run_tab_pick(payload):
     from gcodeproducer.core.cam.tabs import tab_pick
     return tab_pick(*payload)

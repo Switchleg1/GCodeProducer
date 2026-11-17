@@ -6,9 +6,11 @@ from gcodeproducer.core.runtime.compute import (
     run_cam_highlight,
     run_cam_pick,
     run_tab_pick,
+    run_placement_face,
 )
 
 TASKS = {
+    "placement_face": lambda payload, log, progress: run_placement_face(payload),
     "cam_pick": lambda payload, log, progress: run_cam_pick(payload),
     "cam_tab_pick": lambda payload, log, progress: run_tab_pick(payload),
     "cam_highlight": lambda payload, log, progress: run_cam_highlight(payload),

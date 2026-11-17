@@ -75,6 +75,8 @@ class LibraryDialog(QDialog):
 
         self.tabs.setCurrentIndex(KINDS.index(kind) if kind in KINDS else 0)
         self._reload(profile_id)
+        from gcodeproducer.gui.history.dialog_state import library_history
+        self.history = library_history(self)
 
     def kind(self) -> str:
         return KINDS[self.tabs.currentIndex()]

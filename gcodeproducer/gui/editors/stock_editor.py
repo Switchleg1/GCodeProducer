@@ -34,6 +34,7 @@ class StockEditor(QWidget):
         self.section.body.addLayout(form)
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
+        self.name.textEdited.connect(self._edit)
         form.addRow("Material description", self.name)
         from gcodeproducer.core.cam.cam_constants import MATERIALS
         self.category = QComboBox()
