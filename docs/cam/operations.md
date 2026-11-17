@@ -426,7 +426,9 @@ clamped upward to each successive depth floor before reaching the final surface.
 
 Stepover sets raster spacing; depth of cut sets the vertical increment and is
 capped by the tool. Material above a lower selected Start is cleared first.
-There are no engagement feed factors on these XYZ paths. Full description:
+Lead-in/out switches are honoured, and current height-field material supplies
+Slot/High/Cut/HSM/Air classification and feed factors on XYZ moves. Clear
+entries do not ramp; a contacting entry ramps when selected. Full description:
 [3D Contour](3d-operations.md#3d-contour).
 
 ## Output and safety checklist

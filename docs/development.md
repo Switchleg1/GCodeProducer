@@ -72,7 +72,11 @@ update a height field and per-operation display meshes in `core/cam/material.py`
 Surface-limited operations (`_surface_operation` in `core/cam/planning.py`) plan
 each level against `ModelShadow.at(z)`; 3D Contour stores `(n, 3)` path points,
 which the emitter writes as XYZ moves and which the planar material history
-deliberately ignores. Do not document these representations as complete 3D solid simulation. The emitter marks program lines with layer and
+deliberately ignores. `surface_leads.py` constructs bounded, surface-protected
+XYZ entries/exits. `surface_engagement.py` classifies local moves from current
+height-field chords and fresh sweep area during emission, including feed
+factors and line metadata. XYZ cutting does update that emitted material state,
+so subsequent Contour paths/leads use actual prior removal. Do not document these representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
 ## Editor history and versions
@@ -238,7 +242,8 @@ python -m pytest -q
 ```
 
 GUI tests use offscreen Qt, isolated libraries and distinct Qt settings
-namespaces. They should not read/write your real library for routine tests.
+namespaces. The session fixture keeps one QApplication alive across modules
+so deferred widget deletion cannot outlive a module-scoped application. They should not read/write your real library for routine tests.
 OpenGL rendering on actual drivers still needs manual checks. For a new CAM
 strategy, test invalid geometry, reference changes, depth bounds, tool order,
 stock-contact assumptions, metadata and export warnings—not only a happy-path

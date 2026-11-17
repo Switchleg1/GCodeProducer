@@ -4,6 +4,24 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _qt_application_lifetime():
+    """Keep one Qt application alive across GUI modules and deferred widget deletion.
+
+    Module-scoped QApplication wrappers can otherwise die while another module's
+    closed widgets still await deletion, causing native crashes/wrong wrappers.
+    """
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PyQt6.QtWidgets import QApplication
+    except ImportError:
+        yield None
+        return
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
 @pytest.fixture(autouse=True)
 def _isolated_qt_settings(monkeypatch):
     """Never read or write the user's real window/pane state from tests."""

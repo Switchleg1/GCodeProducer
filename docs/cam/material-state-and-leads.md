@@ -93,9 +93,12 @@ from a smooth-looking or warning-free display.
 
 Operations expose **Lead-in ramp along contour**, **Lead-out along
 cleared contour**, and a lead length. Zero length requests an automatic lead.
-Drill/one-point paths keep their vertical drilling entry. 3D Contour passes
-have no lead-in: each pass is reached by a short retract/travel and fed down
-to its first surface point (lead/plunge feed when steeper than 10°).
+Drill/one-point paths keep their vertical drilling entry. 3D Contour also
+honours both lead switches: a contacting entry ramps along its validated XYZ
+path, never below that surface; an already-clear entry skips the ramp. Exits
+follow already-cut XYZ geometry only, and air-only paths skip them. A ramp
+that cannot fit safely fails explicitly instead of silently plunging. See
+[Contour leads and engagement](3d-operations.md#3d-contour).
 
 For each entry (start of a pass, or a path that cannot stay down), the emitter:
 

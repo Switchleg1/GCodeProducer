@@ -93,10 +93,34 @@ uncleared stock.
   Climb/conventional is not a selectable hand for these XYZ paths.
 - **Ceiling:** stretches resting at or above the original material surface
   are omitted. Raised model surfaces and tabs still constrain every band.
-- **Feeds:** normal cutting feed; descents steeper than 10° use lead/plunge
-  feed. Engagement feed modifiers are not applied to these XYZ paths.
-- **Entries:** checked short retract/travel, then a fed descent to the next
-  depth-limited path. There is no contour lead ramp on an XYZ raster.
+- **Feeds:** XYZ moves are classified from current height-field material as
+  **Slot / High engagement / Cut / HSM / Air**. Machine thresholds and the
+  operation/tool/machine feed modifiers apply. Steep surface descents use the
+  lower cut/lead base before the modifier; every feed remains machine-capped.
+- **Entries:** with **Lead-in ramp along contour** checked, an entry which
+  meets remaining material ramps along the validated XYZ path at ≤10°. Short
+  usable prefixes zigzag as needed. Already-clear entries skip the ramp and
+  descend through verified air. Unchecking retains an explicit plunge entry.
+- **Exits:** with **Lead-out along cleared contour** checked, a path that cut
+  material follows a short already-cut XYZ section back out. An uncertain exit
+  is omitted in favour of retracting; an entirely air-only path has no lead-out.
+
+![Contour leads and material-aware cutting features](../pictures/cam-contour-leads-engagement.png)
+
+Leads never extend an arbitrary tangent through a retained wall. If the usable
+surface rises too steeply to fit a protected ≤10° entry, generation reports an
+error instead of silently plunging. Choose another entry/direction or explicitly
+turn lead-in off only after checking plunge capability. A shorter requested lead
+can help where an unnecessarily long lead crosses a raised surface.
+
+![Contour engagement feed controls are enabled](../pictures/cam-contour-engagement-settings.png)
+
+Classification samples the current tip height and newly swept cutter footprint,
+subdividing long XYZ moves so their feed/type can change along the path. It
+includes emitted leads, earlier paths/depths and tool changes. Preview feature
+colours and radial-engagement colours use this metadata; it is a **grid estimate**,
+not measured tooth load. Without allocated stock, the emitter assumes a
+conservative model-bounds blank and logs that limitation.
 
 Heights use a conservative upper-surface grid: the smaller of global material
 resolution and diameter/40, no finer than 0.05 mm. The cell cap may coarsen it

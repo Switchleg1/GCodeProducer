@@ -41,6 +41,11 @@ def test_operation_specific_choices_and_hidden_rows(app):
             assert editor.side.isHidden() == (kind != 'profile')
             assert form.labelForField(editor.side).isHidden() == (kind != 'profile')
             assert [editor.side.itemText(i) for i in range(editor.side.count())] == ['Outside', 'Inside']
+            if kind == 'contour3d':
+                assert editor.lead_in.isEnabled() and editor.lead_out.isEnabled()
+                assert all(field.isEnabled() for field in editor.feed_controls.values())
+                editor.feed_controls['slotting_feed'].setValue(42)
+                assert editor.operation().slotting_feed == 42
             if expected:
                 editor.strategy.setCurrentIndex(editor.strategy.findData('raster_y'))
                 assert editor.operation().strategy == 'raster_y'

@@ -211,7 +211,9 @@ class CAMEditor(QWidget):
         self.direction.currentIndexChanged.connect(self._edit)
         form.addRow(self.direction_override, self.direction)
         self.lead_in = QCheckBox("Lead-in ramp along contour")
+        self.lead_in.setToolTip("Ramp along the validated path when entering remaining material. 3D Contour skips the ramp when the entry is already clear.")
         self.lead_out = QCheckBox("Lead-out along cleared contour")
+        self.lead_out.setToolTip("Follow an already-cut portion of the path after cutting. Retract instead if remaining material makes the exit uncertain.")
         self.lead_in.toggled.connect(self._edit)
         self.lead_out.toggled.connect(self._edit)
         form.addRow(self.lead_in)
@@ -274,7 +276,7 @@ class CAMEditor(QWidget):
             sb.valueChanged.connect(self._edit)
             self.feed_controls[key] = sb
             ff.addRow(label, sb)
-        feed_note = QLabel("Planar estimate, not machine telemetry. Full slots and balanced frontal entries have no unique cutting hand.")
+        feed_note = QLabel("Approximate remaining-material estimate, not machine telemetry. Full slots have no unique cutting hand.")
         feed_note.setWordWrap(True)
         ff.addRow(feed_note)
         form.addRow(feeds)
@@ -464,7 +466,7 @@ class CAMEditor(QWidget):
             self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy == "contour")
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
-                sb.setEnabled(op.kind not in ("drill", "contour3d"))
+                sb.setEnabled(op.kind != "drill")
             self.strategy.setEnabled(bool(choices))
             self.direction_override.setEnabled(op.kind in ("pocket", "profile", "waterfall"))
             self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())

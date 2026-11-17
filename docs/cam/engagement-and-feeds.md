@@ -18,6 +18,24 @@ The old user-facing names Low/Standard have been replaced by HSM/Cut. Stored
 keys `low_engagement_feed` / `standard_engagement_feed` remain compatibility
 aliases; the reference tables show their current labels.
 
+## 3D Contour
+
+Contour uses the same bands and feed modifiers, but measures current
+**height-field** material at the moving tip height instead of a planar slice.
+Short XYZ subdivisions use transverse cutter chords and newly swept area;
+previous cutter-disc removal must not incorrectly turn a full slot into HSM.
+This estimate includes actual emitted leads and prior operation removal.
+
+The engagement feed controls are enabled for Contour. Normal cuts receive
+the selected band factor; contacting lead-in moves use the lead base with that
+factor. Lead-out follows cleared XYZ geometry only. Air-only entries/exits
+skip the corresponding leads. Slot remains hand-neutral; the selected Contour
+motion strategy is not reversed to force a climb/conventional hand.
+
+Feature colours show the XYZ cutting band; lead moves keep Lead-in/Lead-out
+colours and carry the engagement value/type in metadata. The engagement colour
+mode uses that value. See [surface operations](3d-operations.md#3d-contour).
+
 ## Machine thresholds and modifiers
 
 **Libraries → CAM machine → Engagement** sets:
@@ -80,8 +98,9 @@ ceilings, axial defaults and independent feed unlocks.
 
 Example with base cut feed 800 mm/min: HSM 100%=800, Cut 150%=1,200,
 High 75%=600, Slot 50%=400. Increasing Cut does not increase Slot. Contacting
-lead-in uses the independent lead base and machine Slot modifier; normal XY
-cutting/link moves use their estimated band. Positive `max_feed` caps cutting,
+planar lead-in uses the independent lead base and machine Slot modifier;
+Contour lead-in uses its current estimated band and applicable operation
+modifier. Normal cutting/link moves use their estimated band. Positive `max_feed` caps cutting,
 link and plunge rates. Air remains at capped base feed, not G0.
 
 These percentages are **not calibrated chip loads or safety limits**. There is
@@ -100,8 +119,9 @@ even when classified High rather than Slot. One-sided feed links opposing the
 requested hand are replaced by retract/position/plunge; geometrically admissible
 neutral entries remain eligible for stay-down, at the heavier-cut rate.
 
-The planner uses planar depth-tagged sweeps. The emitted-motion pass separately
-updates a height field for display and movement checking. These are **2.5D
+The planar planner uses depth-tagged sweeps. The emitted-motion pass separately
+updates a height field for display and movement checking; Contour uses that
+current height field for its XYZ engagement estimate as described above. These are **2.5D
 estimates**, not tooth-level telemetry or a full 3D stock/fixture simulation.
 Within-path overlap/re-tracing can be conservative; actual axial engagement,
 V-bit/ballnose contact width, deflection and chatter are not predicted. M4

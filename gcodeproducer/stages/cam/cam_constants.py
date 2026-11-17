@@ -6,6 +6,8 @@ _LINE = re.compile(r"^Line (\d+):")
 
 from gcodeproducer.stages.base.api import AUTO, Param
 
+ENGAGEMENT_FEATURES = {"slot": "slot", "high": "high_engagement", "cut": "cut", "hsm": "hsm", "air": "air"}
+
 CAMEMIT_PARAMS = []
 
 CAMPROFILE_PARAMS = [
