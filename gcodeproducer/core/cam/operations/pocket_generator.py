@@ -1,0 +1,105 @@
+"""PocketGenerator — planar clearing of a closed region to a flat floor."""
+from __future__ import annotations
+import math
+import numpy as np
+from .operation_generator import OperationGenerator
+
+
+def pocket_paths(op, loops, region, diameter, direction, log=None):
+    """Wall-parallel or X/Y raster clearing paths for one planar pocket region (also used by Waterfall)."""
+    from gcodeproducer.core.jobs.path import Path
+    from gcodeproducer.core.geometry.infill import scan_fill
+    from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths
+    from gcodeproducer.core.cam.strategy import cutting_strategy
+    strategy = cutting_strategy(op.kind, op.strategy)
+    paths = []
+    if strategy == "contour":
+        contours = contour_pocket(loops, diameter/2, op.stock, op.stepover, direction, log, region=region)
+        linked = link_contours(contours, loops, diameter/2, op.stock, direction, op.stay_down, region=region)
+        paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
+                      stay_down_from=tuple(linked[i-1][0][0]) if link else None)
+                 for i, (p, link) in enumerate(linked)]
+    elif strategy in ("raster_x", "raster_y"):
+        centre_region = region.buffer(-(diameter/2+op.stock))
+        regions = [p for p, _ in boundary_paths(centre_region, direction)]
+        if not regions:
+            raise ValueError(f"{op.name}: pocket is too small for this tool")
+        # scan_fill's angle is the line NORMAL, not its travel direction.
+        normal = math.pi/2 if strategy == "raster_x" else 0.
+        for a, b in scan_fill(regions, normal, diameter * op.stepover / 100, 0, 0, 0.01):
+            pts = np.array([a, b])
+            if direction == "conventional" or (direction == "meander" and len(paths) % 2):
+                pts = pts[::-1]
+            paths.append(Path("cut", pts, width=diameter))
+        paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
+    else:
+        raise ValueError(f"Unknown pocket strategy '{op.strategy}'")
+    return paths
+
+
+class PocketGenerator(OperationGenerator):
+    kinds = ("pocket",)
+    clearing = True
+    needs_closed = True
+
+    def paths(self, run, selection, planning):
+        from shapely.geometry import box as shapely_box, Polygon
+        from shapely import BufferJoinStyle
+        from shapely.ops import unary_union
+        from gcodeproducer.core.cam.paths import pocket_region, part_section, overcut_region
+        op, setup, ctx = run.op, planning.setup, planning.ctx
+        start, end, step, count = run.start, run.end, run.step, run.count
+        if not 0 < op.stepover <= 100:
+            raise ValueError("Pocket stepover must be between 0 and 100 percent")
+        if op.overcut < 0 or not math.isfinite(op.overcut):
+            raise ValueError(f"{op.name}: overcut must be zero or positive")
+        if not math.isfinite(op.material_limit):
+            raise ValueError(f"{op.name}: material boundary limit must be finite")
+        loops = selection.loops
+        stock_loops = selection.edge_loops(selection.stock_edges) if selection.stock_edges else []
+        region = pocket_region(stock_loops if stock_loops else loops)
+        limit = None
+        if setup.stock.allocated:
+            # contour_pocket insets every boundary by radius + roughing clearance. At the blank
+            # edge the clearance protects nothing, so add it back: the cutter's outer edge then
+            # lands exactly at blank edge + material_limit (0 touches, -1 leaves 1 mm, +1 passes).
+            lo_s, hi_s = setup.stock.bounds
+            reach_out = op.material_limit + op.stock
+            limit = shapely_box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+            if abs(reach_out) > 1e-12:
+                limit = limit.buffer(reach_out, join_style=BufferJoinStyle.mitre)
+        if limit is not None and limit.is_empty:
+            raise ValueError(f"{op.name}: material boundary limit removes the whole blank")
+        protected = None
+        if op.overcut > 0 or selection.stock_edges:
+            depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
+            depths.extend(math.ceil(float(hi[2])*1000-1e-9)/1000 for _, hi in planning.tabs
+                          if end < hi[2] < start)
+            # No extra clearance here: the contour inset already leaves op.stock on part walls.
+            protected = part_section(planning.job.mesh, depths, 0.0)
+        if selection.stock_edges:
+            # Material references define the exterior removal envelope, never permission
+            # to machine through the model or automatically bore its internal holes.
+            # Fill section holes conservatively; use a separate part-selected operation
+            # for those features. Part references can still supply the end Z.
+            sections = [protected] if protected.geom_type == "Polygon" else list(getattr(protected, "geoms", ()))
+            protect = [Polygon(p.exterior) for p in sections if p.geom_type == "Polygon"]
+            # Selected part rims/face footprints are retained inner boundaries,
+            # not just depth hints. Honour them even above/below that model rim.
+            protect.extend(pocket_region([loop]) for loop in selection.edge_loops(selection.keep_edges))
+            protected = unary_union(protect)
+            region = (limit if limit is not None else region).difference(protected).buffer(0)
+            if region.is_empty:
+                raise ValueError(f"{op.name}: no material outside the protected part at these depths")
+            ctx.log(f"  {op.name}: material-boundary pocket; part sections protected")
+        if op.overcut > 0:
+            grown = overcut_region(region, op.overcut, protected, limit)
+            ctx.log(f"  {op.name}: overcut {op.overcut:g} mm into void material adds "
+                    f"{grown.area - region.area:.1f} mm² (part sections protected, "
+                    f"material limit {op.material_limit:+g} mm)")
+            region = grown
+        elif limit is not None and not limit.is_empty and not limit.covers(region):
+            region = region.intersection(limit).buffer(0)
+            if region.is_empty:
+                raise ValueError(f"{op.name}: material boundary limit removes the whole pocket")
+        return pocket_paths(op, loops, region, run.diameter, run.direction, ctx.log), region

@@ -1,11 +1,12 @@
 [Documentation](../README.md) / [CAM](README.md) / [Development](../development.md)
 
-# CAM pipeline architecture: current interactions and proposed planner
+# CAM pipeline architecture: the planner section
 
-This page maps how a CAM job travels through the code today, where the
-cutting-type decisions are made, and the structure in which one **motion
-planner** owns those decisions for every operation. Steps 1–2 of the
-migration (section 7) are implemented in 0.1.9; steps 3–5 are planned.
+Since 0.1.10 every CAM job runs through one **planner** section
+(`core/cam/planner/`). Operations are small per-kind **generators**
+(`core/cam/operations/`) that only produce geometry; the planner owns the job
+loop, the material state, entries, links, engagement, feeds and the complete
+motion program. G-code output only serializes the planner's result.
 
 The diagrams use Mermaid, which GitHub renders. In an offline Markdown viewer
 without Mermaid support, read them as plain text graphs (`A --> B` means
@@ -16,287 +17,215 @@ without Mermaid support, read them as plain text graphs (`A --> B` means
 ```mermaid
 flowchart TD
     subgraph GUI["GUI process"]
-        MW["MainWindow.run_slice<br/>(gui/application/main_window.py)"]
-        CS["ComputeService.submit('slice')<br/>(gui/runtime/compute_service.py)"]
-        PV["Preview: GCodeViewer, PlaybackBar,<br/>material outputs, Messages"]
+        MW["MainWindow.run_slice"]
+        CS["ComputeService.submit('slice')"]
+        PV["Preview: viewer, playback,<br/>material outputs, Messages"]
     end
     subgraph WORKER["Compute process"]
-        RS["run_slice<br/>(core/runtime/compute.py)"]
-        SJ["slice_job: fingerprint check, place_mesh<br/>(core/jobs/session.py)"]
-        PL["SlicePipeline.run<br/>(core/pipeline/slice_pipeline.py)"]
-        PRO["CAMProfile stage<br/>(stages/cam/cam_profile.py)"]
-        GEN["planning.generate<br/>(core/cam/planning.py)"]
-        EMIT["CAMEmit stage<br/>(stages/cam/cam_emit.py)"]
-        SIM["simulate_material + check_stock<br/>(core/cam/material.py, stock.py)"]
-        TP["build_toolpath + simulate<br/>(core/gcode/)"]
+        RS["run_slice (core/runtime/compute.py)"]
+        SJ["slice_job: fingerprint, place_mesh"]
+        PL["SlicePipeline.run"]
+        PRO["CAMProfile stage"]
+        SEQ["planner.Sequencer<br/>(via planning.generate)"]
+        EMIT["CAMEmit stage"]
+        MPL["planner.MotionPlanner"]
+        SER["CAMEmit.serialize<br/>MotionPlan → G-code"]
+        CHK["simulate_material + check_stock<br/>(checks the written G-code)"]
     end
     MW -->|"Job + CAMSetup copy"| CS --> RS --> SJ --> PL
-    PL --> PRO -->|"cam_setup present"| GEN
-    GEN -->|"job.layers: Layer[Path + CutCondition]"| EMIT
-    EMIT -->|"GCodeProgram"| SIM
-    SIM -->|"warnings, material snapshots"| RS
-    EMIT --> TP --> RS
+    PL --> PRO --> SEQ
+    SEQ -->|"job.layers: passes + planar CutConditions"| EMIT
+    EMIT --> MPL -->|"job.motion_plan"| SER --> CHK
+    CHK -->|"program, warnings, snapshots"| RS
     RS -->|"chunked program, toolpath, results"| CS --> PV
 ```
 
-`CAMProfile` is a legacy silhouette stage that, when a tree setup exists,
-simply delegates to `planning.generate`. The real work happens in two places:
-**planning** (geometry, depth passes, planar engagement) and **emission**
-(entries, exits, XYZ engagement, feeds, G-code text).
-
-## 2. Inside planning today
-
-```mermaid
-flowchart TD
-    G["generate(job, ctx)"] --> TOPO["cached_topology<br/>Topology / reference shapes"]
-    G --> TABS["resolve_tabs (tabs.py)"]
-    G --> HIST["PlanarStock history<br/>(planar_stock.py)"]
-    G --> CUT["resolve_cutting<br/>RPM / feed / lead / depth (cutting.py)"]
-    G --> SEL["selection → closed loops<br/>(chains, Depth.resolve)"]
-    SEL --> K{"op.kind"}
-    K -->|"waterfall / contour3d"| SURF["_surface_operation"]
-    K -->|pocket| POC["_pocket_paths<br/>contour_pocket / link_contours / raster"]
-    K -->|profile| PRF["offset_into_material + orient_contour"]
-    K -->|"slot / engrave"| OPEN["open polylines"]
-    K -->|drill| DRL["circle fit → drill points"]
-    SURF --> SH["ModelShadow (waterfall)<br/>DropSurface + surface_raster (contour)"]
-    SURF --> POC
-    POC --> AREAS["machining_areas, _tab_schedule,<br/>_drop_air_paths"]
-    PRF --> AREAS
-    OPEN --> AREAS
-    AREAS --> ENG["plan_engagement (engagement.py)<br/>orient hand, CutCondition per segment"]
-    SURF -->|"waterfall only"| ENG
-    ENG --> L["Layer(paths) per area/depth"]
-    SH -->|"contour: XYZ paths, no conditions"| L
-```
-
-Planning produces **geometry plus planar engagement** for XY paths. It does
-**not** decide entries, exits, links between passes or feeds; and it attaches
-no cutting conditions to 3D Contour XYZ paths.
-
-## 3. Inside emission before 0.1.9 (for reference)
-
-```mermaid
-flowchart TD
-    E["CAMEmit.run"] --> RC["resolve_cutting per layer<br/>(tool change, RPM)"]
-    E --> HS["HeightStock live material<br/>(height_stock.py)"]
-    E --> P{"path shape"}
-    P -->|"XY path"| XY["XY branch"]
-    P -->|"XYZ path"| XYZ["surface_path branch"]
-    XY --> STAY["stay-down link? (planned)"]
-    XY --> RAMP["ramp_entry (leads.py)<br/>contour helix / zigzag"]
-    XY --> RETR["short retract / rapid descent<br/>(HeightStock heights)"]
-    XY --> CM["cut_move: feed × CutCondition.feed_factor<br/>(conditions from planning)"]
-    XY --> LO["exit_path lead-out"]
-    RAMP -->|"lead feed × machine Slot % if contact"| G1A["G1 lead_in"]
-    XYZ --> SLEAD["surface_entry / surface_exit<br/>(surface_leads.py)"]
-    XYZ --> SENG["surface_engagement.condition<br/>(per sub-move, HeightStock)"]
-    SENG --> G1B["G1 cut/lead × measured band factor"]
-    CM --> OUT["GCodeBuilder lines<br/>feature + engagement + note"]
-    G1A --> OUT
-    G1B --> OUT
-    LO --> OUT
-```
-
-## 4. Where cutting types were decided before 0.1.9
-
-| Decision | Planar XY operations | 3D Contour (XYZ) |
-|---|---|---|
-| Slot / High / Cut / HSM / Air thresholds | `engagement_band` (shared) | `engagement_band` (shared) |
-| Feed factor per band | `feed_factor` (shared) | `feed_factor` (shared) |
-| Climb / conventional / neutral hand | `_hand` + path reversal in `plan_engagement` | `_hand` (no reversal) |
-| Material model used | `PlanarStock` depth-tagged polygons, **at planning time** | `HeightStock` grid, **at emission time** |
-| Lead-in contact feed | lead base × **machine Slot %** (fixed policy) | lead base × **measured band factor** |
-| Lead-in needed? | always, when switched on | only when the entry contacts material |
-| Plunge feature | emitter, when lead-in is off | emitter, when lead-in is off |
-| Lead-out safety | `HeightStock.contact` → retract | `HeightStock.contact` → retract |
-| Feature colour mapping | `ENGAGEMENT_FEATURES` (shared) | `ENGAGEMENT_FEATURES` (shared) |
-
-So the *vocabulary* was shared, but **two different code paths decided what a
-move is and how fast it runs**, at two different times, against two different
-material models. That was the root of inconsistencies such as the lead-in feed.
-
-### Since 0.1.9 (steps 1–2)
-
-```mermaid
-flowchart TD
-    E["CAMEmit.run (both XY and XYZ paths)"] --> LP["LinkPlanner<br/>stay-down, stay at depth,<br/>short retract, rapid descent"]
-    E --> EP["EntryExitPlanner<br/>enters_material? → ramp / approach / plunge<br/>planar & surface leads, exits"]
-    E --> FM["feed_move: one writer for every G1"]
-    FM --> MS["measure: surface_engagement.condition<br/>(leads, plunges, exits, XYZ cuts)"]
-    FM --> PC["planned CutCondition<br/>(planar cuts, links)"]
-    MS --> FP["FeedPolicy<br/>rate = base(phase) × band factor, cap<br/>feature = phase or band"]
-    PC --> FP
-    FP --> SEG["MotionSegment → MotionPlan (job.motion_plan)"]
-    SEG --> GC["G-code line + engagement metadata"]
-```
-
-| Decision | All operations (0.1.9) |
-|---|---|
-| Lead-in needed? | only when the descent at the path start meets current material |
-| Already-clear entry | *approach*: verified-air feed descent at the lead base, no ramp |
-| Lead-in rate | lead base × measured band factor (normally Slot: operation override or machine modifier) |
-| Plunge rate | plain lead/plunge base |
-| Lead-out | already-cut geometry only; skipped after a path that removed nothing |
-| Feature / colour | phase feature for plunge/lead/approach, band feature for cuts |
-
-Still separate until steps 3–5: planar cut conditions come from planning-time
-`PlanarStock`, while leads, plunges, exits and XYZ cuts are measured on the
-emitter's `HeightStock`.
-
-## 5. Two concepts, kept separate
-
-A move has two independent attributes; the planner must produce both:
-
-- **Motion phase** — *why* the tool moves: `rapid`, `retract`, `plunge`,
-  `lead_in`, `link` (stay-down), `cut`, `lead_out`, `drill`.
-- **Engagement** — *how much material* it meets: `air`, `hsm`, `cut`, `high`,
-  `slot`, with hand `climb` / `conventional` / `neutral` / `mixed`.
-
-A lead-in is normally *phase = lead_in, engagement = slot*: the cutter is
-burying itself at full width. Treating phase and engagement as one enum loses
-exactly that information.
-
-The feed rule then becomes uniform for every operation:
-
-```
-feed = base(phase) × factor(engagement band, operation overrides, tool, machine)
-       → capped by machine max_feed
-base(phase) = lead/plunge base for plunge, lead_in, lead_out; cut base otherwise
-```
-
-## 6. Proposed structure: the planner as its own section
+## 2. The planner section and the operation generators
 
 ```mermaid
 flowchart LR
-    subgraph OPS["Operation generators (per kind)"]
+    subgraph OPS["core/cam/operations/ — one module per kind"]
         direction TB
-        PK[Pocket]
-        WF["3D Waterfall"]
-        CT["3D Contour"]
-        PF[Profile]
-        SL["Slot / Engrave"]
-        DR[Drill]
+        PK["PocketGenerator"]
+        PF["ProfileGenerator"]
+        OP["OpenPathGenerator<br/>(Slot, Engrave)"]
+        DR["DrillGenerator"]
+        WF["WaterfallGenerator"]
+        CT["Contour3dGenerator"]
     end
-    subgraph PLANNER["CAM motion planner (core/cam/planner/)"]
+    subgraph PLANNER["core/cam/planner/"]
         direction TB
-        ORD["Sequencer<br/>tool groups, area/depth order, tabs"]
-        MAT["MaterialModel<br/>one current state: planar + height field"]
-        ENT["EntryExitPlanner<br/>ramp / helix / zigzag / plunge / lead-out"]
-        LNK["LinkPlanner<br/>stay-down vs retract, clearance"]
-        ENGM["EngagementModel<br/>band + hand (XY and XYZ samplers)"]
-        POL["FeedPolicy<br/>phase × band → rate, caps"]
-        MP["MotionPlan<br/>Segment(phase, xyz, CutCondition, rate)"]
-        ORD --> MAT --> ENT --> LNK --> ENGM --> POL --> MP
+        SEQ["Sequencer<br/>tool groups → operations"]
+        CTX["PlanningContext<br/>services for generators"]
+        SCH["pass_scheduler<br/>areas, depth order, tabs, air"]
+        MAT["MaterialModel<br/>planar + height representations"]
+        PS["PlanarSampler"]
+        HS["HeightSampler"]
+        ENG["EngagementModel<br/>band, hand, feed factor"]
+        MPL["MotionPlanner<br/>program loop"]
+        EEP["EntryExitPlanner"]
+        LNK["LinkPlanner"]
+        POL["FeedPolicy"]
+        PLAN["MotionPlan<br/>MotionSegment(phase, xyz, condition, rate)"]
     end
-    subgraph POST["Post / outputs"]
-        direction TB
-        EM["Emitter: MotionPlan → G-code text"]
-        CHK["Checks & material snapshots"]
-        PRE["Preview metadata"]
-    end
-    OPS -->|"CutPass intents"| PLANNER
-    PLANNER -->|"PlanningContext services"| OPS
-    MP --> EM --> CHK
-    MP --> PRE
+    SEQ -->|"generator_for(kind)"| OPS
+    OPS -->|"services: material, shadow, tabs, warnings, reach"| CTX
+    OPS -->|"planar kinds: paths(), region"| SCH
+    SCH --> MAT
+    MAT --> PS --> ENG
+    MAT --> HS --> ENG
+    MPL --> EEP
+    MPL --> LNK
+    MPL --> HS
+    MPL --> POL
+    POL --> PLAN
 ```
 
 ### Who calls whom
 
-The planner **drives**; operations are **strategies** it calls. Material
-must flow across operations and tool changes in execution order, so the one
-object that holds current material has to own the loop. Operations do not
-loop over depth themselves:
+- The **Sequencer** drives: for each enabled operation in execution order it
+  resolves tool, cutting data, depths and the picked selection (`Selection`),
+  builds an `OperationRun` and calls the kind's generator.
+- **Generators** implement a small API (`OperationGenerator`):
+  `validate(run, selection)`, `paths(run, selection, planning)` for planar
+  kinds, or a full `generate(...)` for surface kinds whose reachable region
+  changes with depth. They use the planner as an API through
+  `PlanningContext` (current material, model shadow, holding tabs, warnings,
+  reach check) and never touch material representations directly.
+- **pass_scheduler.schedule_planar** gives every planar kind the same
+  scheduling: reach against current material, air-depth skipping, machining
+  areas, area/depth order, holding-tab bands, air-path removal, engagement on
+  the planar sampler and the planar-history update.
+- The **MotionPlanner** owns the program loop: tool changes and spindle
+  speeds, links, entries (lead-in only into material), leads, cuts and exits.
+  Every feed move goes through one `feed_move`: measure on the height sampler
+  (or use the planned condition), `FeedPolicy` rate and feature, material
+  update. It produces `job.motion_plan`, including non-motion segments
+  (layer/operation markers, M5/T/M6/M3).
+- **CAMEmit.serialize** writes segments: axis words, modal F, comments and
+  line metadata. It makes no machining decisions. Start/end templates and the
+  output checks remain in the stage.
 
-1. The **sequencer** walks tool groups → operations → depth bands → areas
-   (respecting Area order and holding-tab roofs).
-2. For each step it asks the operation for **cut intent** through a small API,
-   passing a read-only `PlanningContext` (current material, model shadow,
-   drop surface, stock limits, tabs, resolved cutting data):
+### One material interface, two measurement plug-ins
 
-   ```python
-   class OperationGenerator(Protocol):
-       kind: str
-       def validate(self, op, selection, ctx) -> None: ...
-       def depth_bands(self, op, start, end, step, ctx) -> list[DepthBand]: ...
-       def passes(self, op, band, ctx) -> list[CutPass]: ...   # geometry only
-   ```
+`MaterialModel` holds both representations behind one interface and hands
+out samplers sharing the `EngagementSampler` API
+(`measure_path` / `measure_move`, `remove_path` / `remove_move`):
 
-   A `CutPass` is pure geometry plus intent: polyline (XY at a band Z, or
-   XYZ), closed/open, allowed entry style (ramp along path, vertical only for
-   Drill), link permissions, retained boundaries. No feeds, no phases.
-3. The planner turns every `CutPass` into **segments** with the same
-   machinery for all kinds: entry/exit, links, engagement, feed, material
-   update, collision/clearance checks.
-4. The **emitter** only serializes `MotionPlan` segments (G0/G1, F words,
-   comments, features). It makes no decisions.
+| Sampler | Representation | Used for |
+|---|---|---|
+| `PlanarSampler` | depth-tagged exact XY sweeps (`PlanarStock`, Shapely) | pass engagement, cutting hand, air removal, reach |
+| `HeightSampler` | height field (`HeightStock`) at the moving tip | entries, leads, plunges, exits, XYZ cuts |
 
-So operations *use the planner as an API* (`PlanningContext` services) to
-build geometry, while the planner *uses operations as strategies* to obtain
-geometry. Neither knows the other's internals.
+Everything after the measurement — band, hand, feed factor — is the shared
+`EngagementModel`; phase base feed, cap and feature are `FeedPolicy`.
 
-### Engagement sampling stays pluggable, policy does not
+## 3. Two concepts, kept separate
 
-Planar and surface material genuinely need different measurements, so the
-`EngagementModel` keeps two **samplers** behind one interface:
+A move has two independent attributes; the planner produces both:
 
-```python
-class EngagementSampler(Protocol):
-    def measure(self, a, b, radius) -> Measurement   # left/right width, fresh area
-    def remove(self, a, b, radius) -> None
+- **Motion phase** — *why* the tool moves: `rapid`, `travel`, `approach`,
+  `plunge`, `lead_in`, `link`, `cut`, `lead_out` (plus non-motion `comment`
+  and `command` segments).
+- **Engagement** — *how much material* it meets: `air`, `hsm`, `cut`,
+  `high`, `slot`, with hand `climb` / `conventional` / `neutral` / `mixed`.
+
+A lead-in is normally *phase = lead_in, engagement = slot*. The feed rule is
+one function for every operation:
+
+```
+rate = base(phase) × factor(engagement band, operation / tool / machine overrides)
+       → capped by machine max_feed
+base(phase) = lead/plunge base for approach, plunge, lead_in, lead_out; cut base otherwise
+(factor not applied to plunge and approach)
 ```
 
-- `PlanarSampler`: depth-tagged Shapely sweeps (today's `measure_segments`).
-- `HeightSampler`: height-field chords + fresh swept area (today's
-  `surface_engagement.condition`).
+## 4. Module map
 
-Everything after the measurement — band, hand, feed factor, phase-based base
-feed, cap, feature colour, conflict marking — is **one code path**.
-
-### What moves where
-
-| Today | Proposed home |
+| Responsibility | Module |
 |---|---|
-| `planning.generate` loop, `_tab_schedule`, area order | `planner/sequencer.py` |
-| `_pocket_paths`, `contour_pocket`, `link_contours` geometry | `operations/pocket.py` (and Waterfall reuse) |
-| `_surface_operation` (waterfall/contour geometry) | `operations/waterfall.py`, `operations/contour3d.py` |
-| profile / slot / engrave / drill branches | one module each under `operations/` |
-| `plan_engagement`, `surface_engagement.condition` | `planner/engagement_model.py` + two samplers |
-| `ramp_entry`, `exit_path`, `surface_entry`, `surface_exit` | `planner/entry_exit.py` (same validated rules) |
-| stay-down + short-retract logic in `CAMEmit` | `planner/links.py` |
-| feed arithmetic in `cut_move`, `move3`, `surface_path` | `planner/feed_policy.py` |
-| `CAMEmit` decisions | removed; `CAMEmit` serializes `MotionPlan` |
-| `PlanarStock` + `HeightStock` | `planner/material_model.py` (one facade, two representations) |
+| Job loop over groups/operations | `planner/sequencer.py` |
+| Generator services | `planner/planning_context.py`, `planner/operation_run.py`, `planner/selection.py` |
+| Shared planar scheduling, air paths, tab bands | `planner/pass_scheduler.py` |
+| Material interface + samplers | `planner/material_model.py`, `planar_sampler.py`, `height_sampler.py`, `engagement_sampler.py` |
+| Engagement classification | `planner/engagement_model.py` |
+| Program loop | `planner/motion_planner.py` |
+| Entries/exits, links, feeds | `planner/entry_exit_planner.py`, `link_planner.py`, `feed_policy.py` |
+| Records | `planner/motion_segment.py`, `motion_plan.py`, `planner_constants.py` |
+| Kind registry | `operations/__init__.py` (`generator_for`), `operations/operations_constants.py` |
+| Per-kind geometry | `operations/pocket_generator.py`, `profile_generator.py`, `open_path_generator.py`, `drill_generator.py`, `waterfall_generator.py`, `contour3d_generator.py`, `surface_common.py` |
+| Serialization, templates, output checks | `stages/cam/cam_emit.py` |
 
-### Consistency this buys
+Compatibility: `planning.generate`, `_pocket_paths`, `_drop_air_paths`,
+`_tab_schedule`, `engagement.plan_engagement` / `_conditions` /
+`measure_segments` and `surface_engagement.condition` / `split_move` remain
+available and delegate to the new modules.
 
-- Every lead-in that contacts material is classified by the same rule
-  (normally Slot) and fed with the same formula in every operation.
-- Lead-in only when entering material, for **all** operations — not only 3D.
-- One material state at planning time, so air removal, stay-down, reach and
-  engagement agree with what the emitter actually cuts.
-- New operations add geometry only; they inherit entries, links, engagement,
-  feeds and checks automatically.
-- The emitter becomes testable as a pure function of `MotionPlan`.
+## 5. Migration status
 
-## 7. Suggested migration order
+All five steps are complete. Steps 3–5 (0.1.10) changed structure only: seven
+reference programs (Pocket, raster Pocket, Profile, Slot, Engrave, Waterfall,
+Contour) and the operator's tail-top part (40,335 lines) are byte-identical to
+0.1.9.
 
-Each step keeps output identical (or deliberately and visibly changed) and is
-covered by the existing CAM tests before the next begins.
+1. ✅ `MotionSegment` / `MotionPlan` and `FeedPolicy` (0.1.9).
+2. ✅ `EntryExitPlanner` and `LinkPlanner`; lead-in only into material (0.1.9).
+3. ✅ `MaterialModel` with `PlanarSampler` / `HeightSampler` behind the
+   `EngagementSampler` interface and one `EngagementModel` (0.1.10).
+4. ✅ `Sequencer` and `MotionPlanner` own the loops; `CAMEmit` serializes
+   `MotionPlan` (0.1.10).
+5. ✅ One generator module per kind; `planning.generate` kept as the
+   compatibility entry point (0.1.10).
 
-1. ✅ **Introduce `MotionSegment` / `MotionPlan` records and `FeedPolicy`.**
-   Both emitter branches' feed arithmetic route through `FeedPolicy`; the
-   lead-in rule is decided once (contacting lead-in = measured band, normally
-   Slot). *Done in 0.1.9.*
-2. ✅ **Extract `EntryExitPlanner` and `LinkPlanner`** from `CAMEmit`, still
-   called by the emitter; "lead-in only when contacting material" is common
-   to every operation. *Done in 0.1.9.*
-3. **Create `MaterialModel`** wrapping `PlanarStock` + `HeightStock`, and the
-   two samplers behind `EngagementModel`.
-4. **Move sequencing into the planner**; the emitter consumes `MotionPlan`.
-5. **Split operation kinds into `OperationGenerator` modules**; delete the
-   `op.kind` branches from the sequencer. Keep `planning.generate` as a
-   compatibility facade that builds and runs the planner.
+## 6. Performance and parallelism
 
-Steps 1–2 resolve today's visible inconsistencies with little risk; 3–5 are
-the structural part.
+Profile of the operator's tail-top part (3D Waterfall, 50 depth passes,
+40,335 lines, 39 s single-threaded, Python 3.14 with the GIL enabled, 24 CPUs):
+
+| Work | Time | Share |
+|---|---:|---:|
+| Output check: `simulate_material` re-runs the whole program on a fresh height field | 15.1 s | 38 % |
+| Motion planning (height-field contact/cut for entries, leads, exits, cuts) | 11.8 s | 30 % |
+| Pass planning: planar engagement chords (Shapely `intersection` 6.3 s) | 9.2 s | 24 % |
+| `Profile.get` → `resolved()` per call (40,717 calls) | 1.5 s | 4 % |
+| Geometry (shadow levels, offsets), serialization, check_stock | ~1.5 s | 4 % |
+
+Within those, `HeightStock._patch` alone is 20 s (109,411 calls), mostly
+`meshgrid`/`clip` overhead on small grids.
+
+**Can multithreading help?** Only a little, for structural reasons:
+
+- **The planner is an ordered state machine.** Each move's engagement, entry
+  decision and feed depend on the material left by every previous move, across
+  passes, operations and tool changes. Those steps cannot run concurrently
+  without changing results.
+- **The GIL.** The hot paths are many small NumPy calls (a few cells each),
+  dominated by Python overhead that holds the interpreter lock. Threads would
+  serialize on it. Shapely 2 releases the GIL in vectorized operations, but the
+  planar engagement calls are per pass and must run in pass order.
+- **Processes** avoid the GIL but would pickle large material states per task.
+  The whole job already runs in a separate compute process, so the GUI stays
+  responsive.
+
+Where parallel work is genuinely independent:
+
+- **Geometry that does not read material history**: generator `paths()` of
+  different operations, Waterfall level geometry (`level_paths`) and Contour
+  depth-band rasters. Shapely/NumPy releases the GIL here, but on this part it
+  is under 1 s.
+- **The output check** (`simulate_material`) could run beside serialization
+  but needs the finished program; it is better removed than parallelized.
+
+Larger, deterministic wins come from removing duplicated or overhead-bound work:
+
+1. **Snapshot material during motion planning** instead of re-simulating the
+   written program (about −15 s here). The motion planner already advances the
+   identical height field move by move. A lightweight check of the written
+   G-code (formatting, tool numbers, rapids) can remain.
+2. **Vectorize `HeightStock._patch`** with precomputed cell coordinates and
+   window slicing instead of `meshgrid` per call (a large part of 20 s).
+3. **Cache `Profile.resolved()`** per planning run (−1.5 s).
+
+These keep results identical and are expected to roughly halve this job;
+threading would add complexity for a small fraction of that. Item 1 changes
+what the output check verifies, so it needs an explicit decision.

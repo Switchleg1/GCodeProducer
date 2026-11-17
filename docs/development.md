@@ -11,7 +11,7 @@
 | `core/libraries/` | Profile/process records and libraries, schemas and starter specifications |
 | `core/parameters/`, `core/settings/`, `core/workflows/` | Shared coercion/default rules, application preferences and workflow compatibility |
 | `core/geometry/`, `core/fdm/` | Mesh/region records, STL geometry kernel, infill and model-owned support |
-| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems; `model_shadow.py`, `drop_surface.py` and `surface_paths.py` for the model-surface-limited operations; `planner/` holds the shared motion planner (feed policy, entries/exits, links, motion segments) |
+| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems; `model_shadow.py`, `drop_surface.py` and `surface_paths.py` for the model-surface-limited operations; `planner/` is the planner section (sequencer, material model and samplers, engagement model, motion planner, entries/exits, links, feed policy, motion records); `operations/` holds one generator module per operation kind |
 | `core/gcode/` | Builder, line/program records, parsing, templates, variables, features, simulation and path arrays |
 | `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
@@ -89,20 +89,23 @@ The current CAM paths are partially unified:
 - Planar planning measures depth-tagged Shapely material; XYZ emission measures
   current height-field chords and newly swept area. These are different
   geometry adapters, not separate definitions of Slot/High/Cut/HSM thresholds.
-- Since 0.1.9 entry/exit, link and feed decisions are shared by all
-  operations in `core/cam/planner/`: `EntryExitPlanner`, `LinkPlanner`,
-  `FeedPolicy`, and the `MotionSegment` / `MotionPlan` records
-  (`job.motion_plan`). The emitter writes every G1 through one `feed_move`
-  routine. Lead-ins happen only when the descent meets material and run at
-  lead base × measured band factor.
+- Since 0.1.10 the planner section owns both loops: `Sequencer` (operations →
+  passes, calling one generator per kind) and `MotionPlanner` (passes →
+  `job.motion_plan`). `CAMEmit` only serializes. Material is one
+  `MaterialModel` with `PlanarSampler` / `HeightSampler`; classification is
+  one `EngagementModel`. Lead-ins happen only when the descent meets
+  material and run at lead base × measured band factor.
 
 Plunge, lead-in, lead-out, rapid and normal cut are **motion phases**. Slot,
 High, Cut, HSM and Air describe **engagement**; a lead-in can simultaneously
 be slotting. They should not be forced into one mutually exclusive classifier.
 `FeedPolicy` combines phase and `CutCondition` for feed caps, overrides and
-features; planar and XYZ geometry sampling and validated lead geometry remain
-separate. Remaining work (one material model, planner-driven sequencing,
-per-kind operation generators) is steps 3–5. Function diagrams
+features; planar and XYZ sampling remain separate plug-ins behind one
+interface. To add an operation kind, write an `OperationGenerator` module and
+register it in `operations/operations_constants.py`; entries, links,
+engagement, feeds and checks come from the planner. A fresh-interpreter
+import test (`tests/test_import_order.py`) guards against circular imports
+between the planner and job records. Function diagrams
 of the current flow and the proposed planner section, with a migration order,
 are in [CAM pipeline architecture](cam/architecture.md).
 

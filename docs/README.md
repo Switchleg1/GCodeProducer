@@ -52,7 +52,7 @@ for a particular printer, material, cutter, or machine.
 | [Toolpath strategy and direction](cam/toolpaths.md) | Wall-parallel offsets, square/circle transitions, climb/conventional/meander and machine defaults |
 | [3D Waterfall and 3D Contour](cam/3d-operations.md) | Full-area surface-limited clearing, depth-limited surface passes, Pocket migration, accuracy and limits |
 | [Pocket, Profile, Slot, Drill and Engrave](cam/operations.md) | Every operation field, algorithms, defaults, examples and restrictions |
-| [CAM pipeline architecture](cam/architecture.md) | Function diagrams of GUI → compute → planning → emission, where cutting types are decided, and the proposed motion-planner section |
+| [CAM pipeline architecture](cam/architecture.md) | Planner section and operation generators: function diagrams, module map, phases vs engagement, performance and parallelism |
 | [Stock allocation and safety](cam/stock-and-safety.md) | Material properties, Auto margin, bounds, warning interpretation, verification |
 
 ## Cross-workflow topics

@@ -107,9 +107,11 @@ def test_every_feed_move_is_a_planned_segment_with_a_phase(libset):
     plan = job.motion_plan
     assert isinstance(plan, MotionPlan)
     feeds = [l for l in job.program.lines if l.cmd == "G1"]
-    planned = [s for s in plan.segments if s.rate is not None]
+    planned = [s for s in plan.segments if s.motion and s.phase != "rapid"]
     assert len(feeds) == len(planned)
-    assert {s.phase for s in plan.segments} <= set(PHASES)
+    assert {s.phase for s in plan.segments if s.motion} <= set(PHASES)
+    # Non-motion program lines (layer markers, spindle / tool change) are planned too.
+    assert {s.phase for s in plan.segments if not s.motion} == {"comment", "command"}
     assert plan.of("lead_in") and plan.of("cut") and plan.of("link")
     # Lead-ins that contact material carry their measured band (normally slot).
     regimes = plan.regimes(("lead_in",))

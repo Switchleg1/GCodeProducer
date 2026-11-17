@@ -5,6 +5,7 @@ meets. Both are kept on every motion segment (a lead-in is normally slotting).
 """
 
 PHASES = ("rapid", "travel", "approach", "plunge", "lead_in", "link", "cut", "lead_out")
+NON_MOTION = ("comment", "command")      # program lines planned without motion
 
 # Phases fed from the lead / plunge base rate; everything else uses the cut base.
 LEAD_BASE_PHASES = frozenset(("approach", "plunge", "lead_in", "lead_out"))

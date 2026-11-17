@@ -130,33 +130,31 @@ def _hand(left, right, engagement, machine=None):
 
 
 def _conditions(measured, operation, tool, neutral=False, machine=None):
+    """Compatibility wrapper: the shared EngagementModel classifies every sampler's measurement."""
+    from gcodeproducer.core.cam.planner.engagement_model import EngagementModel
     left, right, engagement, _ = measured
-    return [CutCondition(float(e), engagement_band(e,machine),
-                         "neutral" if neutral and e > 1e-6 else _hand(l, r, e,machine),
-                         feed_factor(engagement_band(e,machine), operation, tool,machine))
-            for l, r, e in zip(left, right, engagement)]
+    return EngagementModel(operation, tool, machine or {}).classify(left, right, engagement, neutral)
 
 
 def plan_engagement(paths, job, operation, tool, log=None, initial_material=None):
-    """Orient/annotate operation paths using incremental planar material removal."""
-    tool_data = tool.resolved() if hasattr(tool,"resolved") else tool
-    machine_data = job.machine.resolved()
-    engagement_band(.5,machine_data)  # validate machine thresholds even for an all-air operation
-    radius = float(tool_data.get("diameter", 0))/2
+    """Orient/annotate operation paths using incremental planar material removal.
+
+    Measurement is the material model's planar sampler; classification is the
+    shared :class:`EngagementModel` used by every operation and the XYZ sampler.
+    """
+    from gcodeproducer.core.cam.planner.engagement_model import EngagementModel
+    from gcodeproducer.core.cam.planner.material_model import MaterialModel
+    model = EngagementModel(operation, tool, job.machine)
+    machine_data = model.machine
+    radius = float(model.tool.get("diameter", 0))/2
     if radius <= 0 or not math.isfinite(radius):
         raise ValueError("Engagement estimation requires a positive tool diameter")
     stock = getattr(job.cam_setup, "stock", None)
-    if initial_material is not None:
-        material = initial_material
-    elif stock is not None and stock.allocated:
-        lo, hi = stock.bounds
-        material = box(lo[0], lo[1], hi[0], hi[1])
-    else:
-        points = np.concatenate([p.points[:, :2] for p in paths])
-        lo, hi = points.min(axis=0)-2*radius, points.max(axis=0)+2*radius
-        material = box(lo[0], lo[1], hi[0], hi[1])
-        if log:
-            log("  engagement uses a conservative XY blank estimate (stock not allocated)")
+    allocated = stock is not None and stock.allocated
+    if initial_material is None and not allocated and log:
+        log("  engagement uses a conservative XY blank estimate (stock not allocated)")
+    points = np.concatenate([np.asarray(p.points)[:, :2] for p in paths]) if paths else np.zeros((1, 2))
+    sampler = MaterialModel(job, stock).planar_sampler(material=initial_material, fallback_points=points, radius=radius)
     mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot", "waterfall") else None
     totals = Counter()
     flipped = slots = handed = conflicts = 0
@@ -171,8 +169,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             path.stay_down_from = None
         if previous is not None and path.stay_down and path.stay_down_from is not None:
             link = np.array([previous, p[0]])
-            measured = measure_segments(link, False, material, radius)
-            condition = _conditions(measured, operation, tool_data, machine=machine_data)[0]
+            left, right, engagement, _ = sampler.measure_path(link, False, radius)
+            condition = model.classify(left, right, engagement)[0]
             if condition.hand == "mixed":
                 # A balanced frontal entry cuts both sides; it cannot define a
                 # unique climb/conventional hand, just like a slot. Keep its
@@ -184,9 +182,9 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                 path.stay_down_from = None
             else:
                 path.link_condition = condition
-                material = material.difference(LineString(link).buffer(radius))
+                sampler.remove_path(link, False, radius)
                 totals[condition.regime] += 1
-        measured = measure_segments(p, path.closed, material, radius)
+        measured = sampler.measure_path(p, path.closed, radius)
         left, right, engagement, lengths = measured
         slot_limit = float(machine_data.get("slot_engagement_threshold",95))/100-1e-9
         neutral = float(lengths[engagement >= slot_limit].sum()) >= .75*max(float(lengths.sum()), 1e-12)
@@ -204,11 +202,11 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                     path.stay_down = False
                     path.stay_down_from = None
                     path.link_condition = None
-                measured = measure_segments(p, path.closed, material, radius)
+                measured = sampler.measure_path(p, path.closed, radius)
                 flipped += 1
             handed += 1
         slots += int(neutral)
-        path.cut_conditions = _conditions(measured, operation, tool_data, neutral, machine_data)
+        path.cut_conditions = model.classify(*measured[:3], neutral=neutral)
         totals.update(c.regime for c in path.cut_conditions)
         if desired in ("climb", "conventional") and not neutral:
             checked = [(c, d) for c, d in zip(path.cut_conditions, measured[3])
@@ -224,8 +222,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                            f"Segments cutting the other hand are highlighted as Conflict.")
                 if message not in warnings:
                     warnings.append(message)
+        sampler.remove_path(p, path.closed, radius)
         loop = np.vstack((p, p[0])) if path.closed else p
-        material = material.difference(LineString(loop).buffer(radius))
         previous = loop[-1]
     if log:
         log(f"  {operation.name}: remaining-material direction, {flipped} paths reversed; "
