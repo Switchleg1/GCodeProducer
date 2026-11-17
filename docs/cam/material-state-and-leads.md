@@ -93,12 +93,23 @@ from a smooth-looking or warning-free display.
 
 Operations expose **Lead-in ramp along contour**, **Lead-out along
 cleared contour**, and a lead length. Zero length requests an automatic lead.
-Drill/one-point paths keep their vertical drilling entry. 3D Contour also
-honours both lead switches: a contacting entry ramps along its validated XYZ
-path, never below that surface; an already-clear entry skips the ramp. Exits
-follow already-cut XYZ geometry only, and air-only paths skip them. A ramp
-that cannot fit safely fails explicitly instead of silently plunging. See
-[Contour leads and engagement](3d-operations.md#3d-contour).
+Drill/one-point paths keep their vertical drilling entry.
+
+Every operation — Pocket, Profile, Slot, Engrave, 3D Waterfall and 3D
+Contour — uses the same entry/exit rules from the shared CAM motion planner
+([architecture](architecture.md)):
+
+- **A lead-in replaces a plunge only when the descent would enter material.**
+  If the cutter column at the path start is already clear down to the cutting
+  depth (for example a repeat pass in a cleared pocket), the tool descends
+  through verified air as an **approach** move (lead/plunge base feed, Preview
+  feature *Air cut*) and no ramp is emitted. Without allocated stock the
+  material is unknown: the entry is treated as entering material.
+- Planar leads ramp along the contour (helix/zigzag when short); 3D Contour
+  leads ramp along the validated XYZ surface path, never below it. A surface
+  ramp that cannot fit safely fails explicitly instead of silently plunging.
+- Exits follow already-cut geometry only, and are skipped after a path that
+  removed no material. See [Contour leads and engagement](3d-operations.md#3d-contour).
 
 For each entry (start of a pass, or a path that cannot stay down), the emitter:
 
@@ -139,9 +150,12 @@ Either way every XY point lies on the operation's own validated cut path:
 the ramp never leaves the region the operation cuts and never invents a
 tangent extension into a retained wall. It is a sequence of linear G1
 segments, not a G2/G3 helix macro. Generation logs how many ramps needed a
-helix or zigzag. The lead feed is independently calculated/unlocked;
-contacting entry segments also receive the machine Slot feed modifier, and
-every segment is checked against the current material.
+helix or zigzag. The lead feed is independently calculated/unlocked. Ramp
+segments are subdivided and each is classified against current material like
+any other cut: a contacting lead-in is normally **Slot**, so it runs at
+*lead base × Slot factor* (the operation's Slot override, or the machine's
+Slot modifier). A ramp segment still in air runs at the plain lead base.
+Every segment is checked against the current material.
 
 Only a path with no length (a single point) cannot ramp; it reports a
 **LEAD WARNING** and enters vertically. That warning still requires review:

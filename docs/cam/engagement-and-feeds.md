@@ -98,9 +98,16 @@ ceilings, axial defaults and independent feed unlocks.
 
 Example with base cut feed 800 mm/min: HSM 100%=800, Cut 150%=1,200,
 High 75%=600, Slot 50%=400. Increasing Cut does not increase Slot. Contacting
-planar lead-in uses the independent lead base and machine Slot modifier;
-Contour lead-in uses its current estimated band and applicable operation
-modifier. Normal cutting/link moves use their estimated band. Positive `max_feed` caps cutting,
+every lead-in (planar or 3D) uses the independent lead base times its measured
+band factor — normally Slot, so the operation's Slot override or the machine
+Slot modifier. Normal cutting/link moves use their estimated band; a vertical
+plunge keeps the plain lead/plunge base.
+
+The rule is one function for every operation (`FeedPolicy` in
+`core/cam/planner/`): *rate = base(motion phase) × factor(engagement band)*,
+capped by the machine `max_feed`. Phase (rapid, approach, plunge, lead-in,
+link, cut, lead-out) and engagement band are kept separately on every move;
+see [CAM pipeline architecture](architecture.md). Positive `max_feed` caps cutting,
 link and plunge rates. Air remains at capped base feed, not G0.
 
 These percentages are **not calibrated chip loads or safety limits**. There is

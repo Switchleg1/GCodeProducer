@@ -6,7 +6,7 @@ _LINE = re.compile(r"^Line (\d+):")
 
 from gcodeproducer.stages.base.api import AUTO, Param
 
-ENGAGEMENT_FEATURES = {"slot": "slot", "high": "high_engagement", "cut": "cut", "hsm": "hsm", "air": "air"}
+from gcodeproducer.core.cam.planner.planner_constants import ENGAGEMENT_FEATURES  # compatibility export
 
 CAMEMIT_PARAMS = []
 

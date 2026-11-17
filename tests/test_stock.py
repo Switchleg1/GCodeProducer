@@ -100,10 +100,11 @@ def test_skipped_material_at_entry_warns(job):
     job.cam_setup.stock.auto(placed)
     tris = job.mesh.vertices[job.mesh.triangles]
     face = int(np.flatnonzero(np.all(np.isclose(tris[:, :, 2], 20), axis=1))[0])
-    op = Operation(geometry=[Reference("face", [face])], start=Depth("top", -10), end=Depth("top", -11))
+    op = Operation(geometry=[Reference("face", [face])], start=Depth("top", -10), end=Depth("top", -11),
+                   lead_in=False)   # a <=10 degree ramp legitimately clears its own way down
     job.cam_setup.groups = [ToolGroup(job.tools[0].id, [op])]
     slice_job(job)
-    assert any("uncleared entry depth" in w for w in job.warnings)
+    assert any("uncleared entry depth" in w and "plunge" in w for w in job.warnings)
 
 
 def test_missing_stock_and_stock_not_enclosing_part(job):

@@ -11,7 +11,7 @@
 | `core/libraries/` | Profile/process records and libraries, schemas and starter specifications |
 | `core/parameters/`, `core/settings/`, `core/workflows/` | Shared coercion/default rules, application preferences and workflow compatibility |
 | `core/geometry/`, `core/fdm/` | Mesh/region records, STL geometry kernel, infill and model-owned support |
-| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems; `model_shadow.py`, `drop_surface.py` and `surface_paths.py` for the model-surface-limited operations |
+| `core/cam/` | Separate setup/reference/shape/operation/topology/stock classes; drawing hit tests, paths, tabs, cutting, engagement and material systems; `model_shadow.py`, `drop_surface.py` and `surface_paths.py` for the model-surface-limited operations; `planner/` holds the shared motion planner (feed policy, entries/exits, links, motion segments) |
 | `core/gcode/` | Builder, line/program records, parsing, templates, variables, features, simulation and path arrays |
 | `core/runtime/`, `core/plugins/` | Qt-free compute tasks and recursive plugin discovery/registries |
 | `gui/application/` | Application startup, workflow coordination, persistence, docks and actions |
@@ -89,18 +89,20 @@ The current CAM paths are partially unified:
 - Planar planning measures depth-tagged Shapely material; XYZ emission measures
   current height-field chords and newly swept area. These are different
   geometry adapters, not separate definitions of Slot/High/Cut/HSM thresholds.
-- Entry/exit decisions and feed emission still have separate planar and XYZ
-  branches. In particular, a planar contacting lead uses the machine Slot
-  modifier, whereas an XYZ lead uses its measured band and operation-aware
-  modifier. Their material-aware ramp gating also differs.
+- Since 0.1.9 entry/exit, link and feed decisions are shared by all
+  operations in `core/cam/planner/`: `EntryExitPlanner`, `LinkPlanner`,
+  `FeedPolicy`, and the `MotionSegment` / `MotionPlan` records
+  (`job.motion_plan`). The emitter writes every G1 through one `feed_move`
+  routine. Lead-ins happen only when the descent meets material and run at
+  lead base × measured band factor.
 
 Plunge, lead-in, lead-out, rapid and normal cut are **motion phases**. Slot,
 High, Cut, HSM and Air describe **engagement**; a lead-in can simultaneously
 be slotting. They should not be forced into one mutually exclusive classifier.
-A future shared motion-policy resolver should combine phase and `CutCondition`
-for feed caps, overrides, feature/metadata and material-contact decisions,
-while retaining separate planar/XYZ sampling and validated lead geometry.
-The architecture review did not change machining behaviour. Function diagrams
+`FeedPolicy` combines phase and `CutCondition` for feed caps, overrides and
+features; planar and XYZ geometry sampling and validated lead geometry remain
+separate. Remaining work (one material model, planner-driven sequencing,
+per-kind operation generators) is steps 3–5. Function diagrams
 of the current flow and the proposed planner section, with a migration order,
 are in [CAM pipeline architecture](cam/architecture.md).
 

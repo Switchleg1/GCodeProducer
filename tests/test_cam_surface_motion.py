@@ -152,7 +152,8 @@ def test_xyz_cutting_types_feed_modifiers_and_preview_metadata(libset):
     sim = simulate(job.program)
     expected = {'slot': 500, 'high_engagement': 700, 'cut': 850, 'hsm': 1100, 'air': 1000}
     for feature, feed in expected.items():
-        indices = [i for i, l in enumerate(job.program.lines) if l.cmd == 'G1' and l.feature == feature]
+        indices = [i for i, l in enumerate(job.program.lines) if l.cmd == 'G1' and l.feature == feature
+                   and 'Z' not in l.params]   # vertical verified-air approaches use the lead base
         assert indices, feature
         assert np.allclose(sim.feed[indices], feed)
         assert all(job.program.lines[i].note and np.isfinite(job.program.lines[i].engagement) for i in indices)
@@ -169,7 +170,8 @@ def test_steep_air_only_surface_repeat_keeps_cut_base_instead_of_plunge_feed(lib
         layer.paths = [Path('cut', np.array([[13, 12, -1], [27, 12, -5.]]), width=3)]
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     sim = simulate(job.program)
-    air = [i for i, l in enumerate(job.program.lines) if l.cmd == 'G1' and l.feature == 'air' and l.layer == 1]
+    air = [i for i, l in enumerate(job.program.lines) if l.cmd == 'G1' and l.feature == 'air' and l.layer == 1
+           and 'X' in l.params]   # vertical verified-air approaches use the lead base
     assert air and np.all(sim.feed[air] == 1000)
 
 

@@ -9,7 +9,7 @@ clearances from the global settings.
 """
 from __future__ import annotations
 
-from gcodeproducer.stages.cam.cam_constants import CAMEMIT_PARAMS, ENGAGEMENT_FEATURES, _LINE
+from gcodeproducer.stages.cam.cam_constants import CAMEMIT_PARAMS, _LINE
 import math, numpy as np
 from gcodeproducer.core.cam.cam_constants import RAMP_TAN
 from gcodeproducer.core.gcode.builder import GCodeBuilder
@@ -55,8 +55,6 @@ class CAMEmit(SliceStage):
         from gcodeproducer.core.cam.material import height_stock_for
         from gcodeproducer.core.cam.material import simulate_material
         from gcodeproducer.core.settings.preferences import pref
-        from gcodeproducer.core.cam.leads import ramp_entry
-        from gcodeproducer.core.cam.leads import exit_path
         stock = getattr(job.cam_setup,"stock",None)
         if stock is None and job.settings.get("machining_material"):
             from gcodeproducer.core.cam.stock import Stock
@@ -73,86 +71,139 @@ class CAMEmit(SliceStage):
         plunge = tool.get("plunge_feed", 300) if tool else 300
         rpm = first_data.rpm if first_data else (tool.get("spindle_rpm",18000) if tool else job.m("spindle_max",18000))
         rapid_xy = job.m("rapid_xy", 3000)
-        max_feed = float(job.m("max_feed", 0) or 0)
-        if not math.isfinite(max_feed) or max_feed < 0:
-            raise ValueError("Machine max feed must be nonnegative and finite")
-        capped = set()
+        from collections import Counter
+        from gcodeproducer.core.cam.planner import (MotionSegment, MotionPlan, FeedPolicy,
+                                                    EntryExitPlanner, LinkPlanner)
+        from gcodeproducer.core.cam.surface_engagement import condition as measure, split_move
+        from gcodeproducer.core.cam.engagement import engagement_band
+        from gcodeproducer.core.cam.cam_constants import SURFACE_MAX_POINTS
+        policy = FeedPolicy(job.m("max_feed", 0), pref(job, "highlight_conflicts"))
+        plan = MotionPlan()
+        job.motion_plan = plan
         lead_kinds = {}
         short_retracts = bool(pref(job,"short_retracts"))
         lead_clearance = max(.05, float(pref(job,"lead_clearance")))
         travel_clearance = max(.1, float(pref(job,"retract_clearance")))
         short_count = [0]
         stay_count = [0]
-        last_feed = None
-        last_condition = None
-        from collections import Counter
         surface_totals = Counter()
         surface_state = [live]
-        surface_moves = [0]
+        samples = [0]
         machine_values = job.machine.resolved()
-
-        def limited(value):
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError("CAM cutting/plunge feeds must be positive and finite")
-            if max_feed > 0 and value > max_feed:
-                capped.add((value, max_feed))
-                value=max_feed
-            if value<.0001:
-                raise ValueError("Effective CAM feed is too small to represent safely (below 0.0001 mm/min)")
-            return value
+        engagement_band(.5, machine_values)   # validate thresholds even for an all-air program
+        last_feed = None
+        last_condition = None
+        entries = links = None
+        tool_values = tool.resolved() if tool else {}
+        config = None
+        name = None
 
         def feed_text(value):
             return format_number(value,4 if value<1 else 1)
 
-        def cut_move(point, condition=None, comment=None, force=False):
-            nonlocal last_feed, last_condition, position
-            factor = condition.feed_factor if condition is not None else 1.0
-            requested = limited(float(feed)*factor)
-            feature = (ENGAGEMENT_FEATURES.get(condition.regime, "cut")
-                       if condition is not None else "cut")
-            if condition is not None and condition.conflict and pref(job,"highlight_conflicts"):
-                feature = "conflict"
-            b.set_feature(feature)
-            note = None
-            if condition is not None:
-                note = f"{condition.regime} {condition.engagement*100:.2f}% engagement; {condition.hand}"
-                key = (condition.regime, condition.hand)
-                if key != last_condition and comment is None:
-                    comment = note
-                last_condition = key
-            f = f" F{feed_text(requested)}" if force or last_feed != requested else ""
-            line = b.command(f"G1 X{format_number(point[0],3)} Y{format_number(point[1],3)}{f}", comment)
-            if condition is not None:
-                line.engagement = condition.engagement
-                line.note = note
-            if live is not None:
-                target=np.r_[point[:2],position[2]]
-                live.cut(position,target,active_radius)
-            position[:2]=point[:2]
-            last_feed = requested
+        def rapid_z(z, comment=None):
+            nonlocal position
+            z = float(format_number(z, 3))
+            b.set_feature("rapid", comment=False)
+            b.command(f"G0 Z{format_number(z,3)}", comment)
+            plan.add(MotionSegment("rapid", position.copy(), np.r_[position[:2], z], None, None, "rapid", comment))
+            position[2] = z
 
-        def move3(command,target,rate,feature,comment=None):
-            nonlocal position,last_feed
-            target=np.asarray(target,float).copy()
-            target[2]=float(format_number(target[2],3))
-            b.set_feature(feature)
-            f=f" F{feed_text(limited(float(rate)))}" if rate is not None and command=="G1" else ""
-            line=b.command(f"{command} X{format_number(target[0],3)} Y{format_number(target[1],3)} Z{format_number(target[2],3)}{f}",comment)
-            if live is not None and command=="G1":
-                contact=live.contact(position,target,active_radius)
-                line.engagement=1. if contact else 0.
-                live.cut(position,target,active_radius)
-            position=target.copy()
-            last_feed=None
+        def rapid_xy_to(xy):
+            nonlocal position, last_feed
+            b.set_feature("rapid", comment=False)
+            b.command(f"G0 X{format_number(xy[0],3)} Y{format_number(xy[1],3)} F{format_number(rapid_xy,1)}")
+            plan.add(MotionSegment("rapid", position.copy(), np.r_[xy[:2], position[2]], None, None, "rapid"))
+            position[:2] = xy[:2]
+            last_feed = None
+
+        def travel_at_depth(xy):
+            nonlocal position, last_feed
+            b.set_feature("rapid", comment=False)
+            # G1 at rapid feed: a straight line is guaranteed (a G0 dog-leg is not).
+            comment = "stay at depth: cleared by the previous pass"
+            b.command(f"G1 X{format_number(xy[0],3)} Y{format_number(xy[1],3)} F{format_number(rapid_xy,1)}", comment)
+            plan.add(MotionSegment("travel", position.copy(), np.r_[xy[:2], position[2]], None,
+                                   float(rapid_xy), "rapid", comment))
+            position[:2] = xy[:2]
+            last_feed = None
+            stay_count[0] += 1
+
+        def feed_move(target, phase, state, cond=None, comment=None, measured=True, split=False, cleared_only=False):
+            """Every feed move: measure engagement, apply the shared feed policy, write, update material.
+
+            Returns False when ``cleared_only`` and the move would meet current material.
+            """
+            nonlocal position, last_feed, last_condition
+            target = np.asarray(target, float)
+            if split and state is not None:
+                steps = list(split_move(position, target, active_radius, state.resolution))
+            else:
+                steps = [target]
+            for q in steps:
+                # Exact XY keeps planned stay-down endpoints matching; Z is the emitted value.
+                q = np.array([q[0], q[1], float(format_number(q[2], 3))])
+                if np.linalg.norm(q-position) < 1e-9:
+                    continue
+                if cleared_only and state is not None and state.contact(position, q, active_radius):
+                    return False
+                c = cond
+                if measured and state is not None:
+                    c = measure(state, position, q, active_radius, config, tool_values, machine_values)
+                drop, run = position[2]-q[2], float(np.linalg.norm(q[:2]-position[:2]))
+                steep = drop > 1e-9 and drop > RAMP_TAN*run
+                rate = policy.rate(phase, feed, plunge, c, steep)
+                segment = MotionSegment(phase, position.copy(), q.copy(), c, rate, policy.feature(phase, c), comment)
+                key = (c.regime, c.hand) if c is not None else None
+                text = comment if comment is not None else (segment.note if key is not None and key != last_condition else None)
+                words = "G1"
+                if run > 1e-9:
+                    words += f" X{format_number(q[0],3)} Y{format_number(q[1],3)}"
+                if abs(q[2]-position[2]) > 1e-9:
+                    words += f" Z{format_number(q[2],3)}"
+                b.set_feature(segment.feature)
+                line = b.command(words+("" if rate == last_feed else f" F{feed_text(rate)}"), text)
+                if c is not None:
+                    line.engagement, line.note = c.engagement, segment.note
+                if state is not None:
+                    state.cut(position, q, active_radius)
+                plan.add(segment)
+                position = q
+                last_feed = rate
+                if key is not None:
+                    last_condition = key
+                samples[0] += 1
+                if samples[0] > SURFACE_MAX_POINTS:
+                    raise ValueError("CAM output exceeds the engagement sample budget; reduce the area or refine the setup")
+            return True
+
+        def descend(state, xy, z):
+            """Final feed descent to an entry height: a plunge into material, or a verified-air approach."""
+            if z < position[2]-1e-9:
+                phase = "plunge" if entries.enters_material(state, xy, z, top=position[2]) else "approach"
+                feed_move(np.r_[xy[:2], z], phase, state)
+
+        def enter(state, xy, z, lead):
+            """Shared travel to an entry: short retract, XY rapid, rapid descent, feed descent."""
+            travel = links.travel_height(state, position, xy, z)
+            if position[2] < travel-1e-9:
+                rapid_z(travel)
+            if state is not None and links.short_retracts and position[2] < safe_z-1e-9:
+                short_count[0] += 1
+            rapid_xy_to(xy)
+            rapid_to = links.descent_height(state, position[2], xy, z, lead)
+            if rapid_to < position[2]-1e-9:
+                if state is not None and state.contact(position, np.r_[position[:2], rapid_to], active_radius):
+                    raise ValueError(f"{name}: rapid descent to the entry is not clear of current material")
+                rapid_z(rapid_to)
+            descend(state, xy, z)
+
+        def cut_material(start_index):
+            return any(s.condition is not None and s.condition.engagement > 1e-6
+                       for s in plan.segments[start_index:] if s.phase in ("cut", "link", "lead_in"))
 
         def surface_path(pts):
-            """Emit material-aware XYZ leads and locally classified cutting moves."""
-            nonlocal position, last_feed, last_condition
-            from gcodeproducer.core.cam.surface_leads import surface_entry, surface_exit
-            from gcodeproducer.core.cam.surface_engagement import condition, split_move
-            from gcodeproducer.core.cam.cam_constants import SURFACE_MAX_POINTS, SURFACE_LEAD_SETTLE
-            from gcodeproducer.core.cam.engagement import engagement_band
-            engagement_band(.5, machine_values)  # validate thresholds even on an air-only path
+            """XYZ surface path: shared entry, lead-in only into material, measured cuts, cleared lead-out."""
             if surface_state[0] is None:
                 from gcodeproducer.core.cam.stock import Stock
                 estimate = Stock()
@@ -160,100 +211,28 @@ class CAMEmit(SliceStage):
                 surface_state[0] = height_stock_for(job, estimate)
                 ctx.log("  3D Contour: conservative model-bounds blank for entry/engagement; allocate stock for accurate material history")
             state = surface_state[0]
-            tool_values = tool.resolved()
-            first = pts[0]
-            entered = False
-
-            def emit(target, feature=None, comment=None, cleared_only=False):
-                nonlocal position, last_feed, last_condition, entered
-                start = position.copy()
-                for q in split_move(start, target, active_radius, state.resolution):
-                    q = np.array([float(format_number(v, 3)) for v in q])
-                    if np.linalg.norm(q-position) < 1e-9:
-                        continue
-                    if cleared_only and state.contact(position, q, active_radius):
-                        return False
-                    cut = condition(state, position, q, active_radius, config, tool_values, machine_values)
-                    entered |= cut.engagement > 1e-6
-                    drop, run = position[2]-q[2], float(np.linalg.norm(q[:2]-position[:2]))
-                    steep = drop > 1e-9 and drop > RAMP_TAN*run
-                    base = plunge if feature is not None else feed
-                    if feature is None and steep and cut.engagement > 1e-6:
-                        base = min(feed, plunge)
-                    rate = limited(float(base)*cut.feed_factor)
-                    actual = feature or ENGAGEMENT_FEATURES.get(cut.regime, "cut")
-                    b.set_feature(actual)
-                    note = f"{cut.regime} {cut.engagement*100:.2f}% engagement; {cut.hand} (height-field estimate)"
-                    key = (cut.regime, cut.hand)
-                    text = comment if comment is not None else note if key != last_condition else None
-                    words = f"G1 X{format_number(q[0],3)} Y{format_number(q[1],3)} Z{format_number(q[2],3)}"
-                    line = b.command(words+("" if rate == last_feed else f" F{feed_text(rate)}"), text)
-                    line.engagement, line.note = cut.engagement, note
-                    state.cut(position, q, active_radius)
-                    position = q.copy()
-                    last_feed, last_condition = rate, key
-                    surface_totals[cut.regime] += 1
-                    surface_moves[0] += 1
-                    if surface_moves[0] > SURFACE_MAX_POINTS:
-                        raise ValueError("3D Contour output exceeds the engagement sample budget; reduce the area or refine the setup")
-                return True
-
-            probe = np.r_[first[:2], safe_z]
-            entering = state.contact(probe, first, active_radius)
-            lead = None
-            if config is not None and config.lead_in and entering:
-                surface = state.height_at(first[:2], active_radius)
-                for _ in range(SURFACE_LEAD_SETTLE):
-                    entry_z = min(safe_z, max(surface, first[2])+lead_clearance)
-                    lead, kind = surface_entry(pts, entry_z, config.lead_length or 2*active_radius)
-                    above = state.height_at(lead[0, :2], active_radius)
-                    if above <= surface+1e-6:
-                        break
-                    surface = above
-                if state.contact(np.r_[lead[0, :2], safe_z], lead[0], active_radius):
-                    raise ValueError(f"{name}: 3D Contour lead start is not clear; increase safe Z or revise the entry")
-                if kind == "zigzag":
-                    lead_kinds[kind] = lead_kinds.get(kind, 0)+1
-            approach = lead[0] if lead is not None else first
-            b.set_feature("rapid", comment=False)
-            travel = safe_z
-            if short_retracts:
-                travel = min(safe_z, max(state.max_height_along(position[:2], approach[:2], active_radius),
-                                         state.height_at(approach[:2], active_radius))+travel_clearance)
-            travel = max(travel, float(approach[2]))
-            if position[2] < travel-1e-9:
-                b.command(f"G0 Z{format_number(travel,3)}")
-                position[2] = travel
-            b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
-            position[:2] = approach[:2]
-            last_feed = None
-            rapid_to = max(float(approach[2]), min(position[2], state.height_at(approach[:2], active_radius)+lead_clearance))
-            if rapid_to < position[2]-1e-9:
-                target = np.r_[position[:2], rapid_to]
-                if state.contact(position, target, active_radius):
-                    raise ValueError(f"{name}: 3D Contour rapid descent is not clear")
-                b.command(f"G0 Z{format_number(rapid_to,3)}")
-                position[2] = rapid_to
-            if np.linalg.norm(position-approach) > 1e-9:
-                if state.contact(position, approach, active_radius):
-                    emit(approach, "plunge", "vertical entry: lead-in disabled")
-                else:
-                    b.command(f"G0 Z{format_number(approach[2],3)}", "entry already clear")
-                    position = approach.copy()
-            last_feed = None
+            length = (config.lead_length if config is not None else 0) or 2*active_radius
+            lead, kind = (entries.surface(state, pts, length, name)
+                          if config is not None and config.lead_in else (None, None))
+            if kind == "zigzag":
+                lead_kinds[kind] = lead_kinds.get(kind, 0)+1
+            approach = lead[0] if lead is not None else pts[0]
+            begin = len(plan.segments)
+            enter(state, approach[:2], approach[2], lead is not None)
             if lead is not None:
                 for q in lead[1:]:
-                    emit(q, "lead_in", "surface path lead-in")
+                    feed_move(q, "lead_in", state, comment="surface path lead-in", split=True)
+            cuts = len(plan.segments)
             for q in pts[1:]:
-                emit(q)
-            if config is not None and config.lead_out and entered:
-                exit_points = surface_exit(pts, config.lead_length or 2*active_radius)
+                feed_move(q, "cut", state, split=True)
+            surface_totals.update(s.condition.regime for s in plan.segments[cuts:] if s.condition is not None)
+            if config is not None and config.lead_out and cut_material(begin):
+                exit_points = entries.surface_exit(pts, length)
                 if exit_points is not None:
                     for q in exit_points[1:]:
-                        if not emit(q, "lead_out", "cleared surface lead-out", cleared_only=True):
+                        if not feed_move(q, "lead_out", state, comment="cleared surface lead-out", split=True, cleared_only=True):
                             ctx.log(f"  {name}: surface lead-out crosses uncertain remaining cells; retracting instead")
                             break
-            last_feed = None
 
         self._start(b, job, tool, rpm, safe_z, log=ctx.log, cutting=first_data)
         from gcodeproducer.core.gcode.simulation import simulate
@@ -286,6 +265,9 @@ class CAMEmit(SliceStage):
                 previous_group = group
             tool = next_tool
             active_radius=float(tool.get("diameter",0))/2 if tool else 0.
+            tool_values = tool.resolved() if tool else {}
+            entries = EntryExitPlanner(safe_z, lead_clearance, active_radius)
+            links = LinkPlanner(safe_z, travel_clearance, lead_clearance, short_retracts, active_radius)
             if data and (li==0 or data.rpm!=rpm):
                 b.command(f"M3 S{format_number(data.rpm,0)}","calculated / overridden RPM")
             rpm=data.rpm if data else rpm
@@ -298,6 +280,7 @@ class CAMEmit(SliceStage):
             if hasattr(layer, "cam_operation"):
                 b.comment(f"Operation: {layer.cam_operation}")
             previous_end = None   # never carry stay-down permission across depth/operation/tool boundaries
+            length = (config.lead_length if config is not None else 0) or 2*active_radius
             for path_index,path in enumerate(layer.paths):
                 pts = np.asarray(path.points, float)
                 if len(pts) < (1 if path.feature == "drill" else 2):
@@ -308,112 +291,53 @@ class CAMEmit(SliceStage):
                     continue
                 loop = np.vstack([pts, pts[0]]) if path.closed else pts
                 start = loop[0]
-                linked = (path.stay_down and previous_end is not None and path.stay_down_from is not None
-                          and np.allclose(previous_end, path.stay_down_from, atol=1e-7, rtol=0))
-                if linked:
-                    cut_move(start, path.link_condition, "stay-down link", force=True)
+                begin = len(plan.segments)
+                if links.linked(path, previous_end):
+                    last_feed = None   # links always state their feed
+                    feed_move(np.r_[start, position[2]], "link", live, path.link_condition,
+                              "stay-down link", measured=False)
                 else:
-                    lead=None
-                    if config is not None and config.lead_in and len(pts)>1 and live is not None:
-                        surface=live.height_at(start,active_radius)
-                        for _ in range(3):
-                            # The rapid descent happens above the ramp *start*, which moves with the
-                            # ramp length; settle the entry plane over both points (usually one pass).
-                            # The ramp begins just above the material (lead clearance), not at the
-                            # rapid clearance plane, so it does not spend its length cutting air.
-                            entry_z=min(safe_z,max(surface,layer.z)+lead_clearance)
-                            lead,kind=ramp_entry(pts,path.closed,layer.z,entry_z,config.lead_length or 2*active_radius)
-                            if lead is None:break
-                            above=live.height_at(lead[0,:2],active_radius)
-                            if above<=surface+1e-6:break
-                            surface=above
-                        if lead is None:
-                            warning=f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
-                            if warning not in job.warnings:job.warnings.append(warning)
-                            ctx.log("LEAD WARNING: "+warning)
-                        elif kind in ("helix","zigzag"):
-                            lead_kinds[kind]=lead_kinds.get(kind,0)+1
-                    approach=lead[0,:2] if lead is not None else start
-                    entry=lead[0,2] if lead is not None else layer.z
-                    stayed=False
-                    if (live is not None and short_retracts and position[2]<safe_z-1e-9
-                            and position[2]>layer.z+1e-9 and config is not None):
-                        # Already down in material this operation has cleared (typically the floor of
-                        # the previous pass): move across at the current Z and ramp down from here,
-                        # instead of going up at all. Allowed only if the straight move and the ramp
-                        # start are free of CURRENT material under the full cutter radius.
-                        here=position[2]
-                        down_lead=None
-                        if lead is not None:
-                            down_lead,_=ramp_entry(pts,path.closed,layer.z,here,config.lead_length or 2*active_radius)
-                        target=down_lead[0,:2] if down_lead is not None else start
-                        moved=np.r_[target,here]
-                        if (live.height_at(target,active_radius)<=here+1e-6
-                                and not live.contact(position,moved,active_radius)):
-                            if lead is not None:lead=down_lead
-                            approach,entry,stayed=target,(down_lead[0,2] if down_lead is not None else layer.z),True
-                            b.set_feature("rapid", comment=False)
-                            # G1 at rapid feed: a straight line is guaranteed (a G0 dog-leg is not).
-                            b.command(f"G1 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}",
-                                      "stay at depth: cleared by the previous pass")
-                            position[:2]=approach
-                            stay_count[0]+=1
-                    b.set_feature("rapid", comment=False)
+                    want = config is not None and config.lead_in and len(pts) > 1
+                    lead, kind = entries.planar(live, pts, path.closed, layer.z, length) if want else (None, None)
+                    stayed = False
+                    if config is not None and live is not None:
+                        here = position[2]
+                        down, down_kind = (entries.planar(live, pts, path.closed, layer.z, length, top=here)
+                                           if want and layer.z+1e-9 < here < safe_z-1e-9 else (None, None))
+                        target = down[0, :2] if down is not None else start
+                        if links.stay_at_depth(live, position, target, layer.z):
+                            lead, kind, stayed = down, down_kind, True
+                            travel_at_depth(target)
+                    if kind == "degenerate":
+                        lead = None
+                        warning=f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
+                        if warning not in job.warnings:job.warnings.append(warning)
+                        ctx.log("LEAD WARNING: "+warning)
+                    elif kind in ("helix","zigzag"):
+                        lead_kinds[kind]=lead_kinds.get(kind,0)+1
+                    approach = lead[0, :2] if lead is not None else start
+                    entry = lead[0, 2] if lead is not None else layer.z
                     if stayed:
-                        pass
-                    elif live is not None and short_retracts:
-                        # Retract only as high as the CURRENT material along the XY travel needs
-                        # (plus clearance), not to safe Z: inside a cleared pocket the tool stays low.
-                        # Cutter radius, the same footprint the rapid-contact check uses; walls stand
-                        # outside it because contours keep the cutter radius from the retained part.
-                        margin=active_radius
-                        travel=min(safe_z,max(live.max_height_along(position[:2],approach,margin),
-                                              live.height_at(approach,margin))+travel_clearance)
-                        travel=max(travel,entry)
-                        if position[2]<travel-1e-9:
-                            b.command(f"G0 Z{format_number(travel,3)}")
-                            position[2]=travel
-                        else:
-                            travel=position[2]
-                        short_count[0]+=travel<safe_z-1e-9
+                        descend(live, approach, entry)
                     else:
-                        b.command(f"G0 Z{format_number(safe_z,3)}")
-                        position[2]=safe_z
-                    if not stayed:
-                        b.command(f"G0 X{format_number(approach[0],3)} Y{format_number(approach[1],3)} F{format_number(rapid_xy,1)}")
-                        position[:2]=approach
-                    if live is not None and short_retracts and not stayed:
-                        # Rapid down to the clearance plane above the local material, then feed.
-                        # Rapid straight to the ramp start (which already sits lead_clearance above the
-                        # local material), or to clearance above the material for a plain plunge.
-                        local=live.height_at(approach,active_radius)+(lead_clearance if lead is not None else travel_clearance)
-                        rapid_to=max(entry,min(position[2],local))
-                        if rapid_to<position[2]-1e-9:
-                            b.command(f"G0 Z{format_number(rapid_to,3)}")
-                            position[2]=rapid_to
-                    if entry<position[2]-1e-9:
-                        b.set_feature("plunge", comment=False)
-                        b.command(f"G1 Z{format_number(entry,3)} F{feed_text(limited(float(plunge)))}")
-                        if live is not None:live.cut(position,np.r_[approach,entry],active_radius)
-                        position[2]=float(format_number(entry,3))
+                        enter(live, approach, entry, lead is not None)
                     if lead is not None:
                         for q in lead[1:]:
-                            rate=plunge*(float(job.m("slotting_feed",50))/100 if live.contact(position,q,active_radius) else 1)
-                            move3("G1",q,rate,"lead_in","contour lead-in")
+                            feed_move(q, "lead_in", live, comment="contour lead-in", split=True)
                     last_feed = None
                 for i, q in enumerate(loop[1:]):
                     condition = path.cut_conditions[i] if i < len(path.cut_conditions) else None
-                    cut_move(q, condition, force=i == 0)
+                    feed_move(np.r_[q, position[2]], "cut", live, condition, measured=False)
                 next_path=layer.paths[path_index+1] if path_index+1<len(layer.paths) else None
-                if config is not None and config.lead_out and len(pts)>1 and not (next_path and next_path.stay_down):
-                    exit_xy=exit_path(pts,path.closed,config.lead_length or 2*active_radius)
-                    if exit_xy is not None:
-                        for q in exit_xy[1:]:
-                            target=np.r_[q,layer.z]
-                            if live is not None and live.contact(position,target,active_radius):
+                if (config is not None and config.lead_out and len(pts)>1 and not (next_path and next_path.stay_down)
+                        and (live is None or cut_material(begin) or not path.cut_conditions
+                             or any(c.engagement > 1e-6 for c in path.cut_conditions))):
+                    exit_points = entries.planar_exit(pts, path.closed, position[2], length)
+                    if exit_points is not None:
+                        for q in exit_points[1:]:
+                            if not feed_move(q, "lead_out", live, comment="cleared contour lead-out", split=True, cleared_only=True):
                                 ctx.log(f"  {name}: lead-out crosses uncertain remaining cells; retracting instead")
                                 break
-                            move3("G1",target,plunge,"lead_out","cleared contour lead-out")
                 previous_end = position[:2].copy()
             ctx.progress((li + 1) / n)
 
@@ -442,7 +366,7 @@ class CAMEmit(SliceStage):
         if surface_totals:
             ctx.log("  3D engagement moves: " + ", ".join(f"{kind}={surface_totals[kind]}"
                     for kind in ("slot", "high", "cut", "hsm", "air")))
-        for request, cap in sorted(capped):
+        for request, cap in sorted(policy.capped):
             ctx.log(f"  CAM feed capped: {request:g} -> {cap:g} mm/min (machine max_feed)")
         moves = sum(1 for ln in prog.lines if ln.cmd in ("G0", "G1"))
         return f"{len(prog.lines)} lines, {moves} moves, {len(job.layers)} depth passes"

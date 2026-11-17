@@ -3,15 +3,15 @@
 # CAM pipeline architecture: current interactions and proposed planner
 
 This page maps how a CAM job travels through the code today, where the
-cutting-type decisions are made, and a proposed structure in which one
-**motion planner** owns those decisions for every operation. Nothing on this
-page changes machining behaviour; it is the design basis for the refactor.
+cutting-type decisions are made, and the structure in which one **motion
+planner** owns those decisions for every operation. Steps 1–2 of the
+migration (section 7) are implemented in 0.1.9; steps 3–5 are planned.
 
 The diagrams use Mermaid, which GitHub renders. In an offline Markdown viewer
 without Mermaid support, read them as plain text graphs (`A --> B` means
 *A calls / passes data to B*).
 
-## 1. Current end-to-end flow
+## 1. End-to-end flow
 
 ```mermaid
 flowchart TD
@@ -74,7 +74,7 @@ Planning produces **geometry plus planar engagement** for XY paths. It does
 **not** decide entries, exits, links between passes or feeds; and it attaches
 no cutting conditions to 3D Contour XYZ paths.
 
-## 3. Inside emission today
+## 3. Inside emission before 0.1.9 (for reference)
 
 ```mermaid
 flowchart TD
@@ -98,7 +98,7 @@ flowchart TD
     LO --> OUT
 ```
 
-## 4. Where cutting types are decided today
+## 4. Where cutting types were decided before 0.1.9
 
 | Decision | Planar XY operations | 3D Contour (XYZ) |
 |---|---|---|
@@ -112,9 +112,37 @@ flowchart TD
 | Lead-out safety | `HeightStock.contact` → retract | `HeightStock.contact` → retract |
 | Feature colour mapping | `ENGAGEMENT_FEATURES` (shared) | `ENGAGEMENT_FEATURES` (shared) |
 
-So the *vocabulary* is shared, but **two different code paths decide what a
+So the *vocabulary* was shared, but **two different code paths decided what a
 move is and how fast it runs**, at two different times, against two different
-material models. That is the root of inconsistencies such as the lead-in feed.
+material models. That was the root of inconsistencies such as the lead-in feed.
+
+### Since 0.1.9 (steps 1–2)
+
+```mermaid
+flowchart TD
+    E["CAMEmit.run (both XY and XYZ paths)"] --> LP["LinkPlanner<br/>stay-down, stay at depth,<br/>short retract, rapid descent"]
+    E --> EP["EntryExitPlanner<br/>enters_material? → ramp / approach / plunge<br/>planar & surface leads, exits"]
+    E --> FM["feed_move: one writer for every G1"]
+    FM --> MS["measure: surface_engagement.condition<br/>(leads, plunges, exits, XYZ cuts)"]
+    FM --> PC["planned CutCondition<br/>(planar cuts, links)"]
+    MS --> FP["FeedPolicy<br/>rate = base(phase) × band factor, cap<br/>feature = phase or band"]
+    PC --> FP
+    FP --> SEG["MotionSegment → MotionPlan (job.motion_plan)"]
+    SEG --> GC["G-code line + engagement metadata"]
+```
+
+| Decision | All operations (0.1.9) |
+|---|---|
+| Lead-in needed? | only when the descent at the path start meets current material |
+| Already-clear entry | *approach*: verified-air feed descent at the lead base, no ramp |
+| Lead-in rate | lead base × measured band factor (normally Slot: operation override or machine modifier) |
+| Plunge rate | plain lead/plunge base |
+| Lead-out | already-cut geometry only; skipped after a path that removed nothing |
+| Feature / colour | phase feature for plunge/lead/approach, band feature for cuts |
+
+Still separate until steps 3–5: planar cut conditions come from planning-time
+`PlanarStock`, while leads, plunges, exits and XYZ cuts are measured on the
+emitter's `HeightStock`.
 
 ## 5. Two concepts, kept separate
 
@@ -256,11 +284,13 @@ feed, cap, feature colour, conflict marking — is **one code path**.
 Each step keeps output identical (or deliberately and visibly changed) and is
 covered by the existing CAM tests before the next begins.
 
-1. **Introduce `MotionSegment` / `MotionPlan` records and `FeedPolicy`.** Route
-   both emitter branches' feed arithmetic through `FeedPolicy`; decide the
-   lead-in rule once (contacting lead-in = measured band, normally Slot).
-2. **Extract `EntryExitPlanner` and `LinkPlanner`** from `CAMEmit`, still
-   called by the emitter; make "lead-in only when contacting material" common.
+1. ✅ **Introduce `MotionSegment` / `MotionPlan` records and `FeedPolicy`.**
+   Both emitter branches' feed arithmetic route through `FeedPolicy`; the
+   lead-in rule is decided once (contacting lead-in = measured band, normally
+   Slot). *Done in 0.1.9.*
+2. ✅ **Extract `EntryExitPlanner` and `LinkPlanner`** from `CAMEmit`, still
+   called by the emitter; "lead-in only when contacting material" is common
+   to every operation. *Done in 0.1.9.*
 3. **Create `MaterialModel`** wrapping `PlanarStock` + `HeightStock`, and the
    two samplers behind `EngagementModel`.
 4. **Move sequencing into the planner**; the emitter consumes `MotionPlan`.
