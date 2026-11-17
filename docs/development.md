@@ -79,6 +79,29 @@ factors and line metadata. XYZ cutting does update that emitted material state,
 so subsequent Contour paths/leads use actual prior removal. Do not document these representations as complete 3D solid simulation. The emitter marks program lines with layer and
 operation information so Preview preserves execution order across tool changes.
 
+## CAM motion phases and engagement policy
+
+The current CAM paths are partially unified:
+
+- Planar and XYZ estimators share `engagement_band`, `feed_factor` and `_hand`
+  in `core/cam/engagement.py`, the `CutCondition` record and the emitter's
+  `ENGAGEMENT_FEATURES` mapping.
+- Planar planning measures depth-tagged Shapely material; XYZ emission measures
+  current height-field chords and newly swept area. These are different
+  geometry adapters, not separate definitions of Slot/High/Cut/HSM thresholds.
+- Entry/exit decisions and feed emission still have separate planar and XYZ
+  branches. In particular, a planar contacting lead uses the machine Slot
+  modifier, whereas an XYZ lead uses its measured band and operation-aware
+  modifier. Their material-aware ramp gating also differs.
+
+Plunge, lead-in, lead-out, rapid and normal cut are **motion phases**. Slot,
+High, Cut, HSM and Air describe **engagement**; a lead-in can simultaneously
+be slotting. They should not be forced into one mutually exclusive classifier.
+A future shared motion-policy resolver should combine phase and `CutCondition`
+for feed caps, overrides, feature/metadata and material-contact decisions,
+while retaining separate planar/XYZ sampling and validated lead geometry.
+The architecture review did not change machining behaviour.
+
 ## Editor history and versions
 
 `EditHistory` snapshots domain records and editable widget values/selections.
