@@ -42,7 +42,7 @@ def test_runs_in_another_process(app, svc):
     assert not svc.busy
 
 
-def test_slice_result_and_chunked_program(app, svc, libset, cube_stl):
+def test_slice_result_and_chunked_program(app, svc, libset, cube_stl, monkeypatch):
     from gcodeproducer.core import workflow as wf
     from gcodeproducer.core.compute import CHUNK, run_slice
     from gcodeproducer.core.pipeline import SlicePipeline
@@ -54,7 +54,19 @@ def test_slice_result_and_chunked_program(app, svc, libset, cube_stl):
     tid = svc.submit("slice", (job(), SlicePipeline.default(wf.FDM)))
     kind, r = _wait(app, svc, tid)
     assert kind == "done"
+    from gcodeproducer.core.gcode import simulation, toolpath
+    traces = []
+    simulate = simulation.simulate
+
+    def track_trace(program):
+        trace = simulate(program)
+        traces.append(trace)
+        return trace
+
+    monkeypatch.setattr(simulation, "simulate", track_trace)
+    monkeypatch.setattr(toolpath, "simulate", track_trace)
     local = run_slice(job(), SlicePipeline.default(wf.FDM))           # same job in this process
+    assert len(traces) == 1                                           # toolpath and filament share a trace
     assert len(local["program"].lines) > CHUNK                        # big enough to be chunked
     assert [ln.text for ln in r["program"].lines] == [ln.text for ln in local["program"].lines]
     assert r["filament_mm"] == pytest.approx(local["filament_mm"])

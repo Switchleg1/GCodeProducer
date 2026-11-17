@@ -50,28 +50,25 @@ def feed_factor(regime, operation, tool, machine=None):
 
 
 def _occupied(lines, material):
-    """Length of each chord inside the material.
-
-    Most chords lie wholly inside or outside; prepared predicates settle those and
-    only boundary-crossing chords need an exact intersection.
-    """
-    result = np.zeros(len(lines))
-    if material.is_empty or not len(lines):
+    """Measure equal-size batches of left and right chords together."""
+    result = np.zeros(lines.shape)
+    if material.is_empty or not lines.size:
         return result
-    # Work against the material near these chords only: late in a pocket the full
-    # remaining-material polygon is large while one batch of chords is local.
-    low, high = total_bounds(lines)[:2], total_bounds(lines)[2:]
-    if not np.isfinite(np.r_[low, high]).all():
-        return result
-    material = material.intersection(box(low[0]-1e-6, low[1]-1e-6, high[0]+1e-6, high[1]+1e-6))
-    if material.is_empty:
-        return result
-    prepare(material)
-    inside = covers(material, lines)
+    # Clip each side independently: enlarging either clip to the combined
+    # bounds can change GEOS overlay rounding at the chord intersections.
+    local = np.empty((len(lines), 1), dtype=object)
+    for i, side in enumerate(lines):
+        low_x, low_y, high_x, high_y = total_bounds(side)
+        if not np.isfinite((low_x, low_y, high_x, high_y)).all():
+            local[i, 0] = None
+        else:
+            local[i, 0] = material.intersection(box(low_x-1e-6, low_y-1e-6, high_x+1e-6, high_y+1e-6))
+    prepare(local)
+    inside = covers(local, lines)
     result[inside] = length(lines[inside])
-    crossing = ~inside & intersects(material, lines)
+    crossing = ~inside & intersects(local, lines)
     if crossing.any():
-        result[crossing] = length(intersection(lines[crossing], material))
+        result[crossing] = length(intersection(lines[crossing], local[np.nonzero(crossing)[0], 0]))
     return result
 
 
@@ -99,11 +96,12 @@ def measure_segments(points, closed, material, radius):
         centres = (a[start:end, None, None, :] + delta[start:end, None, None, :]*stations[None, :, None, None]
                    + tangent[start:end, None, None, :]*forward[None, None, :, None])
         offsets = normal[start:end, None, None, :]*chord[None, None, :, None]
-        l = np.stack((centres, centres+offsets), axis=-2).reshape(-1, 2, 2)
-        r = np.stack((centres, centres-offsets), axis=-2).reshape(-1, 2, 2)
+        chords = np.empty((2, *centres.shape[:-1], 2, 2))
+        chords[..., 0, :] = centres
+        chords[0, ..., 1, :] = centres+offsets
+        chords[1, ..., 1, :] = centres-offsets
         count = len(a[start:end])
-        lw = _occupied(linestrings(l), material).reshape(count, -1)
-        rw = _occupied(linestrings(r), material).reshape(count, -1)
+        lw, rw = _occupied(linestrings(chords.reshape(2, -1, 2, 2)), material).reshape(2, count, -1)
         best = np.argmax(lw+rw, axis=1)
         left[start:end] = lw[np.arange(count), best]
         right[start:end] = rw[np.arange(count), best]

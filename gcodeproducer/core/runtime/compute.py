@@ -29,8 +29,6 @@ import time, traceback
 
 def run_slice(job, pipeline, log=None, progress=None) -> dict:
     """Slice and prepare everything the GUI shows, so the GUI only has to display it."""
-    import numpy as np
-
     from gcodeproducer.core.jobs.session import slice_job
     from gcodeproducer.core.gcode.simulation import simulate
     from gcodeproducer.core.gcode.toolpath import build_toolpath
@@ -42,8 +40,8 @@ def run_slice(job, pipeline, log=None, progress=None) -> dict:
     from gcodeproducer.core.cam.tabs import resolve_tabs
     out["tab_bounds"] = resolve_tabs(job.mesh, job.cam_setup) if job.cam_setup is not None else []
     if prog is not None:
-        out["toolpath"] = build_toolpath(prog)
         s = simulate(prog)
+        out["toolpath"] = build_toolpath(prog, sim=s)
         out["filament_mm"] = float(s.de[(s.de > 0) & s.moved].sum())
     return out
 

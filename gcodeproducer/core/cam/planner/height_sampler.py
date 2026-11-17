@@ -7,10 +7,20 @@ estimate, not tooth-level or swept-solid simulation.
 """
 from __future__ import annotations
 import math
+from functools import lru_cache
 import numpy as np
 from gcodeproducer.core.cam.cam_constants import (SURFACE_ENGAGEMENT_STATIONS, SURFACE_ENGAGEMENT_FORWARD,
                                                   SURFACE_CHORD_SAMPLES_MIN, SURFACE_CHORD_SAMPLES_MAX)
 from .engagement_sampler import EngagementSampler
+
+
+@lru_cache(maxsize=32)
+def _chord_grid(radius, n):
+    """Sampling offsets that depend on the cutter and resolution, not the move."""
+    forward = radius*np.asarray(SURFACE_ENGAGEMENT_FORWARD)
+    half_width = np.sqrt(np.maximum(radius*radius-forward*forward, 0))
+    radial = (np.arange(n)+.5)/n
+    return forward, half_width, half_width[:, None]*radial[None, :], np.asarray(SURFACE_ENGAGEMENT_STATIONS)
 
 
 class HeightSampler(EngagementSampler):
@@ -31,14 +41,11 @@ class HeightSampler(EngagementSampler):
             return np.array([radius]), np.array([radius]), np.ones(1), lengths
         tangent = delta[:2]/distance
         normal = np.array([-tangent[1], tangent[0]])
-        forward = radius*np.asarray(SURFACE_ENGAGEMENT_FORWARD)
-        half_width = np.sqrt(np.maximum(radius*radius-forward*forward, 0))
         n = max(SURFACE_CHORD_SAMPLES_MIN, min(SURFACE_CHORD_SAMPLES_MAX,
                                              int(math.ceil(radius/state.resolution))))
-        radial = (np.arange(n)+.5)/n
-        stations = np.asarray(SURFACE_ENGAGEMENT_STATIONS)
+        forward, half_width, chord_offsets, stations = _chord_grid(radius, n)
         centers = (a[:2]+stations[:, None]*delta[:2])[:, None, :]+forward[None, :, None]*tangent
-        offsets = half_width[:, None, None]*radial[None, :, None]*normal
+        offsets = chord_offsets[..., None]*normal
         xy = np.stack((centers[:, :, None, :]+offsets[None],
                        centers[:, :, None, :]-offsets[None]), axis=2)
         ix = np.floor((xy[..., 0]-state.stock.x)/state.dx).astype(int)

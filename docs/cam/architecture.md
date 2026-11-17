@@ -206,3 +206,17 @@ surface-band construction, can potentially run in parallel; profile each
 workload before adding concurrency. On tail-top, planar pass planning still
 takes roughly 12 seconds and is a better next profiling target. The GUI
 continues to use its separate compute process.
+
+In 0.1.13, planar engagement batches the two sides' chord predicates and
+intersections while preserving each side's original clip. A single larger clip
+changed tail-top's output fingerprint, so that variant was not kept. Preview
+uses one decoded motion trace for both toolpath and filament totals. The XYZ
+sampler also reuses cutter-dependent chord offsets. Both benchmark jobs still
+match 0.1.12's G-code line data, warnings and material snapshots; the wall-clock
+runs did not establish a repeatable speedup over 0.1.12.
+
+A 0.1.13 Dragon Head CPU profile (31 s including profiler overhead) attributes
+11.3 s to height-field engagement sampling, 8.6 s to independent material replay,
+and 1.4 s to serialization. These are inclusive costs: the first two include
+some of the 9.9 s spent constructing sweeps. The next target is sweep/engagement
+work, not G-code formatting or weakening the replay checks.
