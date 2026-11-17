@@ -46,6 +46,28 @@ def test_detour_around_hole_within_budget_and_fallback():
     assert router.route(a, (3, 5), 5.) == [(3, 5)]
 
 
+def test_large_budget_does_not_disable_detours_on_dense_outlines():
+    angles = np.linspace(0, 2*np.pi, 160, endpoint=False)
+    remote_hole = [(3+np.cos(t), 8+np.sin(t)) for t in angles]
+    a, b = (2, 5), (10, 5)
+    router = TravelRouter([OUTER, HOLE, remote_hole], 3)
+    small = router.route(a, b, 2.)
+    large = router.route(a, b, 100*150.)
+    assert len(small) > 1 and len(large) > 1
+    assert LineString([a, *large]).length <= LineString([a, *small]).length
+    assert Polygon(OUTER, [HOLE, remote_hole]).covers(LineString([a, *large]))
+    assert router.detours == 2
+
+
+def test_mixed_infill_setting_migrates_from_output():
+    from gcodeproducer.core.pipeline.slice_pipeline import SlicePipeline
+    process = SlicePipeline.default('fdm').to_dict()
+    next(s for s in process['steps'] if s['stage'] == 'fdm_emit')['params']['optimize_mixed_infill'] = False
+    pipe = SlicePipeline.from_dict(process)
+    assert 'optimize_mixed_infill' not in pipe.step('fdm_emit').params
+    assert pipe.step('fdm_infill').params['optimize_mixed_infill'] is False
+
+
 def test_detour_stays_inside_concave_island():
     outline = [(0, 0), (9, 0), (9, 9), (6, 9), (6, 3), (3, 3), (3, 9), (0, 9)]
     a, b = (1, 7), (8, 7)

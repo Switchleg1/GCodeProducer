@@ -51,6 +51,38 @@ def test_sections_and_setup(win):
     assert win.state.color_mode == "feature"
 
 
+def test_fdm_seam_pick_edits_process_and_marker(win, monkeypatch):
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import QPushButton
+
+    step = win.pipelines['fdm'].step('fdm_emit')
+    step.params.update(seam='xy', seam_x=110., seam_y=110.)
+    win.process_editor.set_pipeline(win.pipelines['fdm'])
+    view = win.model_viewer
+    view.fit(whole_bed=True)
+    view._position_seam_marker()
+    assert view.seam_target == (110., 110.)
+    assert not view.seam_marker.isHidden()
+    edit = win.process_editor._seam_editor
+    pick = next(b for b in edit.findChildren(QPushButton) if b.text() == 'Pick on bed')
+    pick.click()
+    assert view.pick_seam
+    point = np.array([82.123, 65.456, 3.])
+    monkeypatch.setattr(view, 'ray', lambda *_: (point, np.array([0., 0., -1.])))
+    QTest.mouseClick(view, Qt.MouseButton.LeftButton, pos=QPoint(30, 30))
+    assert not view.pick_seam
+    assert (step.params['seam_x'], step.params['seam_y']) == (82.12, 65.46)
+    assert view.seam_target == (82.12, 65.46)
+    assert win.dirty['fdm']
+    pick.click()
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+    assert not view.pick_seam
+    assert view.seam_target == (82.12, 65.46)
+    edit._setters['seam']('nearest')
+    assert view.seam_target is None and view.seam_marker.isHidden()
+
+
 def test_edit_save_revert_process(win):
     step = win.pipelines["fdm"].step("fdm_infill")
     step.params["density"] = 55.0

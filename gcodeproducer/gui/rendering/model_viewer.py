@@ -73,6 +73,7 @@ class ModelViewer(QOpenGLWidget):
     blockDeleteRequested = pyqtSignal(int)
     placeBlockClicked = pyqtSignal(float, float, float, bool)   # x, y, z, clicked face points down
     placeModeExited = pyqtSignal()
+    seamPicked = pyqtSignal(float, float)
     glError = pyqtSignal(str)
 
     def __init__(self, camera: Camera, parent=None):
@@ -103,6 +104,8 @@ class ModelViewer(QOpenGLWidget):
         self._reference_dirty = True
         self._cam_dirty = True
         self.place_on_face = False
+        self.pick_seam = False
+        self.seam_target = None
         self.blocks = []                      # core.support.SupportBlock
         self.sel_block = -1
         self.show_blocks = False
@@ -127,6 +130,15 @@ class ModelViewer(QOpenGLWidget):
         self.warn.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.warn.setStyleSheet("color:#111;background:rgba(245,160,50,230);padding:3px 8px;border-radius:3px;")
         self.warn.setVisible(False)
+        self.seam_marker = QLabel('⊕', self)
+        self.seam_marker.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.seam_marker.setStyleSheet('color:#5ff4ff;background:#192631;border:1px solid #5ff4ff;'
+                                       'border-radius:11px;font-size:18px;font-weight:bold;')
+        self.seam_marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.seam_marker.setFixedSize(22, 22)
+        self.seam_marker.hide()
+        self.info.raise_()
+        self.warn.raise_()
         camera.changed.connect(self.update)
         self._update_info()
 
@@ -198,8 +210,38 @@ class ModelViewer(QOpenGLWidget):
         self._tool_cursor()
         self._update_info()
 
+    def set_seam_target(self, xy):
+        self.seam_target = xy
+        if xy is None and self.pick_seam:
+            self.set_seam_pick(False)
+        self._position_seam_marker()
+
+    def set_seam_pick(self, on):
+        if self.pick_seam == on:
+            return
+        self.pick_seam = on
+        self._seam_press = None
+        self._drag = self._bdrag = None
+        self._tool_cursor()
+        self._update_info()
+
+    def _position_seam_marker(self, mvp=None):
+        if self.seam_target is None:
+            self.seam_marker.hide()
+            return
+        w, h = self.width(), self.height()
+        if mvp is None:
+            mvp = self.camera.proj_matrix(w / max(h, 1)) @ self.camera.view_matrix()
+        clip = mvp @ np.array([*self.seam_target, 0., 1.])
+        if clip[3] <= 0 or np.any(np.abs(clip[:3]) > clip[3]):
+            self.seam_marker.hide()
+            return
+        x, y = clip[:2] / clip[3]
+        self.seam_marker.move(round((x+1)*w/2)-11, round((1-y)*h/2)-11)
+        self.seam_marker.show()
+
     def _tool_cursor(self):
-        tool = self.cam_pick_mode or self.place_on_face or self.place_block or self.remove_block
+        tool = self.pick_seam or self.cam_pick_mode or self.place_on_face or self.place_block or self.remove_block
         self.setCursor(Qt.CursorShape.CrossCursor if tool else Qt.CursorShape.ArrowCursor)
 
     def set_place_block(self, on: bool):
@@ -227,7 +269,9 @@ class ModelViewer(QOpenGLWidget):
         self.camera.fit(lo, hi)
 
     def _update_info(self):
-        if self.vertices is None:
+        if self.pick_seam:
+            txt = "Click the bed to set the perimeter seam target • Esc cancels"
+        elif self.vertices is None:
             txt = "Import a model (Ctrl+O) or drop an STL here"
         elif self.cam_pick_mode.startswith("tab"):
             txt = ("CAM: click a tab rail to remove" if self.cam_pick_mode == "tab_remove" else
@@ -326,6 +370,7 @@ class ModelViewer(QOpenGLWidget):
         GL.glViewport(0, 0, w, h)
         cam = self.camera
         mvp = (cam.proj_matrix(w / max(h, 1)) @ cam.view_matrix()).astype(np.float32)
+        self._position_seam_marker(mvp)
 
         below = cam.eye()[2] < 0.0          # looking from under the bed: make it see-through
         if not below:
@@ -517,6 +562,9 @@ class ModelViewer(QOpenGLWidget):
         if ev.button() != Qt.MouseButton.LeftButton or ev.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
         mx, my = ev.position().x(), ev.position().y()
+        if self.pick_seam:
+            self._seam_press = (mx, my)
+            return
         if self.cam_pick_mode:
             self._cam_press = (mx, my)
             return
@@ -570,6 +618,10 @@ class ModelViewer(QOpenGLWidget):
                 self.moved.emit(cx + p[0] - start[0], cy + p[1] - start[1])
             self._last = pos
             return
+        if self.pick_seam and self._seam_press is not None and ev.buttons() & Qt.MouseButton.LeftButton:
+            if np.linalg.norm(np.subtract((pos.x(), pos.y()), self._seam_press)) < 4:
+                return
+            self._seam_press = None
         if self.cam_pick_mode and getattr(self, "_cam_press", None) is not None and ev.buttons() & Qt.MouseButton.LeftButton:
             if np.linalg.norm(np.subtract((pos.x(), pos.y()), self._cam_press)) < 4:
                 return   # Do not orbit on ordinary click jitter before hit testing.
@@ -591,11 +643,21 @@ class ModelViewer(QOpenGLWidget):
             over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
             if over != self._highlight:
                 self._highlight = over
-                if not (self.cam_pick_mode or self.place_on_face or self.place_block):
+                if not (self.pick_seam or self.cam_pick_mode or self.place_on_face or self.place_block):
                     self.setCursor(Qt.CursorShape.OpenHandCursor if over else Qt.CursorShape.ArrowCursor)
                 self.update()
 
     def mouseReleaseEvent(self, ev):
+        if self.pick_seam and ev.button() == Qt.MouseButton.LeftButton:
+            xy = (ev.position().x(), ev.position().y())
+            start, self._seam_press = self._seam_press, None
+            if start is not None and np.linalg.norm(np.subtract(xy, start)) < 4:
+                p = self._plane_point(*xy, 0.)
+                x0, y0, x1, y1, _ = self.rect
+                if p is not None and x0 <= p[0] <= x1 and y0 <= p[1] <= y1:
+                    self.set_seam_pick(False)
+                    self.seamPicked.emit(float(p[0]), float(p[1]))
+            return
         if self.cam_pick_mode and ev.button() == Qt.MouseButton.LeftButton:
             xy = (ev.position().x(), ev.position().y())
             start = getattr(self, "_cam_press", None)
@@ -627,6 +689,8 @@ class ModelViewer(QOpenGLWidget):
             self.fit()
         elif k in views:
             self.camera.set_view(views[k])
+        elif k == Qt.Key.Key_Escape and self.pick_seam:
+            self.set_seam_pick(False)
         elif k == Qt.Key.Key_Escape and self.cam_pick_mode:
             self.set_cam_mode("")
             self.camSelectionExited.emit()

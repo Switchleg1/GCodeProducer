@@ -364,6 +364,9 @@ class MainWindow(QMainWindow):
         prl.addLayout(r2)
         self.process_editor = ProcessEditor()
         self.process_editor.changed.connect(self._mark_dirty)
+        self.process_editor.seamTargetChanged.connect(self._show_seam_target)
+        self.process_editor.seamPickRequested.connect(self._pick_seam_target)
+        self.model_viewer.seamPicked.connect(self.process_editor.set_seam_target)
         prl.addWidget(self.process_editor, 1)
         pl.addWidget(proc, 1)
         from gcodeproducer.gui.editors.cam_editor import CAMEditor
@@ -1056,6 +1059,18 @@ class MainWindow(QMainWindow):
             return self.process_save()
         return r == QMessageBox.StandardButton.Discard
 
+    def _show_seam_target(self, xy):
+        self.model_viewer.set_seam_target(xy if self.workflow == wf.FDM else None)
+
+    def _pick_seam_target(self):
+        if self.workflow != wf.FDM or self.model_viewer.seam_target is None:
+            return
+        self.set_mode('prepare')
+        self.b_face.setChecked(False)
+        self._end_block_tools()
+        self.model_viewer.set_seam_pick(True)
+        self.model_viewer.setFocus()
+
     def _mark_dirty(self):
         self.dirty[self.workflow] = True
         self._update_dirty()
@@ -1374,6 +1389,8 @@ class MainWindow(QMainWindow):
         self._placement_changed()
 
     def _on_place_on_face(self, on):
+        if on:
+            self.model_viewer.set_seam_pick(False)
         if on and self.mode != "prepare":
             self.set_mode("prepare")
         self._face_task = None
@@ -1789,6 +1806,7 @@ class MainWindow(QMainWindow):
         if mode == "preview" and self.b_face.isChecked():
             self.b_face.setChecked(False)
         if mode == "preview":
+            self.model_viewer.set_seam_pick(False)
             self._end_block_tools()
         self._update_stale_label()
 

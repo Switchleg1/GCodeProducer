@@ -21,6 +21,7 @@ class FDMInfill(SliceStage):
     params = FDMINFILL_PARAMS
 
     def run(self, job, params, ctx):
+        job.settings["optimize_mixed_infill"] = params["optimize_mixed_infill"]
         density = params["density"] / 100.0
         if density <= 0:
             return "infill off"

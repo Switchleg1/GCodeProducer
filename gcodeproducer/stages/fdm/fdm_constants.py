@@ -38,8 +38,6 @@ FDMEMIT_PARAMS = [
               help="Retract on travels between features (length / speed from the material)."),
         Param("min_travel_retract", "float", 1.5, label="Min travel to retract", unit="mm",
               min=0, decimals=2, group="Travel", help="Shorter travels do not retract."),
-        Param("optimize_mixed_infill", "bool", True, label="Print nearby infill together", group="Travel",
-              help="Interleave sparse, top and bottom solid fill on the same layer to reduce travel."),
         Param("avoid_open_spaces", "bool", False, label="Avoid crossing open spaces", group="Travel",
               help="Prefer a route within the same layer island, around holes or gaps, when within the detour budget."),
         Param("travel_detour_time", "float", 0.1, label="Max extra time per travel", unit="s",
@@ -56,6 +54,8 @@ FDMEMIT_PARAMS = [
     ]
 
 FDMINFILL_PARAMS = [
+        Param("optimize_mixed_infill", "bool", True, label="Print nearby infill together", group="Lines",
+              help="Interleave sparse, top and bottom solid fill on the same layer to reduce travel."),
         Param("density", "float", 20.0, unit="%", min=0, max=100, decimals=1, group="Pattern",
               help="0 = hollow (walls and shells only)."),
         Param("pattern", "choice", "grid", choices=list(infill_gen.PATTERNS), group="Pattern"),

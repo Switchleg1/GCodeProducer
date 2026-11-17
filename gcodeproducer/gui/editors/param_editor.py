@@ -255,6 +255,19 @@ class ParamEditor(QWidget):
                 self.values[name] = widget.text()
         self.changed.emit(dict(self.values))
 
+    def set_numeric_values(self, **values):
+        """Set plain numeric fields as one editor change (e.g. a picked XY pair)."""
+        from PyQt6.QtCore import QSignalBlocker
+        updated = dict(self.values)
+        for name, value in values.items():
+            widget = self._widgets[name]
+            with QSignalBlocker(widget):
+                widget.setValue(value)
+                updated[name] = widget.value()
+        if updated != self.values:
+            self.values = updated
+            self.changed.emit(dict(updated))
+
     def _set(self, name, value):
         self.values[name] = value
         self.changed.emit(dict(self.values))

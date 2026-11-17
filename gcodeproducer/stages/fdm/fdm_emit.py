@@ -85,6 +85,7 @@ class FDMEmit(SliceStage):
         b.reset_e()
 
         n = max(1, len(job.layers))
+        detours = fallbacks = 0
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -94,7 +95,7 @@ class FDMEmit(SliceStage):
             first = layer.index == 0
             router = TravelRouter(layer.outline, b.dx) if detour > 0 and layer.outline else None
             paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
-                     if params["optimize_mixed_infill"] else layer.paths)
+                     if job.settings.get("optimize_mixed_infill", True) else layer.paths)
             for path in paths:
                 pts = np.asarray(path.points, float)
                 if len(pts) < 2:
@@ -109,8 +110,14 @@ class FDMEmit(SliceStage):
                 feed = print_feed("first layer" if first else path.feature, requested, epm)
                 self._print_path(b, path, pts, epm, feed, travel_f, params,
                                  retract_len, retract_spd, zhop, router, detour)
+            if router is not None:
+                detours += router.detours
+                fallbacks += router.fallbacks
             ctx.progress((li + 1) / n)
 
+        if detour > 0:
+            ctx.log(f"  avoid open spaces: {detours} detours, {fallbacks} direct fallbacks "
+                    "(no same-island route found within budget)")
         self._end_gcode(b, job, temps, log=ctx.log)
         for msg in caps.values():
             ctx.log(f"  speed capped: {msg}")

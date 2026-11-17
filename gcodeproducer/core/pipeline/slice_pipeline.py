@@ -27,7 +27,16 @@ class SlicePipeline:
     def from_dict(cls, d: dict) -> "SlicePipeline":
         steps = [Step(s["stage"], dict(s.get("params", {})), bool(s.get("enabled", True)))
                  for s in d.get("steps", [])]
-        return cls(d.get("workflow", wf.FDM), steps)
+        pipeline = cls(d.get("workflow", wf.FDM), steps)
+        pipeline._move_fdm_infill_option()
+        return pipeline
+
+    def _move_fdm_infill_option(self):
+        if self.workflow == wf.FDM:
+            emit, infill = self.step("fdm_emit"), self.step("fdm_infill")
+            key = "optimize_mixed_infill"
+            if emit is not None and infill is not None and key in emit.params:
+                infill.params.setdefault(key, emit.params.pop(key))
 
     def save(self, path: str) -> None:
         with open(path, "w", encoding="utf-8") as fh:
@@ -62,6 +71,7 @@ class SlicePipeline:
                     break
             self.steps.insert(pos, Step(sid, enabled=not optional))
             have.add(sid)
+        self._move_fdm_infill_option()
         return self
 
     def step(self, stage_id: str):

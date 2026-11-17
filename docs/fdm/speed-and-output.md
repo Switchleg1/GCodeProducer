@@ -56,8 +56,6 @@ is not applied; it does not mean unlimited flow is physically possible.
   **material**, not this process section.
 - **Minimum travel to retract:** 1.5 mm. Shorter XY travels skip retraction.
   A detour counts as one travel, using its full length.
-- **Print nearby infill together:** on by default. Mixes nearby sparse, top
-  and bottom solid lines on the same layer when that shortens estimated travel.
 - **Avoid crossing open spaces:** off by default. When a direct move would
   cross a hole or leave a concave outline, try to keep it inside the same
   layer island. No route is forced between separate islands or when the
@@ -65,13 +63,18 @@ is not applied; it does not mean unlimited flow is physically possible.
 - **Max extra time per travel:** defaults to 0.100 s. The extra-distance budget
   is this value times the capped XY travel speed (15 mm at 150 mm/s).
   Zero disables detours. This is a per-travel estimate, not a print time cap:
-  it does not model acceleration, corner slowdown or retraction.
+  it does not model acceleration, corner slowdown or retraction. The Messages
+  log reports how many detours were used and how many travels near an island
+  fell back to direct motion. Raising the budget cannot make a gap between
+  separate islands routable.
 
 Under **Seam → Perimeter start / stop**, **Fastest (nearest start)** puts the
 seam at the closest point on the loop to the current head, minimizing the
 local approach distance. **Toward XY point** snaps it to the point on the
 loop closest to **Target X / Y**, in bed coordinates. A target outside the
-part can put seams on a consistent side across layers. **Fixed (loop start)**
+part can put seams on a consistent side across layers. A cyan target marks the
+point on the Prepare bed. Use **Pick on bed**, then click the bed to update
+both coordinates; **Esc** cancels without moving the target. **Fixed (loop start)**
 keeps the generated start; it does not mean the physical machine origin.
 
 Open paths may reverse to begin at the nearer end. Detours use the slice

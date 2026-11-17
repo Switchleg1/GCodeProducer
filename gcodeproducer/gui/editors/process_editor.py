@@ -20,6 +20,8 @@ from gcodeproducer.gui.editors.section import Section
 class ProcessEditor(QWidget):
     """Scrollable list of collapsible settings sections, one per pipeline step."""
     changed = pyqtSignal()
+    seamTargetChanged = pyqtSignal(object)
+    seamPickRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -55,6 +57,7 @@ class ProcessEditor(QWidget):
 
     def set_pipeline(self, pipeline: SlicePipeline) -> None:
         self.pipeline = pipeline
+        self._seam_editor = None
         pos = self.scroll.verticalScrollBar().value()
         body = QWidget()
         v = QVBoxLayout(body)
@@ -70,6 +73,16 @@ class ProcessEditor(QWidget):
         self.scroll.setWidget(body)
         self._refresh_titles()
         self.scroll.verticalScrollBar().setValue(pos)
+        self._emit_seam_target()
+
+    def _emit_seam_target(self):
+        vals = self._seam_editor.values if self._seam_editor is not None else {}
+        self.seamTargetChanged.emit((vals['seam_x'], vals['seam_y']) if vals.get('seam') == 'xy' else None)
+
+    def set_seam_target(self, x, y):
+        editor = self._seam_editor
+        if editor is not None and editor.values['seam'] == 'xy':
+            editor.set_numeric_values(seam_x=x, seam_y=y)
 
     def _expand_all(self, on: bool):
         for sec in self.sections:
@@ -108,6 +121,14 @@ class ProcessEditor(QWidget):
 
         editor = ParamEditor(cls.parameters(), {**cls.defaults(), **step.params}, section_level=1)
         editor.setEnabled(step.enabled)
+        if step is self.pipeline.step('fdm_emit'):
+            self._seam_editor = editor
+            seam = next(section for section in editor.sections if section.title() == 'Seam')
+            pick = QPushButton('Pick on bed')
+            pick.clicked.connect(self.seamPickRequested.emit)
+            seam.body.addRow(pick)
+            pick.setEnabled(editor.values['seam'] == 'xy')
+            editor.changed.connect(lambda vals: pick.setEnabled(vals['seam'] == 'xy'))
 
         if cls.optional:
             en = QCheckBox("Enabled")
@@ -123,6 +144,8 @@ class ProcessEditor(QWidget):
 
         def on_params(vals, s=step):
             s.params = dict(vals)
+            if editor is self._seam_editor:
+                self._emit_seam_target()
             self._refresh_titles()
             self.changed.emit()
         editor.changed.connect(on_params)
