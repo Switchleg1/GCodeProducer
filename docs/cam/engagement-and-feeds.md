@@ -6,8 +6,8 @@ The current machining engagement types are:
 
 | Type | Default estimated radial engagement | Default base-feed modifier |
 |---|---|---:|
-| **HSM** (low horizontal engagement) | Below 40% | Tool HSM factor, initially 100% |
-| **Cut** | 40% through 80% | Tool Cut factor, initially 100% |
+| **HSM** (low horizontal engagement) | Below 15% | Tool HSM factor, initially 100% |
+| **Cut** | 15% through 80% | Tool Cut factor, initially 100% |
 | **High engagement** | **Above 80%**, below Slot | Machine modifier, initially 75% |
 | **Slot** | Approximately 95–100% | Machine modifier, initially 50% |
 
@@ -40,13 +40,22 @@ mode uses that value. See [surface operations](3d-operations.md#3d-contour).
 
 **Libraries → CAM machine → Engagement** sets:
 
-- `hsm_engagement_threshold` (default 40%).
+- `hsm_engagement_threshold` (default 15%; 40% before 0.1.11).
 - `high_engagement_threshold` (default 80%; High is strictly above it).
 - `slot_engagement_threshold` (default 95%; Slot starts at it).
 - `high_engagement_feed` (default 75% of normal base feed).
 - `slotting_feed` (default 50% of normal base feed).
 
-Boundaries must satisfy `0 < HSM < High < Slot <= 100`. High is strictly
+Boundaries must satisfy `0 < HSM < High < Slot <= 100`.
+
+**Keep the HSM boundary away from your usual stepover.** A side-by-side pass
+with stepover *S* % of the diameter measures about *S* % radial engagement.
+If *S* equals the HSM boundary, height-grid sampling noise of a fraction of a
+percent flips the band between HSM and Cut every few millimetres (for
+example a 40 % stepover with the old 40 % default). The bands, Preview colours
+and — when the HSM and Cut factors differ — the feed then alternate along one
+line. Machines saved before 0.1.11 keep their stored 40 %; change it under
+**Libraries → CAM machine → Engagement → HSM / Cut boundary**. High is strictly
 above its configured percentage (80.01% is High at the default), while Slot
 starts at its configured threshold. Only floating-point roundoff is suppressed;
 estimates near a boundary can vary along the path. Changing a boundary changes

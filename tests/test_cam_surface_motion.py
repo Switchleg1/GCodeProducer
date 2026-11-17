@@ -24,7 +24,7 @@ def state_with_strip(width):
 
 
 @pytest.mark.parametrize('width,band,factor', [(4, 'slot', .35), (3.6, 'high', .6),
-                                              (2.4, 'cut', .9), (1, 'hsm', 1.1), (0, 'air', 1.)])
+                                              (2.4, 'cut', .9), (.4, 'hsm', 1.1), (0, 'air', 1.)])
 def test_xyz_engagement_bands_and_operation_overrides(width, band, factor):
     state = state_with_strip(width)
     op = Operation(kind='contour3d', slotting_feed=35, high_engagement_feed=60,
@@ -101,7 +101,8 @@ def motion_job(libset, lead_in=True, lead_out=True, repeat=False, parallel=False
     op.standard_engagement_feed, op.low_engagement_feed = 85, 110
     job.machine.values['max_feed'] = 5000
     job.preferences['stock_resolution'] = .1
-    ys = [10, 11, 12.5, 15.1] if parallel else [12]
+    # slot, cut (33 %), cut (50 %), high (87 %), hsm (10 % of the 3 mm cutter)
+    ys = [10, 11, 12.5, 15.1, 15.4] if parallel else [12]
     paths = [Path('cut', np.array([[13, y, -1], [27, y, -1.]]), width=3) for y in ys]
     for i in range(2 if repeat else 1):
         layer = Layer(i, -1, 1, paths=paths)

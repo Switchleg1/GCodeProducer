@@ -56,7 +56,7 @@ def test_radial_measurement_and_forward_slot_entry():
     assert engagement_band(front[2][0])=="slot"
 
 
-@pytest.mark.parametrize("value,band", [(0,"air"),(.2,"hsm"),(.4,"cut"),(.7,"cut"),(.8,"cut"),(.9,"high"),(.99,"slot")])
+@pytest.mark.parametrize("value,band", [(0,"air"),(.1,"hsm"),(.15,"cut"),(.4,"cut"),(.7,"cut"),(.8,"cut"),(.9,"high"),(.99,"slot")])
 def test_engagement_bands(value,band):
     assert engagement_band(value)==band
 

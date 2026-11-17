@@ -22,7 +22,7 @@ def engagement_band(value, machine=None):
     if value <= 1e-6:
         return "air"
     percent = round(float(np.clip(value, 0, 1))*100,6)
-    low = float(machine.get("hsm_engagement_threshold",40)) if machine else 40
+    low = float(machine.get("hsm_engagement_threshold",15)) if machine else 15
     high = float(machine.get("high_engagement_threshold",80)) if machine else 80
     slot = float(machine.get("slot_engagement_threshold",95)) if machine else 95
     if not 0 < low < high < slot <= 100:

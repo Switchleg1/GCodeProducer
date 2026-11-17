@@ -46,8 +46,10 @@ def _machine_schema(workflow: str) -> list:
                   choices=[("climb", "Climb"), ("conventional", "Conventional"), ("meander", "Meander")],
                   help="Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses "
                        "direction; full slots are neutral. Operations may override. Meander alternates one-sided passes."),
-            Param("hsm_engagement_threshold", "float", 40., min=1, max=79, unit="%", group="Engagement",
-                  label="HSM / Cut boundary"),
+            Param("hsm_engagement_threshold", "float", 15., min=1, max=79, unit="%", group="Engagement",
+                  label="HSM / Cut boundary",
+                  help="Radial engagement below this is HSM (light, high-speed-style cutting). Keep it well away "
+                       "from your usual stepover: a stepover equal to the boundary flips HSM/Cut on grid noise."),
             Param("high_engagement_threshold", "float", 80., min=1, max=99, unit="%", group="Engagement",
                   label="High engagement above"),
             Param("slot_engagement_threshold", "float", 95., min=1, max=100, unit="%", group="Engagement",

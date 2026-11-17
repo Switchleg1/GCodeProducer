@@ -50,7 +50,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `spindle_max` — Spindle max | float / rpm | `24000.0` | No schema bound | Spindle.  |
 | `units` — Units | choice | `mm` | `mm` = mm; `inch` = inch | Work area.  |
 | `cut_direction` — Default cutting direction | choice | `climb` | `climb` = Climb; `conventional` = Conventional; `meander` = Meander | Toolpaths. Requested one-sided hand for CAM pockets/profiles (M3). Remaining material chooses direction; full slots are neutral. Operations may override. Meander alternates one-sided passes. |
-| `hsm_engagement_threshold` — HSM / Cut boundary | float / % | `40.0` | minimum 1; maximum 79 | Engagement.  |
+| `hsm_engagement_threshold` — HSM / Cut boundary | float / % | `15.0` | minimum 1; maximum 79 | Engagement. Radial engagement below this is HSM (light, high-speed-style cutting). Keep it well away from your usual stepover: a stepover equal to the boundary flips HSM/Cut on grid noise. |
 | `high_engagement_threshold` — High engagement above | float / % | `80.0` | minimum 1; maximum 99 | Engagement.  |
 | `slot_engagement_threshold` — Slot at / above | float / % | `95.0` | minimum 1; maximum 100 | Engagement.  |
 | `high_engagement_feed` — High engagement feed modifier | float / % | `75.0` | minimum 1; maximum 300 | Engagement.  |

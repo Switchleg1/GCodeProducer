@@ -123,7 +123,9 @@ def test_invalid_rpm_ceiling_rejected(bad):
 def test_machine_engagement_thresholds_and_modifiers():
     machine,tool,_=fixture()
     op=Operation()
-    assert engagement_band(.2,machine)=="hsm"
+    assert engagement_band(.1,machine)=="hsm"
+    assert engagement_band(.15,machine)=="cut"      # default HSM / Cut boundary 15%
+    assert engagement_band(.4,machine)=="cut"
     assert engagement_band(.8,machine)=="cut"
     assert engagement_band(.8001,machine)=="high"
     assert engagement_band(.9499,machine)=="high"
