@@ -64,9 +64,10 @@ is not applied; it does not mean unlimited flow is physically possible.
   is this value times the capped XY travel speed (15 mm at 150 mm/s).
   Zero disables detours. This is a per-travel estimate, not a print time cap:
   it does not model acceleration, corner slowdown or retraction. The Messages
-  log reports how many detours were used and how many travels near an island
-  fell back to direct motion. Raising the budget cannot make a gap between
-  separate islands routable.
+  log separates successful detours, unresolved same-island crossings, and
+  travels between islands or to/from outside an island. The search retries
+  dense outlines with more waypoints, but remains bounded. Raising the budget
+  cannot make a gap between separate islands routable.
 
 Under **Seam → Perimeter start / stop**, **Fastest (nearest start)** puts the
 seam at the closest point on the loop to the current head, minimizing the

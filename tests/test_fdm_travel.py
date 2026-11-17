@@ -59,6 +59,34 @@ def test_large_budget_does_not_disable_detours_on_dense_outlines():
     assert router.detours == 2
 
 
+def test_dense_route_retries_with_more_waypoints(monkeypatch):
+    import gcodeproducer.core.fdm.travel_router as travel_router
+
+    # A single candidate cannot route around both corners of this hole.
+    monkeypatch.setattr(travel_router, 'TRAVEL_VERTEX_LIMIT', 1)
+    a, b = (2, 5), (10, 5)
+    router = TravelRouter([OUTER, HOLE], 3)
+    line = LineString([a, *router.route(a, b, 100*150.)])
+    assert len(line.coords) >= 4
+    assert Polygon(OUTER, [HOLE]).covers(line)
+    assert router.detours == 1 and router.fallbacks == 0
+
+
+def test_routed_waypoints_keep_single_decimal_step_in_gcode():
+    class Router:
+        def route(self, start, end, extra):
+            return [(2., 3.), (2.001, 4.), end]
+
+    builder = GCodeBuilder()
+    path = Path('infill', np.array([(4., 5.), (5., 5.)]))
+    FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000,
+                         {'retract': False}, 0, 25, 0, Router(), 20.)
+    program = builder.program()
+    sim = simulate(program)
+    assert [(sim.x[i], sim.y[i]) for i, ln in enumerate(program.lines) if ln.cmd == 'G0'] == [
+        (2., 3.), (2.001, 4.), (4., 5.)]
+
+
 def test_mixed_infill_setting_migrates_from_output():
     from gcodeproducer.core.pipeline.slice_pipeline import SlicePipeline
     process = SlicePipeline.default('fdm').to_dict()

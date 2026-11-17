@@ -85,7 +85,7 @@ class FDMEmit(SliceStage):
         b.reset_e()
 
         n = max(1, len(job.layers))
-        detours = fallbacks = 0
+        detours = fallbacks = outside = 0
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -113,11 +113,12 @@ class FDMEmit(SliceStage):
             if router is not None:
                 detours += router.detours
                 fallbacks += router.fallbacks
+                outside += router.outside
             ctx.progress((li + 1) / n)
 
         if detour > 0:
-            ctx.log(f"  avoid open spaces: {detours} detours, {fallbacks} direct fallbacks "
-                    "(no same-island route found within budget)")
+            ctx.log(f"  avoid open spaces: {detours} detours, {fallbacks} unresolved same-island crossings, "
+                    f"{outside} travels between islands or to/from outside an island")
         self._end_gcode(b, job, temps, log=ctx.log)
         for msg in caps.values():
             ctx.log(f"  speed capped: {msg}")
@@ -154,7 +155,8 @@ class FDMEmit(SliceStage):
         if do_retract:
             b.retract(rlen, rspd, zhop)
         for q in route:
-            b.travel(float(q[0]), float(q[1]), feed=travel_f)
+            # Even a one-unit change in the last decimal can matter at a wall.
+            b.travel(float(q[0]), float(q[1]), feed=travel_f, force_xy=len(route) > 1)
         if do_retract:
             b.unretract(rlen, rspd, zhop)
         for q in loop[1:]:

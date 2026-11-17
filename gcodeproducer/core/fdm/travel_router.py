@@ -2,10 +2,11 @@
 from heapq import heappop, heappush
 import math
 
-from shapely import prepare
+import numpy as np
+from shapely import covers, linestrings, prepare
 from shapely.geometry import LineString, Point, Polygon
 
-from .fdm_constants import TRAVEL_VERTEX_LIMIT, TRAVEL_WAYPOINT_INSET
+from .fdm_constants import TRAVEL_RETRY_VERTEX_LIMIT, TRAVEL_VERTEX_LIMIT, TRAVEL_WAYPOINT_INSET
 
 
 def _polygons(shape):
@@ -20,7 +21,7 @@ def _polygons(shape):
 class TravelRouter:
     def __init__(self, outline, decimals):
         self.decimals = decimals
-        self.detours = self.fallbacks = 0
+        self.detours = self.fallbacks = self.outside = 0
         region = Polygon()
         for ring in outline:
             if len(ring) >= 3:
@@ -71,22 +72,29 @@ class TravelRouter:
             # Keep the best lower bounds; raising the budget can only append
             # less promising candidates, not disable a previously valid route.
             candidates.sort()
-            waypoints = self._search(poly, [a, b, *(p for _, p in candidates[:TRAVEL_VERTEX_LIMIT])], limit)
+            options = [a, b, *(p for _, p in candidates[:TRAVEL_RETRY_VERTEX_LIMIT])]
+            first = TRAVEL_VERTEX_LIMIT + 2
+            waypoints = self._search(poly, options[:first], limit)
+            if waypoints is None and len(options) > first:
+                waypoints = self._search(poly, options, limit)
             if waypoints is not None:
                 self.detours += 1
                 return [*waypoints, end]
             self.fallbacks += 1
             return direct
-        self.fallbacks += int(start_inside or end_inside)
+        self.outside += int(start_inside or end_inside)
         return direct
 
     @staticmethod
     def _search(poly, points, limit):
         """A* on the visibility graph, with a straight-line lower bound."""
         end = points[1]
-        best = [0.] + [math.inf] * (len(points)-1)
+        coords = np.asarray(points)
+        remaining = np.hypot(*(coords - end).T)
+        best = np.full(len(points), np.inf)
+        best[0] = 0.
         parent = [-1] * len(points)
-        queue = [(math.dist(points[0], end), 0., 0)]
+        queue = [(remaining[0], 0., 0)]
         while queue:
             _, cost, i = heappop(queue)
             if cost != best[i]:
@@ -98,12 +106,15 @@ class TravelRouter:
                     waypoints.append(points[j])
                     j = parent[j]
                 return waypoints[::-1]
-            for j, q in enumerate(points[1:], 1):
-                if i == j:
-                    continue
-                new_cost = cost + math.dist(points[i], q)
-                bound = new_cost + math.dist(q, end)
-                if new_cost < best[j] and bound <= limit and poly.covers(LineString((points[i], q))):
-                    best[j], parent[j] = new_cost, i
-                    heappush(queue, (bound, new_cost, j))
+            new_cost = cost + np.hypot(*(coords - coords[i]).T)
+            bound = new_cost + remaining
+            ids = np.flatnonzero((new_cost < best) & (bound <= limit))
+            if not len(ids):
+                continue
+            edges = np.empty((len(ids), 2, 2))
+            edges[:, 0] = coords[i]
+            edges[:, 1] = coords[ids]
+            for j in ids[covers(poly, linestrings(edges))]:
+                best[j], parent[j] = new_cost[j], i
+                heappush(queue, (bound[j], new_cost[j], j))
         return None

@@ -71,13 +71,13 @@ class GCodeBuilder:
     def _fmt(letter: str, value: float, dec: int) -> str:
         return letter + format_number(value, dec)
 
-    def _xyzf(self, x=None, y=None, z=None, f=None) -> str:
+    def _xyzf(self, x=None, y=None, z=None, f=None, *, force_xy=False) -> str:
         parts = []
-        if x is not None and abs(x - self.x) > 10 ** -self.dx:
+        if x is not None and (force_xy or abs(x - self.x) > 10 ** -self.dx):
             parts.append(self._fmt("X", x, self.dx)); self.x = x
         elif x is not None:
             self.x = x
-        if y is not None and abs(y - self.y) > 10 ** -self.dx:
+        if y is not None and (force_xy or abs(y - self.y) > 10 ** -self.dx):
             parts.append(self._fmt("Y", y, self.dx)); self.y = y
         elif y is not None:
             self.y = y
@@ -94,8 +94,9 @@ class GCodeBuilder:
         if body:
             self._emit("G1 " + body if feed else "G0 " + body)
 
-    def travel(self, x: float, y: float, z: Optional[float] = None, feed: Optional[float] = None) -> None:
-        body = self._xyzf(x=x, y=y, z=z, f=feed)
+    def travel(self, x: float, y: float, z: Optional[float] = None, feed: Optional[float] = None,
+               *, force_xy: bool = False) -> None:
+        body = self._xyzf(x=x, y=y, z=z, f=feed, force_xy=force_xy)
         if body:
             self._emit("G0 " + body)
 
