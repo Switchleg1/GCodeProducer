@@ -30,7 +30,7 @@ application/test/tool callers or documentation references:
 | Previous module | Removed definitions |
 |---|---|
 | `core.features` | `assign_layers_by_z`, `assign_layers_by_depth`, `compute_layer_z`, `classify_perimeters`, `mode_value`, `_point_segment_distance` |
-| `core.gcode` | `parse_lines` (program construction remains available through `GCodeProgram.from_lines`) |
+| `core.gcode` | `parse_lines` (program construction remains available through `GCodeProgram.from_text`) |
 | `core.infill_gen` | `Raster`, `chain_polylines`, `bead_area`, `width_from_area` |
 | `core.placement` | `Placement.reset_rotation` |
 | `core.profiles` | `LibrarySet.library_kinds` |

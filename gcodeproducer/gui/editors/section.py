@@ -33,7 +33,9 @@ class Section(QWidget):
         self.header.setCheckable(True)
         self.header.setChecked(expanded)
         self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # A long title (with its summary) must never widen the dock: it is clipped instead.
+        self.header.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.header.setMinimumWidth(60)
         self.header.setMinimumHeight(26)
         # level 1 = a pane nested in another pane: same behaviour, quieter header
         self.header.setObjectName("sectionHeader" if level == 0 else "subsectionHeader")

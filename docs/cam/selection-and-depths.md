@@ -35,10 +35,15 @@ This is not a replacement for exact B-rep/CAD topology.
    ambiguous overlaps, not mutually exclusive operation types; switching a
    filter never clears existing selections.
 3. Click an element to add it; click it again to remove it.
-4. In **Pick purpose (per selection)**, leave **Use for machining** checked for
-   cutting boundaries; uncheck any row that should supply only a height.
-5. Use **Clear geometry** to remove cutting references; saved height-only picks
-   and existing depth links are retained.
+4. Every pick is a row of the full-width selection list. Leave **Use for
+   machining** checked for cutting boundaries; uncheck any row that should
+   supply only a height.
+5. Under the list: the face/edge pick mode, **Remove** (drops the selected row,
+   whether machining or height-only) and **Clear geometry** (removes all cutting
+   references; height-only picks and Start/End links stay). A row that defines
+   Start or End Z cannot be removed until that depth uses another source.
+
+![Selection list with its actions underneath](../pictures/cam-operation-selection-list.png)
 
 Selected part faces/edges highlight yellow; selected material faces/edges
 highlight **green**, drawn over the material surface so they remain visible. The operation owns its selections;
@@ -180,7 +185,7 @@ coordinates, persistence and machining limits.
 A horizontal face may define the operation boundary, while another face
 provides a bottom height. To avoid cutting both faces:
 
-1. Pick both edges/faces. Each gets its own row under **Pick purpose (per selection)**.
+1. Pick both edges/faces. Each gets its own row in the selection list.
 2. Keep the cutting boundary checked under **Use for machining**.
 3. Uncheck the other row: it becomes **Height only** and is excluded from
    toolpath boundaries and *Machining selection* depth extremes.

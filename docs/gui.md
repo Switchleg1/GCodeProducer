@@ -12,6 +12,10 @@ the relationship. The second left dock contains FDM **Process** settings or
 the **CAM setup** tree. Right-hand docks expose view options, G-code,
 statistics and the log.
 
+The **Messages** dock at the bottom keeps to the list: its counts appear in the
+dock title (*Messages — 0 errors, 1 warnings*) and **Clear** sits beside the
+list, so no row is spent below it.
+
 Move, float or close docks using their title bars. Restore hidden docks through
 **View**. Layout and window geometry are remembered using Qt settings. A
 missing dock is not evidence that its feature is disabled.
@@ -155,11 +159,30 @@ leads; see [holding tabs](cam/holding-tabs.md) for setup and safety limits.
 
 ## Inspecting generated paths
 
-- The vertical layer slider selects the highest visible layer/depth pass.
-- **Single layer** isolates that selection rather than showing all lower indices.
-- **In layer** scrubs moves within the selected layer.
-- Layer controls are disabled in Prepare but remain outside the viewport so
-  their labels do not resize the 3D area when changing views.
+The playback bar under the Preview is the same for FDM and CAM (and matches
+GCodeTools). It plays the program line by line, drawing it up to the cursor.
+
+![Preview playback bar](pictures/ui-preview-playback.png)
+
+| Control | Action |
+|---|---|
+| ⏮ / ⏭ | Jump to the start; End shows the whole program |
+| ⏪ / ⏩ | Previous / next layer (FDM layer or CAM depth pass); the cursor goes to the end of that layer |
+| ◀ / ▶\| | Previous / next move (comments and blank lines are skipped) |
+| ▶ / ⏸ | Play / pause (Space). Playing at the end restarts from the start |
+| Speed | 1 to 50,000 lines per second, logarithmic |
+| Line slider and *line* box | Position in the whole program |
+| In layer | Position within the top visible layer |
+| Layers *from* / *to* | Lowest and highest visible layer |
+| Single layer | Show only the top visible layer |
+| Follow | While scrubbing or playing, the top visible layer follows the cursor |
+
+- The vertical slider beside the view is the same *to* layer (PgUp / PgDn).
+- Double-clicking a G-code line moves the cursor there; the view, the G-code
+  list and the status line always show the cursor's line.
+- Playback stops when leaving Preview or regenerating. Layer and playback
+  controls are disabled in Prepare but stay outside the viewport so their
+  labels do not resize the 3D area when changing views.
 - Colour by feature, movement kind, speed or layer. Feature checkboxes hide or
   show categories; hover a CAM entry such as *HSM*, *Conflict* or *Collision*
   for its meaning. Hidden paths still exist in exported G-code.
@@ -190,13 +213,16 @@ cutter clearance or successful workholding.
 | F | Fit view |
 | 1 / 2 / 3 / 4 in viewer | Isometric / top / front / right |
 | PgUp / PgDn | Next / previous layer index |
+| Space (Preview) | Play / pause playback |
+| Left / Right (Preview) | Previous / next move |
 | Home / End | First / last layer index |
 | Esc | Exit active picking/placement tool |
 | Delete / Backspace | Delete selected manual support block in its editing context |
 
 ## Generation, progress and cancellation
 
-The action reads **Slice** for FDM and **Generate paths** for CAM. While a job
+The action reads **Slice** for FDM and **Generate paths** for CAM. It shares
+its height with **Save G-code…** and takes about 70 % of the row. While a job
 is running, it becomes **Cancel**. Heavy geometry work and toolpath preparation
 run in a persistent spawned compute process. The GUI receives progress/log
 signals and chunked program results. Cancelling stops the compute process;

@@ -86,6 +86,9 @@ class CAMEditor(QWidget):
         self.details = QFrame()
         form = QFormLayout(self.details)
         form.setContentsMargins(*SECTION_BODY_MARGINS)
+        # Narrow docks: long labels put their field on the next line instead of forcing a scrollbar.
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.details_section = Section("Operation", self.details, key="cam.operation")
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._edit)
@@ -96,16 +99,6 @@ class CAMEditor(QWidget):
         self.geom_label = QLabel("No geometry selected")
         self.geom_label.setWordWrap(True)
         form.addRow(self.geom_label)
-        row = QHBoxLayout()
-        self.pick = QComboBox()
-        for label, mode in PICK_MODES:
-            self.pick.addItem(label, mode)
-        self.pick.currentIndexChanged.connect(self._pick_changed)
-        row.addWidget(self.pick)
-        clear = QPushButton("Clear geometry")
-        clear.clicked.connect(self.clear_geometry)
-        row.addWidget(clear)
-        form.addRow(row)
         self.pick_source = QComboBox()
         self.pick_source.addItem("Part + material + references", "both")
         self.pick_source.addItem("Part only", "part")
@@ -125,7 +118,27 @@ class CAMEditor(QWidget):
         self.selections.setToolTip("Purpose is per selection. Uncheck an edge/face to keep it only as a height reference. "
                                    "Select its row, then use it for Start Z or End Z below.")
         self.selections.itemChanged.connect(self._selection_purpose_changed)
-        form.addRow("Pick purpose (per selection)", self.selections)
+        self.selections.currentItemChanged.connect(lambda *_: self.b_remove_ref.setEnabled(
+            self.selections.currentItem() is not None))
+        form.addRow(self.selections)                 # full width: one row per picked reference
+        # Actions for the list sit directly under it, as in every pane.
+        row = QHBoxLayout()
+        self.pick = QComboBox()
+        for label, mode in PICK_MODES:
+            self.pick.addItem(label, mode)
+        self.pick.currentIndexChanged.connect(self._pick_changed)
+        row.addWidget(self.pick, 1)
+        self.b_remove_ref = QPushButton("Remove")
+        self.b_remove_ref.setToolTip("Remove the selected reference from this operation (machining and height-only)")
+        self.b_remove_ref.setEnabled(False)
+        self.b_remove_ref.clicked.connect(self.remove_selected_reference)
+        row.addWidget(self.b_remove_ref)
+        clear = QPushButton("Clear geometry")
+        clear.setToolTip("Remove every machining reference of this operation (height-only references and "
+                         "Start/End links stay)")
+        clear.clicked.connect(self.clear_geometry)
+        row.addWidget(clear)
+        form.addRow(row)
         self.pick_status = QLabel("Click geometry to add/remove it from this operation.")
         self.pick_status.setWordWrap(True)
         form.addRow(self.pick_status)
@@ -149,10 +162,10 @@ class CAMEditor(QWidget):
             v.setContentsMargins(0, 0, 0, 0)
             v.addWidget(source)
             r = QHBoxLayout()
-            r.addWidget(val)
-            r.addWidget(extreme)
-            r.addWidget(use)
+            r.addWidget(val, 1)
+            r.addWidget(extreme, 1)
             v.addLayout(r)
+            v.addWidget(use)
             form.addRow(title, box)
             self.depth_controls[key] = (source, val, extreme)
         self.depth_summary = QLabel("")
@@ -194,7 +207,7 @@ class CAMEditor(QWidget):
             self.direction.addItem(label, key)
         self.direction.currentIndexChanged.connect(self._edit)
         form.addRow(self.direction_override, self.direction)
-        self.lead_in = QCheckBox("Lead-in ramp along selected contour")
+        self.lead_in = QCheckBox("Lead-in ramp along contour")
         self.lead_out = QCheckBox("Lead-out along cleared contour")
         self.lead_in.toggled.connect(self._edit)
         self.lead_out.toggled.connect(self._edit)
@@ -237,7 +250,7 @@ class CAMEditor(QWidget):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
-        self.protect_model = QCheckBox("Stop at model surface (3D floor)")
+        self.protect_model = QCheckBox("Stop at model surface")
         self.protect_model.setToolTip("Pocket: at every depth keep the cutter out of all model material above that depth, so a sloped or "
                                       "curved bottom is cleared in terraces instead of being cut flat. Always applied when the selected "
                                       "boundary is not level, and by 3D Waterfall / 3D Contour. Finish terraces with those operations.")
@@ -272,6 +285,11 @@ class CAMEditor(QWidget):
                          "Verify clearance and air-cut before machining.")
         warning.setWordWrap(True)
         layout.addWidget(warning)
+        for combo in self.findChildren(QComboBox):
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(8)
+        for label in self.details.findChildren(QLabel):
+            label.setWordWrap(True)
         self.rebuild()
 
     def _pick_changed(self, *_):
@@ -516,6 +534,7 @@ class CAMEditor(QWidget):
                 self.selections.setCurrentItem(item)
         self.selections.resizeColumnToContents(0)
         self.selections.blockSignals(False)
+        self.b_remove_ref.setEnabled(self.selections.currentItem() is not None)
 
     def _selection_purpose_changed(self, item, column):
         op = self.operation()
@@ -600,6 +619,32 @@ class CAMEditor(QWidget):
             val.setValue(d.value)
             extreme.setCurrentIndex(extreme.findData(d.extreme))
         self._loading = False
+        self.changed.emit()
+
+    def remove_selected_reference(self):
+        """Drop the selected row's reference from the operation.
+
+        A reference that still defines Start or End Z is kept (it cannot silently
+        change the depth); unlink the depth first.
+        """
+        op = self.operation()
+        item = self.selections.currentItem()
+        if op is None or item is None:
+            return
+        ref = item.data(0, Qt.ItemDataRole.UserRole)
+        linked = [name for name, d in (("Start", op.start), ("End", op.end))
+                  if d.source == "geometry" and d.reference == ref]
+        if linked:
+            self.pick_status.setText(f"This reference defines {' and '.join(linked)} Z. Choose another depth source "
+                                     "first, then remove it.")
+            return
+        if ref in op.geometry:
+            op.geometry.remove(ref)
+        if ref in op.height_references:
+            op.height_references.remove(ref)
+        self._refresh_selections()
+        self.geom_label.setText(f"{len(op.geometry)} geometry references")
+        self.pick_status.setText("Reference removed from this operation.")
         self.changed.emit()
 
     def clear_geometry(self):

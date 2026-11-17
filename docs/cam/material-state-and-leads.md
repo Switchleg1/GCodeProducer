@@ -87,7 +87,7 @@ from a smooth-looking or warning-free display.
 
 ## Lead-in
 
-Operations expose **Lead-in ramp along selected contour**, **Lead-out along
+Operations expose **Lead-in ramp along contour**, **Lead-out along
 cleared contour**, and a lead length. Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 

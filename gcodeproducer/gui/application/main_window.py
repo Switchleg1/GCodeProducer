@@ -13,11 +13,11 @@ Layout follows GCodeTools:
 """
 from __future__ import annotations
 
-from .application_constants import SHOW_OPTIONS, CAMERA_VIEW_KEYS, CAMERA_VIEWS, ROTATION_BUTTONS
+from .application_constants import SHOW_OPTIONS, CAMERA_VIEW_KEYS, CAMERA_VIEWS, ROTATION_BUTTONS, ACTION_BUTTON_HEIGHT, ACTION_BUTTON_STRETCH
 from gcodeproducer.gui.application.application_constants import MODEL_FILTER
 import copy, hashlib, json, os, time, numpy as np, gcodeproducer.core.settings.preferences as app_settings, gcodeproducer.core.libraries.defaults as defaults, gcodeproducer.core.plugins.discovery as plugins, gcodeproducer.core.workflows.validation as wf
 from pathlib import Path
-from PyQt6.QtCore import QSettings, Qt, QTimer
+from PyQt6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPixmap, QShortcut
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -147,6 +147,12 @@ class MainWindow(QMainWindow):
         for key, fn in (("PgUp", lambda: self.step_layer(1)), ("PgDown", lambda: self.step_layer(-1)),
                         ("Home", lambda: self.step_layer(-10 ** 6)), ("End", lambda: self.step_layer(10 ** 6))):
             QShortcut(QKeySequence(key), self, activated=fn)
+        # Playback keys act in the Preview view and its playback bar only (not in text fields elsewhere).
+        for widget in (self.viewer, self.playback):
+            for key, fn in (("Space", self.playback.toggle_play), ("Left", lambda: self.playback.step_line(-1)),
+                            ("Right", lambda: self.playback.step_line(1))):
+                QShortcut(QKeySequence(key), widget, activated=fn,
+                          context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
         self._restore()
         for e in plugins.load_errors():
@@ -213,16 +219,16 @@ class MainWindow(QMainWindow):
         lv.addWidget(self.layer_lbl)
         lv.addWidget(self.layer_slider, 1, Qt.AlignmentFlag.AlignHCenter)
 
-        self.line_slider = QSlider(Qt.Orientation.Horizontal)
-        self.line_slider.setToolTip("Position within the top layer")
-        self.line_slider.valueChanged.connect(self._on_line_slider)
-        self.single_layer = QCheckBox("Single layer")
-        self.single_layer.toggled.connect(lambda _v: self._apply_layers())
-        self.lbl_in_layer = QLabel("In layer")
+        # Preview playback (shared by FDM and CAM): cursor, layer range, transport
+        from gcodeproducer.gui.inspection.playback_bar import PlaybackBar
+        self.playback = PlaybackBar()
+        self.playback.cursorChanged.connect(self._on_cursor)
+        self.playback.layersChanged.connect(self._on_layers)
+        self.line_slider = self.playback.layer_line_slider       # position within the top layer
+        self.single_layer = self.playback.single_layer
+        self.lbl_in_layer = self.playback.lbl_in_layer
         bottom = QHBoxLayout()
-        bottom.addWidget(self.lbl_in_layer)
-        bottom.addWidget(self.line_slider, 1)
-        bottom.addWidget(self.single_layer)
+        bottom.addWidget(self.playback)
 
         # both views share one area (and one camera): the layer controls sit outside
         # it, so Prepare and Preview have exactly the same size and framing; the
@@ -371,19 +377,21 @@ class MainWindow(QMainWindow):
         self.model_viewer.camSelectionExited.connect(self._cam_selection_exited)
         self.cam_scroll = QScrollArea()
         self.cam_scroll.setWidgetResizable(True)
+        self.cam_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)   # fit the dock width
         self.cam_scroll.setWidget(self.cam_editor)
         self.cam_scroll.setVisible(False)
         pl.addWidget(self.cam_scroll, 1)
 
         self.slice_btn = QPushButton("\u25b6  Slice")
-        self.slice_btn.setMinimumHeight(34)
         self.slice_btn.setStyleSheet("font-weight:bold;")
         self.slice_btn.clicked.connect(self.run_slice)
         self.save_btn = QPushButton("Save G-code\u2026")
         self.save_btn.clicked.connect(self.save_gcode)
         rb = QHBoxLayout()
-        rb.addWidget(self.slice_btn, 2)
-        rb.addWidget(self.save_btn, 1)
+        for button, stretch in ((self.slice_btn, ACTION_BUTTON_STRETCH[0]), (self.save_btn, ACTION_BUTTON_STRETCH[1])):
+            button.setFixedHeight(ACTION_BUTTON_HEIGHT)            # the same height, 70 / 30 width
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            rb.addWidget(button, stretch)
         pl.addLayout(rb)
         self.dock_process = self._dock("Process", pw, Qt.DockWidgetArea.LeftDockWidgetArea, "dock_process")
         self.splitDockWidget(self.dock_prepare, self.dock_process, Qt.Orientation.Vertical)
@@ -460,6 +468,8 @@ class MainWindow(QMainWindow):
         self.dock_text.raise_()
         self.messages = MessagesPanel()
         self.dock_messages = self._dock("Messages", self.messages, Qt.DockWidgetArea.BottomDockWidgetArea, "dock_messages")
+        self.messages.summaryChanged.connect(
+            lambda text: self.dock_messages.setWindowTitle("Messages" + ("" if text == "No messages" else f" \u2014 {text}")))
 
     def _fit_model_options(self, index=None):
         """The shared Support / Material slot sizes to the visible page only."""
@@ -1189,6 +1199,7 @@ class MainWindow(QMainWindow):
         self.place_box.setEnabled(True)
         # a new model invalidates the old tool path
         self.program = self.tp = None
+        self.playback.clear()
         self.viewer.set_toolpath(None)
         self.text_panel.set_program(None)
         self.feature_list.clear()
@@ -1736,8 +1747,10 @@ class MainWindow(QMainWindow):
             mode = "prepare"
         self.mode = mode
         self.stack.setCurrentIndex(0 if mode == "prepare" else 1)
-        for w in (self.layer_slider, self.layer_lbl, self.line_slider, self.single_layer, self.lbl_in_layer):
+        for w in (self.layer_slider, self.layer_lbl, self.playback):
             w.setEnabled(mode == "preview")
+        if mode != "preview":
+            self.playback.stop_play()
         (self.act_prepare if mode == "prepare" else self.act_preview).setChecked(True)
         if mode == "preview" and self.b_face.isChecked():
             self.b_face.setChecked(False)
@@ -1757,7 +1770,7 @@ class MainWindow(QMainWindow):
         self.material_output.blockSignals(False)
         self.viewer.set_material_surface(None)
         self.viewer.set_info("")
-        self.layer_slider.setEnabled(True);self.line_slider.setEnabled(True)
+        self.layer_slider.setEnabled(True);self.playback.setEnabled(True)
 
     def _on_view_state(self,_what):
         self.model_viewer.show_material=self.state.show_material
@@ -1775,12 +1788,13 @@ class MainWindow(QMainWindow):
             if last<0:
                 # -1 means unlimited to the GL shader, not an empty range.
                 self.state.set("view",layer_min=1,layer_max=0)
-                self.layer_slider.setEnabled(False);self.line_slider.setEnabled(False)
+                self.playback.stop_play()
+                self.layer_slider.setEnabled(False);self.playback.setEnabled(False)
                 self.layer_lbl.setText("Initial stock")
                 self.viewer.set_cursor(-1)
                 self.viewer.set_selected(-1)
             else:
-                self.layer_slider.setEnabled(True);self.line_slider.setEnabled(True)
+                self.layer_slider.setEnabled(True);self.playback.setEnabled(True)
                 self.layer_slider.setValue(last)
                 self._on_layer_slider(last)
         self.viewer.set_info(f"{result['label']} • calculated material grid {result['resolution']:.3f} mm")
@@ -1822,6 +1836,7 @@ class MainWindow(QMainWindow):
         if self._worker is not None:             # the button reads 'Cancel' while slicing
             self.cancel_slice()
             return
+        self.playback.stop_play()
         if self.mesh is None:
             self.notify("no_model", "warning", "No model", "Import a model first.")
             return
@@ -2014,40 +2029,37 @@ class MainWindow(QMainWindow):
         self.layer_slider.setRange(0, nl - 1)
         self.layer_slider.setValue(nl - 1)
         self.layer_slider.blockSignals(False)
-        self.state.layer_min, self.state.layer_max = 0, nl - 1
-        self._apply_layers()
+        self.playback.set_program(self.program, self.tp)
 
     def _on_layer_slider(self, v):
-        self.state.layer_max = v
-        self._apply_layers()
+        self.playback.set_layer_max(v)
 
     def step_layer(self, d):
         if self.program is None:
             return
-        self.layer_slider.setValue(max(0, min(self.layer_slider.maximum(), self.layer_slider.value() + d)))
+        self.playback.step_layer(d)
 
     def _apply_layers(self):
-        if self.program is None or self.tp is None:
-            return
+        self.playback.set_layer_max(self.playback.layer_max)
+
+    def _on_layers(self, low, high):
+        """Playback changed the visible layer range: viewer, vertical slider, label."""
         st = self.state
-        st.layer_min = st.layer_max if self.single_layer.isChecked() else 0
-        z = self.program.layer_z[st.layer_max] if 0 <= st.layer_max < len(self.program.layer_z) else None
-        self.layer_lbl.setText(f"{st.layer_max + 1} / {self.program.num_layers}" +
-                               (f"\nZ {z:.2f}" if z is not None else ""))
-        lo, hi = self.tp.layer_line_range(st.layer_max)
-        if st.layer_max == self.layer_slider.maximum():
-            hi = len(self.program.lines) - 1           # include the end G-code on the top layer
-        self.line_slider.blockSignals(True)
-        self.line_slider.setRange(lo, max(lo, hi))
-        self.line_slider.setValue(max(lo, hi))
-        self.line_slider.blockSignals(False)
-        self.viewer.set_cursor(max(lo, hi))
+        st.layer_min, st.layer_max = low, high
+        with QSignalBlocker(self.layer_slider):
+            self.layer_slider.setValue(high)
+        if self.program is not None:
+            z = self.program.layer_z[high] if 0 <= high < len(self.program.layer_z) else None
+            self.layer_lbl.setText(f"{high + 1} / {self.program.num_layers}" + (f"\nZ {z:.2f}" if z is not None else ""))
         st.changed.emit("view")
 
+    def _on_cursor(self, line):
+        self.viewer.set_cursor(line)
+        self.text_panel.show_line(line)
+        self._update_status(line)
+
     def _on_line_slider(self, v):
-        self.viewer.set_cursor(v)
-        self.text_panel.show_line(v)
-        self._update_status(v)
+        self.playback.set_cursor(v, follow=False)
 
     def _on_viewer_pick(self, line):
         self.text_panel.show_line(line)
@@ -2061,9 +2073,8 @@ class MainWindow(QMainWindow):
     def _on_text_activate(self, line):
         if self.tp is None:
             return
-        layer = int(self.tp.line_layer[line])
-        self.layer_slider.setValue(layer)
-        self.line_slider.setValue(line)
+        self.playback.set_layer_max(int(self.tp.line_layer[line]), move_cursor=False)
+        self.playback.set_cursor(line, follow=False)
 
     def _update_status(self, line):
         if self.program is None or not (0 <= line < len(self.program.lines)):
@@ -2203,4 +2214,5 @@ class MainWindow(QMainWindow):
             "Prepare view: drag the model to move it; 'Place on face', then click a face\n"
             "Ctrl+1 / Ctrl+2: Prepare / Preview view\n"
             "PgUp / PgDn: next / previous layer    Home / End: first / last layer\n"
+            "Preview: Space play / pause    Left / Right previous / next move\n"
             "Ctrl+O import model    Ctrl+R slice    Ctrl+S save G-code"))

@@ -89,7 +89,7 @@ an overlapping reference interior accessible. Picking/highlights and contour
 construction run in the compute process; GUI drawing only intersects a ray
 with a plane and validates small scalar dimensions.
 
-The outline appears by name under **Pick purpose (per selection)**. Leave it
+The outline appears by name in the operation's selection list. Leave it
 checked for machining, or uncheck it to retain it only as a height reference.
 Select its row and **Use selected reference** for Start/End; both extrema equal
 the outline's constant Z, with the usual editable offset. Unchecked outlines

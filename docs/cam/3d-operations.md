@@ -44,7 +44,7 @@ Earlier versions rejected a Pocket whose selected edges were not all at one Z
 - If any selected boundary edge is **not level**, the Pocket is automatically
   limited by the model surface. The log says *limited by the model surface*.
 - For a pocket selected by a **flat rim** whose floor is nevertheless contoured,
-  tick **Stop at model surface (3D floor)** on the operation. Unticked (the
+  tick **Stop at model surface** on the operation. Unticked (the
   default, and the behaviour of saved setups) a flat-rim Pocket still cuts a
   flat floor at End Z through whatever is there.
 

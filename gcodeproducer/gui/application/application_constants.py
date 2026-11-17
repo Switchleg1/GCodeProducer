@@ -41,3 +41,6 @@ THEME_STYLESHEET = ("QToolButton#sectionHeader { background: #3a3d44; border: no
         "QToolButton#modeButton:checked { background: #3c78c8; color: white; border-color: #3c78c8; }"
         "QToolButton#modeButton:disabled { color: #666; }"
         "QPushButton:checked { background: #3c78c8; color: white; border: 1px solid #5a8fd8; }")
+
+ACTION_BUTTON_HEIGHT = 34          # Slice / Generate paths and Save G-code
+ACTION_BUTTON_STRETCH = (7, 3)     # width share of the two buttons
