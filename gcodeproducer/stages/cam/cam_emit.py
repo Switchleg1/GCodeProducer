@@ -82,8 +82,10 @@ class CAMEmit(SliceStage):
         job.program = prog
         if job.cam_setup is not None:
             from gcodeproducer.core.cam.stock import check_stock
-            current_warnings,job.material_results = simulate_material(job,prog,ctx.log)
-            stock_warnings = check_stock(job, prog, progressive=bool(job.material_results)) + current_warnings
+            allocated = job.cam_setup.stock is not None and job.cam_setup.stock.allocated
+            sim = simulate(prog) if allocated else None
+            current_warnings,job.material_results = simulate_material(job,prog,ctx.log,sim=sim)
+            stock_warnings = check_stock(job, prog, sim=sim, progressive=bool(job.material_results)) + current_warnings
             job.warnings = list(job.warnings) + stock_warnings
             for warning in stock_warnings:
                 ctx.log(f"STOCK WARNING: {warning}")

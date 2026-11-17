@@ -82,8 +82,8 @@ def check_stock(job, program, sim=None, progressive=False):
             warn("The part is not fully contained in the allocated material; resize the stock or use Auto.")
     if float(job.m("safe_z", 15)) <= stock.top + 1e-4:
         warn("Safe Z is at or below the material surface; rapid moves may strike the stock.")
-    tools = {int(t.get("tool_number", 1)): t for t in job.tools}
-    radius = max((float(t.get("diameter", 0))/2 for t in job.tools), default=0)
+    tools = {} if progressive else {int(t.get("tool_number", 1)): t.resolved() for t in job.tools}
+    radius = 0 if progressive else max((float(t.get("diameter", 0))/2 for t in job.tools), default=0)
     sim = sim or simulate(program)
     spindle = False
     entry_depth = {}  # exact same-XY/radius plunge history; not a cleared-volume model
@@ -93,14 +93,6 @@ def check_stock(job, program, sim=None, progressive=False):
             spindle = ln.params.get("S", 1) > 0
         elif cmd == "M5":
             spindle = False
-        tool = tools.get(int(sim.tool[i]))
-        r = float(tool.get("diameter", 0))/2 if tool else radius
-        a = np.array([sim.px[i], sim.py[i], sim.pz[i]])
-        b = np.array([sim.x[i], sim.y[i], sim.z[i]])
-        # A cylindrical cutter extends above its tip. Conservative square XY envelope.
-        blo = np.array([lo[0] - r + 1e-5, lo[1] - r + 1e-5, -1e12])
-        bhi = np.array([hi[0] + r - 1e-5, hi[1] + r - 1e-5, hi[2] - 1e-5])
-        contact = _intersects(a, b, blo, bhi)
         label = f"Line {i+1}"
         if cmd and cmd.startswith("G") and cmd not in (
                 "G0", "G1", "G2", "G3", "G4", "G17", "G18", "G19", "G20", "G21", "G90", "G91", "G94"):
@@ -111,12 +103,20 @@ def check_stock(job, program, sim=None, progressive=False):
         commands = re.findall(r"[GMT]\d+(?:\.\d+)?", code)
         if sum(c.startswith("G") for c in commands) > 1:
             warn(f"{label}: multiple G commands in a custom block cannot be fully stock-checked.")
-        if "M6" in commands and b[2] <= stock.top:
+        if "M6" in commands and sim.z[i] <= stock.top:
             warn(f"{label}: tool change at/below the material surface.")
         if progressive:
             continue  # current-material simulator checks motion/contact and removes stock in order
         if not sim.motion[i] or not sim.moved[i]:
             continue
+        tool = tools.get(int(sim.tool[i]))
+        r = float(tool.get("diameter", 0))/2 if tool else radius
+        a = np.array([sim.px[i], sim.py[i], sim.pz[i]])
+        b = np.array([sim.x[i], sim.y[i], sim.z[i]])
+        # A cylindrical cutter extends above its tip. Conservative square XY envelope.
+        blo = np.array([lo[0] - r + 1e-5, lo[1] - r + 1e-5, -1e12])
+        bhi = np.array([hi[0] + r - 1e-5, hi[1] + r - 1e-5, hi[2] - 1e-5])
+        contact = _intersects(a, b, blo, bhi)
         if min(a[2], b[2]) < lo[2] - 1e-4:
             warn(f"{label}: motion below the material bottom; risk of hitting the table/spoilboard.")
         upward_retract = np.linalg.norm(b[:2] - a[:2]) < 1e-6 and b[2] > a[2]

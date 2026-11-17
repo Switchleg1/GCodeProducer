@@ -18,28 +18,46 @@ class HeightStock:
         self.bottom=lo[2]
         self.heights=np.full((self.ny,self.nx),stock.top,np.float32)
         self.resolution=max(self.dx,self.dy)
+        self._last_sweep=None
 
     def _patch(self,a,b,radius):
+        # Contact, engagement and removal often query the same sweep. Cache
+        # only geometry, never the live height values or the contact decision.
+        key=(*a,*b,radius)
+        last=self._last_sweep
+        if last is not None and key==last[0]:
+            return last[1]
+        patch=self._sweep(a,b,radius)
+        self._last_sweep=(key,patch)
+        return patch
+
+    def _sweep(self,a,b,radius):
         xa=max(0,int(math.floor((min(a[0],b[0])-radius-self.stock.x)/self.dx)))
         xb=min(self.nx,int(math.ceil((max(a[0],b[0])+radius-self.stock.x)/self.dx)))
         ya=max(0,int(math.floor((min(a[1],b[1])-radius-self.stock.y)/self.dy)))
         yb=min(self.ny,int(math.ceil((max(a[1],b[1])+radius-self.stock.y)/self.dy)))
         if xa>=xb or ya>=yb:return None
-        x,y=np.meshgrid(self.x[xa:xb],self.y[ya:yb])
+        x=self.x[None,xa:xb]-a[0]
+        y=self.y[ya:yb,None]-a[1]
         d=np.asarray(b[:2])-a[:2]
         length=float(d@d)
-        raw=((x-a[0])*d[0]+(y-a[1])*d[1])/max(length,1e-20)
-        t=np.clip(raw,0,1)
-        distance=(x-a[0]-t*d[0])**2+(y-a[1]-t*d[1])**2
+        if length==0:
+            distance=x**2+y**2
+        else:
+            raw=(x*d[0]+y*d[1])/max(length,1e-20)
+            t=raw.clip(0,1)
+            distance=(x-t*d[0])**2+(y-t*d[1])**2
         if length<1e-12:
             z=np.minimum(a[2],b[2])
+        elif b[2]==a[2]:
+            # Broadcast a constant tip, keeping array precision in comparisons.
+            z=np.array([a[2]],dtype=distance.dtype)
         else:
-            perpendicular=(x-a[0]-raw*d[0])**2+(y-a[1]-raw*d[1])**2
+            perpendicular=(x-raw*d[0])**2+(y-raw*d[1])**2
             half=np.sqrt(np.maximum(radius*radius-perpendicular,0)/length)
-            lo=np.clip(raw-half,0,1);hi=np.clip(raw+half,0,1)
             # Lowest tip while the cylindrical cutter covers each cell centre,
             # not merely its Z at closest XY projection (important for ramps).
-            hit_t=hi if b[2]<a[2] else lo
+            hit_t=(raw+half if b[2]<a[2] else raw-half).clip(0,1)
             z=a[2]+hit_t*(b[2]-a[2])
         return (slice(ya,yb),slice(xa,xb)),distance,z
 
@@ -83,7 +101,8 @@ class HeightStock:
         hit=distance <= radius*radius
         h=np.where(hit,np.minimum(h,np.maximum(z,self.bottom)),h)
         if self.tabs:
-            x,y=np.meshgrid(self.x[region[1]],self.y[region[0]])
+            x=self.x[None,region[1]]
+            y=self.y[region[0],None]
             for lo,hi in self.tabs:
                 keep=(x>=lo[0])&(x<=hi[0])&(y>=lo[1])&(y<=hi[1])
                 h=np.where(keep,np.maximum(h,hi[2]),h)

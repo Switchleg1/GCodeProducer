@@ -17,13 +17,13 @@ def height_stock_for(job,stock):
     return state
 
 
-def simulate_material(job,program,log=None):
+def simulate_material(job,program,log=None,*,sim=None):
     """Execute emitted moves in order, preserving material across all operations."""
     from gcodeproducer.core.gcode.simulation import simulate
     stock=getattr(job.cam_setup,"stock",None)
     if stock is None or not stock.allocated:return [],[]
     state=height_stock_for(job,stock)
-    sim=simulate(program)
+    if sim is None:sim=simulate(program)
     by_id={t.id:t.resolved() for t in job.tools}
     tools={int(by_id[t.id].get("tool_number",1)):by_id[t.id] for t in job.tools}
     layer_tools={layer.index:by_id.get(getattr(layer,"cam_tool_id",None)) for layer in job.layers}

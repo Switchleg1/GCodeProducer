@@ -179,53 +179,30 @@ Contour) and the operator's tail-top part (40,335 lines) are byte-identical to
 
 ## 6. Performance and parallelism
 
-Profile of the operator's tail-top part (3D Waterfall, 50 depth passes,
-40,335 lines, 39 s single-threaded, Python 3.14 with the GIL enabled, 24 CPUs):
+A profile on the tail-top Waterfall job identified repeated height-grid sweep
+construction as a hot spot. In 0.1.12 the grid uses broadcast coordinate slices
+and caches the last move's sweep geometry per grid. Contact, engagement and
+removal reuse that geometry but always read current material heights. Flat
+moves skip the ramp-tip calculation. The stock checks share one decoded motion
+trace and skip the original-blank intersection test when progressive contact
+checking is active. The progressive check still independently replays the
+emitted G-code on a fresh grid.
 
-| Work | Time | Share |
-|---|---:|---:|
-| Output check: `simulate_material` re-runs the whole program on a fresh height field | 15.1 s | 38 % |
-| Motion planning (height-field contact/cut for entries, leads, exits, cuts) | 11.8 s | 30 % |
-| Pass planning: planar engagement chords (Shapely `intersection` 6.3 s) | 9.2 s | 24 % |
-| `Profile.get` → `resolved()` per call (40,717 calls) | 1.5 s | 4 % |
-| Geometry (shadow levels, offsets), serialization, check_stock | ~1.5 s | 4 % |
+Single-run local `slice_job` timings (seconds; same inputs before and after):
 
-Within those, `HeightStock._patch` alone is 20 s (109,411 calls), mostly
-`meshgrid`/`clip` overhead on small grids.
+| Job | G-code lines | 0.1.11 | 0.1.12 |
+|---|---:|---:|---:|
+| Dragon Head — 3D Contour | 119,995 | 71.14 | 31.55 |
+| Tail-top — 3D Waterfall | 38,553 | 39.87 | 22.08 |
 
-**Can multithreading help?** Only a little, for structural reasons:
+G-code line data, warnings, and material height grids and display meshes
+matched exactly. These timings cover generation and its output checks, not GUI
+rendering. Each job retained its saved tool and machine settings; tail-top's
+sloped Pocket was switched to Waterfall in memory for both runs.
 
-- **The planner is an ordered state machine.** Each move's engagement, entry
-  decision and feed depend on the material left by every previous move, across
-  passes, operations and tool changes. Those steps cannot run concurrently
-  without changing results.
-- **The GIL.** The hot paths are many small NumPy calls (a few cells each),
-  dominated by Python overhead that holds the interpreter lock. Threads would
-  serialize on it. Shapely 2 releases the GIL in vectorized operations, but the
-  planar engagement calls are per pass and must run in pass order.
-- **Processes** avoid the GIL but would pickle large material states per task.
-  The whole job already runs in a separate compute process, so the GUI stays
-  responsive.
-
-Where parallel work is genuinely independent:
-
-- **Geometry that does not read material history**: generator `paths()` of
-  different operations, Waterfall level geometry (`level_paths`) and Contour
-  depth-band rasters. Shapely/NumPy releases the GIL here, but on this part it
-  is under 1 s.
-- **The output check** (`simulate_material`) could run beside serialization
-  but needs the finished program; it is better removed than parallelized.
-
-Larger, deterministic wins come from removing duplicated or overhead-bound work:
-
-1. **Snapshot material during motion planning** instead of re-simulating the
-   written program (about −15 s here). The motion planner already advances the
-   identical height field move by move. A lightweight check of the written
-   G-code (formatting, tool numbers, rapids) can remain.
-2. **Vectorize `HeightStock._patch`** with precomputed cell coordinates and
-   window slicing instead of `meshgrid` per call (a large part of 20 s).
-3. **Cache `Profile.resolved()`** per planning run (−1.5 s).
-
-These keep results identical and are expected to roughly halve this job;
-threading would add complexity for a small fraction of that. Item 1 changes
-what the output check verifies, so it needs an explicit decision.
+**Why not thread the motion loop?** A move's entry, engagement and feed depend
+on the material left by preceding moves. Independent geometry, such as some
+surface-band construction, can potentially run in parallel; profile each
+workload before adding concurrency. On tail-top, planar pass planning still
+takes roughly 12 seconds and is a better next profiling target. The GUI
+continues to use its separate compute process.
