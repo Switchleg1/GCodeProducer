@@ -109,6 +109,19 @@ class FDMEmit(SliceStage):
         self._start_gcode(b, job, temps, params, log=ctx.log)
         b.relative_e = rel_e
         b.reset_e()
+        bridge = job.material.resolved() if job.material is not None else {}
+        bridge_speed = (bridge.get('bridge_speed', 25.) if bridge.get('bridge_speed_mode') != 'modifier'
+                        else params['solid_infill_speed'] * bridge['bridge_speed_modifier']/100.)
+        configured_fan = job.mat('fan_speed', 100.) or 0.
+        bridge_fan = (bridge.get('bridge_cooling', 100.) if bridge.get('bridge_cooling_mode') != 'modifier'
+                      else configured_fan * bridge['bridge_cooling_modifier']/100.)
+        bridge_pwm = round(255 * min(100., max(0., bridge_fan))/100.)
+        normal_pwm = 0
+        for line in b.lines:
+            if line.cmd == 'M106':
+                normal_pwm = line.params.get('S', 255)
+            elif line.cmd == 'M107':
+                normal_pwm = 0
 
         n = max(1, len(job.layers))
         detours = fallbacks = outside = bridges = 0
@@ -117,7 +130,10 @@ class FDMEmit(SliceStage):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
                 self._layer_temperatures(b, temps)
-            self._cooling(b, job, layer)
+            cooling = self._cooling(b, job, layer)
+            if cooling is not None:
+                normal_pwm = cooling
+            active_pwm = normal_pwm
             h = flh if layer.index == 0 else lh
             first = layer.index == 0
             router = TravelRouter(layer.outline, b.dx) if route_or_classify else None
@@ -130,13 +146,23 @@ class FDMEmit(SliceStage):
                 width = path.width or job.line_width
                 epm = extrusion_per_mm(width, h, fil, flow)
                 b.set_feature(path.feature)
-                if first:
+                is_bridge = path.feature == 'bridge'
+                target_pwm = bridge_pwm if is_bridge else normal_pwm
+                if target_pwm != active_pwm:
+                    self._fan(b, target_pwm)
+                    active_pwm = target_pwm
+                if is_bridge:
+                    requested = bridge_speed
+                    epm *= bridge.get('bridge_flow', 100.)/100.
+                elif first:
                     requested = params["first_layer_speed"]
                 else:
                     requested = path.speed or params[_FEATURE_SPEED.get(path.feature, "print_speed")]
                 feed = print_feed("first layer" if first else path.feature, requested, epm)
                 self._print_path(b, path, pts, epm, feed, travel_f, params,
                                  retract_len, retract_spd, zhop, router, detour)
+            if active_pwm != normal_pwm:
+                self._fan(b, normal_pwm)
             if router is not None:
                 detours += router.detours
                 fallbacks += router.fallbacks
@@ -194,7 +220,7 @@ class FDMEmit(SliceStage):
             b.travel(float(q[0]), float(q[1]), feed=travel_f, force_xy=len(route) > 1)
         if do_retract:
             b.unretract(rlen, rspd, zhop)
-        coast = params.get('coast_length', 0.)
+        coast = 0. if path.feature == 'bridge' else params.get('coast_length', 0.)
         if coast > 0:
             lengths = np.linalg.norm(np.diff(loop, axis=0), axis=1)
             tail = np.cumsum(lengths[::-1])
@@ -257,7 +283,14 @@ class FDMEmit(SliceStage):
         fan_off = job.mat("fan_first_layers", 1) or 0
         fan = job.mat("fan_speed", 100.0) or 0.0
         if layer.index == fan_off:
-            b.command(f"M106 S{int(round(255 * fan / 100.0))}", "fan on")
+            pwm = round(255 * fan / 100.)
+            b.command(f"M106 S{pwm}", "fan on")
+            return pwm
+        return None
+
+    @staticmethod
+    def _fan(b, pwm):
+        b.command(f'M106 S{pwm:g}' if pwm else 'M107', 'bridge cooling transition')
 
     def _start_gcode(self, b, job, t, params, log=None):
         """The machine's start G-code template (or the default), filled from the job's variables."""

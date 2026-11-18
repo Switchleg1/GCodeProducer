@@ -83,8 +83,27 @@ line patterns, not analytic lattice solids with guaranteed strength.
 4. Review tiny gaps against raster resolution and minimum segment length.
 5. Review actual solid/top/sparse speeds and flow caps separately.
 
-Sparse fill under a roof is not a bridging simulation. Very low infill can
-leave long unsupported solid lines. “100%” fill does not guarantee absence of
+## Bridging
+
+In **Libraries → Material → Bridging**, set **Minimum unsupported area** above
+zero to enable bridge paths. The area is measured in mm² for each connected
+unsupported patch before growth. **Anchor growth** extends each qualifying
+patch in every direction, clipped to the printable fill region. The slicer
+tries straight parallel lines in several directions and only emits bridge
+lines that land on support at both ends. Bridge paths replace overlapping
+solid or sparse infill and can be inspected by feature in Preview.
+
+- **Speed mode:** fixed mm/s or a percentage of the requested solid infill speed.
+  Machine speed and volumetric flow limits still apply.
+- **Cooling mode:** fixed fan percentage or a percentage of the material’s
+  normal fan setting, capped at 100%. Normal cooling resumes after the bridge.
+- **Flow modifier:** percentage of the material’s normal extrusion flow.
+  Coasting is skipped on bridge lines so the end anchor still receives filament.
+
+Detection estimates support from the previous layer’s model outline and nearby
+printed support lines. It does not model gaps between sparse infill beads or
+predict sag. One-sided overhangs are not bridges; inspect the resulting paths
+before printing. Very low infill can still leave long unsupported solid lines. “100%” fill does not guarantee absence of
 all voids; wall offsets, overlap, path spacing and geometry quality still matter.
 
 [Shell settings](../reference/stage-settings.md#fdm_top_bottom) ·

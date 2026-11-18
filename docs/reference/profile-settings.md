@@ -76,6 +76,15 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `fan_speed` — Fan speed | float / % | `100.0` | No schema bound | Cooling.  |
 | `fan_first_layers` — Fan first layers | int | `1` | No schema bound | Cooling. Layers with the fan off. |
 | `min_layer_time` — Min layer time | float / s | `8.0` | No schema bound | Cooling. Slow down thin layers to at least this time. |
+| `bridge_min_area` — Minimum unsupported area | float / mm² | `0.0` | minimum 0 | Bridging. Minimum area of one unsupported patch before growth. 0 disables bridge generation. |
+| `bridge_speed_mode` — Speed mode | choice | `fixed` | `fixed` = Fixed speed; `modifier` = Percentage of solid infill speed | Bridging.  |
+| `bridge_speed` — Fixed speed | float / mm/s | `25.0` | minimum 1 | Bridging.  |
+| `bridge_speed_modifier` — Speed modifier | float / % | `65.0` | minimum 1; maximum 300 | Bridging.  |
+| `bridge_cooling_mode` — Cooling mode | choice | `fixed` | `fixed` = Fixed fan speed; `modifier` = Percentage of normal cooling | Bridging.  |
+| `bridge_cooling` — Fixed fan speed | float / % | `100.0` | minimum 0; maximum 100 | Bridging.  |
+| `bridge_cooling_modifier` — Cooling modifier | float / % | `100.0` | minimum 0; maximum 500 | Bridging.  |
+| `bridge_flow` — Flow modifier | float / % | `100.0` | minimum 1; maximum 300 | Bridging. Percentage of this material's normal extrusion flow. |
+| `bridge_growth` — Anchor growth | float / mm | `0.8` | minimum 0 | Bridging. Grow the unsupported patch in every direction, clipped to the printable fill area. |
 | `retract_length` — Retract length | float / mm | `1.0` | No schema bound | Retraction.  |
 | `retract_speed` — Retract speed | float / mm/s | `35.0` | No schema bound | Retraction.  |
 | `zhop` — Zhop | float / mm | `0.0` | No schema bound | Retraction.  |

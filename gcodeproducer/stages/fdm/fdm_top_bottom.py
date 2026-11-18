@@ -11,6 +11,8 @@ from __future__ import annotations
 from gcodeproducer.stages.fdm.fdm_constants import FDMTOPBOTTOM_PARAMS
 import numpy as np, gcodeproducer.core.geometry.kernel as geometry, gcodeproducer.core.geometry.infill as infill_gen
 from gcodeproducer.core.jobs.path import Path
+from gcodeproducer.core.fdm.bridges import backing_region, bridge_fill, exclude_bridges
+from gcodeproducer.core.fdm.wall_regions import slice_region
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -26,7 +28,8 @@ class FDMTopBottom(SliceStage):
     def run(self, job, params, ctx):
         top_n = params["top_layers"]
         bot_n = params["bottom_layers"]
-        if top_n <= 0 and bot_n <= 0:
+        bridge_min = job.mat('bridge_min_area', 0.)
+        if top_n <= 0 and bot_n <= 0 and not bridge_min:
             return "top/bottom shells off"
         if job.mesh is None or not job.layers:
             return "no layers"
@@ -55,8 +58,17 @@ class FDMTopBottom(SliceStage):
             return acc if acc is not None else np.ones_like(empty)
 
         inset = lw * 0.5 * (1.0 - params["overlap"] / 100.0)
-        total = 0
+        total = bridge_count = 0
+        growth = job.mat('bridge_growth', .8) if bridge_min else 0.
         for i, layer in enumerate(job.layers):
+            layer.bridge_region = None
+            if bridge_min and i > 0 and layer.contours:
+                fill = slice_region(layer.contours)
+                supported = backing_region(job.layers[i-1], lw)
+                segments, layer.bridge_region = bridge_fill(fill, supported, lw, growth, bridge_min)
+                for segment in infill_gen.order_segments(np.asarray(segments)):
+                    layer.paths.append(Path('bridge', segment, width=lw))
+                    bridge_count += 1
             g = masks[i]
             above = stack_and(range(i + 1, i + 1 + top_n)) if top_n > 0 else np.ones_like(g)
             below = stack_and(range(i - bot_n, i)) if bot_n > 0 else np.ones_like(g)
@@ -70,7 +82,8 @@ class FDMTopBottom(SliceStage):
             total += self._fill(layer, top_solid, "top_infill", params, lw, inset, res, base)
             total += self._fill(layer, bottom_solid, "solid_infill", params, lw, inset, res, base)
             ctx.progress((i + 1) / nL)
-        return f"{total} solid surface lines (top {top_n}, bottom {bot_n})"
+        detail = f', {bridge_count} bridge lines' if bridge_min else ''
+        return f"{total} solid surface lines (top {top_n}, bottom {bot_n}){detail}"
 
     def _fill(self, layer, cell_grid, feature, params, lw, inset, res, base):
         if not cell_grid.any():
@@ -88,6 +101,7 @@ class FDMTopBottom(SliceStage):
             if not len(segs):
                 continue
             segs = infill_gen.split_by_raster(segs, block, params["min_length"])
+            segs = exclude_bridges(segs, layer.bridge_region, params['min_length'])
             if not len(segs):
                 continue
             segs = infill_gen.order_segments(segs, start=(layer_x(layer), 0.0))

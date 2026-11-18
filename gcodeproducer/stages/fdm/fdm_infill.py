@@ -8,6 +8,7 @@ from __future__ import annotations
 from gcodeproducer.stages.fdm.fdm_constants import FDMINFILL_PARAMS
 import numpy as np, gcodeproducer.core.geometry.infill as infill_gen
 from gcodeproducer.core.jobs.path import Path
+from gcodeproducer.core.fdm.bridges import exclude_bridges
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -46,6 +47,7 @@ class FDMInfill(SliceStage):
                 s = infill_gen.scan_fill(regions, phi, period, off, inset, params["min_length"])
                 if block is not None and len(s):
                     s = infill_gen.split_by_raster(s, block, params["min_length"])
+                s = exclude_bridges(s, layer.bridge_region, params['min_length'])
                 if len(s):
                     segs_all.append(s)
             if not segs_all:

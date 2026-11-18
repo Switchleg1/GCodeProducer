@@ -143,6 +143,15 @@ class LibraryDialog(QDialog):
                 self.hint.setText(_HINT["tool"] + " Cutting tables are per material. Auto depth uses the category "
                                   "selected in CAM Material / stock, not always the first table.")
         editor = ParamEditor(params, p.resolved(), context=ctx)
+        if p.kind == 'material':
+            def show_bridge_fields(values):
+                for setting in ('speed', 'cooling'):
+                    modifier = values[f'bridge_{setting}_mode'] == 'modifier'
+                    editor.set_field_visible(f'bridge_{setting}', not modifier)
+                    editor.set_field_visible(f'bridge_{setting}_modifier', modifier)
+
+            show_bridge_fields(editor.values)
+            editor.changed.connect(show_bridge_fields)
         editor.changed.connect(lambda vals, pr=p: pr.values.update(vals))
         self.editor_area.setWidget(editor)
 
