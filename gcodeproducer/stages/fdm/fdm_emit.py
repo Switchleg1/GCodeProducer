@@ -57,6 +57,12 @@ class FDMEmit(SliceStage):
                 values['retraction_mode'] = 'all'
             else:
                 values['retraction_mode'] = 'separate' if flag('force_travel_retract', True) else 'open'
+        if 'avoid_open_spaces' in values:
+            enabled = coerce_bool(values.pop('avoid_open_spaces'))
+            if not enabled:
+                values['travel_detour_time'] = 0.
+            elif values.get('travel_detour_time') is None:
+                values['travel_detour_time'] = 0.1  # default budget before the controls were combined
         return super().resolve(values, strict=strict)
 
     def run(self, job, params, ctx):
@@ -79,7 +85,7 @@ class FDMEmit(SliceStage):
             caps["travel"] = f"travel {travel:g} \u2192 {max_travel:g} mm/s (machine max travel speed)"
             travel = max_travel
         travel_f = travel * 60.0
-        detour = travel * params["travel_detour_time"] if params["avoid_open_spaces"] else 0.
+        detour = travel * params["travel_detour_time"]
         retract_len = job.mat("retract_length", 0.0) or 0.0
         retract_spd = job.mat("retract_speed", 35) or 35
         zhop = job.mat("zhop", 0.0) or 0.0

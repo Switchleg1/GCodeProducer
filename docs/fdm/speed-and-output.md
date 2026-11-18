@@ -73,19 +73,17 @@ path at print speed. This can relieve nozzle pressure before travel. Short
 paths that cannot fit the coast keep their normal extrusion. Coasting works
 independently of retraction; too much can leave gaps.
 
-- **Avoid crossing open spaces:** off by default. The router tries to stay
-  inside an island around holes and concave edges. Between separate islands,
-  it tries to travel inside each island to shorten the open-air portion of
-  the jump. If no candidate improves the crossing within budget, use the
-  direct travel.
-- **Max extra time per travel:** defaults to 0.100 s. The extra-distance budget
-  is this value times the capped XY travel speed (15 mm at 150 mm/s).
-  Zero disables detours. This is a per-travel estimate, not a print time cap:
-  it does not model acceleration, corner slowdown or retraction. The Messages
-  log separates same-island detours, shortened island crossings, unresolved
-  same-island crossings, and other open transitions. The search retries
-  dense outlines with more waypoints, but remains bounded. An island crossing
-  still passes over open space even when shortened.
+**Max time to avoid open spaces** defaults to **0 s** (off). A positive value
+lets the router detour around holes and concave edges or shorten the open-air
+portion of a jump between islands. If no candidate improves the crossing within
+the budget, it uses the direct route. The extra-distance budget is this value
+times the capped XY travel speed (15 mm for 0.100 s at 150 mm/s).
+This is a per-travel estimate, not a print time cap:
+it does not model acceleration, corner slowdown or retraction. The Messages
+log separates same-island detours, shortened island crossings, unresolved
+same-island crossings, and other open transitions. The search retries
+dense outlines with more waypoints, but remains bounded. An island crossing
+still passes over open space even when shortened.
 
 Under **Seam → Perimeter start / stop**, **Fastest (nearest start)** puts the
 seam at the closest point on the loop to the current head, minimizing the

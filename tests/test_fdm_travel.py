@@ -123,6 +123,20 @@ def test_coast_follows_path_tail_without_extruding(relative, length, expected):
         assert [(line.params.get('X', 4.), line.params.get('Y', 1.)) for line in coasts] == expected
 
 
+@pytest.mark.parametrize('settings, budget', [
+    ({}, 0.),
+    ({'travel_detour_time': .25}, .25),
+    ({'avoid_open_spaces': False, 'travel_detour_time': .25}, 0.),
+    ({'avoid_open_spaces': True, 'travel_detour_time': .25}, .25),
+    ({'avoid_open_spaces': True}, .1),
+    ({'avoid_open_spaces': True, 'travel_detour_time': 0.}, 0.),
+])
+def test_detour_time_replaces_legacy_checkbox(settings, budget):
+    resolved = FDMEmit.resolve(settings, strict=True)
+    assert resolved['travel_detour_time'] == budget
+    assert 'avoid_open_spaces' not in resolved
+
+
 def test_short_open_crossing_skips_retraction_even_with_lower_inside_threshold():
     builder = GCodeBuilder()
     builder.travel(4.9, 5)
