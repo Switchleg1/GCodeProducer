@@ -54,13 +54,16 @@ is not applied; it does not mean unlimited flow is physically possible.
 
 - **Retract on travel:** default On. Amount, speed and Z-hop come from the
   **material**, not this process section.
-- **Only retract over open spaces:** off by default. When enabled, retract
-  if the chosen XY route crosses open space, even on short crossings. A
-  detour that stays inside the outline does not count as a crossing.
-- **Force retract on long travels:** in open-spaces mode, also retract at or
-  above the **Retract travel threshold** (default 1.5 mm). Turn Force off
-  for crossings only. With open-spaces mode off, the threshold works as
-  before. A detour counts as one travel, using its full length.
+- **Separate open and inside retraction:** off by default. Turn it on to
+  use two independent distances based on the chosen XY route. A detour
+  that stays inside the outline counts as an inside travel.
+- **Minimum travel to retract:** defaults to 1.5 mm. In separate mode, skip
+  retraction on open-space crossings shorter than this. With separate mode
+  off, this threshold applies to all travels.
+- **Retract on long inside travels:** in separate mode, retract on inside
+  travels at or above the **Inside travel retraction distance** (default
+  10 mm). Turn this off for crossings only. Both thresholds use the full
+  length of the individual XY travel, not cumulative distance.
 - **Avoid crossing open spaces:** off by default. The router tries to stay
   inside an island around holes and concave edges. Between separate islands,
   it tries to travel inside each island to shorten the open-air portion of

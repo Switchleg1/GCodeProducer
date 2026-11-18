@@ -155,12 +155,12 @@ class FDMEmit(SliceStage):
         dist = sum(math.dist(a, q) for a, q in zip([head, *route], route))
         do_retract = False
         if params['retract'] and rlen > 0 and dist > 1e-9:
-            long = dist >= params.get('min_travel_retract', 1.5)
-            if params.get('retract_open_only', False):
-                do_retract = ((params.get('force_travel_retract', True) and long)
-                              or (router is not None and router.crosses_open(head, route)))
+            if (params.get('retract_open_only', False) and router is not None
+                    and not router.crosses_open(head, route)):
+                do_retract = (params.get('force_travel_retract', True)
+                              and dist >= params['inside_travel_retract'])
             else:
-                do_retract = long
+                do_retract = dist >= params['min_travel_retract']
         if do_retract:
             b.retract(rlen, rspd, zhop)
         for q in route:

@@ -77,9 +77,9 @@ def test_island_jump_moves_to_facing_edges_when_budget_allows():
 
 
 @pytest.mark.parametrize('end,avoid,force,expected', [
-    ((4, 5), False, False, False),  # long, but entirely inside
-    ((4, 5), False, True, True),    # force threshold reached
-    ((2.5, 5), False, True, False), # below threshold
+    ((4.5, 5), False, False, False),  # inside threshold reached, but disabled
+    ((4.5, 5), False, True, True),    # inside threshold reached
+    ((4, 5), False, True, False),    # meets open minimum, not the inside threshold
     ((10, 5), False, False, True),  # open space, no routing
     ((10, 5), True, False, False),  # selected detour stays inside
     ((10, 5), True, True, True),    # long even after avoiding the hole
@@ -90,21 +90,21 @@ def test_retract_policy_uses_chosen_route(end, avoid, force, expected):
     builder.travel(2, 5)
     path = Path('infill', np.array([end, (end[0]+.25, end[1])], float))
     params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': force,
-              'min_travel_retract': 1.5}
+              'min_travel_retract': 1.5, 'inside_travel_retract': 2.5}
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
                          TravelRouter([OUTER, HOLE], builder.dx), 2. if avoid else 0.)
     assert any(line.params.get('E', 0) < 0 for line in builder.program().lines) == expected
 
 
-def test_short_open_crossing_retracts_even_below_threshold():
+def test_short_open_crossing_skips_retraction_even_with_lower_inside_threshold():
     builder = GCodeBuilder()
     builder.travel(4.9, 5)
     path = Path('infill', np.array([(5.1, 5), (5.3, 5)]))
-    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': False,
-              'min_travel_retract': 1.5}
+    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': True,
+              'min_travel_retract': 1.5, 'inside_travel_retract': .1}
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
                          TravelRouter([OUTER, HOLE], builder.dx))
-    assert any(line.params.get('E', 0) < 0 for line in builder.program().lines)
+    assert not any(line.params.get('E', 0) < 0 for line in builder.program().lines)
 
 
 def test_dense_route_retries_with_more_waypoints(monkeypatch):
