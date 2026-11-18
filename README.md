@@ -3,7 +3,7 @@
 Python/PyQt6 application that produces **FDM and 2.5D / basic 3-axis CAM G-code from STL models**,
 with a desktop interface and command-line tools.
 
-![GCodeProducer desktop app showing multiple models on the FDM build plate](docs/pictures/fdm-model-plate.png)
+![GCodeProducer Preview showing generated toolpaths and playback controls](docs/pictures/ui-preview-playback.png)
 
 **Early software:** the geometry kernel is minimal. CAM checks are advisory,
 not a full stock-removal, holder, or fixture simulation. Independently verify
