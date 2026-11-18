@@ -14,7 +14,7 @@ _FEATURE_SPEED = {
 }
 
 from gcodeproducer.stages.base.api import Param, AUTO
-import gcodeproducer.core.geometry.infill as infill_gen, gcodeproducer.core.fdm.support as support
+import gcodeproducer.core.geometry.infill as infill_gen
 
 def _speed(name, default, label, help=""):
     return Param(name, "float", default, label=label, unit="mm/s", min=1, max=2000, decimals=1,

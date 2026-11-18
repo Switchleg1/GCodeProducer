@@ -7,7 +7,7 @@ readers, modules and the tool-path builder all share.
 from __future__ import annotations
 
 from gcodeproducer.core.gcode.sim_result import SimResult
-from gcodeproducer.core.gcode.gcode_constants import EPS_E, EPS_XYZ, MOTION_COMMANDS
+from gcodeproducer.core.gcode.gcode_constants import EPS_XYZ, MOTION_COMMANDS
 import math, numpy as np
 from gcodeproducer.core.gcode.program import GCodeProgram
 

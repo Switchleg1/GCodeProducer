@@ -390,14 +390,8 @@ class GCodeViewer(QOpenGLWidget):
         k = ev.key()
         if k == Qt.Key.Key_F:
             self.fit()
-        elif k == Qt.Key.Key_1:
-            self.camera.set_view("iso")
-        elif k == Qt.Key.Key_2:
-            self.camera.set_view("top")
-        elif k == Qt.Key.Key_3:
-            self.camera.set_view("front")
-        elif k == Qt.Key.Key_4:
-            self.camera.set_view("right")
+        elif k in shaders.CAMERA_SHORTCUTS:
+            self.camera.set_view(shaders.CAMERA_SHORTCUTS[k])
         else:
             super().keyPressEvent(ev)
 

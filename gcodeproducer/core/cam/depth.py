@@ -1,7 +1,7 @@
 """Depth — cam subsystem."""
 from __future__ import annotations
 from dataclasses import dataclass
-import numpy as np, gcodeproducer.core.geometry.kernel as geometry
+import numpy as np
 from gcodeproducer.core.cam.reference import Reference
 
 @dataclass

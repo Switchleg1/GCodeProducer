@@ -10,7 +10,7 @@ clearances from the global settings.
 from __future__ import annotations
 
 from gcodeproducer.stages.cam.cam_constants import CAMEMIT_PARAMS, _LINE
-import math, numpy as np
+import numpy as np
 from gcodeproducer.core.gcode.builder import GCodeBuilder
 from gcodeproducer.core.gcode.parsing import format_number
 from gcodeproducer.stages.base.api import CAM

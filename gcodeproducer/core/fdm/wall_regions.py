@@ -4,14 +4,7 @@ from shapely import make_valid
 from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
 
-
-def polygons(shape):
-    if shape.geom_type == 'Polygon':
-        if not shape.is_empty:
-            yield shape
-    elif hasattr(shape, 'geoms'):
-        for child in shape.geoms:
-            yield from polygons(child)
+from gcodeproducer.core.geometry.polygon_parts import polygons
 
 
 def slice_region(contours):

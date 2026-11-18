@@ -10,10 +10,6 @@ SHOW_OPTIONS = (("show_travel", "Travel / rapid moves", "colors"),
                                 ("show_tool", "Tool head", "view"), ("show_grid", "Grid", "view"),
                                 ("dim_lower", "Dim layers below top", "view"))
 
-CAMERA_VIEW_KEYS = ("iso", "top", "front", "right")
-
-CAMERA_VIEWS = tuple((name.title(), name) for name in CAMERA_VIEW_KEYS)
-
 ROTATION_BUTTONS = ((2, -90), (3, 90))
 
 THEME_COLORS = {

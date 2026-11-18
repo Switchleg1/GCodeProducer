@@ -15,7 +15,9 @@ from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.cam.topology import Topology
 from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KINDS
 from dataclasses import asdict
-import hashlib, math, numpy as np, gcodeproducer.core.geometry.kernel as geometry
+import hashlib
+import numpy as np
+import gcodeproducer.core.geometry.kernel as geometry
 
 
 def fingerprint(mesh):

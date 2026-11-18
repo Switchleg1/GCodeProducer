@@ -273,26 +273,22 @@ class ModelViewer(QOpenGLWidget):
             lo, hi = np.array([x0, y0, min(h, 0.0)]), np.array([x1, y1, max(0.0, min(h, 50.0))])
         self.camera.fit(lo, hi)
 
+    @staticmethod
+    def _cam_pick_hint(mode):
+        if mode in shaders.CAM_PICK_HINTS:
+            return shaders.CAM_PICK_HINTS[mode]
+        for prefix, hint in shaders.CAM_PICK_PREFIX_HINTS:
+            if mode.startswith(prefix):
+                return hint.format(suffix=mode.removeprefix(prefix))
+        return f"CAM: select {mode}s • Shift-drag to pan, drag to orbit • Esc = navigate"
+
     def _update_info(self):
         if self.pick_seam:
             txt = "Click the bed to set the perimeter seam target • Esc cancels"
         elif self.vertices is None:
             txt = "Import a model (Ctrl+O) or drop an STL here"
-        elif self.cam_pick_mode.startswith("tab"):
-            txt = ("CAM: click a tab rail to remove" if self.cam_pick_mode == "tab_remove" else
-                   "CAM: click side walls to place holding tabs to the material edge") + " • Esc = navigate"
-        elif self.cam_pick_mode == "sketch_move":
-            txt = "CAM: click the new center of the selected reference • Esc = done"
-        elif self.cam_pick_mode == "sketch_resize":
-            txt = "CAM: click a new rim point / corner of the selected reference • Esc = done"
-        elif self.cam_pick_mode.startswith("sketch_"):
-            txt = "CAM: draw reference on XY plane • click two points • Esc cancels"
-        elif self.cam_pick_mode.startswith("reference_"):
-            txt = "CAM: select reference geometry • Esc = navigate"
-        elif self.cam_pick_mode.startswith("stock_"):
-            txt = f"CAM: select material {self.cam_pick_mode.removeprefix('stock_')}s • Esc = navigate"
         elif self.cam_pick_mode:
-            txt = f"CAM: select {self.cam_pick_mode}s • Shift-drag to pan, drag to orbit • Esc = navigate"
+            txt = self._cam_pick_hint(self.cam_pick_mode)
         elif self.place_on_face:
             txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
         elif self.place_block:
@@ -696,11 +692,10 @@ class ModelViewer(QOpenGLWidget):
 
     def keyPressEvent(self, ev):
         k = ev.key()
-        views = {Qt.Key.Key_1: "iso", Qt.Key.Key_2: "top", Qt.Key.Key_3: "front", Qt.Key.Key_4: "right"}
         if k == Qt.Key.Key_F:
             self.fit()
-        elif k in views:
-            self.camera.set_view(views[k])
+        elif k in shaders.CAMERA_SHORTCUTS:
+            self.camera.set_view(shaders.CAMERA_SHORTCUTS[k])
         elif k == Qt.Key.Key_Escape and self.pick_seam:
             self.set_seam_pick(False)
         elif k == Qt.Key.Key_Escape and self.cam_pick_mode:

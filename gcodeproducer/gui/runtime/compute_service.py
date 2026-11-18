@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc, itertools, multiprocessing as mp
 from PyQt6.QtCore import QObject, pyqtSignal
 from gcodeproducer.gui.runtime.result_reader import _Reader
+from .runtime_constants import MESSAGE_HANDLERS
 
 class ComputeService(QObject):
     log = pyqtSignal(int, str)
@@ -95,25 +96,33 @@ class ComputeService(QObject):
         tid, kind, payload = msg
         if tid not in self.running:            # cancelled task: ignore late messages
             return
-        if kind == "log":
-            self.log.emit(tid, payload)
-        elif kind == "progress":
-            self.progressed.emit(tid, payload)
-        elif kind == "chunk":                  # a big program arrives in pieces
-            if tid not in self._chunks:
-                # no automatic full collections while ~1M acyclic objects arrive
-                gc.disable()
-            self._chunks.setdefault(tid, []).extend(payload)
-        elif kind == "done":
-            self.running.discard(tid)
-            lines = self._chunks.pop(tid, None)
-            if lines is not None and isinstance(payload, dict) and payload.get("program") is not None:
-                payload["program"].lines = lines
-            if lines is not None:
-                self._settle_gc()
-            self.done.emit(tid, payload)
-        elif kind == "error":
-            self.running.discard(tid)
-            if self._chunks.pop(tid, None) is not None:
-                self._settle_gc()
-            self.failed.emit(tid, payload)
+        handler = MESSAGE_HANDLERS.get(kind)
+        if handler is not None:
+            getattr(self, handler)(tid, payload)
+
+    def _receive_log(self, tid, payload):
+        self.log.emit(tid, payload)
+
+    def _receive_progress(self, tid, payload):
+        self.progressed.emit(tid, payload)
+
+    def _receive_chunk(self, tid, payload):
+        if tid not in self._chunks:
+            # No automatic full collections while ~1M acyclic objects arrive.
+            gc.disable()
+        self._chunks.setdefault(tid, []).extend(payload)
+
+    def _receive_done(self, tid, payload):
+        self.running.discard(tid)
+        lines = self._chunks.pop(tid, None)
+        if lines is not None and isinstance(payload, dict) and payload.get("program") is not None:
+            payload["program"].lines = lines
+        if lines is not None:
+            self._settle_gc()
+        self.done.emit(tid, payload)
+
+    def _receive_error(self, tid, payload):
+        self.running.discard(tid)
+        if self._chunks.pop(tid, None) is not None:
+            self._settle_gc()
+        self.failed.emit(tid, payload)

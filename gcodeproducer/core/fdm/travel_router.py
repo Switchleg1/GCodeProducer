@@ -9,14 +9,7 @@ from shapely.ops import nearest_points
 
 from .fdm_constants import TRAVEL_RETRY_VERTEX_LIMIT, TRAVEL_VERTEX_LIMIT, TRAVEL_WAYPOINT_INSET
 
-
-def _polygons(shape):
-    if shape.geom_type == "Polygon":
-        if not shape.is_empty:
-            yield shape
-    elif hasattr(shape, "geoms"):
-        for child in shape.geoms:
-            yield from _polygons(child)
+from gcodeproducer.core.geometry.polygon_parts import polygons
 
 
 class TravelRouter:
@@ -29,7 +22,7 @@ class TravelRouter:
                 part = Polygon(ring)
                 region = region.symmetric_difference(part if part.is_valid else part.buffer(0))
         self.region = region
-        self.islands = [(poly, None) for poly in _polygons(region)]
+        self.islands = [(poly, None) for poly in polygons(region)]
         self._bridge_edges = {}
         for poly, _ in self.islands:
             prepare(poly)
@@ -62,7 +55,7 @@ class TravelRouter:
                 # Inset waypoints to leave room for rounded machine coordinates.
                 inner = poly.buffer(-TRAVEL_WAYPOINT_INSET, join_style=2).simplify(0)
                 vertices = set()
-                for part in _polygons(inner):
+                for part in polygons(inner):
                     for ring in (part.exterior, *part.interiors):
                         vertices.update((round(x, self.decimals), round(y, self.decimals))
                                         for x, y in list(ring.coords)[:-1])

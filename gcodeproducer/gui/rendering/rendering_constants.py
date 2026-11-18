@@ -2,7 +2,24 @@
 from __future__ import annotations
 from gcodeproducer.core.geometry.geometry_constants import BINARY_BOX_EDGES, BINARY_BOX_FACES
 import numpy as np
+from PyQt6.QtCore import Qt
 from gcodeproducer.core.gcode.toolpath import CUT, EXTRUDE, RAPID, TRAVEL
+
+CAMERA_VIEW_KEYS = ('iso', 'top', 'front', 'right')
+CAMERA_VIEWS = tuple((name.title(), name) for name in CAMERA_VIEW_KEYS)
+CAMERA_SHORTCUTS = dict(zip((Qt.Key.Key_1, Qt.Key.Key_2, Qt.Key.Key_3, Qt.Key.Key_4), CAMERA_VIEW_KEYS))
+
+CAM_PICK_HINTS = {
+    'tab_remove': 'CAM: click a tab rail to remove • Esc = navigate',
+    'sketch_move': 'CAM: click the new center of the selected reference • Esc = done',
+    'sketch_resize': 'CAM: click a new rim point / corner of the selected reference • Esc = done',
+}
+CAM_PICK_PREFIX_HINTS = (
+    ('tab', 'CAM: click side walls to place holding tabs to the material edge • Esc = navigate'),
+    ('sketch_', 'CAM: draw reference on XY plane • click two points • Esc cancels'),
+    ('reference_', 'CAM: select reference geometry • Esc = navigate'),
+    ('stock_', 'CAM: select material {suffix}s • Esc = navigate'),
+)
 
 DEFAULT_RECT = (0.0, 0.0, 220.0, 220.0, 250.0)
 

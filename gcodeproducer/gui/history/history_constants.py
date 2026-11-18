@@ -1,7 +1,15 @@
 """Bounds and input events for editor history."""
 from PyQt6.QtCore import QEvent
+from PyQt6.QtWidgets import (QComboBox, QDoubleSpinBox, QSlider, QSpinBox, QTabBar)
 
 HISTORY_LIMIT = 100
+SIMPLE_WIDGET_STATES = (
+    ((QSpinBox, QDoubleSpinBox, QSlider), 'value', 'value'),
+    (QComboBox, 'combo', 'currentIndex'),
+    (QTabBar, 'tab', 'currentIndex'),
+)
+DIRECT_RESTORE_SETTERS = {'value': 'setValue', 'combo': 'setCurrentIndex', 'tab': 'setCurrentIndex'}
+SELECTION_STATES = frozenset(('list', 'tree', 'tab', 'view'))
 INPUT_EVENTS = frozenset((QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
                           QEvent.Type.KeyPress, QEvent.Type.KeyRelease, QEvent.Type.Wheel,
                           QEvent.Type.FocusOut))

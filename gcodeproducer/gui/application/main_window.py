@@ -13,7 +13,7 @@ Layout follows GCodeTools:
 """
 from __future__ import annotations
 
-from .application_constants import SHOW_OPTIONS, CAMERA_VIEW_KEYS, CAMERA_VIEWS, ROTATION_BUTTONS, ACTION_BUTTON_HEIGHT, ACTION_BUTTON_STRETCH
+from .application_constants import SHOW_OPTIONS, ROTATION_BUTTONS, ACTION_BUTTON_HEIGHT, ACTION_BUTTON_STRETCH
 from gcodeproducer.gui.application.application_constants import MODEL_FILTER
 import copy, hashlib, json, os, time, numpy as np, gcodeproducer.core.settings.preferences as app_settings, gcodeproducer.core.libraries.defaults as defaults, gcodeproducer.core.plugins.discovery as plugins, gcodeproducer.core.workflows.validation as wf
 from pathlib import Path
@@ -74,7 +74,7 @@ from gcodeproducer.gui.messages.popup import show_message
 from gcodeproducer.gui.rendering.model_viewer import ModelViewer
 from gcodeproducer.gui.editors.pipeline_dialog import PipelineDialog
 from gcodeproducer.gui.editors.process_editor import ProcessEditor
-from gcodeproducer.gui.rendering.rendering_constants import COLOR_MODES
+from gcodeproducer.gui.rendering.rendering_constants import CAMERA_VIEW_KEYS, CAMERA_VIEWS, COLOR_MODES
 from gcodeproducer.gui.rendering.view_state import ViewState
 from gcodeproducer.gui.rendering.gcode_viewer import GCodeViewer
 from gcodeproducer.gui.runtime.compute_service import ComputeService
@@ -2338,9 +2338,6 @@ class MainWindow(QMainWindow):
         self.viewer.set_cursor(line)
         self.text_panel.show_line(line)
         self._update_status(line)
-
-    def _on_line_slider(self, v):
-        self.playback.set_cursor(v, follow=False)
 
     def _on_viewer_pick(self, line):
         self.text_panel.show_line(line)

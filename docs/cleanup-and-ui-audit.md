@@ -22,7 +22,19 @@
   classes defined in the scanned module. Compatibility exports therefore do
   not register stages twice. External plugin discovery locations are unchanged.
 
-### Removed unused definitions
+### Follow-up sweep (0.1.21)
+
+- Shared one table for camera shortcuts and toolbar orientations, and moved
+  CAM pick prompts and compute result dispatch into subsystem tables.
+- Consolidated simple widget history reads/writes while keeping selection
+  restore order and signal blocking explicit.
+- Removed the unused legacy line-slider callback, unused imports and a
+  write-only material flag. FDM wall and travel code share polygon iteration.
+- Kept documented compatibility helpers and Qt event overrides even when
+  they have no direct in-tree callers. The structure tests enforce the
+  one-class-per-file and local constants rules.
+
+### Removed unused definitions in the original sweep
 
 Ten standalone functions, six methods and two obsolete classes had no remaining
 application/test/tool callers or documentation references:

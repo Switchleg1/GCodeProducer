@@ -27,7 +27,6 @@ class MaterialModel:
         self.planar = PlanarStock(self.stock) if allocated else None
         self.height = height_stock_for(job, self.stock) if allocated else None
         self._log = log
-        self._estimated = False
         if estimate and self.height is None:
             self.estimate_height()
 
@@ -43,7 +42,6 @@ class MaterialModel:
             estimate = Stock()
             estimate.auto(self.job.mesh)
             self.height = height_stock_for(self.job, estimate)
-            self._estimated = True
             if self._log:
                 self._log("  3D Contour: conservative model-bounds blank for entry/engagement; "
                           "allocate stock for accurate material history")

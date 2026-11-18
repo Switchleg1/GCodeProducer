@@ -1,7 +1,6 @@
 """CAMSetup — cam subsystem."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass, field
-import gcodeproducer.core.geometry.kernel as geometry
 from gcodeproducer.core.cam.stock import Stock
 from gcodeproducer.core.cam.holding_tab import HoldingTab
 from gcodeproducer.core.cam.reference import Reference
