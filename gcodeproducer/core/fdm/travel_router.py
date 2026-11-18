@@ -7,9 +7,39 @@ from shapely import covers, linestrings, prepare
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import nearest_points
 
-from .fdm_constants import TRAVEL_RETRY_VERTEX_LIMIT, TRAVEL_VERTEX_LIMIT, TRAVEL_WAYPOINT_INSET
+from .fdm_constants import (TRAVEL_RETRY_VERTEX_LIMIT, TRAVEL_VERTEX_LIMIT,
+                            TRAVEL_VISIBILITY_CACHE_ROWS, TRAVEL_WAYPOINT_INSET)
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
+
+
+def _visible_edges(poly, coords, points, i, ids, cache):
+    # Cache only stable waypoint-to-waypoint edges; travel endpoints vary.
+    row = None
+    if i >= 2:
+        row = cache.get(points[i])
+        if row is None and len(cache) < TRAVEL_VISIBILITY_CACHE_ROWS:
+            row = cache.setdefault(points[i], {})
+    visible = np.empty(len(ids), dtype=bool)
+    missing = []
+    for k, j in enumerate(ids):
+        hit = row.get(points[j]) if row is not None and j >= 2 else None
+        if hit is None:
+            missing.append(k)
+        else:
+            visible[k] = hit
+    if missing:
+        dest = ids[missing]
+        edges = np.empty((len(dest), 2, 2))
+        edges[:, 0] = coords[i]
+        edges[:, 1] = coords[dest]
+        hits = covers(poly, linestrings(edges))
+        visible[missing] = hits
+        if row is not None and len(row) < TRAVEL_RETRY_VERTEX_LIMIT:
+            for j, hit in zip(dest[:TRAVEL_RETRY_VERTEX_LIMIT-len(row)], hits):
+                if j >= 2:
+                    row[points[j]] = hit
+    return visible
 
 
 class TravelRouter:
@@ -24,6 +54,7 @@ class TravelRouter:
         self.region = region
         self.islands = [(poly, None) for poly in polygons(region)]
         self._bridge_edges = {}
+        self._visibility = {}  # per-island, per-layer waypoint visibility
         for poly, _ in self.islands:
             prepare(poly)
 
@@ -72,9 +103,10 @@ class TravelRouter:
             candidates.sort()
             options = [a, b, *(p for _, p in candidates[:TRAVEL_RETRY_VERTEX_LIMIT])]
             first = TRAVEL_VERTEX_LIMIT + 2
-            waypoints = self._search(poly, options[:first], limit)
+            visibility = self._visibility.setdefault(i, {})
+            waypoints = self._search(poly, options[:first], limit, visibility)
             if waypoints is None and len(options) > first:
-                waypoints = self._search(poly, options, limit)
+                waypoints = self._search(poly, options, limit, visibility)
             if waypoints is not None:
                 self.detours += 1
                 return [*waypoints, end]
@@ -135,7 +167,7 @@ class TravelRouter:
         return [point for point, endpoint in ((p, a), (q, b)) if point != endpoint] or None
 
     @staticmethod
-    def _search(poly, points, limit):
+    def _search(poly, points, limit, visibility):
         """A* on the visibility graph, with a straight-line lower bound."""
         end = points[1]
         coords = np.asarray(points)
@@ -160,10 +192,8 @@ class TravelRouter:
             ids = np.flatnonzero((new_cost < best) & (bound <= limit))
             if not len(ids):
                 continue
-            edges = np.empty((len(ids), 2, 2))
-            edges[:, 0] = coords[i]
-            edges[:, 1] = coords[ids]
-            for j in ids[covers(poly, linestrings(edges))]:
+            visible = _visible_edges(poly, coords, points, i, ids, visibility)
+            for j in ids[visible]:
                 best[j], parent[j] = new_cost[j], i
                 heappush(queue, (bound[j], new_cost[j], j))
         return None

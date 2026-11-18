@@ -319,15 +319,15 @@ def slice_layers(mesh, layer_height: float, first_layer_height: float | None = N
     from gcodeproducer.core.jobs.layer import Layer
     flh = first_layer_height or layer_height
     top = float(mesh.bounds[1][2])
-    layers = []
+    heights, planes = [], []
     z = flh
     while z <= top + 1e-6:
-        h = flh if not layers else layer_height
-        contours = geometry.slice_z(mesh, z - h * 0.5)
-        layers.append(Layer(index=len(layers), z=round(z, 4), height=h,
-                            contours=list(contours), outline=list(contours)))
+        h = flh if not heights else layer_height
+        heights.append((round(z, 4), h))
+        planes.append(z - h * 0.5)
         z += layer_height
-    return layers
+    return [Layer(index=i, z=z, height=h, contours=list(contours), outline=list(contours))
+            for i, ((z, h), contours) in enumerate(zip(heights, geometry.slice_planes(mesh, planes)))]
 
 
 def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, angle: float = 50.0,

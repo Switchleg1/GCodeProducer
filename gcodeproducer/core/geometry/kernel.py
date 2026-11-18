@@ -70,7 +70,44 @@ def slice_z(mesh: Mesh, z: float) -> list:
     """Intersect the mesh with the plane Z=z; return a list of closed polygons (n,2)."""
     v = mesh.vertices
     t = mesh.triangles
-    zt = v[t][:, :, 2]                     # (m,3) triangle vertex Z
+    return _slice_candidates(v, t, v[:, 2][t], z)
+
+
+def slice_planes(mesh: Mesh, planes):
+    """Slice ordered planes in bounded batches, preserving original triangle order."""
+    from .geometry_constants import SLICE_PLANE_BATCH
+
+    v, t = mesh.vertices, mesh.triangles
+    zt = v[:, 2][t]
+    low, high = zt.min(axis=1), zt.max(axis=1)
+    for i in range(0, len(planes), SLICE_PLANE_BATCH):
+        batch = planes[i:i+SLICE_PLANE_BATCH]
+        ids = np.flatnonzero((low <= batch[-1]) & (high > batch[0]))
+        lo, hi = low[ids], high[ids]
+        for z in batch:
+            selected = ids[(lo <= z) & (hi > z)]
+            if v.dtype == np.float64:
+                yield _slice_batch_plane(v, t[selected], zt[selected], z)
+            else:
+                yield _slice_candidates(v, t[selected], zt[selected], z)
+
+
+def _slice_batch_plane(vertices, triangles, heights, z):
+    """Intersect known crossing triangles in their original edge order."""
+    above = heights > z
+    lone = np.argmax(above == (above.sum(axis=1) == 1)[:, None], axis=1)
+    first = (lone == 0).astype(np.intp)
+    second = 2 - (lone == 2).astype(np.intp)
+    rows = np.arange(len(triangles))
+    origin = vertices[triangles[rows, lone]]
+    others = vertices[triangles[rows[:, None], np.column_stack((first, second))]]
+    delta = others - origin[:, None]
+    fraction = (z - origin[:, 2, None]) / delta[:, :, 2]
+    segments = origin[:, None, :2] + fraction[:, :, None] * delta[:, :, :2]
+    return _chain(segments)
+
+
+def _slice_candidates(v, t, zt, z):
     above = zt > z
     cnt = above.sum(axis=1)
     cross = t[(cnt == 1) | (cnt == 2)]

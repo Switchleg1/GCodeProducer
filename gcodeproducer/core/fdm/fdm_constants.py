@@ -8,4 +8,5 @@ WALL_FEATURES = frozenset(("outer_perimeter", "inner_perimeter", "middle_perimet
 FILL_LOOKAHEAD = 32                      # candidates per feature, even on dense layers
 TRAVEL_VERTEX_LIMIT = 384               # common per-travel visibility search
 TRAVEL_RETRY_VERTEX_LIMIT = 768         # retry only if the first set has no route
+TRAVEL_VISIBILITY_CACHE_ROWS = 1024
 TRAVEL_WAYPOINT_INSET = .01              # mm inside the layer outline before G-code rounding

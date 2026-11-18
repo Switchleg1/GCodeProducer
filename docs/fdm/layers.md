@@ -54,6 +54,20 @@ that thickness unless you increase the count. A one-layer support gap changes
 similarly. Unequal first-layer height means the first physical interval may
 not match a simple count × normal-height calculation.
 
+## Computation time
+
+The slicer filters triangles by their Z range in batches of planes before
+computing intersections. Solid-fill clipping batches raster lookups without
+changing sample spacing. Travel routing remembers waypoint visibility within
+a layer to avoid repeating polygon tests. These are computation changes,
+not print-speed settings.
+
+With open-space avoidance enabled, routing can still dominate slicing time
+on detailed outlines. Check the **Speed & travel** stage time in the log;
+setting the detour budget to zero is a useful comparison, but changes the
+paths. These optimizations run in the existing compute process, not a thread
+pool.
+
 ## Troubleshooting
 
 “No mesh loaded” means import failed or a job was built without geometry.

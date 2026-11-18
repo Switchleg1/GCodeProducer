@@ -101,29 +101,46 @@ def split_by_raster(segs: np.ndarray, raster, min_length: float) -> np.ndarray:
         return segs
     step = min(r.res for r in rasters) * 0.5
     out = []
-    for p0, p1 in segs:
-        d = float(np.linalg.norm(p1 - p0))
-        n = max(2, int(math.ceil(d / step)) + 1)
-        t = np.linspace(0, 1, n)
-        pts = p0 + (p1 - p0) * t[:, None]
-        free = np.ones(n, bool)
+    for batch in _raster_sample_batches(segs, step):
+        points = np.concatenate([row[4] for row in batch])
+        free = np.ones(len(points), bool)
         for r in rasters:
-            free &= ~r.blocked(pts)
-        if free.all():
-            out.append((p0, p1))
-            continue
-        if not free.any():
-            continue
-        # runs of free samples
-        edges = np.diff(np.concatenate([[0], free.view(np.int8), [0]]))
-        starts = np.nonzero(edges == 1)[0]
-        ends = np.nonzero(edges == -1)[0] - 1
-        for s, e in zip(starts, ends):
-            if (t[e] - t[s]) * d > min_length:
-                out.append((pts[s], pts[e]))
+            free &= ~r.blocked(points)
+        offset = 0
+        for p0, p1, d, t, pts in batch:
+            keep = free[offset:offset+len(t)]
+            offset += len(t)
+            if keep.all():
+                out.append((p0, p1))
+            elif keep.any():
+                edges = np.diff(keep.astype(np.int8), prepend=0, append=0)
+                starts = np.flatnonzero(edges == 1)
+                ends = np.flatnonzero(edges == -1) - 1
+                for s, e in zip(starts, ends):
+                    if (t[e] - t[s]) * d > min_length:
+                        out.append((pts[s], pts[e]))
     if not out:
         return np.zeros((0, 2, 2))
     return np.array(out, float)
+
+
+def _raster_sample_batches(segs, step):
+    """Keep the original sample spacing and segment order; batch grid lookups."""
+    from .geometry_constants import RASTER_SAMPLE_BATCH
+
+    batch, size = [], 0
+    for p0, p1 in segs:
+        delta = p1 - p0
+        d = float(np.linalg.norm(delta))
+        n = max(2, int(math.ceil(d / step)) + 1)
+        if batch and size + n > RASTER_SAMPLE_BATCH:
+            yield batch
+            batch, size = [], 0
+        t = np.linspace(0, 1, n)
+        batch.append((p0, p1, d, t, p0 + delta*t[:, None]))
+        size += n
+    if batch:
+        yield batch
 
 
 def order_segments(segs: np.ndarray, start=(0.0, 0.0)) -> np.ndarray:

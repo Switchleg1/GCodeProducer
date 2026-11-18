@@ -4,6 +4,9 @@ import numpy as np
 
 _STL_RECORD = np.dtype([("normal", "<f4", (3,)), ("v", "<f4", (3, 3)), ("attr", "<u2")])
 
+SLICE_PLANE_BATCH = 16
+RASTER_SAMPLE_BATCH = 32_768
+
 PATTERNS = [
     ("rectilinear", "Rectilinear (alternating 90°)"),
     ("grid", "Grid / box (two directions per layer)"),
