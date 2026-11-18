@@ -85,7 +85,8 @@ class FDMEmit(SliceStage):
         b.reset_e()
 
         n = max(1, len(job.layers))
-        detours = fallbacks = outside = 0
+        detours = fallbacks = outside = bridges = 0
+        route_or_classify = detour > 0 or (params['retract'] and params['retract_open_only'] and retract_len > 0)
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -93,7 +94,7 @@ class FDMEmit(SliceStage):
             self._cooling(b, job, layer)
             h = flh if layer.index == 0 else lh
             first = layer.index == 0
-            router = TravelRouter(layer.outline, b.dx) if detour > 0 and layer.outline else None
+            router = TravelRouter(layer.outline, b.dx) if route_or_classify else None
             paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
                      if job.settings.get("optimize_mixed_infill", True) else layer.paths)
             for path in paths:
@@ -114,11 +115,12 @@ class FDMEmit(SliceStage):
                 detours += router.detours
                 fallbacks += router.fallbacks
                 outside += router.outside
+                bridges += router.bridges
             ctx.progress((li + 1) / n)
 
         if detour > 0:
-            ctx.log(f"  avoid open spaces: {detours} detours, {fallbacks} unresolved same-island crossings, "
-                    f"{outside} travels between islands or to/from outside an island")
+            ctx.log(f"  avoid open spaces: {detours} same-island detours, {bridges} shortened island crossings, "
+                    f"{fallbacks} unresolved same-island crossings, {outside} other open transitions")
         self._end_gcode(b, job, temps, log=ctx.log)
         for msg in caps.values():
             ctx.log(f"  speed capped: {msg}")
@@ -151,7 +153,14 @@ class FDMEmit(SliceStage):
         start = loop[0]
         route = router.route(head, start, detour) if router is not None else [start]
         dist = sum(math.dist(a, q) for a, q in zip([head, *route], route))
-        do_retract = params["retract"] and rlen > 0 and dist >= params["min_travel_retract"]
+        do_retract = False
+        if params['retract'] and rlen > 0 and dist > 1e-9:
+            long = dist >= params.get('min_travel_retract', 1.5)
+            if params.get('retract_open_only', False):
+                do_retract = ((params.get('force_travel_retract', True) and long)
+                              or (router is not None and router.crosses_open(head, route)))
+            else:
+                do_retract = long
         if do_retract:
             b.retract(rlen, rspd, zhop)
         for q in route:

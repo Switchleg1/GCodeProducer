@@ -59,6 +59,54 @@ def test_large_budget_does_not_disable_detours_on_dense_outlines():
     assert router.detours == 2
 
 
+def test_island_jump_moves_to_facing_edges_when_budget_allows():
+    other = [(16, 2), (23, 2), (23, 12), (16, 12)]
+    router = TravelRouter([OUTER, other], 3)
+    a, b = (4, 1), (20, 11)
+    route = router.route(a, b, 8.)
+    assert len(route) == 3 and route[-1] == b
+    source, dest = Polygon(OUTER), Polygon(other)
+    assert source.covers(LineString([a, route[0]]))
+    assert dest.covers(LineString([route[1], b]))
+    direct = LineString([a, b])
+    routed = LineString([a, *route])
+    assert routed.difference(router.region).length < direct.difference(router.region).length
+    assert routed.length <= direct.length + 8.
+    assert router.bridges == 1
+    assert router.route(a, b, .001) == [b]
+
+
+@pytest.mark.parametrize('end,avoid,force,expected', [
+    ((4, 5), False, False, False),  # long, but entirely inside
+    ((4, 5), False, True, True),    # force threshold reached
+    ((2.5, 5), False, True, False), # below threshold
+    ((10, 5), False, False, True),  # open space, no routing
+    ((10, 5), True, False, False),  # selected detour stays inside
+    ((10, 5), True, True, True),    # long even after avoiding the hole
+    ((-.5, 5), False, False, True),# leaves the island
+])
+def test_retract_policy_uses_chosen_route(end, avoid, force, expected):
+    builder = GCodeBuilder()
+    builder.travel(2, 5)
+    path = Path('infill', np.array([end, (end[0]+.25, end[1])], float))
+    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': force,
+              'min_travel_retract': 1.5}
+    FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
+                         TravelRouter([OUTER, HOLE], builder.dx), 2. if avoid else 0.)
+    assert any(line.params.get('E', 0) < 0 for line in builder.program().lines) == expected
+
+
+def test_short_open_crossing_retracts_even_below_threshold():
+    builder = GCodeBuilder()
+    builder.travel(4.9, 5)
+    path = Path('infill', np.array([(5.1, 5), (5.3, 5)]))
+    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': False,
+              'min_travel_retract': 1.5}
+    FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
+                         TravelRouter([OUTER, HOLE], builder.dx))
+    assert any(line.params.get('E', 0) < 0 for line in builder.program().lines)
+
+
 def test_dense_route_retries_with_more_waypoints(monkeypatch):
     import gcodeproducer.core.fdm.travel_router as travel_router
 

@@ -30,6 +30,12 @@ def win(app, tmp_path, monkeypatch):
     QSettings("GCodeProducer", f"pytest_{tmp_path.name}").clear()
 
 
+def test_camera_actions_are_grouped_in_toolbar(win):
+    button = next(b for b in win.findChildren(QtWidgets.QToolButton) if b.text() == 'Camera views')
+    assert [a.text() for a in button.menu().actions() if not a.isSeparator()] == [
+        'Iso', 'Top', 'Front', 'Right', 'Fit']
+
+
 def test_sections_and_setup(win):
     titles = [s._title for s in win.process_editor.sections]
     assert titles == ["Layers", "Skirt / brim", "Support", "Walls", "Top / bottom shells", "Infill",

@@ -120,8 +120,10 @@ Workflow: fdm. Optional stage: no.
 | `travel_speed` — Travel | float / mm/s | `150.0` | minimum 1; maximum 2000 | Speeds.  |
 | `acceleration` — Acceleration | float / mm/s² | `0.0` | minimum 0; maximum 100000 | Speeds. Print acceleration (M204); 0 = leave the firmware setting. Capped at the machine's maximum. |
 | `retract` — Retract on travel | bool | `True` | No schema bound | Travel. Retract on travels between features (length / speed from the material). |
-| `min_travel_retract` — Min travel to retract | float / mm | `1.5` | minimum 0 | Travel. Shorter travels do not retract. |
-| `avoid_open_spaces` — Avoid crossing open spaces | bool | `False` | No schema bound | Travel. Prefer a route within the same layer island, around holes or gaps, when within the detour budget. |
+| `retract_open_only` — Only retract over open spaces | bool | `False` | No schema bound | Travel. Retract when the chosen travel leaves a layer island, even on short crossings. |
+| `force_travel_retract` — Force retract on long travels | bool | `True` | No schema bound | Travel. Also retract on long in-island moves in open-spaces mode. Off = crossings only. |
+| `min_travel_retract` — Retract travel threshold | float / mm | `1.5` | minimum 0 | Travel. Minimum length in normal mode; force-retract distance in open-spaces mode. |
+| `avoid_open_spaces` — Avoid crossing open spaces | bool | `False` | No schema bound | Travel. Route around holes within islands and try shorter open-air jumps between islands, within the detour budget. |
 | `travel_detour_time` — Max extra time per travel | float / s | `0.1` | minimum 0 | Travel. Extra XY distance divided by travel speed (ignores acceleration); 0 = no detours. |
 | `seam` — Perimeter start / stop | choice | `nearest` | `nearest` = Fastest (nearest start); `xy` = Toward XY point; `origin` = Fixed (loop start) | Seam. Choose where each perimeter starts and ends. Fastest minimizes the local approach distance. |
 | `seam_x` — Target X | float / mm | `0.0` | No schema bound | Seam. Bed-coordinate target for Toward XY point. May be outside the part. |

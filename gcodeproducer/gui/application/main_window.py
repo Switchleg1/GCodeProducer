@@ -779,9 +779,17 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction(self.act_libs)
         tb.addSeparator()
+        views = QToolButton(tb)
+        views.setText('Camera views')
+        views.setToolTip('Choose a camera orientation or fit the current view')
+        views.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(views)
         for name, key in CAMERA_VIEWS:
-            tb.addAction(self._act(name, lambda _=False, k=key: self.camera.set_view(k)))
-        tb.addAction(self._act("Fit", self.fit_view))
+            menu.addAction(self._act(name, lambda _=False, k=key: self.camera.set_view(k)))
+        menu.addSeparator()
+        menu.addAction(self._act('Fit', self.fit_view))
+        views.setMenu(menu)
+        tb.addWidget(views)
 
     def _act(self, text, slot, shortcut=None):
         a = QAction(text, self)

@@ -54,20 +54,26 @@ is not applied; it does not mean unlimited flow is physically possible.
 
 - **Retract on travel:** default On. Amount, speed and Z-hop come from the
   **material**, not this process section.
-- **Minimum travel to retract:** 1.5 mm. Shorter XY travels skip retraction.
-  A detour counts as one travel, using its full length.
-- **Avoid crossing open spaces:** off by default. When a direct move would
-  cross a hole or leave a concave outline, try to keep it inside the same
-  layer island. No route is forced between separate islands or when the
-  search cannot find a detour within budget.
+- **Only retract over open spaces:** off by default. When enabled, retract
+  if the chosen XY route crosses open space, even on short crossings. A
+  detour that stays inside the outline does not count as a crossing.
+- **Force retract on long travels:** in open-spaces mode, also retract at or
+  above the **Retract travel threshold** (default 1.5 mm). Turn Force off
+  for crossings only. With open-spaces mode off, the threshold works as
+  before. A detour counts as one travel, using its full length.
+- **Avoid crossing open spaces:** off by default. The router tries to stay
+  inside an island around holes and concave edges. Between separate islands,
+  it tries to travel inside each island to shorten the open-air portion of
+  the jump. If no candidate improves the crossing within budget, use the
+  direct travel.
 - **Max extra time per travel:** defaults to 0.100 s. The extra-distance budget
   is this value times the capped XY travel speed (15 mm at 150 mm/s).
   Zero disables detours. This is a per-travel estimate, not a print time cap:
   it does not model acceleration, corner slowdown or retraction. The Messages
-  log separates successful detours, unresolved same-island crossings, and
-  travels between islands or to/from outside an island. The search retries
-  dense outlines with more waypoints, but remains bounded. Raising the budget
-  cannot make a gap between separate islands routable.
+  log separates same-island detours, shortened island crossings, unresolved
+  same-island crossings, and other open transitions. The search retries
+  dense outlines with more waypoints, but remains bounded. An island crossing
+  still passes over open space even when shortened.
 
 Under **Seam → Perimeter start / stop**, **Fastest (nearest start)** puts the
 seam at the closest point on the loop to the current head, minimizing the

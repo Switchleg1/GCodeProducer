@@ -5,7 +5,8 @@
 ## Workspace and docks
 
 The toolbar provides import, workflow actions, Prepare/Preview switching,
-camera views and Libraries. The **Model** dock contains the **Setup**, **Model**
+Libraries and a **Camera views** menu for Iso, Top, Front, Right and Fit.
+The **Model** dock contains the **Setup**, **Model**
 (import and placement) panes and one workflow-specific options slot. That slot
 displays **Support** for FDM, or **Material / stock** and **Holding tabs** for
 CAM, followed in CAM by **Reference geometry**; moving the dock keeps them
