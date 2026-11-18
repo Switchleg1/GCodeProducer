@@ -42,6 +42,7 @@ class WindowState:
             'cam': w.cam_editor.setup.to_dict(), 'cam_row': w.cam_editor.indices(),
             'pipelines': {k: p.to_dict() for k, p in w.pipelines.items()},
             'process_id': dict(w.process_id), 'dirty': dict(w.dirty),
+            'session_process_names': dict(w.session_process_names),
             'libraries': {k: [p.to_dict() for p in w.libset[k].all()] for k in KINDS},
             'processes': [p.to_dict() for p in w.libset.processes.all()],
             'preferences': w.preferences,
@@ -115,7 +116,7 @@ class WindowState:
         current = self.capture()
         content_changed = any(current[k] != state[k] for k in (
             'plate', 'plate_row', 'mesh', 'path', 'workflow', 'machine', 'consumables', 'placement', 'blocks', 'support',
-            'cam', 'pipelines', 'process_id', 'dirty', 'libraries', 'processes', 'preferences'))
+            'cam', 'pipelines', 'process_id', 'dirty', 'session_process_names', 'libraries', 'processes', 'preferences'))
         w.playback.stop_play()
         if not content_changed:
             self.restore_controls(state, controls)
@@ -143,6 +144,7 @@ class WindowState:
         w.cam_editor.defaults = w.preferences
         w.pipelines = {k: SlicePipeline.from_dict(p) for k, p in state['pipelines'].items()}
         w.process_id, w.dirty = dict(state['process_id']), dict(state['dirty'])
+        w.session_process_names = dict(state['session_process_names'])
         w._loading = True
         w.cb_workflow.setCurrentIndex(w.cb_workflow.findData(state['workflow']))
         w._loading = False

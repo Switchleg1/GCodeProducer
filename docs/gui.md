@@ -59,13 +59,27 @@ spacing; move or remove a model if the app cannot find room.
 
 **Slice** prints the whole FDM plate layer by layer in one program, not one
 object at a time. Keep models separate; intersecting meshes are not merged.
-The plate list is session-only. CAM remains single-model and switching back
-to FDM restores the plate from the current session.
+CAM remains single-model. Switching back to FDM restores the active FDM plate.
 
 ![FDM model list with an original, a selected copy, and a second STL on the bed](pictures/fdm-model-plate.png)
 
 Binary and ASCII STL are welded to shared vertices; STL units are not
 self-describing, so verify displayed dimensions in millimetres.
+
+## Work sessions
+
+**File → Export work session…** saves a `.gcpsession` file. **File → Import
+work session…** replaces the current workspace with that file. It restores
+loaded model instances and their placement and support settings, the active CAM
+setup, the workflow, the process name and working settings, and the window,
+dock and camera layout. Import does not add or overwrite library presets.
+
+Closing the app saves the same information as the default session in its
+settings. A normal launch restores it; launching with a model path starts a
+workspace for that model instead. Session files reference the source STLs, so
+keep those accessible. Manual import reports missing files without replacing
+the workspace; automatic startup skips missing models and logs them. Generated
+G-code is not saved in the session: regenerate it to return to Preview.
 
 ## Position and orientation
 

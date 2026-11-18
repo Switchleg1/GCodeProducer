@@ -32,7 +32,7 @@ def run_gui(path: str | None = None) -> int:
     apply_theme(app)
 
     from gcodeproducer.gui.application.main_window import MainWindow
-    win = MainWindow()
+    win = MainWindow(resume_session=not path)
 
     def excepthook(etype, value, tb):
         import traceback

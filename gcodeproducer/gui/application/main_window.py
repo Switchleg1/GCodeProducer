@@ -14,7 +14,7 @@ Layout follows GCodeTools:
 from __future__ import annotations
 
 from .application_constants import SHOW_OPTIONS, ROTATION_BUTTONS, ACTION_BUTTON_HEIGHT, ACTION_BUTTON_STRETCH
-from gcodeproducer.gui.application.application_constants import MODEL_FILTER
+from gcodeproducer.gui.application.application_constants import MODEL_FILTER, WORK_SESSION_FILTER, WORK_SESSION_KEY
 import copy, hashlib, json, os, time, numpy as np, gcodeproducer.core.settings.preferences as app_settings, gcodeproducer.core.libraries.defaults as defaults, gcodeproducer.core.plugins.discovery as plugins, gcodeproducer.core.workflows.validation as wf
 from pathlib import Path
 from PyQt6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
@@ -83,7 +83,7 @@ from gcodeproducer.gui.editors.widgets import small_button
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, *, resume_session=True):
         super().__init__()
         self.setWindowTitle(f"GCodeProducer {__version__}")
         self.resize(1600, 950)
@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self.workflow = wf.FDM
         self.pipelines = {w: SlicePipeline.default(w) for w in wf.ALL}
         self.process_id = {w: None for w in wf.ALL}
+        self.session_process_names = {}
         self.dirty = {w: False for w in wf.ALL}
         self.mesh = None
         self.model_path = None
@@ -155,7 +156,7 @@ class MainWindow(QMainWindow):
                 QShortcut(QKeySequence(key), widget, activated=fn,
                           context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
-        self._restore()
+        self._restore(resume_session=resume_session)
         for e in plugins.load_errors():
             self.log(f"Plugin load error: {e}")
         self._update_enabled()
@@ -824,6 +825,9 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_process_import)
         m.addAction(self.act_process_export)
         m.addSeparator()
+        m.addAction(self._act('Import work session…', self.import_work_session))
+        m.addAction(self._act('Export work session…', self.export_work_session))
+        m.addSeparator()
         m.addAction(self.act_libs)
         m.addAction(self.act_settings)
         m.addSeparator()
@@ -853,7 +857,7 @@ class MainWindow(QMainWindow):
                                    "Licensed under the GNU GPL v3.")))
 
     # persistence
-    def _restore(self):
+    def _restore(self, *, resume_session=True):
         s = self.settings
         if s.value("geometry") is not None:
             self.restoreGeometry(s.value("geometry"))
@@ -884,8 +888,51 @@ class MainWindow(QMainWindow):
         self._loading = False
         self._on_workflow()
         self._refresh_recent()
+        default = s.value(WORK_SESSION_KEY) if resume_session else None
+        if default:
+            try:
+                self._restore_work_session(json.loads(default), skip_missing=True)
+                self._restored_work_session = True
+            except (ValueError, TypeError, KeyError, OSError, AttributeError) as exc:
+                self.log(f'Could not restore last work session: {exc}')
+
+    def _restore_work_session(self, data, **options):
+        from .work_session import restore
+        for warning in restore(self, data, **options):
+            self.log(warning)
+
+    def import_work_session(self):
+        if self._worker is not None:
+            self.statusBar().showMessage('Wait for slicing to finish or cancel it before importing a session.', 5000)
+            return
+        path, _ = QFileDialog.getOpenFileName(self, 'Import work session', '', WORK_SESSION_FILTER)
+        if path:
+            try:
+                source = Path(path)
+                self._restore_work_session(json.loads(source.read_text(encoding='utf-8')), base=source.parent)
+                self.statusBar().showMessage(f'Imported work session {source.name}', 5000)
+            except (ValueError, TypeError, KeyError, OSError, AttributeError) as exc:
+                self.notify('session_import_failed', 'error', 'Work session import failed', str(exc))
+
+    def export_work_session(self):
+        from PyQt6.QtCore import QIODevice, QSaveFile
+        from .work_session import capture
+        path, _ = QFileDialog.getSaveFileName(self, 'Export work session', 'workspace.gcpsession', WORK_SESSION_FILTER)
+        if not path:
+            return
+        if not Path(path).suffix:
+            path += '.gcpsession'
+        data = json.dumps(capture(self), indent=2).encode('utf-8')
+        output = QSaveFile(path)
+        if (not output.open(QIODevice.OpenModeFlag.WriteOnly) or output.write(data) != len(data)
+                or not output.commit()):
+            self.notify('session_export_failed', 'error', 'Work session export failed', output.errorString())
+            return
+        self.statusBar().showMessage(f'Exported work session {Path(path).name}', 5000)
 
     def _default_dock_sizes(self):
+        if getattr(self, '_restored_work_session', False):
+            return
         self.resizeDocks([self.dock_messages], [110], Qt.Orientation.Vertical)   # a few lines only
         self.resizeDocks([self.dock_prepare, self.dock_view], [430, 330], Qt.Orientation.Horizontal)
         self.resizeDocks([self.dock_prepare, self.dock_process], [430, 520], Qt.Orientation.Vertical)
@@ -896,6 +943,8 @@ class MainWindow(QMainWindow):
             history.dispose()
         self._cam_highlight_timer.stop()
         s = self.settings
+        from .work_session import capture
+        s.setValue(WORK_SESSION_KEY, json.dumps(capture(self)))
         s.setValue("geometry", self.saveGeometry())
         s.setValue("windowState", self.saveState())
         s.setValue("messagesDockPlaced", True)
@@ -1061,6 +1110,9 @@ class MainWindow(QMainWindow):
         self.cb_process.clear()
         for p in sorted(self.libset.processes.all(self.workflow), key=lambda p: p.name.lower()):
             self.cb_process.addItem(p.name, p.id)
+        session_name = self.session_process_names.get(self.workflow)
+        if session_name:
+            self.cb_process.insertItem(0, f'{session_name} (session)', None)
         if self.cb_process.count() == 0:
             self.cb_process.addItem("(default \u2014 not saved)", None)
         i = self.cb_process.findData(self.process_id[self.workflow])
@@ -1288,10 +1340,16 @@ class MainWindow(QMainWindow):
             self.log("CAM geometry changed: cleared old operations to avoid stale geometry references")
             setup = CAMSetup()
         setup.fingerprint = current
+        self._show_cam_setup(setup)
+        self._set_model_label(path, mesh)
+
+    def _show_cam_setup(self, setup):
         self.cam_editor.set_setup(setup)
         self.reference_editor.set_setup(setup)
         self.model_viewer.set_reference_geometry()
         self.stock_editor.set_stock(setup.stock)
+
+    def _set_model_label(self, path, mesh):
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
 

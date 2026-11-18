@@ -30,6 +30,53 @@ def win(app, tmp_path, monkeypatch):
     QSettings("GCodeProducer", f"pytest_{tmp_path.name}").clear()
 
 
+def test_work_session_file_roundtrip(win, cube_stl, tmp_path, monkeypatch):
+    from gcodeproducer.gui.application.work_session import capture
+
+    win.open_model(cube_stl)
+    win.copy_plate_model()
+    win.sp_x.setValue(150.)
+    win.select_process('0-30-mm-draft')
+    win.pipelines['fdm'].step('fdm_slice').params['layer_height'] = .25
+    win._mark_dirty()
+    win.dock_view.hide()
+    path = tmp_path / 'plate.gcpsession'
+    monkeypatch.setattr(QtWidgets.QFileDialog, 'getSaveFileName', lambda *a: (str(path), ''))
+    monkeypatch.setattr(QtWidgets.QFileDialog, 'getOpenFileName', lambda *a: (str(path), ''))
+    win.export_work_session()
+    assert json.loads(path.read_text(encoding='utf-8'))['processes']['fdm']['name'] == win.cb_process.currentText()
+    win.delete_plate_model()
+    win.dock_view.show()
+    win.import_work_session()
+    assert win.model_list.count() == 2 and win.plate_row == 1
+    assert win.placement.x == 150 and win.dock_view.isHidden()
+    assert win.process_id['fdm'] == '0-30-mm-draft' and win.dirty['fdm']
+    assert win.pipelines['fdm'].step('fdm_slice').params['layer_height'] == .25
+    broken = capture(win)
+    broken['models'][0]['path'] = str(tmp_path / 'missing.stl')
+    with pytest.raises(ValueError, match='Cannot load model'):
+        win._restore_work_session(broken)
+    assert win.model_list.count() == 2 and win.placement.x == 150
+
+
+def test_default_work_session_resumes_cam_and_fdm_plate(win, cube_stl):
+    from gcodeproducer.gui.application.main_window import MainWindow
+
+    win.open_model(cube_stl)
+    win.copy_plate_model()
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    win.sp_z.setValue(-3.)
+    win.close()
+    reopened = MainWindow()
+    try:
+        assert reopened.workflow == 'cam' and reopened.model_path == cube_stl
+        assert reopened.placement.z == -3.
+        reopened.cb_workflow.setCurrentIndex(reopened.cb_workflow.findData('fdm'))
+        assert len(reopened.plate_models) == 2 and reopened.plate_row == 1
+    finally:
+        reopened.close()
+
+
 def test_camera_actions_are_grouped_in_toolbar(win):
     button = next(b for b in win.findChildren(QtWidgets.QToolButton) if b.text() == 'Camera views')
     assert [a.text() for a in button.menu().actions() if not a.isSeparator()] == [
