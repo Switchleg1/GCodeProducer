@@ -23,11 +23,7 @@ def _model_record(path, placement, blocks, support, persistent=True):
 def capture(window):
     w = window
     w._remember_plate_model()
-    cam = None
-    if w.model_plates['cam']:
-        cam = dict(models=[_model_record(m.path, m.placement, m.blocks, m.support, m.persistent)
-                           for m in w.model_plates['cam']], selected=w.model_rows['cam'],
-                   setup=w.cam_editor.setup.to_dict(), selection=list(w.cam_editor.indices()))
+    cam = dict(setup=w.cam_editor.setup.to_dict(), selection=list(w.cam_editor.indices())) if w.plate_models else None
     processes = {}
     for workflow, pipeline in w.pipelines.items():
         pid = w.process_id[workflow]
@@ -36,7 +32,7 @@ def capture(window):
         processes[workflow] = dict(id=pid, name=name, pipeline=pipeline.to_dict(), dirty=w.dirty[workflow])
     return dict(version=WORK_SESSION_VERSION, workflow=w.workflow, processes=processes,
                 models=[_model_record(m.path, m.placement, m.blocks, m.support, m.persistent)
-                        for m in w.model_plates['fdm']], selected=w.model_rows['fdm'], cam=cam,
+                        for m in w.plate_models], selected=w.plate_row, cam=cam,
                 geometry=bytes(w.saveGeometry().toBase64()).decode('ascii'),
                 layout=bytes(w.saveState().toBase64()).decode('ascii'),
                 camera=dict(target=w.camera.target.tolist(), distance=w.camera.distance,
@@ -45,7 +41,7 @@ def capture(window):
 
 def restore(window, data, *, base=None, skip_missing=False):
     """Load and validate before replacing the workspace. Automatic restore can skip absent files."""
-    if not isinstance(data, dict) or data.get('version') != WORK_SESSION_VERSION:
+    if not isinstance(data, dict) or data.get('version') not in (1, WORK_SESSION_VERSION):
         raise ValueError('Unsupported work session format.')
     w = window
     workflow = data['workflow']
@@ -96,9 +92,17 @@ def restore(window, data, *, base=None, skip_missing=False):
                           [SupportBlock.from_dict(b) for b in record['blocks']],
                           ModelSupport.from_dict(record['support']), bool(record['persistent']))
 
-    selected = int(data['selected'])
+    cam = data['cam']
+    records, selected = data['models'], int(data['selected'])
+    if data['version'] == 1 and cam is not None:
+        cam_records = cam.get('models', [cam])
+        if workflow == 'cam' or not records:
+            records, selected = cam_records, int(cam.get('selected', 0))
+        elif [m['path'] for m in records] != [m['path'] for m in cam_records]:
+            cam = None  # CAM references belonged to a different model list
+            warnings.append('Kept the FDM model list; the old CAM setup used different models.')
     plate, row = [], -1
-    for i, record in enumerate(data['models']):
+    for i, record in enumerate(records):
         model = load(record)
         if model is not None:
             if i == selected:
@@ -106,28 +110,20 @@ def restore(window, data, *, base=None, skip_missing=False):
             plate.append(model)
     if plate and row < 0:
         row = 0
-    cam, cam_row, setup, cam_selection = [], -1, CAMSetup(), None
-    if data['cam'] is not None:
-        record = data['cam']
-        records = record.get('models', [record])  # older sessions stored one CAM model
-        selected_cam = int(record.get('selected', 0))
-        for i, entry in enumerate(records):
-            model = load(entry)
-            if model is not None:
-                if i == selected_cam:
-                    cam_row = len(cam)
-                cam.append(model)
-        if cam:
-            cam_row = max(cam_row, 0)
-            from gcodeproducer.core.cam.assembly import assembly_fingerprint
-            setup = CAMSetup.from_dict(record['setup'])
-            current = assembly_fingerprint(cam)
-            if len(cam) != len(records) or (setup.fingerprint and setup.fingerprint != current):
+    setup, cam_selection = CAMSetup(), None
+    if plate:
+        from gcodeproducer.core.cam.assembly import assembly_fingerprint
+        from gcodeproducer.core.fdm.plate import reanchor_models
+        current = assembly_fingerprint(plate)
+        if cam is not None:
+            setup = CAMSetup.from_dict(cam['setup'])
+            if len(plate) != len(records) or (setup.fingerprint and setup.fingerprint != current):
                 warnings.append('CAM source geometry changed; the saved CAM setup was not restored.')
                 setup = CAMSetup()
             else:
-                cam_selection = tuple(record['selection'])
-            setup.fingerprint = current
+                cam_selection = tuple(cam['selection'])
+        setup.fingerprint = current
+        reanchor_models(plate, 'top' if workflow == 'cam' else 'bottom', None)
 
     w._cam_highlight_timer.stop()
     w._face_task = w._blocks_task = w._cam_pick_task = w._cam_highlight_task = None
@@ -142,8 +138,7 @@ def restore(window, data, *, base=None, skip_missing=False):
     w.feature_list.clear()
     w.stale = False
     w.mesh = w.model_path = None  # don't save old placement during the workflow change
-    w.model_plates = {'fdm': plate, 'cam': cam}
-    w.model_rows = {'fdm': row, 'cam': cam_row}
+    w.plate_models, w.plate_row = plate, row
     w.session_process_names.clear()
     for kind, (pid, pipeline, dirty, name) in processes.items():
         w.process_id[kind], w.pipelines[kind], w.dirty[kind] = pid, pipeline, dirty

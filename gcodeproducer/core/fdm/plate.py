@@ -38,6 +38,25 @@ def free_position(mesh, center, rect, occupied, gap=2.):
     return min(valid)[-2:] if valid else None
 
 
+def reanchor_models(models, anchor, auto_xy):
+    """Shift the whole assembly to the new Z datum without changing relative poses."""
+    if not models or all(m.placement.z_anchor == anchor for m in models):
+        return
+    bounds = [m.placement.apply(m.mesh, auto_xy).bounds for m in models]
+    shift = (-max(hi[2] for _, hi in bounds) if anchor == 'top'
+             else -min(lo[2] for lo, _ in bounds))
+    for model, (lo, hi) in zip(models, bounds):
+        pose = model.placement
+        pose.z_anchor = anchor
+        pose.z = float((hi if anchor == 'top' else lo)[2] + shift)
+        pose.drop = True
+        if pose.x is None:
+            pose.x = float((lo[0]+hi[0])/2)
+        if pose.y is None:
+            pose.y = float((lo[1]+hi[1])/2)
+        # Manual FDM support blocks stay in bed coordinates, not CAM Z.
+
+
 def overlapping_bounds(meshes):
     """Conservative indication of intersecting instance envelopes, not a mesh collision check."""
     bounds = [mesh.bounds for mesh in meshes]

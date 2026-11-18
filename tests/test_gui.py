@@ -170,6 +170,28 @@ def test_cam_multiple_models_auto_stock_and_session(win, cube_stl, monkeypatch):
     assert op.geometry == [Reference('face', [0])]
 
 
+def test_cam_three_models_keep_relative_poses_in_fdm(win, cube_stl):
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    win.open_model(cube_stl)
+    win.copy_plate_model()
+    win.sp_rot['z'].setValue(25.)
+    win.sp_scale.setValue(75.)
+    win.copy_plate_model()
+    win.sp_z.setValue(-4.)
+    models = list(win.plate_models)
+    before = win.assembly.vertices.copy()
+    shift = -before[:, 2].min()
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('fdm'))
+    assert win.plate_models == models and win.plate_row == 2
+    np.testing.assert_allclose(win.assembly.vertices, before + [0, 0, shift], atol=1e-9)
+    assert win.sp_rot['z'].value() == 25. and win.sp_scale.value() == 75.
+    win.sp_y.setValue(80.)
+    after = win.assembly.vertices.copy()
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    assert win.sp_y.value() == 80.
+    np.testing.assert_allclose(win.assembly.vertices, after - [0, 0, after[:, 2].max()], atol=1e-9)
+
+
 def test_fdm_plate_copy_shortcut_selection_and_workflow(win, app, cube_stl):
     from PyQt6.QtCore import Qt
     from PyQt6.QtTest import QTest
@@ -192,7 +214,8 @@ def test_fdm_plate_copy_shortcut_selection_and_workflow(win, app, cube_stl):
     win.model_list.setCurrentRow(1)
     assert win.sp_scale.value() == 120
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
-    assert win.model_list.count() == 1 and len(win.model_viewer.triangles) == len(clone.mesh.triangles)
+    assert win.model_list.count() == 2 and len(win.model_viewer.triangles) == 2*len(clone.mesh.triangles)
+    assert win.sp_scale.value() == 120
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('fdm'))
     assert win.model_list.count() == 2 and win.sp_scale.value() == 120
     win.delete_model_button.click()
@@ -787,7 +810,7 @@ def test_cam_stock_shared_slot_top_zero_and_workflow_placement(win, cube_stl):
     from gcodeproducer.core.placement import fits, bed_rect
     win.open_model(cube_stl)
     win.sp_z.setValue(7)
-    fdm_placement = win.placement.to_dict()
+    fdm_xy = (win.placement.x, win.placement.y)
     assert win.model_options.currentWidget() is win.support_box
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     assert win.model_options.currentWidget() is win.stock_editor
@@ -804,15 +827,16 @@ def test_cam_stock_shared_slot_top_zero_and_workflow_placement(win, cube_stl):
     assert win.model_viewer.stock is stock and win.viewer.stock is stock
     win.sp_z.setValue(-2)
     assert win.placed.bounds[1][2] == -2
-    win.open_model(cube_stl)
+    win.open_model(cube_stl, replace=True)
     assert win.cam_editor.setup.stock.to_dict() == stock.to_dict()
     assert win.placement.z == -2
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
-    assert win.placement.to_dict() == fdm_placement
+    assert (win.placement.x, win.placement.y) == fdm_xy
+    assert win.placement.z == 0
     assert win.model_options.currentWidget() is win.support_box
     assert win.model_viewer.stock is None and win.viewer.stock is None
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
-    assert win.placement.z == -2
+    assert win.placement.z == 0
     win.drop_model()
     assert win.placed.bounds[1][2] == 0
 

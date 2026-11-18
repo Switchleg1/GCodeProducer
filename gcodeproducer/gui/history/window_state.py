@@ -26,16 +26,14 @@ class WindowState:
         if mesh_key is not None:
             self.meshes[mesh_key] = w.mesh
         w._remember_plate_model()
-        plates = {}
-        for workflow, models in w.model_plates.items():
-            plates[workflow] = []
-            for model in models:
-                key = id(model.mesh)
-                self.meshes[key] = model.mesh
-                plates[workflow].append((key, model.path, model.placement.to_dict(), [b.to_dict() for b in model.blocks],
-                                         model.support.to_dict(), model.persistent))
+        plate = []
+        for model in w.plate_models:
+            key = id(model.mesh)
+            self.meshes[key] = model.mesh
+            plate.append((key, model.path, model.placement.to_dict(), [b.to_dict() for b in model.blocks],
+                          model.support.to_dict(), model.persistent))
         return {
-            'plate': plates, 'plate_row': dict(w.model_rows),
+            'plate': plate, 'plate_row': w.plate_row,
             'mesh': mesh_key, 'path': w.model_path, 'workflow': w.workflow,
             'machine': w.cb_machine.currentData(),
             'consumables': {k: cb.currentData() for k, (_, _, cb) in w.cons_rows.items()},
@@ -107,7 +105,7 @@ class WindowState:
     def prune(self, history):
         def mesh_keys(snapshot):
             state = snapshot[0]
-            return {state['mesh'], *(model[0] for plate in state['plate'].values() for model in plate)}
+            return {state['mesh'], *(model[0] for model in state['plate'])}
         keys = mesh_keys(history.current)
         for before, after in history.entries:
             keys.update(mesh_keys(before) | mesh_keys(after))
@@ -132,8 +130,7 @@ class WindowState:
         w.progress.setVisible(False)
         old_model = (id(w.mesh) if w.mesh is not None else None, w.model_path)
         w.mesh = w.model_path = None       # switching workflow must not save outgoing placement
-        w.model_plates = {kind: [] for kind in w.model_plates}
-        w.model_rows = {kind: -1 for kind in w.model_rows}
+        w.plate_models, w.plate_row = [], -1
         for k in KINDS:
             self.restore_library(w.libset[k], state['libraries'][k], Profile)
         self.restore_library(w.libset.processes, state['processes'], ProcessPreset)
@@ -157,13 +154,10 @@ class WindowState:
         w._pl_prev = copy.deepcopy(w.placement)
         w.blocks = [SupportBlock.from_dict(b) for b in state['blocks']]
         w.model_support = ModelSupport.from_dict(state['support'])
-        w.model_plates = {
-            kind: [PlateModel(path, self.meshes[key], Placement.from_dict(pose),
-                              [SupportBlock.from_dict(b) for b in blocks], ModelSupport.from_dict(support), original)
-                   for key, path, pose, blocks, support, original in plate]
-            for kind, plate in state['plate'].items()
-        }
-        w.model_rows = dict(state['plate_row'])
+        w.plate_models = [PlateModel(path, self.meshes[key], Placement.from_dict(pose),
+                                     [SupportBlock.from_dict(b) for b in blocks], ModelSupport.from_dict(support), original)
+                          for key, path, pose, blocks, support, original in state['plate']]
+        w.plate_row = state['plate_row']
         w._remember_plate_model()
         w._refresh_model_list()
         w.sel_block = state['block_row']

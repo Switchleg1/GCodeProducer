@@ -100,8 +100,8 @@ class MainWindow(QMainWindow):
         self.dirty = {w: False for w in wf.ALL}
         self.mesh = None
         self.model_path = None
-        self.model_plates = {kind: [] for kind in wf.ALL}
-        self.model_rows = {kind: -1 for kind in wf.ALL}
+        self.plate_models = []
+        self.plate_row = -1
         self.placement = Placement()
         self.placed = None              # placement applied to the mesh (what gets sliced)
         self._pl_prev = None            # last placement (to move support blocks with the model)
@@ -172,22 +172,6 @@ class MainWindow(QMainWindow):
         self.camera.changed.connect(self.history.schedule)
         self.menuBar().triggered.connect(self.history.schedule)
         self.history.changed.connect(lambda: self._history_state.prune(self.history))
-
-    @property
-    def plate_models(self):
-        return self.model_plates[self.workflow]
-
-    @plate_models.setter
-    def plate_models(self, models):
-        self.model_plates[self.workflow] = models
-
-    @property
-    def plate_row(self):
-        return self.model_rows[self.workflow]
-
-    @plate_row.setter
-    def plate_row(self, row):
-        self.model_rows[self.workflow] = row
 
     # UI construction
     def _build_central(self):
@@ -609,8 +593,10 @@ class MainWindow(QMainWindow):
                              self._on_place_on_face, checkable=True)
         g.addWidget(self.b_face, 6, 2)
         g.addWidget(button("Reset", "Reset rotation, scale and Z and centre the model", self.reset_placement), 6, 3)
-        for sb in (self.sp_x, self.sp_y, self.sp_z, self.sp_scale, *self.sp_rot.values()):
-            sb.valueChanged.connect(self._on_placement_spin)
+        fields = ((self.sp_x, 'x'), (self.sp_y, 'y'), (self.sp_z, 'z'), (self.sp_scale, 'scale'),
+                  *((spinbox, 'r'+axis) for axis, spinbox in self.sp_rot.items()))
+        for spinbox, field in fields:
+            spinbox.valueChanged.connect(lambda value, field=field: self._on_placement_spin(field, value))
         ml.addWidget(self.place_box)
 
         self.place_box.setEnabled(False)
@@ -998,8 +984,11 @@ class MainWindow(QMainWindow):
             return
         if self.model_path:
             self._save_placement()
-        previous = self.workflow
-        self.workflow = self.cb_workflow.currentData()
+        workflow = self.cb_workflow.currentData()
+        if workflow != self.workflow and self.plate_models:
+            from gcodeproducer.core.fdm.plate import reanchor_models
+            reanchor_models(self.plate_models, 'top' if workflow == wf.CAM else 'bottom', self._auto_xy())
+        self.workflow = workflow
         if self.material_results:self._reset_material_outputs()
         self.fdm_process_box.setVisible(self.workflow == wf.FDM)
         self.cam_editor.setVisible(self.workflow == wf.CAM)
@@ -1017,13 +1006,6 @@ class MainWindow(QMainWindow):
         self._reload_machines()
         if self.plate_models:
             self._activate_plate_model(self.plate_row)
-        elif previous != self.workflow and self.model_path:
-            from gcodeproducer.core.fdm.plate_model import PlateModel
-            pose, blocks, support = self._load_model_state(self.model_path)
-            self.plate_models.append(PlateModel(self.model_path, self.mesh, pose, blocks, support))
-            self._activate_plate_model(0)
-            if self.workflow == wf.CAM:
-                self._load_cam_model(self.model_path, self.mesh)
         elif self.mesh is None:
             self._activate_plate_model(-1)
         self._refresh_model_list()
@@ -1437,8 +1419,7 @@ class MainWindow(QMainWindow):
         self._activate_plate_model(len(self.plate_models)-1)
         self._refresh_model_list()
         if first:
-            if self.workflow == wf.CAM:
-                self._load_cam_model(model.path, model.mesh)
+            self._load_cam_model(model.path, model.mesh)
             self._finish_model_open(model.path)
         else:
             self._plate_changed(fit=True)
@@ -1459,25 +1440,25 @@ class MainWindow(QMainWindow):
             return
         self._save_placement()
         row = self.plate_row
-        if self.workflow == wf.CAM:
-            from gcodeproducer.core.cam.assembly import remove_model_references
-            if not remove_model_references(self.cam_editor.setup, self.plate_models, row):
-                self.notify('model_in_use', 'warning', 'Model is in use',
-                            'Remove the CAM selections, linked depths or holding tabs that use this model first.')
-                return
+        from gcodeproducer.core.cam.assembly import remove_model_references
+        if not remove_model_references(self.cam_editor.setup, self.plate_models, row):
+            self.notify('model_in_use', 'warning', 'Model is in use',
+                        'Remove the CAM selections, linked depths or holding tabs that use this model first.')
+            return
         del self.plate_models[row]
         self._activate_plate_model(min(row, len(self.plate_models)-1))
         self._refresh_model_list()
         self._plate_changed()
 
     def _plate_changed(self, fit=False):
-        if self.workflow == wf.CAM:
-            from gcodeproducer.core.cam.assembly import assembly_fingerprint
+        from gcodeproducer.core.cam.assembly import assembly_fingerprint
+        if self.plate_models:
             self.cam_editor.setup.fingerprint = assembly_fingerprint(self.plate_models)
-            if not self.plate_models:
-                from gcodeproducer.core.cam.cam_setup import CAMSetup
-                self._show_cam_setup(CAMSetup())
             self.cam_editor.rebuild(self.cam_editor.indices())
+            self._cam_changed()
+        else:
+            from gcodeproducer.core.cam.cam_setup import CAMSetup
+            self._show_cam_setup(CAMSetup())
         self._set_stale()
         self._update_scene()
         self.set_mode('prepare')
@@ -1552,11 +1533,9 @@ class MainWindow(QMainWindow):
             sb.setValue(v)
             sb.blockSignals(False)
 
-    def _on_placement_spin(self, _v=0.0):
-        pl = self.placement
-        pl.x, pl.y, pl.z = self.sp_x.value(), self.sp_y.value(), self.sp_z.value()
-        pl.rx, pl.ry, pl.rz = (self.sp_rot[a].value() for a in "xyz")
-        pl.scale = self.sp_scale.value()
+    def _on_placement_spin(self, field, value):
+        # Do not round the untouched coordinates to the displayed precision.
+        setattr(self.placement, field, value)
         self._placement_changed()
 
     def _follow_model(self):

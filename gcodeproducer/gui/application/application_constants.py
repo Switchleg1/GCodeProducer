@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 MODEL_FILTER = "Meshes (*.stl)"
-WORK_SESSION_VERSION = 1
+WORK_SESSION_VERSION = 2
 WORK_SESSION_KEY = 'workSession/default'
 WORK_SESSION_FILTER = 'GCodeProducer work session (*.gcpsession);;JSON (*.json)'
 

@@ -64,7 +64,7 @@ fits a single blank around every loaded CAM model, with the configured margin.
 CAM selections can refer to any model; a model used by a selection, linked
 height, or holding tab cannot be deleted until those references are removed.
 Use normal navigation to select a model on the bed, or use the list while in
-CAM picking mode. Switching workflows preserves each workflow's model list.
+CAM picking mode. Both workflows share the same model list and selection.
 
 ![FDM model list with an original, a selected copy, and a second STL on the bed](pictures/fdm-model-plate.png)
 
@@ -101,8 +101,12 @@ G-code is not saved in the session: regenerate it to return to Preview.
 | Place on face (Ctrl+L) | Click a face: point it down onto the FDM bed, or up toward the CAM cutting surface. Rotation and Z placement are applied together; Esc cancels |
 | Reset | Restores rotation, scale and Z, then centres XY using the active workflow convention |
 
-Placement is model state, not FDM process state. FDM and CAM placements are
-remembered separately. Changing presets must not move a model or alter its
+Placement is model state, not process state. Switching workflows keeps XY,
+rotation, scale and relative Z spacing. The entire group shifts in Z so its
+lowest point rests on the FDM bed or its highest point is at CAM Z0. CAM stock
+and drawn references stay in work coordinates. Older sessions with separate
+model lists reopen the list for their saved workflow.
+Changing presets must not move a model or alter its
 support blocks. Moving FDM models moves their support blocks; rotation or
 scaling invalidates those blocks and removes them. CAM references use mesh
 indices and are re-evaluated after placement; an operation may become invalid

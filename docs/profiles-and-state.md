@@ -181,8 +181,9 @@ process-contained support placement is not a reliable model-state migration;
 select the desired support mode in Model → Support. Reusable style values
 remain process settings.
 
-CAM uses a separate placement key. The first CAM placement defaults to top
-Z0 instead of reusing a remembered FDM bottom height. Old CAM setups without
-stock load with unallocated stock and require Auto or manual dimensions before
-stock checking can run. If the source mesh fingerprint changes, saved CAM
+FDM and CAM share the loaded assembly. Switching workflows preserves the relative
+poses and shifts the assembly in Z to the FDM bed or CAM top datum. Individual
+file imports still use the remembered placement defaults for the active workflow.
+Old CAM setups without stock load with unallocated stock and require Auto or
+manual dimensions before stock checking can run. If the source mesh fingerprint changes, saved CAM
 setup references are invalidated rather than applied to unrelated geometry.
