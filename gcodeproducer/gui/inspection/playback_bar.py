@@ -1,6 +1,7 @@
 """PlaybackBar — Preview transport shared by FDM and CAM."""
 from __future__ import annotations
 import time
+import numpy as np
 from PyQt6.QtCore import QSignalBlocker, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSlider, QSpinBox, QVBoxLayout, QWidget
 from gcodeproducer.gui.editors.widgets import small_button
@@ -17,6 +18,7 @@ class PlaybackBar(QWidget):
     and toolpath representation.
     """
     cursorChanged = pyqtSignal(int)          # line index
+    headChanged = pyqtSignal(object)         # interpolated XYZ, or None when seeking
     layersChanged = pyqtSignal(int, int)     # lowest, highest visible layer
 
     def __init__(self, parent=None):
@@ -27,7 +29,7 @@ class PlaybackBar(QWidget):
         self.layer_min = 0
         self.layer_max = 0
         self.play_speed = 1.0
-        self._play_acc = 0.0
+        self._distance = 0.0
         self._play_t = 0.0
         self.timer = QTimer(self)
         self.timer.setInterval(PLAY_INTERVAL_MS)
@@ -75,7 +77,7 @@ class PlaybackBar(QWidget):
         self.speed_slider.setRange(0, PLAY_SPEED_STEPS)
         self.speed_slider.setMinimumWidth(80)
         self.speed_slider.setMaximumWidth(180)
-        self.speed_slider.setToolTip("Playback speed (logarithmic)")
+        self.speed_slider.setToolTip("Preview tool speed in mm/s along the path (logarithmic)")
         self.speed_slider.valueChanged.connect(self._on_speed)
         self.speed_lbl = QLabel()
         self.speed_lbl.setMinimumWidth(90)
@@ -112,6 +114,8 @@ class PlaybackBar(QWidget):
     def clear(self):
         self.stop_play()
         self.program = self.tp = None
+        self._distance = 0.0
+        self.headChanged.emit(None)
         self.cursor = self.layer_min = self.layer_max = 0
         for w in (self.line_slider, self.layer_line_slider):
             with QSignalBlocker(w):
@@ -146,10 +150,17 @@ class PlaybackBar(QWidget):
         return max(0, (self.program.num_layers if self.program is not None else 1)-1)
 
     # ----------------------------------------------------------------- cursor
-    def set_cursor(self, line, follow=True):
+    def set_cursor(self, line, follow=True, *, seek=True):
         if self.program is None or not len(self.program.lines):
             return
         line = max(0, min(len(self.program.lines)-1, int(line)))
+        if seek:
+            self._distance = 0.0
+            if self.tp is not None and len(self.tp.line):
+                segment = self.tp.line.searchsorted(line, side='right') - 1
+                if segment >= 0:
+                    self._distance = float(self.tp.distance_ends[segment])
+            self.headChanged.emit(None)
         self.cursor = line
         with QSignalBlocker(self.line_slider):
             self.line_slider.setValue(line)
@@ -232,7 +243,7 @@ class PlaybackBar(QWidget):
 
     def _on_speed(self, value):
         self.play_speed = 10 ** (value/PLAY_SPEED_STEPS*PLAY_SPEED_DECADES)
-        self.speed_lbl.setText(f"{self.play_speed:,.0f} lines/s")
+        self.speed_lbl.setText(f"{self.play_speed:,.0f} mm/s")
 
     def toggle_play(self):
         if self.timer.isActive():
@@ -242,7 +253,7 @@ class PlaybackBar(QWidget):
             return
         if self.cursor >= len(self.program.lines)-1:
             self.set_cursor(0)                     # replay from the start
-        self._play_acc = 0.0
+            self._distance = 0.0
         self._play_t = time.perf_counter()
         self.timer.start()
         self.b_play.setText(PAUSE_ICON)
@@ -253,16 +264,22 @@ class PlaybackBar(QWidget):
 
     def advance(self, seconds):
         """Move the cursor by ``seconds`` of playback; returns False when the end is reached."""
-        self._play_acc += seconds*self.play_speed
-        steps = int(self._play_acc)
-        if steps <= 0:
-            return True
-        self._play_acc -= steps
-        last = len(self.program.lines)-1
-        if self.cursor+steps >= last:
-            self.set_cursor(last)
+        if self.program is None or not self.program.lines:
             return False
-        self.set_cursor(self.cursor+steps)
+        self._distance += max(0., seconds)*self.play_speed
+        ends = self.tp.distance_ends if self.tp is not None else ()
+        if not len(ends) or self._distance >= ends[-1]:
+            self.set_cursor(len(self.program.lines)-1)
+            return False
+        segment = int(np.searchsorted(ends, self._distance, side='right'))
+        # Show complete lines only. Non-motion lines don't consume playback time.
+        line = max(0, int(self.tp.line[segment])-1)
+        if line != self.cursor:
+            self.set_cursor(line, seek=False)
+        start = ends[segment-1] if segment else 0.
+        t = (self._distance-start)/(ends[segment]-start)
+        a, b = self.tp.p0[segment], self.tp.p1[segment]
+        self.headChanged.emit(a + t*(b-a))
         return True
 
     def _tick(self):

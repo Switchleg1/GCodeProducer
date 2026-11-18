@@ -61,6 +61,7 @@ class GCodeViewer(QOpenGLWidget):
         self.bed_rect = None            # machine plate; None = grid around the tool path
         self.tp: Toolpath | None = None
         self.cursor = 1 << 30
+        self.playback_head = None
         self.selected = -1
         self._geom_dirty = False
         self._color_dirty = False
@@ -116,11 +117,16 @@ class GCodeViewer(QOpenGLWidget):
 
     def set_toolpath(self, tp: Toolpath | None) -> None:
         self.tp = tp
+        self.playback_head = None
         self._geom_dirty = True
         self.update()
 
     def set_cursor(self, line: int) -> None:
         self.cursor = line
+        self.update()
+
+    def set_playback_head(self, xyz) -> None:
+        self.playback_head = xyz
         self.update()
 
     def set_selected(self, line: int) -> None:
@@ -298,7 +304,8 @@ class GCodeViewer(QOpenGLWidget):
                 self.m_events.draw(GL.GL_POINTS)
             # tool head
             if st.show_tool and 0 <= self.cursor < len(self.tp.line_pos):
-                pos = self.tp.line_pos[self.cursor][None, :]
+                head = self.playback_head if self.playback_head is not None else self.tp.line_pos[self.cursor]
+                pos = np.asarray(head, dtype=np.float32)[None, :]
                 self.m_tool.upload(pos, np.zeros((1, 2), np.float32), np.array([[0.1, 1.0, 1.0, 1.0]], np.float32))
                 self._set_common(self.p_point, mvp)
                 GL.glUniform1i(self._u(self.p_point, "uNoFilter"), 1)

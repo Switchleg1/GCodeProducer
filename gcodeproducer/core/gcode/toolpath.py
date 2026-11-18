@@ -34,6 +34,7 @@ class Toolpath:
     op_names: list = field(default_factory=list)
     engagement: np.ndarray = None   # (N,) float32 CAM radial engagement (nan = n/a)
     stats: dict = field(default_factory=dict)
+    distance_ends: np.ndarray = None  # cumulative XYZ distance at each segment end (mm)
 
     @property
     def num_layers(self) -> int:
@@ -168,12 +169,15 @@ def build_toolpath(program: GCodeProgram, sim: SimResult | None = None) -> Toolp
     tp.op = op_line[seg_line] if len(seg_line) else np.zeros(0, np.int16)
     eng_line = np.array([ln.engagement for ln in lines], dtype=np.float32)
     tp.engagement = eng_line[seg_line] if len(seg_line) else np.zeros(0, np.float32)
-    tp.stats = compute_stats(tp, program)
+    lengths = np.linalg.norm(tp.p1 - tp.p0, axis=1)
+    tp.distance_ends = np.cumsum(lengths, dtype=np.float64)
+    tp.stats = compute_stats(tp, program, lengths)
     return tp
 
 
-def compute_stats(tp: Toolpath, program: GCodeProgram) -> dict:
-    length = np.linalg.norm(tp.p1 - tp.p0, axis=1) if len(tp.p0) else np.zeros(0)
+def compute_stats(tp: Toolpath, program: GCodeProgram, length=None) -> dict:
+    if length is None:
+        length = np.linalg.norm(tp.p1 - tp.p0, axis=1)
     solid = np.isin(tp.kind, SOLID_KINDS)
     feed = np.where(tp.feed > 0, tp.feed, np.nan)
     with np.errstate(invalid="ignore", divide="ignore"):

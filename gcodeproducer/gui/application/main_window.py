@@ -239,6 +239,7 @@ class MainWindow(QMainWindow):
         from gcodeproducer.gui.inspection.playback_bar import PlaybackBar
         self.playback = PlaybackBar()
         self.playback.cursorChanged.connect(self._on_cursor)
+        self.playback.headChanged.connect(self.viewer.set_playback_head)
         self.playback.layersChanged.connect(self._on_layers)
         self.line_slider = self.playback.layer_line_slider       # position within the top layer
         self.single_layer = self.playback.single_layer

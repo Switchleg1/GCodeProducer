@@ -249,8 +249,10 @@ leads; see [holding tabs](cam/holding-tabs.md) for setup and safety limits.
 
 ## Inspecting generated paths
 
-The playback bar under Preview is shared by FDM and CAM. It plays the program
-line by line, drawing it up to the cursor.
+The playback bar under Preview is shared by FDM and CAM. The tool marker
+moves along the path at the selected preview speed; the drawing and G-code
+cursor advance as each line completes. Playback skips dwell and other
+non-motion delays and does not use the programmed feed rates.
 
 ![Preview playback bar](pictures/ui-preview-playback.png)
 
@@ -260,7 +262,7 @@ line by line, drawing it up to the cursor.
 | ⏪ / ⏩ | Previous / next layer (FDM layer or CAM depth pass); the cursor goes to the end of that layer |
 | ◀ / ▶\| | Previous / next move (comments and blank lines are skipped) |
 | ▶ / ⏸ | Play / pause (Space). Playing at the end restarts from the start |
-| Speed | 1 to 50,000 lines per second, logarithmic |
+| Speed | About 1 to 50,000 mm/s along the toolpath, logarithmic |
 | Line slider and *line* box | Position in the whole program |
 | In layer | Position within the top visible layer |
 | Layers *from* / *to* | Lowest and highest visible layer |

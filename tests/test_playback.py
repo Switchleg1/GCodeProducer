@@ -109,10 +109,16 @@ def test_layer_steps_follow_and_single_layer(bar):
 
 
 def test_playback_advances_at_the_chosen_speed_and_stops_at_the_end(bar):
-    prog, tp = program(layers=6, moves=20)
+    from gcodeproducer.core.gcode.program import GCodeProgram
+    from gcodeproducer.core.gcode.toolpath import build_toolpath
+
+    prog = GCodeProgram.from_text("G90\nG1 X2 F1200\n;comment\nG1 X10 F60\nM84")
+    tp = build_toolpath(prog)
+    heads = []
+    bar.headChanged.connect(heads.append)
     bar.set_program(prog, tp)
     bar.speed_slider.setValue(0)
-    assert bar.play_speed == pytest.approx(1) and bar.speed_lbl.text() == "1 lines/s"
+    assert bar.play_speed == pytest.approx(1) and bar.speed_lbl.text() == "1 mm/s"
     bar.speed_slider.setValue(1000)
     assert bar.play_speed == pytest.approx(10**4.7)
     bar.speed_slider.setValue(500)
@@ -120,13 +126,38 @@ def test_playback_advances_at_the_chosen_speed_and_stops_at_the_end(bar):
     bar.toggle_play()                     # at the end: replay from the start
     assert bar.is_playing() and bar.cursor == 0 and bar.b_play.text() == "\u23f8"
     bar.stop_play()
-    bar._play_acc = 0
-    assert bar.advance(10/speed) and bar.cursor == 10
-    assert bar.layer_max == int(tp.line_layer[10])           # Follow keeps the top layer with the cursor
+    assert bar.advance(1/speed) and bar.cursor == 0
+    np.testing.assert_allclose(heads[-1], [1, 0, 0])
+    assert bar.advance(4/speed) and bar.cursor == 2  # comment consumes no time
+    np.testing.assert_allclose(heads[-1], [5, 0, 0])
+    bar.toggle_play()  # resume rather than restarting the current move
+    bar.stop_play()
+    assert bar.advance(1/speed)
+    np.testing.assert_allclose(heads[-1], [6, 0, 0])
+    bar.set_cursor(1)
+    assert heads[-1] is None
+    assert bar.advance(1/speed)
+    np.testing.assert_allclose(heads[-1], [3, 0, 0])
     assert not bar.advance(1e6) and bar.cursor == len(prog.lines)-1
     bar.toggle_play()
     bar.toggle_play()
     assert not bar.is_playing() and bar.b_play.text() == "\u25b6"
+
+
+def test_playback_follows_arc_distance(bar):
+    from gcodeproducer.core.gcode.program import GCodeProgram
+    from gcodeproducer.core.gcode.toolpath import build_toolpath
+
+    prog = GCodeProgram.from_text('G90\nG3 X10 Y0 I5 J0 F60\nM84')
+    tp = build_toolpath(prog)
+    heads = []
+    bar.headChanged.connect(heads.append)
+    bar.set_program(prog, tp)
+    bar.set_cursor(0)
+    assert tp.distance_ends[-1] == pytest.approx(5*np.pi, rel=.001)
+    assert bar.advance(tp.distance_ends[-1]/(2*bar.play_speed))
+    np.testing.assert_allclose(heads[-1], [5, -5, 0], atol=.01)
+    assert bar.cursor == 0  # the arc line has not finished
 
 
 def test_clear_stops_and_empties(bar):
