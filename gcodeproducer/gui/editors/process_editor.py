@@ -119,10 +119,18 @@ class ProcessEditor(QWidget):
         head.addWidget(reset, 0, Qt.AlignmentFlag.AlignTop)
         v.addLayout(head)
 
-        editor = ParamEditor(cls.parameters(), {**cls.defaults(), **step.params}, section_level=1)
+        editor = ParamEditor(cls.parameters(), cls.resolve(step.params), section_level=1)
         editor.setEnabled(step.enabled)
         if step is self.pipeline.step('fdm_emit'):
             self._seam_editor = editor
+
+            def show_retraction_fields(values):
+                mode = values['retraction_mode']
+                editor.set_field_visible('min_travel_retract', mode != 'off')
+                editor.set_field_visible('inside_travel_retract', mode == 'separate')
+
+            show_retraction_fields(editor.values)
+            editor.changed.connect(show_retraction_fields)
             seam = next(section for section in editor.sections if section.title() == 'Seam')
             pick = QPushButton('Pick on bed')
             pick.clicked.connect(self.seamPickRequested.emit)

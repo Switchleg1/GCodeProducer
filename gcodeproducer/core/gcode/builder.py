@@ -100,6 +100,12 @@ class GCodeBuilder:
         if body:
             self._emit("G0 " + body)
 
+    def coast_to(self, x: float, y: float, feed: float) -> None:
+        """Follow the print path at print feed without changing filament position."""
+        body = self._xyzf(x=x, y=y, f=feed)
+        if body:
+            self._emit(f"G1 {body}", "coast")
+
     def extrude_to(self, x: float, y: float, e_per_mm: float,
                    z: Optional[float] = None, feed: Optional[float] = None) -> None:
         """Print a straight segment to (x, y), depositing ``e_per_mm`` mm of filament per mm travelled."""

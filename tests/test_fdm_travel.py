@@ -89,18 +89,45 @@ def test_retract_policy_uses_chosen_route(end, avoid, force, expected):
     builder = GCodeBuilder()
     builder.travel(2, 5)
     path = Path('infill', np.array([end, (end[0]+.25, end[1])], float))
-    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': force,
+    params = {'retraction_mode': 'separate' if force else 'open',
               'min_travel_retract': 1.5, 'inside_travel_retract': 2.5}
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
                          TravelRouter([OUTER, HOLE], builder.dx), 2. if avoid else 0.)
     assert any(line.params.get('E', 0) < 0 for line in builder.program().lines) == expected
 
 
+@pytest.mark.parametrize('legacy, mode', [({}, 'all'), ({'retract': False}, 'off'),
+    ({'retract_open_only': 'true', 'force_travel_retract': False}, 'open'),
+    ({'retract_open_only': True}, 'separate'),
+    ({'retraction_mode': 'open', 'retract': False}, 'open')])
+def test_retraction_mode_preserves_legacy_processes(legacy, mode):
+    values = FDMEmit.resolve({**legacy, 'min_travel_retract': 2.5}, strict=True)
+    assert values['retraction_mode'] == mode
+    assert values['min_travel_retract'] == 2.5
+
+
+@pytest.mark.parametrize('relative', [True, False])
+@pytest.mark.parametrize('length, expected', [(0., []), (1.5, [(4., 1.), (5., 1.)]), (2., [(4., 1.), (5., 1.)]), (6., [])])
+def test_coast_follows_path_tail_without_extruding(relative, length, expected):
+    builder = GCodeBuilder(relative_e=relative)
+    path = Path('infill', np.array([(0., 0.), (4., 0.), (4., 1.), (5., 1.)]))
+    params = {'retraction_mode': 'off', 'coast_length': length}
+    FDMEmit()._print_path(builder, path, path.points, .05, 1000, 5000, params, 0, 25, 0)
+    lines = builder.program().lines
+    coasts = [line for line in lines if line.raw.endswith(';coast')]
+    assert len(coasts) == len(expected)
+    assert all(line.cmd == 'G1' and 'E' not in line.params for line in coasts)
+    assert (builder.x, builder.y) == (5., 1.)
+    assert builder.e == pytest.approx(.05*(6. - (length if coasts else 0.)))
+    if coasts:
+        assert [(line.params.get('X', 4.), line.params.get('Y', 1.)) for line in coasts] == expected
+
+
 def test_short_open_crossing_skips_retraction_even_with_lower_inside_threshold():
     builder = GCodeBuilder()
     builder.travel(4.9, 5)
     path = Path('infill', np.array([(5.1, 5), (5.3, 5)]))
-    params = {'retract': True, 'retract_open_only': True, 'force_travel_retract': True,
+    params = {'retraction_mode': 'separate',
               'min_travel_retract': 1.5, 'inside_travel_retract': .1}
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000, params, .4, 25, 0,
                          TravelRouter([OUTER, HOLE], builder.dx))
@@ -128,7 +155,7 @@ def test_routed_waypoints_keep_single_decimal_step_in_gcode():
     builder = GCodeBuilder()
     path = Path('infill', np.array([(4., 5.), (5., 5.)]))
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000,
-                         {'retract': False}, 0, 25, 0, Router(), 20.)
+                         {'retraction_mode': 'off'}, 0, 25, 0, Router(), 20.)
     program = builder.program()
     sim = simulate(program)
     assert [(sim.x[i], sim.y[i]) for i, ln in enumerate(program.lines) if ln.cmd == 'G0'] == [
@@ -157,7 +184,7 @@ def test_emit_one_retract_for_detour_and_no_extrusion_in_waypoints():
     builder.travel(2, 5)
     path = Path('infill', np.array([(10, 5), (11, 5)], float))
     FDMEmit()._print_path(builder, path, path.points, .04, 1000, 5000,
-                         {'retract': True, 'min_travel_retract': 8.5}, .4, 25, 0,
+                         {'retraction_mode': 'all', 'min_travel_retract': 8.5}, .4, 25, 0,
                          TravelRouter([OUTER, HOLE], builder.dx), 2.)
     program = builder.program()
     sim = simulate(program)
@@ -173,7 +200,7 @@ def test_emitted_wall_seam_start_stop(mode, expected):
     builder.command('M83')
     builder.travel(4, -1)
     path = Path('outer_perimeter', np.asarray(OUTER, float), closed=True)
-    params = {'seam': mode, 'seam_x': 7, 'seam_y': 25, 'retract': False}
+    params = {'seam': mode, 'seam_x': 7, 'seam_y': 25, 'retraction_mode': 'off'}
     FDMEmit()._print_path(builder, path, path.points, .05, 1000, 5000, params, 0, 25, 0)
     program = builder.program()
     sim = simulate(program)

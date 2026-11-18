@@ -37,6 +37,7 @@ class ParamEditor(QWidget):
         self.values = resolve_params(params, {p.name: values[p.name] for p in params if p.name in values})
         self._widgets = {}
         self._setters = {}
+        self._form_fields = {}
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         groups: dict = {}
@@ -76,7 +77,13 @@ class ParamEditor(QWidget):
                 lab.setWordWrap(True)
                 lab.setToolTip(p.help)
                 form.addRow(lab, w)
+                self._form_fields[p.name] = form, w
         outer.addStretch(1)
+
+    def set_field_visible(self, name, visible):
+        """Show or hide a standalone field and its label without changing its value."""
+        form, widget = self._form_fields[name]
+        form.setRowVisible(widget, visible)
 
     def _make(self, p: Param) -> QWidget:
         v = self.values[p.name]

@@ -39,6 +39,26 @@ class FDMEmit(SliceStage):
     category = "Output"
     params = FDMEMIT_PARAMS
 
+    @classmethod
+    def resolve(cls, values, strict=False):
+        from gcodeproducer.core.parameters.type_conversion import coerce_bool
+
+        values = dict(values or {})
+        legacy = {key: values.pop(key) for key in ('retract', 'retract_open_only', 'force_travel_retract')
+                  if key in values}
+        if legacy and values.get('retraction_mode') is None:
+            def flag(key, default):
+                value = legacy.get(key)
+                return default if value is None else coerce_bool(value)
+
+            if not flag('retract', True):
+                values['retraction_mode'] = 'off'
+            elif not flag('retract_open_only', False):
+                values['retraction_mode'] = 'all'
+            else:
+                values['retraction_mode'] = 'separate' if flag('force_travel_retract', True) else 'open'
+        return super().resolve(values, strict=strict)
+
     def run(self, job, params, ctx):
         rel_e = bool(job.m("relative_e", True))
         b = GCodeBuilder(relative_e=rel_e)
@@ -86,7 +106,7 @@ class FDMEmit(SliceStage):
 
         n = max(1, len(job.layers))
         detours = fallbacks = outside = bridges = 0
-        route_or_classify = detour > 0 or (params['retract'] and params['retract_open_only'] and retract_len > 0)
+        route_or_classify = detour > 0 or (params['retraction_mode'] in ('open', 'separate') and retract_len > 0)
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -154,11 +174,11 @@ class FDMEmit(SliceStage):
         route = router.route(head, start, detour) if router is not None else [start]
         dist = sum(math.dist(a, q) for a, q in zip([head, *route], route))
         do_retract = False
-        if params['retract'] and rlen > 0 and dist > 1e-9:
-            if (params.get('retract_open_only', False) and router is not None
-                    and not router.crosses_open(head, route)):
-                do_retract = (params.get('force_travel_retract', True)
-                              and dist >= params['inside_travel_retract'])
+        mode = params['retraction_mode']
+        if mode != 'off' and rlen > 0 and dist > 1e-9:
+            inside = mode in ('open', 'separate') and router is not None and not router.crosses_open(head, route)
+            if inside:
+                do_retract = mode == 'separate' and dist >= params['inside_travel_retract']
             else:
                 do_retract = dist >= params['min_travel_retract']
         if do_retract:
@@ -168,6 +188,24 @@ class FDMEmit(SliceStage):
             b.travel(float(q[0]), float(q[1]), feed=travel_f, force_xy=len(route) > 1)
         if do_retract:
             b.unretract(rlen, rspd, zhop)
+        coast = params.get('coast_length', 0.)
+        if coast > 0:
+            lengths = np.linalg.norm(np.diff(loop, axis=0), axis=1)
+            tail = np.cumsum(lengths[::-1])
+            # Leave at least one position increment of extrusion. Very short
+            # paths keep their normal extrusion instead of coasting entirely.
+            if tail[-1] - coast > 10**-b.dx and coast >= 10**-b.dx:
+                reverse_index = int(tail.searchsorted(coast))
+                i = len(lengths) - 1 - reverse_index
+                remaining = coast - (tail[reverse_index-1] if reverse_index else 0.)
+                split = loop[i+1] + (remaining/lengths[i])*(loop[i]-loop[i+1])
+                for q in loop[1:i+1]:
+                    b.extrude_to(float(q[0]), float(q[1]), epm, feed=feed)
+                if math.dist(split, loop[i]) > 1e-9:
+                    b.extrude_to(float(split[0]), float(split[1]), epm, feed=feed)
+                for q in loop[i+1:]:
+                    b.coast_to(float(q[0]), float(q[1]), feed=feed)
+                return
         for q in loop[1:]:
             b.extrude_to(float(q[0]), float(q[1]), epm, feed=feed)
 

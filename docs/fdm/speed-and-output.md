@@ -52,18 +52,27 @@ is not applied; it does not mean unlimited flow is physically possible.
 
 ## Travel, retraction and seams
 
-- **Retract on travel:** default On. Amount, speed and Z-hop come from the
-  **material**, not this process section.
-- **Separate open and inside retraction:** off by default. Turn it on to
-  use two independent distances based on the chosen XY route. A detour
-  that stays inside the outline counts as an inside travel.
-- **Minimum travel to retract:** defaults to 1.5 mm. In separate mode, skip
-  retraction on open-space crossings shorter than this. With separate mode
-  off, this threshold applies to all travels.
-- **Retract on long inside travels:** in separate mode, retract on inside
-  travels at or above the **Inside travel retraction distance** (default
-  10 mm). Turn this off for crossings only. Both thresholds use the full
-  length of the individual XY travel, not cumulative distance.
+**Retraction mode** (under **Speed & travel → Travel**) shows only the
+thresholds used by the selected mode:
+
+| Mode | When a travel retracts |
+|---|---|
+| Off | Never. |
+| All travels (default) | Any travel at or above **Minimum travel to retract** (default 1.5 mm). |
+| Open spaces only | An open-space crossing at or above the minimum. |
+| Open spaces + long inside travels | An open-space crossing at or above the minimum, or an inside travel at or above **Inside travel retraction distance** (default 10 mm). |
+
+Thresholds use the full length of the individual XY travel, not cumulative
+distance. A detour that stays inside the outline counts as an inside travel.
+Retraction amount, speed and Z-hop come from the **material**. Existing presets
+keep their prior behavior when loaded.
+
+**Coast length** defaults to 0 mm (off). Set a distance to stop feeding
+filament over the last part of each extrusion path while still following the
+path at print speed. This can relieve nozzle pressure before travel. Short
+paths that cannot fit the coast keep their normal extrusion. Coasting works
+independently of retraction; too much can leave gaps.
+
 - **Avoid crossing open spaces:** off by default. The router tries to stay
   inside an island around holes and concave edges. Between separate islands,
   it tries to travel inside each island to shorten the open-air portion of

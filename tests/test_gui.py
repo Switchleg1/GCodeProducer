@@ -77,6 +77,23 @@ def test_default_work_session_resumes_cam_and_fdm_plate(win, cube_stl):
         reopened.close()
 
 
+def test_retraction_dropdown_shows_only_relevant_distances(win):
+    step = win.pipelines['fdm'].step('fdm_emit')
+    step.params.update(retract_open_only=True, min_travel_retract=2., inside_travel_retract=12.)
+    win.process_editor.set_pipeline(win.pipelines['fdm'])
+    editor = win.process_editor._seam_editor
+    minimum = editor._widgets['min_travel_retract']
+    inside = editor._widgets['inside_travel_retract']
+    assert editor.values['retraction_mode'] == 'separate'
+    for mode, show_minimum, show_inside in [('off', False, False), ('all', True, False),
+                                           ('open', True, False), ('separate', True, True)]:
+        editor._setters['retraction_mode'](mode)
+        assert (not minimum.isHidden(), not inside.isHidden()) == (show_minimum, show_inside)
+        assert step.params['retraction_mode'] == mode
+    assert (minimum.value(), inside.value()) == (2., 12.)
+    assert 'retract_open_only' not in step.params
+
+
 def test_camera_actions_are_grouped_in_toolbar(win):
     button = next(b for b in win.findChildren(QtWidgets.QToolButton) if b.text() == 'Camera views')
     assert [a.text() for a in button.menu().actions() if not a.isSeparator()] == [
