@@ -1,4 +1,4 @@
-"""One independently placed FDM instance; copies can share source geometry."""
+"""One independently placed model instance; copies can share source geometry."""
 from dataclasses import dataclass, field
 
 from gcodeproducer.core.fdm.model_support import ModelSupport

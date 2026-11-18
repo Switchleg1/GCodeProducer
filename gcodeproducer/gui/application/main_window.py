@@ -100,8 +100,8 @@ class MainWindow(QMainWindow):
         self.dirty = {w: False for w in wf.ALL}
         self.mesh = None
         self.model_path = None
-        self.plate_models = []
-        self.plate_row = -1
+        self.model_plates = {kind: [] for kind in wf.ALL}
+        self.model_rows = {kind: -1 for kind in wf.ALL}
         self.placement = Placement()
         self.placed = None              # placement applied to the mesh (what gets sliced)
         self._pl_prev = None            # last placement (to move support blocks with the model)
@@ -172,6 +172,22 @@ class MainWindow(QMainWindow):
         self.camera.changed.connect(self.history.schedule)
         self.menuBar().triggered.connect(self.history.schedule)
         self.history.changed.connect(lambda: self._history_state.prune(self.history))
+
+    @property
+    def plate_models(self):
+        return self.model_plates[self.workflow]
+
+    @plate_models.setter
+    def plate_models(self, models):
+        self.model_plates[self.workflow] = models
+
+    @property
+    def plate_row(self):
+        return self.model_rows[self.workflow]
+
+    @plate_row.setter
+    def plate_row(self, row):
+        self.model_rows[self.workflow] = row
 
     # UI construction
     def _build_central(self):
@@ -502,15 +518,6 @@ class MainWindow(QMainWindow):
         """Model: file, placement (position / rotation / scale) and support."""
         model = Section("Model", key="model.placement")
         ml = model.body
-        top = QHBoxLayout()
-        self.lbl_model = QLabel("No model \u2014 import an STL or drop it on the window")
-        self.lbl_model.setWordWrap(True)
-        b_imp = QPushButton("Import\u2026")
-        b_imp.clicked.connect(self.import_dialog)
-        top.addWidget(self.lbl_model, 1)
-        top.addWidget(b_imp, 0, Qt.AlignmentFlag.AlignTop)
-        ml.addLayout(top)
-        self.single_import = b_imp
         self.model_list = QListWidget()
         self.model_list.setMaximumHeight(120)
         self.model_list.setToolTip('Select a model to edit its placement and supports')
@@ -1008,21 +1015,17 @@ class MainWindow(QMainWindow):
         self.act_process_export.setEnabled(self.workflow == wf.FDM)
         self.dock_process.setWindowTitle("CAM setup" if self.workflow == wf.CAM else "Process")
         self._reload_machines()
-        if self.workflow == wf.FDM and self.plate_models:
+        if self.plate_models:
             self._activate_plate_model(self.plate_row)
-        elif self.model_path:
-            self.placement = self._load_workflow_placement(self.model_path)
-            self._pl_prev = copy.deepcopy(self.placement)
-            self._sync_placement_controls()
-            if previous != self.workflow:
-                if self.workflow == wf.CAM:
-                    self._load_cam_model(self.model_path, self.mesh)
-                else:
-                    from gcodeproducer.core.fdm.plate_model import PlateModel
-                    self.placement, self.blocks, self.model_support = self._load_model_state(self.model_path)
-                    self.plate_models.append(PlateModel(self.model_path, self.mesh, self.placement,
-                                                       self.blocks, self.model_support))
-                    self._activate_plate_model(0)
+        elif previous != self.workflow and self.model_path:
+            from gcodeproducer.core.fdm.plate_model import PlateModel
+            pose, blocks, support = self._load_model_state(self.model_path)
+            self.plate_models.append(PlateModel(self.model_path, self.mesh, pose, blocks, support))
+            self._activate_plate_model(0)
+            if self.workflow == wf.CAM:
+                self._load_cam_model(self.model_path, self.mesh)
+        elif self.mesh is None:
+            self._activate_plate_model(-1)
         self._refresh_model_list()
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
@@ -1285,15 +1288,11 @@ class MainWindow(QMainWindow):
     def dropEvent(self, ev):
         urls = ev.mimeData().urls()
         paths = [url.toLocalFile() for url in urls if url.isLocalFile()]
-        for path in (paths if self.workflow == wf.FDM else paths[:1]):
+        for path in paths:
             self.open_model(path)
 
     def import_dialog(self):
-        if self.workflow == wf.FDM:
-            paths, _ = QFileDialog.getOpenFileNames(self, "Add models", "", MODEL_FILTER)
-        else:
-            path, _ = QFileDialog.getOpenFileName(self, "Import model", "", MODEL_FILTER)
-            paths = [path] if path else []
+        paths, _ = QFileDialog.getOpenFileNames(self, "Add models", "", MODEL_FILTER)
         for path in paths:
             self.open_model(path)
 
@@ -1308,24 +1307,16 @@ class MainWindow(QMainWindow):
             return
         self._face_task = None
         self._reset_material_outputs()
-        if self.workflow == wf.FDM:
-            from gcodeproducer.core.fdm.plate_model import PlateModel
-            self._save_placement()
-            if replace:
-                self.plate_models.clear()
-                self.plate_row = -1
-            pose, blocks, support = self._load_model_state(path)
-            model = PlateModel(path, mesh, pose, blocks, support,
-                               not any(self._model_key('placement', m.path) == self._model_key('placement', path)
-                                       for m in self.plate_models))
-            if self._insert_plate_model(model):
-                self._add_recent(path)
-                self.log(f'Loaded {path}')
-            return
-        self.mesh, self.model_path = mesh, path
-        self._load_cam_model(path, mesh)
-        self.placement, self.blocks, self.model_support = self._load_model_state(path)
-        self._finish_model_open(path)
+        from gcodeproducer.core.fdm.plate_model import PlateModel
+        self._save_placement()
+        if replace:
+            self.plate_models.clear()
+            self.plate_row = -1
+        pose, blocks, support = self._load_model_state(path)
+        model = PlateModel(path, mesh, pose, blocks, support,
+                           not any(self._model_key('placement', m.path) == self._model_key('placement', path)
+                                   for m in self.plate_models))
+        self._insert_plate_model(model)
 
     def _load_cam_model(self, path, mesh):
         from gcodeproducer.core.cam.cam_setup import CAMSetup
@@ -1341,17 +1332,12 @@ class MainWindow(QMainWindow):
             setup = CAMSetup()
         setup.fingerprint = current
         self._show_cam_setup(setup)
-        self._set_model_label(path, mesh)
 
     def _show_cam_setup(self, setup):
         self.cam_editor.set_setup(setup)
         self.reference_editor.set_setup(setup)
         self.model_viewer.set_reference_geometry()
         self.stock_editor.set_stock(setup.stock)
-
-    def _set_model_label(self, path, mesh):
-        self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
-        self.lbl_model.setToolTip(path)
 
     def _finish_model_open(self, path):
         self._pl_prev = copy.deepcopy(self.placement)
@@ -1377,11 +1363,6 @@ class MainWindow(QMainWindow):
         self._update_enabled()
 
     def _refresh_model_list(self):
-        fdm = self.workflow == wf.FDM
-        for widget in (self.model_list, self.add_model_button, self.delete_model_button, self.copy_model_button):
-            widget.setVisible(fdm)
-        self.lbl_model.setVisible(not fdm)
-        self.single_import.setVisible(not fdm)
         with QSignalBlocker(self.model_list):
             self.model_list.clear()
             for model in self.plate_models:
@@ -1393,14 +1374,14 @@ class MainWindow(QMainWindow):
 
     def _update_model_buttons(self):
         idle = self._worker is None
-        selected = idle and self.workflow == wf.FDM and self.plate_row >= 0
+        selected = idle and self.plate_row >= 0
         self.add_model_button.setEnabled(idle)
         self.delete_model_button.setEnabled(selected)
         self.copy_model_button.setEnabled(selected)
         self.copy_model_shortcut.setEnabled(selected and self.mode == 'prepare')
 
     def _remember_plate_model(self):
-        if self.workflow == wf.FDM and self.mesh is not None and 0 <= self.plate_row < len(self.plate_models):
+        if self.mesh is not None and 0 <= self.plate_row < len(self.plate_models):
             model = self.plate_models[self.plate_row]
             model.placement, model.blocks, model.support = self.placement, self.blocks, self.model_support
 
@@ -1425,7 +1406,7 @@ class MainWindow(QMainWindow):
         self._update_blocks_busy()
 
     def _select_plate_model(self, row):
-        if self.workflow != wf.FDM or not 0 <= row < len(self.plate_models) or row == self.plate_row:
+        if not 0 <= row < len(self.plate_models) or row == self.plate_row:
             return
         self._remember_plate_model()
         self._activate_plate_model(row)
@@ -1456,13 +1437,16 @@ class MainWindow(QMainWindow):
         self._activate_plate_model(len(self.plate_models)-1)
         self._refresh_model_list()
         if first:
+            if self.workflow == wf.CAM:
+                self._load_cam_model(model.path, model.mesh)
             self._finish_model_open(model.path)
         else:
             self._plate_changed(fit=True)
+            self._add_recent(model.path)
         return True
 
     def copy_plate_model(self):
-        if self.workflow != wf.FDM or self.plate_row < 0 or self._worker is not None:
+        if self.plate_row < 0 or self._worker is not None:
             return
         from gcodeproducer.core.fdm.plate_model import PlateModel
         self._remember_plate_model()
@@ -1471,16 +1455,29 @@ class MainWindow(QMainWindow):
                                           copy.deepcopy(model.blocks), copy.deepcopy(model.support), False))
 
     def delete_plate_model(self):
-        if self.workflow != wf.FDM or self.plate_row < 0 or self._worker is not None:
+        if self.plate_row < 0 or self._worker is not None:
             return
         self._save_placement()
         row = self.plate_row
+        if self.workflow == wf.CAM:
+            from gcodeproducer.core.cam.assembly import remove_model_references
+            if not remove_model_references(self.cam_editor.setup, self.plate_models, row):
+                self.notify('model_in_use', 'warning', 'Model is in use',
+                            'Remove the CAM selections, linked depths or holding tabs that use this model first.')
+                return
         del self.plate_models[row]
         self._activate_plate_model(min(row, len(self.plate_models)-1))
         self._refresh_model_list()
         self._plate_changed()
 
     def _plate_changed(self, fit=False):
+        if self.workflow == wf.CAM:
+            from gcodeproducer.core.cam.assembly import assembly_fingerprint
+            self.cam_editor.setup.fingerprint = assembly_fingerprint(self.plate_models)
+            if not self.plate_models:
+                from gcodeproducer.core.cam.cam_setup import CAMSetup
+                self._show_cam_setup(CAMSetup())
+            self.cam_editor.rebuild(self.cam_editor.indices())
         self._set_stale()
         self._update_scene()
         self.set_mode('prepare')
@@ -1524,12 +1521,9 @@ class MainWindow(QMainWindow):
                 model_support = ModelSupport()
         return placement, blocks, model_support
 
-    def _load_workflow_placement(self, path):
-        return self._load_model_state(path)[0]
-
     def _save_placement(self):
         self._remember_plate_model()
-        if self.workflow == wf.FDM and 0 <= self.plate_row < len(self.plate_models):
+        if 0 <= self.plate_row < len(self.plate_models):
             if not self.plate_models[self.plate_row].persistent:
                 return
         if self.model_path:
@@ -1684,7 +1678,7 @@ class MainWindow(QMainWindow):
         self.model_viewer.set_stock(stock)
         self.viewer.set_stock(stock)
         if self.mesh is None:
-            self.placed = None
+            self.placed = self.assembly = None
             self.lbl_size.setText("")
             self.model_viewer.set_scene(None, rect, (0, 0))
             return
@@ -1698,12 +1692,14 @@ class MainWindow(QMainWindow):
         if self.workflow == wf.FDM and self.cb_show_over.isChecked():
             angle = self.model_support.overhang_angle
         center = tuple(v if v is not None else a for v, a in zip((self.placement.x, self.placement.y), self._auto_xy()))
-        if self.workflow == wf.FDM and len(self.plate_models) > 1:
+        self.assembly = self.placed
+        if len(self.plate_models) > 1:
             from gcodeproducer.core.fdm.plate import combine_meshes
             meshes = [self.placed if i == self.plate_row else model.placement.apply(model.mesh, self._auto_xy())
                       for i, model in enumerate(self.plate_models)]
             ends = np.cumsum([len(mesh.triangles) for mesh in meshes])
-            self.model_viewer.set_scene(combine_meshes(meshes), rect, center,
+            self.assembly = combine_meshes(meshes)
+            self.model_viewer.set_scene(self.assembly, rect, center,
                                         angle, all(fits(m, rect) for m in meshes),
                                         model_ends=ends, active_model=self.plate_row)
         else:
@@ -1719,13 +1715,13 @@ class MainWindow(QMainWindow):
     def _auto_stock(self):
         if self.placed is None:
             return
-        self.cam_editor.setup.stock.auto(self.placed)
+        self.cam_editor.setup.stock.auto(self.assembly)
         self.stock_editor.set_stock(self.cam_editor.setup.stock)
         self._stock_changed()
 
     def _cam_changed(self):
         self._cam_highlight()
-        if self.model_path:
+        if self.workflow == wf.CAM and self.model_path and len(self.plate_models) == 1:
             self.settings.setValue(self._model_key("cam", self.model_path),
                                    json.dumps(self.cam_editor.setup.to_dict()))
         self._set_stale()
@@ -1773,11 +1769,11 @@ class MainWindow(QMainWindow):
         self._cam_pick_operation = self.cam_editor.operation()
         self._cam_pick_kind = payload[0]
         if payload[0].startswith("tab"):
-            self._cam_pick_task = self.compute.submit("cam_tab_pick", (self.placed, copy.deepcopy(self.cam_editor.setup), *payload))
+            self._cam_pick_task = self.compute.submit("cam_tab_pick", (self.assembly, copy.deepcopy(self.cam_editor.setup), *payload))
         else:
             if self.cam_editor.pick_source.currentData() == "both" and payload[0] in ("face", "edge"):
                 payload = ("mixed_"+payload[0], *payload[1:])
-            self._cam_pick_task = self.compute.submit("cam_pick", (self.placed, *payload,
+            self._cam_pick_task = self.compute.submit("cam_pick", (self.assembly, *payload,
                                                        copy.deepcopy(self.cam_editor.setup.stock),
                                                        copy.deepcopy(self.cam_editor.setup.reference_shapes)))
 
@@ -1818,7 +1814,7 @@ class MainWindow(QMainWindow):
             gi,_=self.cam_editor.indices()
             tool=next((t for t in self.cam_editor.tools if t.id==self.cam_editor.setup.groups[gi].tool_id),None)
             context={"tool":tool,"machine":self._machine()} if tool and self._machine() else None
-        self._cam_highlight_task = self.compute.submit("cam_highlight", (self.placed, copy.deepcopy(op),
+        self._cam_highlight_task = self.compute.submit("cam_highlight", (self.assembly, copy.deepcopy(op),
             copy.deepcopy(self.cam_editor.setup.stock), copy.deepcopy(context), copy.deepcopy(self.cam_editor.setup.tabs),
             copy.deepcopy(self.cam_editor.setup.reference_shapes),
             self.reference_editor.current().id if self.reference_editor.current() else None))
@@ -2177,6 +2173,12 @@ class MainWindow(QMainWindow):
         else:
             kw["tools"] = self.libset.consumables_for(machine, "tool")
             kw["cam_setup"] = copy.deepcopy(self.cam_editor.setup)
+        if self.workflow == wf.CAM and len(self.plate_models) > 1:
+            self._remember_plate_model()
+            placed_models = [m.placement.apply(m.mesh, self._auto_xy()) for m in self.plate_models]
+            kw['plate_models'] = [copy.copy(m) for m in self.plate_models]
+            for model in kw['plate_models']:
+                model.placement = copy.deepcopy(model.placement)
         mesh = Mesh(self.mesh.vertices.copy(), self.mesh.triangles)   # stages may move the mesh
         placed = self.placement.apply(mesh, self._auto_xy())
         if not all(fits(m, bed_rect(machine, self.workflow))

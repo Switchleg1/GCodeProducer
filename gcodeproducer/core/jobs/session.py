@@ -41,12 +41,12 @@ def place_mesh(job: Job) -> None:
     original XY for CAM; FDM bottom at Z0, CAM top at Z0)."""
     from gcodeproducer.core.jobs.placement import Placement
     from gcodeproducer.core.jobs.placement import bed_xy
-    if job.workflow == wf.FDM and job.plate_models:
+    if job.plate_models:
         from gcodeproducer.core.fdm.plate import combine_meshes
         auto = bed_xy(job.machine, job.workflow)
         job.placed_models = [model.placement.apply(model.mesh, auto_xy=auto) for model in job.plate_models]
         job.mesh = combine_meshes(job.placed_models)
-        if len(job.plate_models) == 1:
+        if job.workflow == wf.FDM and len(job.plate_models) == 1:
             job.support = job.plate_models[0].support
             job.support_blocks = job.plate_models[0].blocks
         return
@@ -63,7 +63,10 @@ def slice_job(job: Job, pipeline: Optional[SlicePipeline] = None,
     pipeline = pipeline or SlicePipeline.default(job.workflow)
     if job.cam_setup is not None and job.cam_setup.fingerprint:
         from gcodeproducer.core.cam.planning import fingerprint
-        if job.mesh is None or fingerprint(job.mesh) != job.cam_setup.fingerprint:
+        from gcodeproducer.core.cam.assembly import assembly_fingerprint
+        current = (assembly_fingerprint(job.plate_models) if job.plate_models
+                   else fingerprint(job.mesh) if job.mesh is not None else '')
+        if current != job.cam_setup.fingerprint:
             raise ValueError("CAM model geometry changed; reselect operation geometry")
     place_mesh(job)
     return pipeline.run(job, log=log, progress=progress)

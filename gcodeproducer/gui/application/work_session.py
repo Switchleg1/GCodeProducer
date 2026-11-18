@@ -24,10 +24,10 @@ def capture(window):
     w = window
     w._remember_plate_model()
     cam = None
-    if w.workflow == 'cam' and w.mesh is not None:
-        cam = _model_record(w.model_path, w.placement, w.blocks, w.model_support)
-        cam['setup'] = w.cam_editor.setup.to_dict()
-        cam['selection'] = list(w.cam_editor.indices())
+    if w.model_plates['cam']:
+        cam = dict(models=[_model_record(m.path, m.placement, m.blocks, m.support, m.persistent)
+                           for m in w.model_plates['cam']], selected=w.model_rows['cam'],
+                   setup=w.cam_editor.setup.to_dict(), selection=list(w.cam_editor.indices()))
     processes = {}
     for workflow, pipeline in w.pipelines.items():
         pid = w.process_id[workflow]
@@ -36,7 +36,7 @@ def capture(window):
         processes[workflow] = dict(id=pid, name=name, pipeline=pipeline.to_dict(), dirty=w.dirty[workflow])
     return dict(version=WORK_SESSION_VERSION, workflow=w.workflow, processes=processes,
                 models=[_model_record(m.path, m.placement, m.blocks, m.support, m.persistent)
-                        for m in w.plate_models], selected=w.plate_row, cam=cam,
+                        for m in w.model_plates['fdm']], selected=w.model_rows['fdm'], cam=cam,
                 geometry=bytes(w.saveGeometry().toBase64()).decode('ascii'),
                 layout=bytes(w.saveState().toBase64()).decode('ascii'),
                 camera=dict(target=w.camera.target.tolist(), distance=w.camera.distance,
@@ -106,15 +106,23 @@ def restore(window, data, *, base=None, skip_missing=False):
             plate.append(model)
     if plate and row < 0:
         row = 0
-    cam, setup, cam_selection = None, CAMSetup(), None
-    if workflow == 'cam' and data['cam'] is not None:
+    cam, cam_row, setup, cam_selection = [], -1, CAMSetup(), None
+    if data['cam'] is not None:
         record = data['cam']
-        cam = load(record)
-        if cam is not None:
-            from gcodeproducer.core.cam.planning import fingerprint
+        records = record.get('models', [record])  # older sessions stored one CAM model
+        selected_cam = int(record.get('selected', 0))
+        for i, entry in enumerate(records):
+            model = load(entry)
+            if model is not None:
+                if i == selected_cam:
+                    cam_row = len(cam)
+                cam.append(model)
+        if cam:
+            cam_row = max(cam_row, 0)
+            from gcodeproducer.core.cam.assembly import assembly_fingerprint
             setup = CAMSetup.from_dict(record['setup'])
-            current = fingerprint(cam.mesh)
-            if setup.fingerprint and setup.fingerprint != current:
+            current = assembly_fingerprint(cam)
+            if len(cam) != len(records) or (setup.fingerprint and setup.fingerprint != current):
                 warnings.append('CAM source geometry changed; the saved CAM setup was not restored.')
                 setup = CAMSetup()
             else:
@@ -134,7 +142,8 @@ def restore(window, data, *, base=None, skip_missing=False):
     w.feature_list.clear()
     w.stale = False
     w.mesh = w.model_path = None  # don't save old placement during the workflow change
-    w.plate_models, w.plate_row = plate, row
+    w.model_plates = {'fdm': plate, 'cam': cam}
+    w.model_rows = {'fdm': row, 'cam': cam_row}
     w.session_process_names.clear()
     for kind, (pid, pipeline, dirty, name) in processes.items():
         w.process_id[kind], w.pipelines[kind], w.dirty[kind] = pid, pipeline, dirty
@@ -143,20 +152,9 @@ def restore(window, data, *, base=None, skip_missing=False):
     with QSignalBlocker(w.cb_workflow):
         w.cb_workflow.setCurrentIndex(w.cb_workflow.findData(workflow))
     w._on_workflow()
-    if workflow == 'cam':
-        if cam is not None:
-            w.mesh, w.model_path = cam.mesh, cam.path
-            w.placement, w.blocks, w.model_support = cam.placement, cam.blocks, cam.support
-            w._finish_model_open(cam.path)
-            w._set_model_label(cam.path, cam.mesh)
-        else:
-            w.lbl_model.setText('No model loaded')
-            w.place_box.setEnabled(False)
-        w._show_cam_setup(setup)
-        if cam_selection is not None:
-            w.cam_editor.rebuild(cam_selection)
-    elif not plate:
-        w._activate_plate_model(-1)
+    w._show_cam_setup(setup)
+    if cam_selection is not None:
+        w.cam_editor.rebuild(cam_selection)
     w._refresh_model_list()
     w.set_mode('prepare')
     w.restoreGeometry(QByteArray(geometry))

@@ -32,6 +32,22 @@ def job_for(libset, mesh, operations, second=None):
     return build_job("cam", machine, mesh=mesh, tools=tools, cam_setup=CAMSetup(groups))
 
 
+def test_cam_plate_generates_paths_on_both_models(libset, mesh):
+    from gcodeproducer.core.cam.assembly import assembly_fingerprint
+    from gcodeproducer.core.fdm.plate_model import PlateModel
+    from gcodeproducer.core.jobs.placement import Placement
+
+    first = face_ref(mesh, 20)
+    second = Reference('face', [first.indices[0] + len(mesh.triangles)])
+    job = job_for(libset, mesh, [Operation(geometry=[ref], end=Depth('top', -1))
+                                for ref in (first, second)])
+    job.plate_models = [PlateModel('', mesh, Placement(x=x, y=80, z_anchor='top')) for x in (70, 150)]
+    job.cam_setup.fingerprint = assembly_fingerprint(job.plate_models)
+    assert slice_job(job).program is not None
+    assert max(path.points[:, 0].max() for path in job.layers[0].paths) < 100
+    assert min(path.points[:, 0].min() for path in job.layers[-1].paths) > 120
+
+
 def test_topology_omits_triangle_seams(mesh):
     topo = Topology(mesh)
     ref = face_ref(mesh, 20)

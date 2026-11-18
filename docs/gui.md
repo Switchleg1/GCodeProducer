@@ -49,7 +49,7 @@ relevant entry. Changing machines refreshes the permitted consumables; a saved
 CAM tool that is no longer available causes generation to fail instead of
 silently substituting another cutter.
 
-In FDM, use **Model → Add…** (`Ctrl+O`), drop STL files on the window,
+In FDM or CAM, use **Model → Add…** (`Ctrl+O`), drop STL files on the window,
 or use **File → Recent models** to add to the plate. Select an instance in
 the list or click it in Prepare to edit its placement and supports. **Copy**
 (`Ctrl+D` in Prepare) duplicates the selected instance in a free spot, with
@@ -59,7 +59,12 @@ spacing; move or remove a model if the app cannot find room.
 
 **Slice** prints the whole FDM plate layer by layer in one program, not one
 object at a time. Keep models separate; intersecting meshes are not merged.
-CAM remains single-model. Switching back to FDM restores the active FDM plate.
+CAM generates one program against the combined placed geometry. **Auto material**
+fits a single blank around every loaded CAM model, with the configured margin.
+CAM selections can refer to any model; a model used by a selection, linked
+height, or holding tab cannot be deleted until those references are removed.
+Use normal navigation to select a model on the bed, or use the list while in
+CAM picking mode. Switching workflows preserves each workflow's model list.
 
 ![FDM model list with an original, a selected copy, and a second STL on the bed](pictures/fdm-model-plate.png)
 
@@ -288,8 +293,8 @@ cutter clearance or successful workholding.
 | Ctrl+L | Activate Place on face; then click the face |
 | Ctrl+, | Settings |
 | Ctrl+Q | Quit |
-| Ctrl+O | Add models (FDM) / import model (CAM) |
-| Ctrl+D | Copy selected FDM model in Prepare |
+| Ctrl+O | Add models |
+| Ctrl+D | Copy selected model in Prepare |
 | Ctrl+R | Slice / generate paths |
 | Ctrl+S | Save generated G-code (subject to CAM checks) |
 | Ctrl+1 / Ctrl+2 | Prepare / Preview |

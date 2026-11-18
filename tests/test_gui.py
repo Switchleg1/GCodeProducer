@@ -136,6 +136,40 @@ def test_fdm_seam_pick_edits_process_and_marker(win, monkeypatch):
     assert view.seam_target is None and view.seam_marker.isHidden()
 
 
+def test_cam_multiple_models_auto_stock_and_session(win, cube_stl, monkeypatch):
+    from gcodeproducer.core.cam.reference import Reference
+    from gcodeproducer.gui.application.work_session import capture
+
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    win.open_model(cube_stl)
+    win.copy_model_button.click()
+    assert win.model_list.count() == 2 and win.plate_row == 1
+    win.sp_x.setValue(195.)
+    win.sp_z.setValue(-2.)
+    lo, hi = win.assembly.bounds
+    win._auto_stock()
+    stock = win.cam_editor.setup.stock
+    np.testing.assert_allclose(stock.bounds[0], lo - stock.margin)
+    np.testing.assert_allclose(stock.bounds[1], [hi[0] + stock.margin, hi[1] + stock.margin, hi[2]])
+    win.cam_editor.add_tool()
+    win.cam_editor.add_operation()
+    op = win.cam_editor.operation()
+    op.geometry = [Reference('face', [len(win.mesh.triangles)])]
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('fdm'))
+    saved = capture(win)
+    win._restore_work_session(saved)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    assert win.model_list.count() == 2 and win.placement.z == -2.
+    op = win.cam_editor.setup.groups[0].operations[0]
+    monkeypatch.setattr(win, 'notify', lambda *args, **kwargs: None)
+    win.delete_plate_model()  # the referenced second model cannot be removed
+    assert win.model_list.count() == 2
+    win.model_list.setCurrentRow(0)
+    win.delete_plate_model()
+    assert win.model_list.count() == 1
+    assert op.geometry == [Reference('face', [0])]
+
+
 def test_fdm_plate_copy_shortcut_selection_and_workflow(win, app, cube_stl):
     from PyQt6.QtCore import Qt
     from PyQt6.QtTest import QTest
@@ -158,7 +192,7 @@ def test_fdm_plate_copy_shortcut_selection_and_workflow(win, app, cube_stl):
     win.model_list.setCurrentRow(1)
     assert win.sp_scale.value() == 120
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
-    assert win.model_list.isHidden() and len(win.model_viewer.triangles) == len(clone.mesh.triangles)
+    assert win.model_list.count() == 1 and len(win.model_viewer.triangles) == len(clone.mesh.triangles)
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('fdm'))
     assert win.model_list.count() == 2 and win.sp_scale.value() == 120
     win.delete_model_button.click()
@@ -604,7 +638,7 @@ def test_draw_reference_geometry_and_pick_it_in_compute_process(win, cube_stl, a
     assert win._cam_pick_task is None
     editor.use_depth("end")
     saved = editor.setup.to_dict()
-    win.open_model(cube_stl)
+    win.open_model(cube_stl, replace=True)
     assert editor.setup.to_dict() == saved
     assert win.reference_editor.items.count() == 1
     assert win.reference_editor.setup is editor.setup
@@ -732,7 +766,7 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     ed.use_depth("end")
     assert op.end.source == "geometry" and op.end.reference == Reference("face", [0])
     saved = ed.setup.to_dict()
-    win.open_model(cube_stl)
+    win.open_model(cube_stl, replace=True)
     assert ed.setup.to_dict() == saved
     assert ed.feed_controls["standard_engagement_feed"].value() == 150
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("fdm"))
@@ -1047,7 +1081,7 @@ def test_holding_tabs_click_tools_model_persistence_and_shared_slot(win, cube_st
     assert len(saved["tabs"]) == 1 and saved["groups"] == []
     out = highlight_geometry((win.placed, None, editor.setup.stock, None, editor.setup.tabs))
     assert len(out["tabs"]) == 1    # overlay is available even without any tool groups
-    win.open_model(cube_stl)
+    win.open_model(cube_stl, replace=True)
     assert len(editor.setup.tabs) == 1
     assert editor.setup is win.cam_editor.setup
     editor.list.setCurrentRow(0)
