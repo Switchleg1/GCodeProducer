@@ -37,7 +37,9 @@ class FDMSupport(SliceStage):
 
     def run(self, job, params, ctx):
         ms = job.support or support.ModelSupport()        # the model's support settings
-        if not ms.enabled:
+        multi = len(job.plate_models) > 1
+        sources = [model.support for model in job.plate_models if model.support.enabled] if multi else [ms] if ms.enabled else []
+        if not sources:
             return "no support (Model > Support: None)"
         layers = job.layers
         if job.mesh is None or len(layers) < 2:
@@ -45,27 +47,29 @@ class FDMSupport(SliceStage):
         lw = params["line_width"]
         lw = job.line_width if lw in (0, AUTO) else float(lw)
         lo, hi = job.mesh.bounds
-        margin = ms.extend
+        margin = max(source.extend for source in sources)
         base = support.make_grid(lo, hi, lw, margin)
         n = len(layers)
-        masks = support.model_masks(layers, base, ms.fill_holes)
-        ctx.progress(0.2)
         mode = ms.mode
-        gap = params["z_gap_layers"]
-        bgap = params["bottom_z_gap_layers"]
-        if mode == "blocks":
-            blocks = list(job.support_blocks or [])
-            if not blocks:
-                return "manual support: no support blocks"
-            over = None
-            sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw,
-                                        bgap)
+        if multi:
+            from gcodeproducer.core.fdm.plate_support import plate_columns
+            sup = plate_columns(job, params, base, lw, ctx)
         else:
-            over = support.overhangs(masks, layers, base.res, ms.overhang_angle, params["min_area"])
-            ctx.progress(0.4)
-            sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
-                                       mode == "everywhere", margin, lw, bgap)
-        everywhere = mode == "everywhere"
+            masks = support.model_masks(layers, base, ms.fill_holes)
+            ctx.progress(0.2)
+            gap = params["z_gap_layers"]
+            bgap = params["bottom_z_gap_layers"]
+            if mode == "blocks":
+                blocks = list(job.support_blocks or [])
+                if not blocks:
+                    return "manual support: no support blocks"
+                sup = support.block_columns(masks, layers, base, blocks, params["xy_distance"], gap, margin, lw,
+                                            bgap)
+            else:
+                over = support.overhangs(masks, layers, base.res, ms.overhang_angle, params["min_area"])
+                ctx.progress(0.4)
+                sup = support.auto_columns(masks, over, base.res, params["xy_distance"], gap,
+                                           mode == "everywhere", margin, lw, bgap)
         ctx.progress(0.6)
 
         # ---- toolpaths
@@ -122,6 +126,8 @@ class FDMSupport(SliceStage):
                 at += 1
             layer.paths[at:at] = new
             ctx.progress(0.6 + 0.4 * (i + 1) / n)
+        if multi:
+            return f"plate support on {used} layers: {n_body} lines + {n_roof} interface lines"
         if not used:
             if mode == "blocks":
                 return "manual support: the blocks are not under the model"

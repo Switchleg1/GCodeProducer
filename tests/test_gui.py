@@ -83,6 +83,37 @@ def test_fdm_seam_pick_edits_process_and_marker(win, monkeypatch):
     assert view.seam_target is None and view.seam_marker.isHidden()
 
 
+def test_fdm_plate_copy_shortcut_selection_and_workflow(win, app, cube_stl):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+
+    win.open_model(cube_stl)
+    x, y = win.placement.x, win.placement.y
+    win.show()
+    win.activateWindow()
+    win.model_list.setFocus()
+    app.processEvents()
+    QTest.keyClick(win.model_list, Qt.Key.Key_D, Qt.KeyboardModifier.ControlModifier)
+    assert win.model_list.count() == 2 and win.model_list.currentRow() == 1
+    original, clone = win.plate_models
+    assert clone.mesh is original.mesh
+    assert (clone.placement.x, clone.placement.y) != (x, y)
+    assert len(win.model_viewer.triangles) == 2*len(original.mesh.triangles)
+    win.sp_scale.setValue(120)
+    win.model_viewer.modelPicked.emit(0)
+    assert win.model_list.currentRow() == 0 and win.sp_scale.value() == 100
+    win.model_list.setCurrentRow(1)
+    assert win.sp_scale.value() == 120
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+    assert win.model_list.isHidden() and len(win.model_viewer.triangles) == len(clone.mesh.triangles)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('fdm'))
+    assert win.model_list.count() == 2 and win.sp_scale.value() == 120
+    win.delete_model_button.click()
+    assert win.model_list.count() == 1 and win.placement.x == x
+    win.delete_model_button.click()
+    assert win.mesh is None and not win.slice_btn.isEnabled()
+
+
 def test_edit_save_revert_process(win):
     step = win.pipelines["fdm"].step("fdm_infill")
     step.params["density"] = 55.0
@@ -180,7 +211,7 @@ def test_placement_controls(win, tmp_path):
     assert (win.sp_x.value(), win.sp_y.value()) == (80, 90)
     # placement is remembered per model
     path = win.model_path
-    win.open_model(path)
+    win.open_model(path, replace=True)
     assert (win.placement.x, win.placement.scale) == (80, 200)
     win._on_face_clicked(np.array([0.0, 0.0, 1.0]))                  # top face down = upside down
     assert abs(win.placement.rx) == 180 or abs(win.placement.ry) == 180
@@ -247,7 +278,7 @@ def test_manual_support_blocks(win, app, tmp_path):
     assert win.blocks[0].z0 == pytest.approx(3)
     # ...are remembered with the model...
     path = win.model_path
-    win.open_model(path)
+    win.open_model(path, replace=True)
     assert len(win.blocks) == 1 and win.blocks[0].x0 == pytest.approx(x0 + 15)
     # ...and are used when slicing
     win.run_slice()
@@ -383,7 +414,7 @@ def test_model_support_saved_per_model(win, tmp_path):
     win.sp_extend.setValue(2.0)
     win.open_model(os.path.join(os.path.dirname(__file__), "..", "examples", "cube20.stl"))
     assert win.model_support.mode == "none"                   # a different model has its own settings
-    win.open_model(a)
+    win.model_list.setCurrentRow(0)
     assert win.model_support.mode == "everywhere" and win.model_support.extend == 2.0
 
 

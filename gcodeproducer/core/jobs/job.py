@@ -24,6 +24,8 @@ class Job:
     material_results: list = field(default_factory=list)  # operation output surfaces from progressive stock simulation
     warnings: list = field(default_factory=list)   # advisory CAM stock safety findings
     program: object = None                          # GCodeProgram once emitted
+    plate_models: list = field(default_factory=list)   # FDM source instances
+    placed_models: list = field(default_factory=list)  # matching meshes in build coordinates
 
     def __post_init__(self):
         self.workflow = wf.normalize(self.workflow)

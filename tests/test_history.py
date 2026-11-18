@@ -69,6 +69,23 @@ def test_placement_undo_redo_and_branch(win):
     assert win.placement.x == old + 7
 
 
+def test_fdm_plate_copy_and_delete_undo(win):
+    model(win)
+    win.copy_plate_model()
+    flush(win)
+    assert win.model_list.count() == 2 and win.plate_row == 1
+    copy_x = win.placement.x
+    win.delete_plate_model()
+    flush(win)
+    assert win.model_list.count() == 1
+    win.history.undo()
+    assert win.model_list.count() == 2 and win.plate_row == 1 and win.placement.x == copy_x
+    win.history.undo()
+    assert win.model_list.count() == 1 and win.plate_row == 0
+    win.history.redo()
+    assert win.model_list.count() == 2 and win.model_list.currentRow() == 1
+
+
 def test_fdm_process_checkbox_dropdown_and_spin(win):
     from gcodeproducer.gui.editors.param_editor import ParamEditor
     model(win)

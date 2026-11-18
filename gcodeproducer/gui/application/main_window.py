@@ -99,6 +99,8 @@ class MainWindow(QMainWindow):
         self.dirty = {w: False for w in wf.ALL}
         self.mesh = None
         self.model_path = None
+        self.plate_models = []
+        self.plate_row = -1
         self.placement = Placement()
         self.placed = None              # placement applied to the mesh (what gets sliced)
         self._pl_prev = None            # last placement (to move support blocks with the model)
@@ -205,6 +207,7 @@ class MainWindow(QMainWindow):
         self.state.changed.connect(self._on_view_state)
         self.model_viewer.glError.connect(lambda m: self.notify("opengl", "error", "OpenGL", m))
         self.model_viewer.moved.connect(self._on_model_dragged)
+        self.model_viewer.modelPicked.connect(self._select_plate_model)
         self.model_viewer.moveFinished.connect(self._save_placement)
         self.model_viewer.faceClicked.connect(self._on_face_clicked)
         self.model_viewer.facePickRequested.connect(self._pick_placement_face)
@@ -506,6 +509,26 @@ class MainWindow(QMainWindow):
         top.addWidget(self.lbl_model, 1)
         top.addWidget(b_imp, 0, Qt.AlignmentFlag.AlignTop)
         ml.addLayout(top)
+        self.single_import = b_imp
+        self.model_list = QListWidget()
+        self.model_list.setMaximumHeight(120)
+        self.model_list.setToolTip('Select a model to edit its placement and supports')
+        self.model_list.currentRowChanged.connect(self._select_plate_model)
+        ml.addWidget(self.model_list)
+        actions = QHBoxLayout()
+        self.add_model_button = QPushButton('Add…')
+        self.delete_model_button = QPushButton('Delete')
+        self.copy_model_button = QPushButton('Copy')
+        for button, callback in ((self.add_model_button, self.import_dialog),
+                                 (self.delete_model_button, self.delete_plate_model),
+                                 (self.copy_model_button, self.copy_plate_model)):
+            button.clicked.connect(callback)
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            actions.addWidget(button, 1)
+        ml.addLayout(actions)
+        self.copy_model_shortcut = QShortcut(QKeySequence('Ctrl+D'), self)
+        self.copy_model_shortcut.activated.connect(self.copy_plate_model)
+        self._refresh_model_list()
 
         self.place_box = QWidget()
         g = QGridLayout(self.place_box)
@@ -911,6 +934,7 @@ class MainWindow(QMainWindow):
             return
         if self.model_path:
             self._save_placement()
+        previous = self.workflow
         self.workflow = self.cb_workflow.currentData()
         if self.material_results:self._reset_material_outputs()
         self.fdm_process_box.setVisible(self.workflow == wf.FDM)
@@ -927,10 +951,22 @@ class MainWindow(QMainWindow):
         self.act_process_export.setEnabled(self.workflow == wf.FDM)
         self.dock_process.setWindowTitle("CAM setup" if self.workflow == wf.CAM else "Process")
         self._reload_machines()
-        if self.model_path:
+        if self.workflow == wf.FDM and self.plate_models:
+            self._activate_plate_model(self.plate_row)
+        elif self.model_path:
             self.placement = self._load_workflow_placement(self.model_path)
             self._pl_prev = copy.deepcopy(self.placement)
             self._sync_placement_controls()
+            if previous != self.workflow:
+                if self.workflow == wf.CAM:
+                    self._load_cam_model(self.model_path, self.mesh)
+                else:
+                    from gcodeproducer.core.fdm.plate_model import PlateModel
+                    self.placement, self.blocks, self.model_support = self._load_model_state(self.model_path)
+                    self.plate_models.append(PlateModel(self.model_path, self.mesh, self.placement,
+                                                       self.blocks, self.model_support))
+                    self._activate_plate_model(0)
+        self._refresh_model_list()
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
         self._update_dirty()
@@ -1188,15 +1224,22 @@ class MainWindow(QMainWindow):
 
     def dropEvent(self, ev):
         urls = ev.mimeData().urls()
-        if urls:
-            self.open_model(urls[0].toLocalFile())
-
-    def import_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import model", "", MODEL_FILTER)
-        if path:
+        paths = [url.toLocalFile() for url in urls if url.isLocalFile()]
+        for path in (paths if self.workflow == wf.FDM else paths[:1]):
             self.open_model(path)
 
-    def open_model(self, path: str):
+    def import_dialog(self):
+        if self.workflow == wf.FDM:
+            paths, _ = QFileDialog.getOpenFileNames(self, "Add models", "", MODEL_FILTER)
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, "Import model", "", MODEL_FILTER)
+            paths = [path] if path else []
+        for path in paths:
+            self.open_model(path)
+
+    def open_model(self, path: str, *, replace=False):
+        if self._worker is not None:
+            return
         try:
             find_importer(path)
             mesh = load_mesh(path)
@@ -1205,7 +1248,26 @@ class MainWindow(QMainWindow):
             return
         self._face_task = None
         self._reset_material_outputs()
+        if self.workflow == wf.FDM:
+            from gcodeproducer.core.fdm.plate_model import PlateModel
+            self._save_placement()
+            if replace:
+                self.plate_models.clear()
+                self.plate_row = -1
+            pose, blocks, support = self._load_model_state(path)
+            model = PlateModel(path, mesh, pose, blocks, support,
+                               not any(self._model_key('placement', m.path) == self._model_key('placement', path)
+                                       for m in self.plate_models))
+            if self._insert_plate_model(model):
+                self._add_recent(path)
+                self.log(f'Loaded {path}')
+            return
         self.mesh, self.model_path = mesh, path
+        self._load_cam_model(path, mesh)
+        self.placement, self.blocks, self.model_support = self._load_model_state(path)
+        self._finish_model_open(path)
+
+    def _load_cam_model(self, path, mesh):
         from gcodeproducer.core.cam.cam_setup import CAMSetup
         from gcodeproducer.core.cam.planning import fingerprint
         raw = self.settings.value(self._model_key("cam", path))
@@ -1224,7 +1286,8 @@ class MainWindow(QMainWindow):
         self.stock_editor.set_stock(setup.stock)
         self.lbl_model.setText(f"<b>{Path(path).name}</b><br>{len(mesh.triangles):,} triangles")
         self.lbl_model.setToolTip(path)
-        self.placement, self.blocks, self.model_support = self._load_model_state(path)
+
+    def _finish_model_open(self, path):
         self._pl_prev = copy.deepcopy(self.placement)
         self.sel_block = 0 if self.blocks else -1
         self._refresh_block_list(keep=True)
@@ -1245,6 +1308,118 @@ class MainWindow(QMainWindow):
         self.model_viewer.fit()
         self._add_recent(path)
         self.log(f"Loaded {path}")
+        self._update_enabled()
+
+    def _refresh_model_list(self):
+        fdm = self.workflow == wf.FDM
+        for widget in (self.model_list, self.add_model_button, self.delete_model_button, self.copy_model_button):
+            widget.setVisible(fdm)
+        self.lbl_model.setVisible(not fdm)
+        self.single_import.setVisible(not fdm)
+        with QSignalBlocker(self.model_list):
+            self.model_list.clear()
+            for model in self.plate_models:
+                item = QListWidgetItem(Path(model.path).name + ('' if model.persistent else ' (copy)'))
+                item.setToolTip(f'{model.path}\n{len(model.mesh.triangles):,} triangles')
+                self.model_list.addItem(item)
+            self.model_list.setCurrentRow(self.plate_row)
+        self._update_model_buttons()
+
+    def _update_model_buttons(self):
+        idle = self._worker is None
+        selected = idle and self.workflow == wf.FDM and self.plate_row >= 0
+        self.add_model_button.setEnabled(idle)
+        self.delete_model_button.setEnabled(selected)
+        self.copy_model_button.setEnabled(selected)
+        self.copy_model_shortcut.setEnabled(selected and self.mode == 'prepare')
+
+    def _remember_plate_model(self):
+        if self.workflow == wf.FDM and self.mesh is not None and 0 <= self.plate_row < len(self.plate_models):
+            model = self.plate_models[self.plate_row]
+            model.placement, model.blocks, model.support = self.placement, self.blocks, self.model_support
+
+    def _activate_plate_model(self, row):
+        self.plate_row = row
+        self._face_task = self._blocks_task = None
+        self.b_face.setChecked(False)
+        self._end_block_tools()
+        if row >= 0:
+            model = self.plate_models[row]
+            self.mesh, self.model_path = model.mesh, model.path
+            self.placement, self.blocks, self.model_support = model.placement, model.blocks, model.support
+        else:
+            self.mesh = self.model_path = None
+            self.placement, self.blocks, self.model_support = Placement(), [], ModelSupport()
+        self._pl_prev = copy.deepcopy(self.placement)
+        self.sel_block = 0 if self.blocks else -1
+        self.place_box.setEnabled(self.mesh is not None)
+        self._sync_placement_controls()
+        self._sync_support_controls()
+        self._refresh_block_list(keep=True)
+        self._update_blocks_busy()
+
+    def _select_plate_model(self, row):
+        if self.workflow != wf.FDM or not 0 <= row < len(self.plate_models) or row == self.plate_row:
+            return
+        self._remember_plate_model()
+        self._activate_plate_model(row)
+        with QSignalBlocker(self.model_list):
+            self.model_list.setCurrentRow(row)
+        self._update_scene()
+        self._update_enabled()
+
+    def _insert_plate_model(self, model):
+        from gcodeproducer.core.fdm.plate import free_position
+        first = not self.plate_models
+        if not first:
+            auto = self._auto_xy()
+            pose = model.placement
+            center = (pose.x if pose.x is not None else auto[0], pose.y if pose.y is not None else auto[1])
+            occupied = [m.placement.apply(m.mesh, auto).bounds for m in self.plate_models]
+            machine = self._machine()
+            rect = bed_rect(machine, wf.FDM) if machine else self.model_viewer.rect
+            xy = free_position(pose.apply(model.mesh, auto), center, rect, occupied)
+            if xy is None:
+                self.notify('plate_full', 'warning', 'No free plate space',
+                            'Move or delete a model to make room, then try again.')
+                return False
+            pose.x, pose.y = xy
+            for block in model.blocks:
+                block.translate(xy[0]-center[0], xy[1]-center[1], 0.)
+        self.plate_models.append(model)
+        self._activate_plate_model(len(self.plate_models)-1)
+        self._refresh_model_list()
+        if first:
+            self._finish_model_open(model.path)
+        else:
+            self._plate_changed(fit=True)
+        return True
+
+    def copy_plate_model(self):
+        if self.workflow != wf.FDM or self.plate_row < 0 or self._worker is not None:
+            return
+        from gcodeproducer.core.fdm.plate_model import PlateModel
+        self._remember_plate_model()
+        model = self.plate_models[self.plate_row]
+        self._insert_plate_model(PlateModel(model.path, model.mesh, copy.deepcopy(model.placement),
+                                          copy.deepcopy(model.blocks), copy.deepcopy(model.support), False))
+
+    def delete_plate_model(self):
+        if self.workflow != wf.FDM or self.plate_row < 0 or self._worker is not None:
+            return
+        self._save_placement()
+        row = self.plate_row
+        del self.plate_models[row]
+        self._activate_plate_model(min(row, len(self.plate_models)-1))
+        self._refresh_model_list()
+        self._plate_changed()
+
+    def _plate_changed(self, fit=False):
+        self._set_stale()
+        self._update_scene()
+        self.set_mode('prepare')
+        if fit:
+            self.model_viewer.fit()
         self._update_enabled()
 
     # ------------------------------------------------------------- placement
@@ -1287,6 +1462,10 @@ class MainWindow(QMainWindow):
         return self._load_model_state(path)[0]
 
     def _save_placement(self):
+        self._remember_plate_model()
+        if self.workflow == wf.FDM and 0 <= self.plate_row < len(self.plate_models):
+            if not self.plate_models[self.plate_row].persistent:
+                return
         if self.model_path:
             self.settings.setValue(self._model_key("placement_cam" if self.workflow == wf.CAM else "placement", self.model_path),
                                    json.dumps(self.placement.to_dict()))
@@ -1452,7 +1631,17 @@ class MainWindow(QMainWindow):
         angle = None
         if self.workflow == wf.FDM and self.cb_show_over.isChecked():
             angle = self.model_support.overhang_angle
-        self.model_viewer.set_scene(self.placed, rect, (self.placement.x, self.placement.y), angle, inside)
+        center = tuple(v if v is not None else a for v, a in zip((self.placement.x, self.placement.y), self._auto_xy()))
+        if self.workflow == wf.FDM and len(self.plate_models) > 1:
+            from gcodeproducer.core.fdm.plate import combine_meshes
+            meshes = [self.placed if i == self.plate_row else model.placement.apply(model.mesh, self._auto_xy())
+                      for i, model in enumerate(self.plate_models)]
+            ends = np.cumsum([len(mesh.triangles) for mesh in meshes])
+            self.model_viewer.set_scene(combine_meshes(meshes), rect, center,
+                                        angle, all(fits(m, rect) for m in meshes),
+                                        model_ends=ends, active_model=self.plate_row)
+        else:
+            self.model_viewer.set_scene(self.placed, rect, center, angle, inside)
         self._cam_pick_task = None
         self._cam_highlight()
 
@@ -1797,6 +1986,7 @@ class MainWindow(QMainWindow):
         if mode == "preview" and self.program is None:
             mode = "prepare"
         self.mode = mode
+        self._update_model_buttons()
         self.stack.setCurrentIndex(0 if mode == "prepare" else 1)
         for w in (self.layer_slider, self.layer_lbl, self.playback):
             w.setEnabled(mode == "preview")
@@ -1870,6 +2060,7 @@ class MainWindow(QMainWindow):
 
     # slicing
     def _update_enabled(self):
+        self._update_model_buttons()
         busy = self._worker is not None
         ok = self.mesh is not None and self._machine() is not None
         # while slicing the Slice button cancels
@@ -1904,12 +2095,26 @@ class MainWindow(QMainWindow):
         if self.workflow == wf.FDM:
             kw["material"] = self._consumable("material")
             kw["nozzle"] = self._consumable("nozzle")
+            self._remember_plate_model()
+            if len(self.plate_models) > 1:
+                from gcodeproducer.core.fdm.plate import overlapping_bounds
+                placed_models = [m.placement.apply(m.mesh, self._auto_xy()) for m in self.plate_models]
+                if overlapping_bounds(placed_models) and not self.notify(
+                        'plate_overlap', 'warning', 'Models may overlap',
+                        'Model bounds overlap. Intersecting models are not merged. Slice anyway?', question=True,
+                        default_no=True):
+                    return
+                from gcodeproducer.core.fdm.plate_model import PlateModel
+                kw['plate_models'] = [PlateModel(m.path, m.mesh, copy.deepcopy(m.placement),
+                                                 copy.deepcopy(m.blocks), copy.deepcopy(m.support), m.persistent)
+                                      for m in self.plate_models]
         else:
             kw["tools"] = self.libset.consumables_for(machine, "tool")
             kw["cam_setup"] = copy.deepcopy(self.cam_editor.setup)
         mesh = Mesh(self.mesh.vertices.copy(), self.mesh.triangles)   # stages may move the mesh
         placed = self.placement.apply(mesh, self._auto_xy())
-        if not fits(placed, bed_rect(machine, self.workflow)):
+        if not all(fits(m, bed_rect(machine, self.workflow))
+                   for m in (placed_models if 'plate_models' in kw else [placed])):
             if not self.notify("outside_volume", "warning", "Outside the build volume",
                                "The model does not fit inside the machine's build volume.\nSlice anyway?",
                                question=True):

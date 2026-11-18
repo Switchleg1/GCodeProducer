@@ -166,7 +166,8 @@ def block_cells(base: geometry.RegionMask, blocks, z: float) -> np.ndarray:
 
 
 def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
-                  edge_margin: float = 0.0, line_width: float = 0.45, bottom_gap: int = 1) -> list:
+                  edge_margin: float = 0.0, line_width: float = 0.45, bottom_gap: int = 1,
+                  *, source_masks=None) -> list:
     """Support inside the block volumes wherever there is model above (with a Z gap).
 
     ``edge_margin`` (mm) widens that support past the model's edges (also into
@@ -180,7 +181,7 @@ def block_columns(masks, layers, base, blocks, xy_distance: float, gap: int,
     for i in range(n - 1, -1, -1):
         j = i + 1 + gap
         if j < n:
-            above |= masks[j]
+            above |= masks[j] if source_masks is None else source_masks[j]
         mid_z = layers[i].z - layers[i].height * 0.5
         s = block_cells(base, blocks, mid_z) & above & ~geometry.dilate(masks[i], xy)
         s = _gap_free(s, masks, i, gap, 0)

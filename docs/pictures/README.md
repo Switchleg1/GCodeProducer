@@ -10,7 +10,8 @@ paths; do not scatter new images across the documentation root.
 
 | File | Purpose / provenance | Used by |
 |---|---|---|
-| [ui-controls-and-shortcuts.png](ui-controls-and-shortcuts.png) | Actual 0.1.1 Help → Controls dialog, including undo/redo and Ctrl+L; captured with isolated temporary library/settings | [GUI shortcuts](../gui.md#keyboard-and-mouse-reference) |
+| [ui-controls-and-shortcuts.png](ui-controls-and-shortcuts.png) | Historical 0.1.1 Help → Controls dialog, before Ctrl+D; captured with isolated temporary library/settings | [GUI shortcuts](../gui.md#keyboard-and-mouse-reference) |
+| [fdm-model-plate.png](fdm-model-plate.png) | Actual FDM Prepare capture: three instances, the selected copy highlighted, and Add / Delete / Copy; isolated library/settings | [GUI guide](../gui.md) |
 | [prepare.jpg](prepare.jpg) | Earlier Prepare workspace screenshot; some labels may be historical | [GUI guide](../gui.md) |
 | [preview.jpg](preview.jpg) | Earlier Preview workspace screenshot | [GUI guide](../gui.md) |
 | [support_panel.jpg](support_panel.jpg) | Earlier FDM support panel screenshot; ownership descriptions in the guide take precedence | [Support](../fdm/support.md) |

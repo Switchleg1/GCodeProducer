@@ -6,6 +6,7 @@ from gcodeproducer.core.cam.cam_setup import CAMSetup
 from gcodeproducer.core.jobs.placement import Placement
 from gcodeproducer.core.fdm.support_block import SupportBlock
 from gcodeproducer.core.fdm.model_support import ModelSupport
+from gcodeproducer.core.fdm.plate_model import PlateModel
 from gcodeproducer.core.pipeline.slice_pipeline import SlicePipeline
 from gcodeproducer.core.libraries.libraries_constants import KINDS
 from gcodeproducer.core.libraries.profile import Profile
@@ -24,7 +25,15 @@ class WindowState:
         mesh_key = id(w.mesh) if w.mesh is not None else None
         if mesh_key is not None:
             self.meshes[mesh_key] = w.mesh
+        w._remember_plate_model()
+        plate = []
+        for model in w.plate_models:
+            key = id(model.mesh)
+            self.meshes[key] = model.mesh
+            plate.append((key, model.path, model.placement.to_dict(), [b.to_dict() for b in model.blocks],
+                          model.support.to_dict(), model.persistent))
         return {
+            'plate': plate, 'plate_row': w.plate_row,
             'mesh': mesh_key, 'path': w.model_path, 'workflow': w.workflow,
             'machine': w.cb_machine.currentData(),
             'consumables': {k: cb.currentData() for k, (_, _, cb) in w.cons_rows.items()},
@@ -93,16 +102,19 @@ class WindowState:
         w.set_mode(state['mode'])
 
     def prune(self, history):
-        keys = {history.current[0]['mesh']}
+        def mesh_keys(snapshot):
+            state = snapshot[0]
+            return {state['mesh'], *(model[0] for model in state['plate'])}
+        keys = mesh_keys(history.current)
         for before, after in history.entries:
-            keys.update((before[0]['mesh'], after[0]['mesh']))
+            keys.update(mesh_keys(before) | mesh_keys(after))
         self.meshes = {k: mesh for k, mesh in self.meshes.items() if k in keys}
 
     def restore(self, state, controls):
         w = self.window
         current = self.capture()
         content_changed = any(current[k] != state[k] for k in (
-            'mesh', 'path', 'workflow', 'machine', 'consumables', 'placement', 'blocks', 'support',
+            'plate', 'plate_row', 'mesh', 'path', 'workflow', 'machine', 'consumables', 'placement', 'blocks', 'support',
             'cam', 'pipelines', 'process_id', 'dirty', 'libraries', 'processes', 'preferences'))
         w.playback.stop_play()
         if not content_changed:
@@ -117,6 +129,7 @@ class WindowState:
         w.progress.setVisible(False)
         old_model = (id(w.mesh) if w.mesh is not None else None, w.model_path)
         w.mesh = w.model_path = None       # switching workflow must not save outgoing placement
+        w.plate_models, w.plate_row = [], -1
         for k in KINDS:
             self.restore_library(w.libset[k], state['libraries'][k], Profile)
         self.restore_library(w.libset.processes, state['processes'], ProcessPreset)
@@ -139,6 +152,12 @@ class WindowState:
         w._pl_prev = copy.deepcopy(w.placement)
         w.blocks = [SupportBlock.from_dict(b) for b in state['blocks']]
         w.model_support = ModelSupport.from_dict(state['support'])
+        w.plate_models = [PlateModel(path, self.meshes[key], Placement.from_dict(pose),
+                                     [SupportBlock.from_dict(b) for b in blocks], ModelSupport.from_dict(support), original)
+                          for key, path, pose, blocks, support, original in state['plate']]
+        w.plate_row = state['plate_row']
+        w._remember_plate_model()
+        w._refresh_model_list()
         w.sel_block = state['block_row']
         setup = CAMSetup.from_dict(state['cam'])
         w.cam_editor.set_setup(setup)

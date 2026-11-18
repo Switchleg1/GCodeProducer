@@ -25,7 +25,7 @@ def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = 
               nozzle: Optional[Profile] = None, tools: Optional[list] = None,
               mesh=None, model_path: Optional[str] = None, settings: Optional[dict] = None,
               placement=None, support_blocks=None, support=None, cam_setup=None,
-              preferences: Optional[dict] = None) -> Job:
+              preferences: Optional[dict] = None, plate_models=None) -> Job:
     workflow = wf.normalize(workflow)
     if machine.workflow != workflow:
         raise ValueError(f"machine '{machine.name}' is a {machine.workflow} machine, not {workflow}")
@@ -33,7 +33,7 @@ def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = 
                tools=list(tools or []), mesh=mesh, model_path=model_path,
                settings=dict(settings or {}), placement=placement,
                support_blocks=list(support_blocks or []), support=support, cam_setup=cam_setup,
-               preferences=dict(preferences or {}))
+               preferences=dict(preferences or {}), plate_models=list(plate_models or []))
 
 
 def place_mesh(job: Job) -> None:
@@ -41,6 +41,15 @@ def place_mesh(job: Job) -> None:
     original XY for CAM; FDM bottom at Z0, CAM top at Z0)."""
     from gcodeproducer.core.jobs.placement import Placement
     from gcodeproducer.core.jobs.placement import bed_xy
+    if job.workflow == wf.FDM and job.plate_models:
+        from gcodeproducer.core.fdm.plate import combine_meshes
+        auto = bed_xy(job.machine, job.workflow)
+        job.placed_models = [model.placement.apply(model.mesh, auto_xy=auto) for model in job.plate_models]
+        job.mesh = combine_meshes(job.placed_models)
+        if len(job.plate_models) == 1:
+            job.support = job.plate_models[0].support
+            job.support_blocks = job.plate_models[0].blocks
+        return
     if job.mesh is None:
         return
     pl = job.placement or Placement(z_anchor="top" if job.workflow == wf.CAM else "bottom")

@@ -74,6 +74,7 @@ class ModelViewer(QOpenGLWidget):
     placeBlockClicked = pyqtSignal(float, float, float, bool)   # x, y, z, clicked face points down
     placeModeExited = pyqtSignal()
     seamPicked = pyqtSignal(float, float)
+    modelPicked = pyqtSignal(int)
     glError = pyqtSignal(str)
 
     def __init__(self, camera: Camera, parent=None):
@@ -90,6 +91,8 @@ class ModelViewer(QOpenGLWidget):
         self.overhang_angle = None            # None = do not show overhangs
         self.inside = True
         self.center_xy = (0.0, 0.0)
+        self.model_ends = ()
+        self.active_model = -1
         self.cam_pick_mode = ""
         self.cam_faces = []
         self.cam_edges = np.empty((0, 3))
@@ -143,7 +146,9 @@ class ModelViewer(QOpenGLWidget):
         self._update_info()
 
     # ----------------------------------------------------------------- API
-    def set_scene(self, mesh, rect, center_xy, overhang_angle=None, inside=True):
+    def set_scene(self, mesh, rect, center_xy, overhang_angle=None, inside=True, *, model_ends=(), active_model=-1):
+        self.model_ends = model_ends
+        self.active_model = active_model
         self.vertices = None if mesh is None else np.asarray(mesh.vertices, np.float64)
         self.triangles = None if mesh is None else np.asarray(mesh.triangles)
         self.tris = None if mesh is None else self.vertices[self.triangles]
@@ -351,6 +356,11 @@ class ModelViewer(QOpenGLWidget):
         col = np.empty((m, 4), np.float32)
         col[:, :3] = MODEL_COLOR if self.inside else OUTSIDE_COLOR
         col[:, 3] = 1.0
+        if self.active_model >= 0:
+            start = self.model_ends[self.active_model-1] if self.active_model else 0
+            end = self.model_ends[self.active_model]
+            col[:start, :3] *= .62
+            col[end:, :3] *= .62
         if self.overhang_angle is not None:
             col[overhang_faces(self.vertices, self.triangles, self.overhang_angle), :3] = OVERHANG_COLOR
         if self.cam_faces:
@@ -599,6 +609,8 @@ class ModelViewer(QOpenGLWidget):
                 return
         if tri < 0:
             return
+        if len(self.model_ends):
+            self.modelPicked.emit(int(np.searchsorted(self.model_ends, tri, side='right')))
         self._drag = (float(pt[2]), pt, tuple(self.center_xy))
         self.setCursor(Qt.CursorShape.ClosedHandCursor)
 

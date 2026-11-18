@@ -48,10 +48,23 @@ relevant entry. Changing machines refreshes the permitted consumables; a saved
 CAM tool that is no longer available causes generation to fail instead of
 silently substituting another cutter.
 
-Import with `Ctrl+O`, drop an STL on the window, or use **File → Recent models**.
-Only one model is loaded at a time. The import label shows the filename and
-triangle count. Binary and ASCII STL are welded to shared vertices; STL units
-are not self-describing, so verify displayed dimensions in millimetres.
+In FDM, use **Model → Add…** (`Ctrl+O`), drop STL files on the window,
+or use **File → Recent models** to add to the plate. Select an instance in
+the list or click it in Prepare to edit its placement and supports. **Copy**
+(`Ctrl+D` in Prepare) duplicates the selected instance in a free spot, with
+independent placement and supports. **Delete** removes only that instance from
+the plate, not its source file. Add and Copy use bounding boxes for initial
+spacing; move or remove a model if the app cannot find room.
+
+**Slice** prints the whole FDM plate layer by layer in one program, not one
+object at a time. Keep models separate; intersecting meshes are not merged.
+The plate list is session-only. CAM remains single-model and switching back
+to FDM restores the plate from the current session.
+
+![FDM model list with an original, a selected copy, and a second STL on the bed](pictures/fdm-model-plate.png)
+
+Binary and ASCII STL are welded to shared vertices; STL units are not
+self-describing, so verify displayed dimensions in millimetres.
 
 ## Position and orientation
 
@@ -260,7 +273,8 @@ cutter clearance or successful workholding.
 | Ctrl+L | Activate Place on face; then click the face |
 | Ctrl+, | Settings |
 | Ctrl+Q | Quit |
-| Ctrl+O | Import model |
+| Ctrl+O | Add models (FDM) / import model (CAM) |
+| Ctrl+D | Copy selected FDM model in Prepare |
 | Ctrl+R | Slice / generate paths |
 | Ctrl+S | Save generated G-code (subject to CAM checks) |
 | Ctrl+1 / Ctrl+2 | Prepare / Preview |

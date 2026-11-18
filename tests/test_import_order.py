@@ -19,5 +19,6 @@ ENTRY_POINTS = [
 
 @pytest.mark.parametrize("module", ENTRY_POINTS)
 def test_module_imports_first(module):
-    result = subprocess.run([sys.executable, "-c", f"import {module}"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-c", f"import {module}"],
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
