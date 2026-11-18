@@ -1,8 +1,7 @@
 """The slice job: the mutable object that flows through the stage pipeline.
 
-GCodeTools passes a :class:`GCodeProgram` from module to module.  Here the
-pipeline passes a :class:`Job`: stages add layers, toolpaths and finally the
-emitted :class:`GCodeProgram`.
+The pipeline passes a :class:`Job` between stages, which add layers, toolpaths
+and finally the emitted :class:`GCodeProgram`.
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Shared inspection (Preview playback) constants."""
 
-# (key, label, tooltip) of the transport buttons, left to right (as in GCodeTools)
+# (key, label, tooltip) of the transport buttons, left to right
 TRANSPORT_BUTTONS = (
     ("start", "\u23ee", "Start of the program"),
     ("prev_layer", "\u23ea", "Previous layer (PgDown)"),

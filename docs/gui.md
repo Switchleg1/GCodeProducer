@@ -240,8 +240,8 @@ leads; see [holding tabs](cam/holding-tabs.md) for setup and safety limits.
 
 ## Inspecting generated paths
 
-The playback bar under the Preview is the same for FDM and CAM (and matches
-GCodeTools). It plays the program line by line, drawing it up to the cursor.
+The playback bar under Preview is shared by FDM and CAM. It plays the program
+line by line, drawing it up to the cursor.
 
 ![Preview playback bar](pictures/ui-preview-playback.png)
 

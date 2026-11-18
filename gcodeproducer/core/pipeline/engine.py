@@ -1,7 +1,6 @@
 """The slice pipeline: an ordered list of stages that turns a Job into G-code.
 
-Mirrors GCodeTools' ``Pipeline`` but, instead of transforming a loaded
-program, it drives geometry -> G-code production for one *workflow*.  A default
+The pipeline drives geometry-to-G-code production for one *workflow*. A default
 pipeline per workflow is provided; the operator can enable / disable / reorder
 optional stages and tune their parameters.
 """

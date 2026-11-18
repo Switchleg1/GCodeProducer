@@ -22,8 +22,7 @@ the selected machine allows.  Speeds and feeds live on the machine profile, so
 a given machine runs every material / tool at its own rates.
 
 Each kind has a declarative :class:`~gcodeproducer.core.params.Param` schema,
-so the GUI form and CLI options are generated the same way module parameters
-are in GCodeTools.
+which is shared by the GUI forms and CLI options.
 """
 from __future__ import annotations
 

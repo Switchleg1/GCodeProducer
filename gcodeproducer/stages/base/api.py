@@ -1,4 +1,4 @@
-"""Slice stage API (the GCodeProducer analogue of GCodeTools' modules).
+"""Slice stage API.
 
 A stage is a class deriving from :class:`SliceStage`::
 

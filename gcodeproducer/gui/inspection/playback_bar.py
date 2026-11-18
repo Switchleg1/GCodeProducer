@@ -1,4 +1,4 @@
-"""PlaybackBar — Preview transport shared by FDM and CAM (same controls as GCodeTools)."""
+"""PlaybackBar — Preview transport shared by FDM and CAM."""
 from __future__ import annotations
 import time
 from PyQt6.QtCore import QSignalBlocker, Qt, QTimer, pyqtSignal

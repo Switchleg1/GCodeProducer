@@ -5,7 +5,7 @@ import sys
 
 
 def apply_theme(app) -> None:
-    """Dark Fusion theme shared with GCodeTools."""
+    """Apply the application's dark Fusion theme."""
     from PyQt6.QtGui import QColor, QPalette
     app.setStyle("Fusion")
     palette = QPalette()

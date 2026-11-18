@@ -48,7 +48,6 @@ def test_local_documentation_links_and_anchors():
             if url.scheme or url.netloc:
                 continue
             target = (path.parent / unquote(url.path)).resolve() if url.path else path
-            # The root README deliberately links to the sibling GCodeTools repo.
             if not target.is_relative_to(ROOT):
                 continue
             if not target.exists():

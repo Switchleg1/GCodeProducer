@@ -1,6 +1,6 @@
 """GCodeProducer main window.
 
-Layout follows GCodeTools:
+Window layout:
 
 * toolbar             import / slice / save, Prepare / Preview switch, camera views
 * left dock  Prepare  Setup (workflow, machine, consumables) -> Model (placement,

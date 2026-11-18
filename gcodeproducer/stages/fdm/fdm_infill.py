@@ -1,4 +1,4 @@
-"""FDM stage: sparse infill inside each layer, using any GCodeTools pattern.
+"""FDM stage: sparse infill inside each layer using the selected pattern.
 
 Fills the region inside the innermost perimeter, skipping any cells already
 claimed by the top / bottom solid shells (so sparse and solid never overlap).
