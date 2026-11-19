@@ -100,11 +100,17 @@ flowchart LR
   speeds, links, entries (lead-in only into material), leads, cuts and exits.
   Every feed move goes through one `feed_move`: measure on the height sampler
   (or use the planned condition), `FeedPolicy` rate and feature, material
-  update. It produces `job.motion_plan`, including non-motion segments
-  (layer/operation markers, M5/T/M6/M3).
-- **CAMEmit.serialize** writes segments: axis words, modal F, comments and
-  line metadata. It makes no machining decisions. Start/end templates and the
-  output checks remain in the stage.
+  update. It logs a cut-segment estimate after path geometry is available and
+  before motion checks, then streams motion and non-motion segments (layer and
+  operation markers, M5/T/M6/M3) in batches of 4,096. The total segment count and
+  first batch remain in `job.motion_plan` for inspection; `complete` identifies
+  whether that prefix is the entire plan.
+- **CAMEmit** serializes each batch, carrying modal feed and engagement comments
+  across batches. It makes no machining decisions. Start/end templates and the
+  independent replay of emitted G-code remain in the stage. There is no total
+  job-wide engagement segment cap; the emitted program, simulation trace, and
+  Preview still use memory proportional to job size. Geometry sampling retains
+  its separate per-band guard.
 
 ### One material interface, two measurement plug-ins
 

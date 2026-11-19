@@ -18,7 +18,7 @@ from .link_planner import LinkPlanner
 
 
 class MotionPlanner:
-    def __init__(self, job, ctx, stock, position, rpm):
+    def __init__(self, job, ctx, stock, position, rpm, *, consume=None):
         from collections import Counter
         from gcodeproducer.core.settings.preferences import pref
         from .material_model import MaterialModel
@@ -27,7 +27,7 @@ class MotionPlanner:
         self.rpm = rpm
         self.material = MaterialModel(job, stock, log=ctx.log)
         self.policy = FeedPolicy(job.m("max_feed", 0), pref(job, "highlight_conflicts"))
-        self.plan = MotionPlan()
+        self.plan = MotionPlan(consume)
         self.safe_z = job.m("safe_z", 15.0)
         self.rapid_feed = job.m("rapid_xy", 3000)
         self.short_retracts = bool(pref(job, "short_retracts"))
@@ -39,6 +39,8 @@ class MotionPlanner:
         self.lead_kinds = {}
         self.stay_count = self.short_count = self.samples = 0
         self.surface_totals = Counter()
+        self._path_cut_material = False
+        self._surface_cut = False
         self.layer, self.op = 0, None
         self.tool = self.config = self.name = self.model = None
         self.feed = self.plunge = 0.0
@@ -52,6 +54,11 @@ class MotionPlanner:
         segment = MotionSegment(phase, start, None if end is None else np.asarray(end, float).copy(),
                                 condition, rate, feature, comment, self.layer, self.op, words, force_feed)
         self.plan.add(segment)
+        if condition is not None:
+            if phase in ('cut', 'link', 'lead_in') and condition.engagement > 1e-6:
+                self._path_cut_material = True
+            if self._surface_cut and phase == 'cut':
+                self.surface_totals[condition.regime] += 1
         if end is not None:
             self.position = segment.end.copy()
         return segment
@@ -85,10 +92,9 @@ class MotionPlanner:
         Returns False when ``cleared_only`` and the move would meet current material.
         """
         from gcodeproducer.core.cam.surface_engagement import split_move
-        from gcodeproducer.core.cam.cam_constants import SURFACE_MAX_POINTS
         target = np.asarray(target, float)
         sampler = self.sampler(state)
-        steps = list(split_move(self.position, target, self.radius, state.resolution)) if split and state is not None else [target]
+        steps = split_move(self.position, target, self.radius, state.resolution) if split and state is not None else (target,)
         for q in steps:
             # Exact XY keeps planned stay-down endpoints matching; Z is the emitted value.
             q = np.array([q[0], q[1], float(format_number(q[2], 3))])
@@ -108,8 +114,6 @@ class MotionPlanner:
             if sampler is not None:
                 sampler.remove_move(start, q, self.radius)
             self.samples += 1
-            if self.samples > SURFACE_MAX_POINTS:
-                raise ValueError("CAM output exceeds the engagement sample budget; reduce the area or refine the setup")
         return True
 
     def descend(self, state, xy, z):
@@ -133,10 +137,6 @@ class MotionPlanner:
             self.rapid_z(rapid_to)
         self.descend(state, xy, z)
 
-    def cut_material(self, start_index):
-        return any(s.condition is not None and s.condition.engagement > 1e-6
-                   for s in self.plan.segments[start_index:] if s.phase in ("cut", "link", "lead_in"))
-
     # ---------------------------------------------------------------- paths
     def surface_path(self, pts):
         """XYZ surface path: shared entry, lead-in only into material, measured cuts, cleared lead-out."""
@@ -148,16 +148,16 @@ class MotionPlanner:
         if kind == "zigzag":
             self.lead_kinds[kind] = self.lead_kinds.get(kind, 0)+1
         approach = lead[0] if lead is not None else pts[0]
-        begin = len(self.plan.segments)
+        self._path_cut_material = False
         self.enter(state, approach[:2], approach[2], lead is not None)
         if lead is not None:
             for q in lead[1:]:
                 self.feed_move(q, "lead_in", state, comment="surface path lead-in", split=True)
-        cuts = len(self.plan.segments)
+        self._surface_cut = True
         for q in pts[1:]:
             self.feed_move(q, "cut", state, split=True)
-        self.surface_totals.update(s.condition.regime for s in self.plan.segments[cuts:] if s.condition is not None)
-        if config is not None and config.lead_out and self.cut_material(begin):
+        self._surface_cut = False
+        if config is not None and config.lead_out and self._path_cut_material:
             exit_points = self.entries.surface_exit(pts, length)
             if exit_points is not None:
                 for q in exit_points[1:]:
@@ -173,7 +173,7 @@ class MotionPlanner:
         loop = np.vstack([pts, pts[0]]) if path.closed else pts
         start = loop[0]
         length = (config.lead_length if config is not None else 0) or 2*self.radius
-        begin = len(self.plan.segments)
+        self._path_cut_material = False
         linked = self.links.linked(path, previous_end)
         if linked:
             self.feed_move(np.r_[start, self.position[2]], "link", live, path.link_condition,
@@ -214,7 +214,7 @@ class MotionPlanner:
             first_cut = False
         next_path = layer.paths[path_index+1] if path_index+1 < len(layer.paths) else None
         if (config is not None and config.lead_out and len(pts) > 1 and not (next_path and next_path.stay_down)
-                and (live is None or self.cut_material(begin) or not path.cut_conditions
+                and (live is None or self._path_cut_material or not path.cut_conditions
                      or any(c.engagement > 1e-6 for c in path.cut_conditions))):
             exit_points = self.entries.planar_exit(pts, path.closed, self.position[2], length)
             if exit_points is not None:
@@ -238,6 +238,9 @@ class MotionPlanner:
         data = first_data
         rate_key = None
         previous_group = getattr(job.layers[0], "cam_group", None) if job.layers else None
+        from .move_estimate import estimate_cut_segments
+        estimated = estimate_cut_segments(job.layers, tool_map, first_tool, self.material.height)
+        ctx.log(f'  CAM estimate: ~{estimated:,} cut segments before entries, exits and links')
         n = max(1, len(job.layers))
         for li, layer in enumerate(job.layers):
             key = getattr(layer, "cam_operation_key", None)
@@ -286,7 +289,9 @@ class MotionPlanner:
                     previous_end = self.planar_path(layer, path_index, path, previous_end)
             ctx.progress((li + 1) / n)
         self.tool, self.data = tool, data
+        self.plan.finish()
         self.report()
+        self.ctx.log(f'  CAM planned {self.samples:,} sampled feed segments')
         return self.plan
 
     def report(self):

@@ -70,10 +70,15 @@ class CAMEmit(SliceStage):
         start_state = simulate(b.program())
         position = (np.array([start_state.x[-1], start_state.y[-1], start_state.z[-1]])
                     if len(start_state) else np.zeros(3))
-        planner = MotionPlanner(job, ctx, stock, position, rpm)
-        job.motion_plan = planner.run(tool, first_data)
         b.set_feature("rapid", comment=False)
-        self.serialize(b, job.motion_plan)
+        modal = None, None
+
+        def write_chunk(segments):
+            nonlocal modal
+            modal = self._serialize_segments(b, segments, modal)
+
+        planner = MotionPlanner(job, ctx, stock, position, rpm, consume=write_chunk)
+        job.motion_plan = planner.run(tool, first_data)
         tool, data = planner.tool or tool, planner.data
         self._end(b, job, safe_z, tool=tool, log=ctx.log, cutting=data)
         prog = b.program()
@@ -98,11 +103,16 @@ class CAMEmit(SliceStage):
     @staticmethod
     def serialize(b, plan):
         """Write a MotionPlan as G-code: axis words, modal feed, comments and line metadata only."""
+        if not plan.complete:
+            raise ValueError('Streamed motion plan contains only an inspection prefix')
+        CAMEmit._serialize_segments(b, plan.segments, (None, None))
+
+    @staticmethod
+    def _serialize_segments(b, segments, modal):
         def feed_text(value):
             return format_number(value, 4 if value < 1 else 1)
-        last_feed = None
-        last_key = None
-        for s in plan.segments:
+        last_feed, last_key = modal
+        for s in segments:
             b.layer, b.op = s.layer, s.op
             if s.phase == "comment":
                 b.comment(s.words)
@@ -145,6 +155,7 @@ class CAMEmit(SliceStage):
             last_feed = s.rate
             if key is not None:
                 last_key = key
+        return last_feed, last_key
 
     def _start(self, b, job, tool, rpm, safe_z, log=None, cutting=None):
         from gcodeproducer.core.gcode.variables import render_box

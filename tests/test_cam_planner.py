@@ -118,6 +118,35 @@ def test_every_feed_move_is_a_planned_segment_with_a_phase(libset):
     assert regimes["slot"] > 0
 
 
+def test_move_estimate_counts_xyz_subdivision_and_closed_planar_edges():
+    from types import SimpleNamespace
+    from gcodeproducer.core.cam.planner.move_estimate import estimate_cut_segments
+    from gcodeproducer.core.jobs.path import Path
+
+    layer = SimpleNamespace(paths=[
+        Path('cut', np.array([[0., 0., 0.], [2., 0., 0.], [2., 0., -1.]])),
+        Path('cut', np.array([[0., 0.], [1., 0.], [0., 1.]]), closed=True),
+    ])
+    assert estimate_cut_segments([layer], {}, {'diameter': 3.}, SimpleNamespace(resolution=.05)) == 8
+
+
+def test_chunked_planning_preserves_commands_feeds_and_checks(libset, monkeypatch):
+    from gcodeproducer.core.cam.planner import motion_plan
+
+    expected, _ = emitted(libset)
+    monkeypatch.setattr(motion_plan, 'MOTION_CHUNK_SIZE', 7)
+    streamed, _ = emitted(libset)
+    assert not streamed.motion_plan.complete
+    assert len(streamed.motion_plan.segments) == 7
+    assert streamed.motion_plan.total == expected.motion_plan.total
+    assert streamed.program.to_text() == expected.program.to_text()
+    assert [line.engagement for line in streamed.program.lines if line.note] == [
+        line.engagement for line in expected.program.lines if line.note]
+    assert streamed.warnings == expected.warnings
+    for a, b in zip(streamed.material_results, expected.material_results, strict=True):
+        np.testing.assert_array_equal(a['heights'], b['heights'])
+
+
 def test_planar_lead_in_uses_measured_band_and_operation_override(libset):
     job, op = emitted(libset, slotting_feed=30, unlock_lead_feed=True, lead_feed=300)
     sim = simulate(job.program)
