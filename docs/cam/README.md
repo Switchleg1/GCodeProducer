@@ -89,7 +89,25 @@ as XYZ feed moves; see [3-axis surface operations](3d-operations.md).
 Between tool groups, output retracts to safe Z, stops the spindle (`M5`),
 issues `T… M6`, and restarts the spindle (`M3 S…`). A real controller may need
 additional tool-change macros, manual handling or offsets. The machine's
-start/end templates see the first and last active tool respectively. Generic
+start/end templates see the first and last active tool respectively.
+
+### Machines without an automatic tool changer
+
+Turn off **Libraries → Machine → Tool changes → Automatic tool changer** to
+split the program at every tool group. **Save G-code** then writes one file
+per tool, numbered in run order, for example `part_01_T1-6mm-flat.nc` and
+`part_02_T2-3mm-ball.nc`. Each file is wrapped in the machine's start and end
+G-code, rendered for that file's tool and spindle speed. After the start block,
+each later file returns to safe Z before moving, then starts the spindle. No
+`M5`/`T… M6` is written between groups, and the shared tool-number warning is
+not raised. The default CAM start template still contains `T{tool} M6`; remove
+it if your controller rejects `M6`.
+
+Planning still runs as one job: material removed by earlier files is known to
+later ones (no recutting), and Preview shows the whole sequence. The files must
+run in order on the same work zero. Re-touch Z (tool length) after each manual
+change; the program cannot detect a different stick-out. The CLI writes the
+same numbered files. Generic
 startup/shutdown templates must be qualified for the machine.
 
 Each depth pass receives preview layer metadata, with operation labels and

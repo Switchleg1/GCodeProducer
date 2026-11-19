@@ -24,7 +24,8 @@ class Sequencer:
                                    MaterialModel(job), tabs, bool(pref(job, "skip_air_cuts")))
         job.warnings = []
         tools = {t.id: t for t in job.tools}
-        self.check_tool_numbers(setup, tools, planning)
+        if job.m("auto_tool_change", True):   # manual changes are per file, not by T number
+            self.check_tool_numbers(setup, tools, planning)
         for gi, group in enumerate(setup.groups):
             if group.tool_id not in tools:
                 raise ValueError(f"CAM tool '{group.tool_id}' is missing or not allowed by the machine")

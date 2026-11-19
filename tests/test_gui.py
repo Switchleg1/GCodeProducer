@@ -108,6 +108,19 @@ def test_preview_bridge_feature_distinguishes_absent_and_present(win):
         assert len([name for name in names if name.startswith('Bridge')]) == 1
 
 
+def test_save_writes_one_file_per_tool_for_manual_changes(win, tmp_path, monkeypatch):
+    from gcodeproducer.core.gcode.program import GCodeProgram
+
+    win.workflow = 'fdm'          # skip the CAM stale/warning prompts; saving is shared
+    win.program = GCodeProgram.from_text('; tool one\nG0 X1\n; tool two\nG0 X2\n')
+    win.program.parts = [(0, 'T1 6 mm'), (2, 'T2 3 mm')]
+    monkeypatch.setattr(QtWidgets.QFileDialog, 'getSaveFileName', lambda *a: (str(tmp_path / 'job.nc'), ''))
+    win.save_gcode()
+    assert sorted(p.name for p in tmp_path.glob('job*')) == ['job_01_T1-6-mm.nc', 'job_02_T2-3-mm.nc']
+    assert (tmp_path / 'job_02_T2-3-mm.nc').read_text() == '; tool two\nG0 X2\n'
+    assert 'one per tool' in win.statusBar().currentMessage()
+
+
 def test_camera_actions_are_grouped_in_toolbar(win):
     button = next(b for b in win.findChildren(QtWidgets.QToolButton) if b.text() == 'Camera views')
     assert [a.text() for a in button.menu().actions() if not a.isSeparator()] == [

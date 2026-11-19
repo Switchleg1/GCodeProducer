@@ -106,6 +106,44 @@ def test_operation_generation(libset, mesh, kind):
             assert path.points.max() <= 17 + 1e-6
 
 
+def test_manual_tool_changes_split_one_self_contained_file_per_tool(libset, mesh, tmp_path):
+    from pathlib import Path
+    from gcodeproducer.core.gcode.program_parts import part_path
+    ref = face_ref(mesh, 20)
+    first = Operation(name="first", geometry=[ref], end=Depth("top", -1))
+    second = Operation(name="second", kind="engrave", geometry=[ref], end=Depth("top", -0.1))
+    job = job_for(libset, mesh, [first], [second])
+    job.machine.values.update(auto_tool_change=False, start_gcode="; start T{tool} S{spindle_rpm}\nG90",
+                              end_gcode="M5\n; end T{tool}\nM30")
+    logs = []
+    program = slice_job(job, log=logs.append).program
+    assert [label for _, label in program.parts] == [f"T{t.get('tool_number')} {t.name}" for t in job.tools]
+    text = program.to_text()
+    assert " M6" not in text and "spindle off before tool change" not in text
+    assert any("one per tool group" in line for line in logs)
+    # Material and checks continue across the split: the second file is still a recut-aware program.
+    assert not any("Tool number" in warning for warning in job.warnings)
+    files = program.save(str(tmp_path / "part.nc"))
+    assert files == [part_path(tmp_path / "part.nc", i, label) for i, (_, label) in enumerate(program.parts, 1)]
+    assert [Path(f).name[:10] for f in files] == ["part_01_T1", "part_02_T2"]
+    contents = [Path(f).read_text() for f in files]
+    assert "".join(contents) == text
+    for content, tool in zip(contents, job.tools):
+        number = tool.get("tool_number")
+        assert content.startswith(";GCodeProducer CAM")
+        assert f"; start T{number}" in content and content.rstrip().endswith("M30")
+        assert f"; end T{number}" in content
+    # The second file re-establishes safe Z before moving, then starts its spindle.
+    tail = contents[1].splitlines()
+    body = [line for line in tail[tail.index("G90")+1:] if not line.startswith(";")]
+    assert body[0].startswith("G0 Z30") and body[1].startswith("M3 S")
+    # Each file's last layer marker belongs to that file.
+    assert not contents[0].splitlines()[-4].startswith(";LAYER")
+    assert ";LAYER:" in tail[tail.index("G90")+1]
+    assert "Operation: first" in contents[0] and "Operation: second" in contents[1]
+    assert "Operation: second" not in contents[0]
+
+
 def test_tool_change_order_and_template_values(libset, mesh):
     ref = face_ref(mesh, 20)
     op = Operation(name="first", geometry=[ref], end=Depth("top", -1))

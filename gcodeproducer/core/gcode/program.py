@@ -17,6 +17,7 @@ class GCodeProgram:
         self.settings: dict = {}            # raw slicer/CAM settings
         self.slicer: dict = {}              # normalised settings (see readers.base)
         self.layer_z: list = []             # Z height per layer index
+        self.parts: list = []               # (first line, label) per separate output file; [] = one file
 
     # ------------------------------------------------------------ creation
     @classmethod
@@ -45,6 +46,7 @@ class GCodeProgram:
         p.settings = dict(self.settings)
         p.slicer = dict(self.slicer)
         p.layer_z = list(self.layer_z)
+        p.parts = list(self.parts)
         return p
 
     # -------------------------------------------------------------- output
@@ -58,9 +60,22 @@ class GCodeProgram:
             s += self.newline
         return s
 
-    def save(self, path: str) -> None:
-        with open(path, "w", encoding="utf-8", newline="") as fh:
-            fh.write(self.to_text())
+    def save(self, path: str) -> list:
+        """Write the program; a split program writes one numbered file per part. Returns the paths."""
+        if not self.parts:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(self.to_text())
+            return [path]
+        from gcodeproducer.core.gcode.program_parts import part_path
+        written = []
+        ends = [start for start, _ in self.parts[1:]] + [len(self.lines)]
+        for index, ((start, label), end) in enumerate(zip(self.parts, ends), 1):
+            target = part_path(path, index, label)
+            text = self.newline.join(line.text for line in self.lines[start:end])
+            with open(target, "w", encoding="utf-8", newline="") as fh:
+                fh.write(text + (self.newline if self.trailing_newline else ""))
+            written.append(target)
+        return written
 
     # --------------------------------------------------------------- query
     def __len__(self) -> int:

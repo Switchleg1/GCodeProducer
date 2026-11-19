@@ -46,6 +46,7 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `rapid_xy` — Rapid xy | float / mm/min | `3000.0` | No schema bound | Speeds & feeds.  |
 | `rapid_z` — Rapid z | float / mm/min | `1000.0` | No schema bound | Speeds & feeds.  |
 | `max_feed` — Max feed | float / mm/min | `2000.0` | minimum 0 | Speeds & feeds. Caps cutting, engagement-adjusted/link and plunge G1 feeds; 0 = no cap. Not a spindle or G0 limit. |
+| `auto_tool_change` — Automatic tool changer | bool | `True` | No schema bound | Tool changes. On: tool groups are joined in one program with M5 / T M6 / M3. Off: one G-code file per tool group, each wrapped in the start and end G-code, for manual tool changes. |
 | `spindle_min` — Spindle min | float / rpm | `6000.0` | No schema bound | Spindle.  |
 | `spindle_max` — Spindle max | float / rpm | `24000.0` | No schema bound | Spindle.  |
 | `units` — Units | choice | `mm` | `mm` = mm; `inch` = inch | Work area.  |

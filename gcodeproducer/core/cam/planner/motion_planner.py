@@ -47,6 +47,8 @@ class MotionPlanner:
         self.sample_spacing = max(0., float(pref(job, "cam_engagement_step")))
         self.merge_moves = bool(pref(job, "cam_merge_moves"))
         self.skip_air = bool(pref(job, "skip_air_cuts"))
+        self.auto_tool_change = bool(job.m("auto_tool_change", True))
+        self.files = 1
         self.air_skipped = 0.
         self.air_paths = 0
         self.machine = job.machine.resolved()
@@ -65,11 +67,11 @@ class MotionPlanner:
 
     # ------------------------------------------------------------- segments
     def add(self, phase, end=None, condition=None, rate=None, feature="rapid", comment=None,
-            words=None, force_feed=False, start=None):
+            words=None, force_feed=False, start=None, payload=None):
         if end is not None and start is None:
             start = self.position.copy()
         segment = MotionSegment(phase, start, None if end is None else np.asarray(end, float).copy(),
-                                condition, rate, feature, comment, self.layer, self.op, words, force_feed)
+                                condition, rate, feature, comment, self.layer, self.op, words, force_feed, payload)
         self.plan.add(segment)
         if condition is not None:
             if phase in ('cut', 'link', 'lead_in') and condition.engagement > 1e-6:
@@ -340,17 +342,29 @@ class MotionPlanner:
             name = getattr(layer, "cam_operation", None)
             self.layer, self.name = li, name
             self.op = f"{key[0]+1}.{key[1]+1} {name}" if key is not None else name
-            self.comment(f"LAYER:{li}")
             group = getattr(layer, "cam_group", None)
+            starts_file = group != previous_group and not self.auto_tool_change
+            if not starts_file:
+                self.comment(f"LAYER:{li}")
             next_tool = tool_map.get(getattr(layer, "cam_tool_id", None), tool)
             config = self.config = getattr(layer, "cam_operation_config", None)
+            previous_data = data
             data = getattr(layer, "cam_cutting", None) or (resolve_cutting(job.machine, next_tool, self.stock, config)
                                                           if next_tool else None)
             if group != previous_group:
                 self.rapid_z(self.safe_z)
-                self.command("M5", "spindle off before tool change")
-                self.command(f"T{int(next_tool.get('tool_number', 1))} M6")
-                self.command(f"M3 S{format_number(data.rpm if data else next_tool.get('spindle_rpm', 18000), 0)}")
+                spindle = format_number(data.rpm if data else next_tool.get('spindle_rpm', 18000), 0)
+                if self.auto_tool_change:
+                    self.command("M5", "spindle off before tool change")
+                    self.command(f"T{int(next_tool.get('tool_number', 1))} M6")
+                else:
+                    # Manual changer: the writer closes this file (end G-code) and opens the
+                    # next one (start G-code). Re-establish safe Z after an unknown start block.
+                    self.add("split", payload=(tool, previous_data, next_tool, data))
+                    self.comment(f"LAYER:{li}")    # the layer marker belongs to the new file
+                    self.rapid_z(self.safe_z, comment="safe height after start G-code")
+                    self.files += 1
+                self.command(f"M3 S{spindle}")
                 rpm = data.rpm if data else rpm
                 previous_group = group
             tool = self.tool = next_tool
@@ -384,6 +398,8 @@ class MotionPlanner:
         self.tool, self.data = tool, data
         self.plan.finish()
         self.report()
+        if not self.auto_tool_change and self.files > 1:
+            self.ctx.log(f'  Manual tool changes: output split into {self.files} files, one per tool group')
         self.ctx.log(f'  CAM planned {self.samples:,} sampled feed segments; '
                      f'{self.plan.total:,} program segments written')
         return self.plan

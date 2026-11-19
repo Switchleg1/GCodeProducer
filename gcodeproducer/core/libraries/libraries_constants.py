@@ -39,6 +39,9 @@ def _machine_schema(workflow: str) -> list:
             Param("rapid_z", "float", 1000.0, unit="mm/min", group="Speeds & feeds"),
             Param("max_feed", "float", 2000.0, unit="mm/min", min=0, group="Speeds & feeds",
                   help="Caps cutting, engagement-adjusted/link and plunge G1 feeds; 0 = no cap. Not a spindle or G0 limit."),
+            Param("auto_tool_change", "bool", True, label="Automatic tool changer", group="Tool changes",
+                  help="On: tool groups are joined in one program with M5 / T M6 / M3. Off: one G-code file "
+                       "per tool group, each wrapped in the start and end G-code, for manual tool changes."),
             Param("spindle_min", "float", 6000.0, unit="rpm", group="Spindle"),
             Param("spindle_max", "float", 24000.0, unit="rpm", group="Spindle"),
             Param("units", "choice", "mm", choices=["mm", "inch"], group="Work area"),

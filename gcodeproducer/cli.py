@@ -170,8 +170,13 @@ def cmd_slice(args):
         raise SystemExit("pipeline produced no program (missing emit stage?)")
 
     out = args.output or str(Path(args.input).with_suffix(".gcode"))
-    prog.save(out)
-    print(f"wrote {out}  ({len(prog.lines)} lines, {prog.num_layers} layers)")
+    written = prog.save(out)
+    if len(written) > 1:
+        print(f"wrote {len(written)} files, one per tool (manual tool changes):")
+        for path in written:
+            print(f"  {path}")
+    else:
+        print(f"wrote {out}  ({len(prog.lines)} lines, {prog.num_layers} layers)")
 
 
 def build_parser():

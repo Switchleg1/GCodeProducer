@@ -72,16 +72,32 @@ class CAMEmit(SliceStage):
                     if len(start_state) else np.zeros(3))
         b.set_feature("rapid", comment=False)
         modal = None, None
+        parts = [(0, _part_label(tool))]
 
         def write_chunk(segments):
             nonlocal modal
-            modal = self._serialize_segments(b, segments, modal)
+            begin = 0
+            for k, s in enumerate(segments):
+                if s.phase == "split":
+                    modal = self._serialize_segments(b, segments[begin:k], modal)
+                    previous, previous_data, following, following_data = s.payload
+                    # One self-contained file per tool: end G-code, then start G-code.
+                    self._end(b, job, safe_z, tool=previous, log=ctx.log, cutting=previous_data)
+                    parts.append((len(b.lines), _part_label(following)))
+                    b.layer, b.op = s.layer, s.op
+                    following_rpm = following_data.rpm if following_data else following.get("spindle_rpm", 18000)
+                    self._start(b, job, following, following_rpm, safe_z, log=ctx.log, cutting=following_data)
+                    b.set_feature("rapid", comment=False)
+                    modal = None, None                 # a new file restates its feed
+                    begin = k+1
+            modal = self._serialize_segments(b, segments[begin:], modal)
 
         planner = MotionPlanner(job, ctx, stock, position, rpm, consume=write_chunk)
         job.motion_plan = planner.run(tool, first_data)
         tool, data = planner.tool or tool, planner.data
         self._end(b, job, safe_z, tool=tool, log=ctx.log, cutting=data)
         prog = b.program()
+        prog.parts = parts if len(parts) > 1 else []
         prog.machine = "cam"
         prog.layer_z = [l.z for l in job.layers]
         job.program = prog
@@ -114,6 +130,8 @@ class CAMEmit(SliceStage):
         last_feed, last_key = modal
         for s in segments:
             b.layer, b.op = s.layer, s.op
+            if s.phase == "split":
+                continue                  # file boundaries are written by CAMEmit.run
             if s.phase == "comment":
                 b.comment(s.words)
                 continue
@@ -177,6 +195,12 @@ class CAMEmit(SliceStage):
         if last is not None:
             extra.update(layer=len(job.layers), layer_z=last.z)
         b.raw(render_box(job, "end_gcode", extra=extra, log=log).rstrip("\n"))
+
+
+def _part_label(tool):
+    if tool is None:
+        return "tool"
+    return f"T{int(tool.get('tool_number', 1))} {tool.name}"
 
 
 def _tool_variables(tool):

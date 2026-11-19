@@ -25,6 +25,7 @@ class MotionSegment:
     op: Optional[str] = None            # operation label "group.index name"
     words: Optional[str] = None         # comment text / command words for non-motion segments
     force_feed: bool = False            # always state F (first cut after an entry, links)
+    payload: object = None              # split: (previous tool, cutting data, next tool, cutting data)
 
     @property
     def motion(self):

@@ -2340,9 +2340,13 @@ class MainWindow(QMainWindow):
         base = Path(self.model_path).with_suffix(ext) if self.model_path else Path("out" + ext)
         path, _ = QFileDialog.getSaveFileName(self, "Save G-code", str(base), "G-code (*.gcode *.nc *.g *.tap)")
         if path:
-            self.program.save(path)
-            self.statusBar().showMessage(f"Saved {path}", 5000)
-            self.log(f"Saved {path}")
+            written = self.program.save(path)
+            if len(written) > 1:
+                self.statusBar().showMessage(f"Saved {len(written)} files, one per tool", 8000)
+                self.log("Manual tool changes: saved one file per tool, in order:\n  " + "\n  ".join(written))
+            else:
+                self.statusBar().showMessage(f"Saved {path}", 5000)
+                self.log(f"Saved {path}")
 
     # viewer: layers / cursor
     def _setup_layers(self):
