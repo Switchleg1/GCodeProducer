@@ -35,7 +35,7 @@ boundaries, or can be retained as per-selection height-only references.
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside or Inside; row visible only for Profile |
 | Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
-| Pocket overcut into void | 0 mm (global default) | Pocket only: grows the removal region outward into material that is not part of the model at any pass depth, so the pocket overlaps the next operation and leaves no thin wall between them; see below |
+| Overcut (mm) | 0 mm (global default) | Pocket and 3D Waterfall only: extends the removal region outward into stock clear of the model at the sampled pass depths, so adjacent operations can overlap without leaving a thin wall |
 | Material boundary (mm) | 0 mm (global default) | Pocket / Waterfall: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
 
 Choose realistic end depths explicitly; an automatically created operation
@@ -231,13 +231,13 @@ set End to -5.8 if that is required.
 
 ### Overcut into void material
 
-**Pocket overcut into void** grows the pocket region outward by the given
-distance, then removes every part cross-section sampled just above each pass
-depth from the growth and limits it at the allocated blank. The result is:
-the pocket extends into stock that will be removed anyway, never into the
-model. The grown region is cleared with the operation's own strategy
-(wall-parallel contours or raster, same stepover, direction, stay-down links
-and engagement planning) — there is no separate overcut path.
+**Overcut** works the same way in Pocket and 3D Waterfall. It grows the
+selected removal region outward by the given distance, excludes part
+cross-sections sampled just above each pass depth from the added area, and
+clips the growth to the material boundary limit. Waterfall still protects
+model shadows and active tabs at each depth. The expanded region uses the
+operation's own cutting strategy and settings; there is no separate overcut
+path. Profile does not use or show Overcut.
 
 Two different allowances apply at the two kinds of boundary:
 
@@ -414,7 +414,7 @@ the former wall-only Waterfall paths.
 
 Select closed outlines, set Start/End and depth per pass (automatic: the tool's
 Pocket axial percentage). Stepover, wall-parallel/raster strategy, stay-down
-links, material limit, cutting direction and leads apply. Overcut does not.
+links, material limit, overcut, cutting direction and leads apply.
 Material above a lower selected Start is cleared first. Full description:
 [3D Waterfall](3d-operations.md#3d-waterfall).
 

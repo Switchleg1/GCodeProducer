@@ -33,7 +33,7 @@ class Operation:
     lead_in: bool = True
     lead_out: bool = True
     lead_length: float = 0.0            # 0 = auto: >= one diameter, with <=10-degree ramp
-    overcut: float = 0.0                # pocket: grow the floor region into void material (never the part)
+    overcut: float = 0.0                # Pocket/Waterfall: grow the removal region into void material
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
     area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
     protect_model: bool = False        # legacy input: migrates a surface-limited Pocket to Waterfall

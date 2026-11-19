@@ -26,7 +26,7 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Combine same-condition feed moves (CAM planner resolution) | On | Writes matching measured sub-moves as one G1. See below. |
 | Colour conflicts and collisions | On | Moves flagged by the planner/stock checks are recoloured as the **Conflict** and **Collision** features in Feature colour mode. |
 | Material boundary limit (Default operation settings) | 0 mm | Initial value for new operations' *Material boundary limit* (see [Pocket](cam/operations.md#overcut-into-void-material)). |
-| Pocket overcut into void (Default operation settings) | 0 mm | Initial overcut for new Pocket operations. Existing operations keep their saved values. |
+| Overcut (Default operation settings) | 0 mm | Initial overcut for new Pocket and 3D Waterfall operations. Existing operations keep their saved values. |
 | Area order (Default operation settings) | Each area to full depth | New operations finish each disconnected area before the next. Select *Each depth across all areas* to visit every area at each depth. Each saved operation has its own override; see [multiple areas](cam/operations.md#multiple-machining-areas). |
 | Messages | all shown | Which pop-ups appear; see below. |
 

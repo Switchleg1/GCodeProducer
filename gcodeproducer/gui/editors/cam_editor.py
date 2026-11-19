@@ -237,9 +237,9 @@ class CAMEditor(QWidget):
         self.stock = self.spin(0, 100, 0)
         self.stock.setToolTip("Pocket/Profile/Waterfall: radial material left on walls/islands. 3D Contour: axial stock above the surface.")
         self.overcut = self.spin(0, 1000, 0)
-        self.overcut.setToolTip("Pocket only: grow the removal region outward by this distance into void material (stock that is not "
-                                "part of the model at any pass depth). Part cross-sections plus roughing clearance are never entered. "
-                                "Lets this pocket overlap the next operation so no thin wall remains between them.")
+        self.overcut.setToolTip("Pocket / 3D Waterfall: extend the removal region outward into stock that is not part of the model "
+                                "at the sampled pass depths, within the material boundary limit. "
+                                "Use this to overlap the next operation and avoid leaving a thin wall.")
         self.material_limit = self.spin(-1000, 1000, 0)
         self.material_limit.setToolTip("Pocket / Waterfall, where the region reaches the blank edge: how far the cutter's outer edge may go "
                                        "relative to that edge. 0 touches it, -1 leaves 1 mm of material, +1 passes 1 mm beyond. "
@@ -248,7 +248,7 @@ class CAMEditor(QWidget):
         self.strategy.setPlaceholderText("Choose a cutting strategy")
         for label, w in (("Area order", self.area_order), ("Stepover (%)", self.stepover),
                          ("Profile side", self.side), ("Roughing clearance (mm)", self.stock),
-                         ("Pocket overcut (mm)", self.overcut),
+                         ("Overcut (mm)", self.overcut),
                          ("Material boundary (mm)", self.material_limit),
                          ("Cutting strategy", self.strategy)):
             form.addRow(label, w)
@@ -382,7 +382,7 @@ class CAMEditor(QWidget):
         op = Operation(name=KIND_LABELS[kind], kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
                        area_order=self.defaults.get("default_area_order", DEFAULTS["default_area_order"]),
                        material_limit=float(self.defaults.get("default_material_limit", DEFAULTS["default_material_limit"])),
-                       overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind == "pocket" else 0.0)
+                       overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind in ("pocket", "waterfall") else 0.0)
         if kind == "pocket" or kind in SURFACE_KINDS:
             op.start = Depth("selection", extreme="max")
             op.end = Depth("selection", extreme="min")
@@ -425,6 +425,7 @@ class CAMEditor(QWidget):
         choices = CUTTING_STRATEGIES.get(op.kind, ()) if op else ()
         self.operation_form.setRowVisible(self.strategy, bool(choices))
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
+        self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
         self.strategy.clear()
         for label, value in choices:
             self.strategy.addItem(label, value)
@@ -456,7 +457,6 @@ class CAMEditor(QWidget):
             self.side.setCurrentIndex(self.side.findData(op.side))
             self.stock.setValue(op.stock)
             self.overcut.setValue(op.overcut)
-            self.overcut.setEnabled(op.kind == "pocket")
             self.material_limit.setValue(op.material_limit)
             self.material_limit.setEnabled(op.kind in ("pocket", "waterfall"))
             self.strategy.setCurrentIndex(self.strategy.findData(cutting_strategy(op.kind, op.strategy)))

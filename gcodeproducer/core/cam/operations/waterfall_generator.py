@@ -40,8 +40,10 @@ class WaterfallGenerator(OperationGenerator):
         from shapely import BufferJoinStyle
         from gcodeproducer.core.cam.engagement import plan_engagement
         from gcodeproducer.core.cam.planner.pass_scheduler import drop_air_paths
+        from .clearing_region import apply_overcut, clearing_part_section, validate_overcut
         from .surface_common import prepare_surface
         op, ctx, material = run.op, planning.ctx, planning.material
+        validate_overcut(op)
         region, surface_top = prepare_surface(run, selection, planning)
         limit = edge = None
         setup = planning.setup
@@ -52,14 +54,17 @@ class WaterfallGenerator(OperationGenerator):
             grow = op.material_limit+op.stock
             if abs(grow) > 1e-12:
                 limit = blank.buffer(grow, join_style=BufferJoinStyle.mitre)
-            if grow > 1e-12:
-                # Clearing paths are offset by radius + stock to leave from every boundary. Stock
-                # to leave protects the part, not the blank: where the selection reaches the blank
-                # edge, extend it by the same amount so the cutter edge still meets that edge
-                # (plus the material boundary limit) instead of leaving a wall of raw stock.
-                edge = limit.difference(blank).intersection(
-                    region.buffer(grow+1e-6, join_style=BufferJoinStyle.mitre))
-                edge = None if edge.is_empty else edge
+        if op.overcut > 0:
+            # Expand the selected boundary, not the per-depth holes left by part shadow or tabs.
+            region = apply_overcut(region, op, clearing_part_section(run, planning), limit, ctx)
+        if setup.stock.allocated and grow > 1e-12:
+            # Clearing paths are offset by radius + stock to leave from every boundary. Stock
+            # to leave protects the part, not the blank: where the region reaches the blank
+            # edge, extend it by the same amount so the cutter edge still meets that edge
+            # (plus the material boundary limit) instead of leaving a wall of raw stock.
+            edge = limit.difference(blank).intersection(
+                region.buffer(grow+1e-6, join_style=BufferJoinStyle.mitre))
+            edge = None if edge.is_empty else edge
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
         produced = reachable = 0

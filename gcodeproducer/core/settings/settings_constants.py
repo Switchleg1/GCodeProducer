@@ -61,8 +61,8 @@ SCHEMA = [
           help="Initial order for new operations with separate machining areas. Each area to full depth finishes "
                "one area before moving to the next; each depth visits all areas before stepping down."),
     Param("default_overcut", "float", 0.0, min=0, max=1000, unit="mm", group="Default operation settings",
-          label="Pocket overcut into void",
-          help="Initial overcut for new Pocket operations."),
+          label="Overcut",
+          help="Initial overcut for new Pocket and 3D Waterfall operations."),
 ]
 
 MESSAGES = {

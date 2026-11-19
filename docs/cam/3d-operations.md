@@ -74,7 +74,10 @@ a tab because this planner does not insert an extra tab-roof pass.
 A cutter-sized region may disappear before End on a slope; those levels are
 skipped. A smaller tool or Contour can reach more of the surface, but neither
 can reach below an overhang or into corners tighter than the cutter.
-Pocket overcut into void is not a Waterfall setting.
+**Overcut** extends the selected removal region into surrounding stock, just
+as in Pocket. The added area respects the sampled part sections and the
+material boundary limit; each pass still protects the model shadow and tabs.
+See [Overcut](operations.md#overcut-into-void-material).
 
 ## Pocket migration
 

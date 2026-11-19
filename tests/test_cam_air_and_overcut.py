@@ -125,9 +125,13 @@ def test_part_section_samples_each_depth_and_adds_clearance():
     assert part_section(mesh, [-4], 1).covers(Point(0, 10.5))   # clearance ring around the boss
 
 
-def test_pocket_overcut_only_outward_of_flange(libset):
+@pytest.mark.parametrize("kind", ["pocket", "waterfall"])
+def test_clearing_overcut_only_outward_of_flange(libset, kind):
     mesh = stepped_part()
-    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    ref = floor_ref(mesh)
+    mesh.triangles = mesh.triangles[:, ::-1].copy()  # outward normals for Waterfall's shadow
+    job, op = job_for(mesh, [ref], libset)
+    op.kind = kind
     job.cam_setup.stock.margin = 6
     job.cam_setup.stock.auto(mesh)
     generate(job, StageContext())
@@ -200,11 +204,15 @@ def test_reach_check_uses_current_material_surface(libset):
     assert not [w for w in job.warnings if "cutting length" in w]
 
 
+@pytest.mark.parametrize("kind", ["pocket", "waterfall"])
 @pytest.mark.parametrize("limit", [0.0, -1.0, 1.0])
 @pytest.mark.parametrize("clearance", [0.0, 0.5])
-def test_material_limit_places_cutter_edge_relative_to_blank_edge(libset, limit, clearance):
+def test_material_limit_places_cutter_edge_relative_to_blank_edge(libset, kind, limit, clearance):
     mesh = stepped_part()
-    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    ref = floor_ref(mesh)
+    mesh.triangles = mesh.triangles[:, ::-1].copy()
+    job, op = job_for(mesh, [ref], libset)
+    op.kind = kind
     job.cam_setup.stock.margin = 2
     job.cam_setup.stock.auto(mesh)
     lo, hi = job.cam_setup.stock.bounds
@@ -227,13 +235,16 @@ def test_material_limit_default_comes_from_global_settings(win):
     win.cb_workflow.setCurrentIndex(win.cb_workflow.findData("cam"))
     ed.set_tools(win.libset["tool"].all())
     ed.add_tool()
-    ed.kind.setCurrentIndex(ed.kind.findData("pocket"))
-    ed.add_operation()
-    assert ed.operation().material_limit == -1.5 and ed.operation().overcut == 2.0
-    assert ed.material_limit.value() == -1.5
-    ed.kind.setCurrentIndex(ed.kind.findData("profile"))
-    ed.add_operation()
-    assert ed.operation().overcut == 0.0
+    form = ed.operation_form
+    assert form.labelForField(ed.overcut).text() == "Overcut (mm)"
+    for kind in ("pocket", "waterfall", "profile", "contour3d", "drill"):
+        ed.kind.setCurrentIndex(ed.kind.findData(kind))
+        ed.add_operation()
+        clearing = kind in ("pocket", "waterfall")
+        assert ed.operation().overcut == (2.0 if clearing else 0.0)
+        assert form.isRowVisible(ed.overcut) == clearing
+        if clearing:
+            assert ed.operation().material_limit == ed.material_limit.value() == -1.5
 
 
 def test_messages_migration_and_validation(tmp_path):

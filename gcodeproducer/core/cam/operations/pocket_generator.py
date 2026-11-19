@@ -46,13 +46,12 @@ class PocketGenerator(OperationGenerator):
         from shapely.geometry import box as shapely_box, Polygon
         from shapely import BufferJoinStyle
         from shapely.ops import unary_union
-        from gcodeproducer.core.cam.paths import pocket_region, part_section, overcut_region
+        from gcodeproducer.core.cam.paths import pocket_region
+        from .clearing_region import apply_overcut, clearing_part_section, validate_overcut
         op, setup, ctx = run.op, planning.setup, planning.ctx
-        start, end, step, count = run.start, run.end, run.step, run.count
         if not 0 < op.stepover <= 100:
             raise ValueError("Pocket stepover must be between 0 and 100 percent")
-        if op.overcut < 0 or not math.isfinite(op.overcut):
-            raise ValueError(f"{op.name}: overcut must be zero or positive")
+        validate_overcut(op)
         if not math.isfinite(op.material_limit):
             raise ValueError(f"{op.name}: material boundary limit must be finite")
         loops = selection.loops
@@ -72,11 +71,7 @@ class PocketGenerator(OperationGenerator):
             raise ValueError(f"{op.name}: material boundary limit removes the whole blank")
         protected = None
         if op.overcut > 0 or selection.stock_edges:
-            depths = [max(end, start - (i + 1) * step) for i in range(count)] + [start]
-            depths.extend(math.ceil(float(hi[2])*1000-1e-9)/1000 for _, hi in planning.tabs
-                          if end < hi[2] < start)
-            # No extra clearance here: the contour inset already leaves op.stock on part walls.
-            protected = part_section(planning.job.mesh, depths, 0.0)
+            protected = clearing_part_section(run, planning)
         if selection.stock_edges:
             # Material references define the exterior removal envelope, never permission
             # to machine through the model or automatically bore its internal holes.
@@ -93,11 +88,7 @@ class PocketGenerator(OperationGenerator):
                 raise ValueError(f"{op.name}: no material outside the protected part at these depths")
             ctx.log(f"  {op.name}: material-boundary pocket; part sections protected")
         if op.overcut > 0:
-            grown = overcut_region(region, op.overcut, protected, limit)
-            ctx.log(f"  {op.name}: overcut {op.overcut:g} mm into void material adds "
-                    f"{grown.area - region.area:.1f} mm² (part sections protected, "
-                    f"material limit {op.material_limit:+g} mm)")
-            region = grown
+            region = apply_overcut(region, op, protected, limit, ctx)
         elif limit is not None and not limit.is_empty and not limit.covers(region):
             region = region.intersection(limit).buffer(0)
             if region.is_empty:
