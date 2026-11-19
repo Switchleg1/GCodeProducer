@@ -1,25 +1,29 @@
-"""Anchored rectilinear fill for unsupported patches of an FDM layer."""
+"""Rectilinear fill for unsupported patches of an FDM layer."""
 import numpy as np
-from shapely import covers, length, intersection, linestrings, points, prepare, union_all
-from shapely.geometry import LineString
+from shapely import box, covers, length, intersection, linestrings, points, prepare, union_all
 
 from gcodeproducer.core.fdm.fdm_constants import BRIDGE_ANGLES
-from gcodeproducer.core.fdm.wall_regions import _rings, slice_region
+from gcodeproducer.core.fdm.wall_regions import _rings
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from gcodeproducer.core.geometry.infill import scan_fill
 
 
-def backing_region(layer, width):
-    """Previous-layer model footprint plus nominal printed support beads."""
-    outline = slice_region(layer.outline)
-    support = [LineString(path.points).buffer((path.width or width)/2)
-               for path in layer.paths if path.feature in ('support', 'support_interface') and len(path.points) >= 2]
-    return union_all([outline, *support]) if support else outline
+def support_footprint(base, mask):
+    """Convert runs of nominal support cells to a continuous XY footprint."""
+    edges = np.diff(mask.astype(np.int8), axis=1, prepend=0, append=0)
+    rows, start = np.where(edges == 1)
+    _, end = np.where(edges == -1)
+    x, y = base.lo
+    res = base.res
+    return union_all(box(x+start*res, y+rows*res, x+end*res, y+(rows+1)*res))
 
 
-def bridge_fill(fill, supported, width, growth, min_area):
-    """Return anchored segments and their coverage, within the current fill region."""
-    if fill.is_empty or supported.is_empty:
+def bridge_fill(fill, supported, width, growth, min_area, support_material=None):
+    """Generate bridge lines for unsupported fill, preferring backed endpoints."""
+    if support_material is not None:
+        # Growth can extend into model material, but not over generated support.
+        fill = fill.difference(support_material)
+    if fill.is_empty:
         return [], None
     anchors = supported.buffer(1e-7)
     prepare(anchors)
@@ -31,25 +35,23 @@ def bridge_fill(fill, supported, width, growth, min_area):
         if sweeps:
             region = region.difference(union_all(sweeps))
         rings = list(_rings(region))
-        best, score = None, (0, 0.)
+        best, score = None, (0, 0., 0.)
         for phi in BRIDGE_ANGLES:
             segs = scan_fill(rings, phi, width, width/2, 0.)
-            if not len(segs):
-                continue
-            anchored = covers(anchors, points(segs[:, 0])) & covers(anchors, points(segs[:, 1]))
-            segs = segs[anchored]
             if not len(segs):
                 continue
             spans = length(intersection(linestrings(segs), patch))
             keep = spans > 1e-7
             if not keep.any():
                 continue
-            spans = spans[keep]
-            # Prefer good coverage, then shorter unsupported spans. Quantize
-            # coverage to avoid picking a diagonal just due to scan phase.
-            rank = (max(1, round(20*width*float(spans.sum())/patch.area)), -float(spans.max()))
+            spans, segs = spans[keep], segs[keep]
+            ends = covers(anchors, points(segs.reshape(-1, 2))).reshape(-1, 2)
+            # Prefer good coverage, then backed endpoints and shorter spans.
+            # Quantize coverage to avoid choosing a diagonal due to scan phase.
+            rank = (max(1, round(20*width*float(spans.sum())/patch.area)),
+                    float(ends.mean()), -float(spans.max()))
             if rank > score:
-                best, score = segs[keep], rank
+                best, score = segs, rank
         if best is not None:
             paths.extend(best)
             sweeps.append(union_all([line.buffer(width/2, cap_style=1) for line in linestrings(best)]))

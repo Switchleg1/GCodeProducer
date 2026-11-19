@@ -12,3 +12,4 @@ class Layer:
     paths: list = field(default_factory=list)       # list[Path] in print order
     solid_mask: object = None                       # geometry.RegionMask: cells filled solid (top/bottom)
     bridge_region: object = None                    # FDM: area occupied by bridge beads
+    support_region: object = None                   # FDM: footprint of generated support on this layer

@@ -11,7 +11,8 @@ from __future__ import annotations
 from gcodeproducer.stages.fdm.fdm_constants import FDMTOPBOTTOM_PARAMS
 import numpy as np, gcodeproducer.core.geometry.kernel as geometry, gcodeproducer.core.geometry.infill as infill_gen
 from gcodeproducer.core.jobs.path import Path
-from gcodeproducer.core.fdm.bridges import backing_region, bridge_fill, exclude_bridges
+from shapely import union_all
+from gcodeproducer.core.fdm.bridges import bridge_fill, exclude_bridges
 from gcodeproducer.core.fdm.wall_regions import slice_region
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
@@ -60,12 +61,16 @@ class FDMTopBottom(SliceStage):
         inset = lw * 0.5 * (1.0 - params["overlap"] / 100.0)
         total = bridge_count = 0
         growth = job.mat('bridge_growth', .8) if bridge_min else 0.
+        support_gap = job.settings.get('bridge_support_gap_layers', 0)
         for i, layer in enumerate(job.layers):
             layer.bridge_region = None
             if bridge_min and i > 0 and layer.contours:
                 fill = slice_region(layer.contours)
-                supported = backing_region(job.layers[i-1], lw)
-                segments, layer.bridge_region = bridge_fill(fill, supported, lw, growth, bridge_min)
+                supported = slice_region(job.layers[i-1].outline)
+                support_regions = [previous.support_region for previous in job.layers[max(0, i-support_gap-1):i]
+                                   if previous.support_region is not None]
+                support_material = union_all(support_regions) if support_regions else None
+                segments, layer.bridge_region = bridge_fill(fill, supported, lw, growth, bridge_min, support_material)
                 for segment in infill_gen.order_segments(np.asarray(segments)):
                     layer.paths.append(Path('bridge', segment, width=lw))
                     bridge_count += 1

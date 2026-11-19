@@ -89,8 +89,9 @@ In **Libraries → Material → Bridging**, set **Minimum unsupported area** abo
 zero to enable bridge paths. The area is measured in mm² for each connected
 unsupported patch before growth. **Anchor growth** extends each qualifying
 patch in every direction, clipped to the printable fill region. The slicer
-tries straight parallel lines in several directions and only emits bridge
-lines that land on support at both ends. Bridge paths replace overlapping
+tries straight parallel lines in several directions. Backed endpoints help
+choose a direction but are not required: unsupported fill on one-sided
+overhangs also gets the bridge settings. Bridge paths replace overlapping
 solid or sparse infill and can be inspected by feature in Preview.
 
 - **Speed mode:** fixed mm/s or a percentage of the requested solid infill speed.
@@ -100,10 +101,10 @@ solid or sparse infill and can be inspected by feature in Preview.
 - **Flow modifier:** percentage of the material’s normal extrusion flow.
   Coasting is skipped on bridge lines so the end anchor still receives filament.
 
-Detection estimates support from the previous layer’s model outline and nearby
-printed support lines. It does not model gaps between sparse infill beads or
-predict sag. One-sided overhangs are not bridges; inspect the resulting paths
-before printing. Very low infill can still leave long unsupported solid lines. “100%” fill does not guarantee absence of
+Detection excludes the previous layer’s model outline and generated support
+beneath the patch, including support separated by the configured Z gap. It
+estimates coverage rather than modelling individual sparse infill or support
+beads, and it does not predict sag. Inspect the resulting paths before printing. Very low infill can still leave long unsupported solid lines. “100%” fill does not guarantee absence of
 all voids; wall offsets, overlap, path spacing and geometry quality still matter.
 
 [Shell settings](../reference/stage-settings.md#fdm_top_bottom) ·

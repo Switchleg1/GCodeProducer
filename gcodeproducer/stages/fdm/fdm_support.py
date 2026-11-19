@@ -79,6 +79,10 @@ class FDMSupport(SliceStage):
         roof_spacing = lw / (params["interface_density"] / 100.0)
         n_body = n_roof = 0
         used = 0
+        track_bridges = job.mat('bridge_min_area', 0.) > 0
+        if track_bridges:
+            from gcodeproducer.core.fdm.bridges import support_footprint
+            job.settings['bridge_support_gap_layers'] = params['z_gap_layers']
         for i, layer in enumerate(layers):
             s = sup[i]
             if not s.any():
@@ -120,6 +124,8 @@ class FDMSupport(SliceStage):
                     n_body += len(arr)
                 else:
                     n_roof += len(arr)
+            if track_bridges and new:
+                layer.support_region = support_footprint(base, s)
             # print support right after any skirt / brim on the layer
             at = 0
             while at < len(layer.paths) and layer.paths[at].feature == "skirt":

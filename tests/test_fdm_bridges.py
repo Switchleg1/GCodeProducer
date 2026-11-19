@@ -16,12 +16,15 @@ from gcodeproducer.stages.fdm.fdm_infill import FDMInfill
 from gcodeproducer.stages.fdm.fdm_top_bottom import FDMTopBottom
 
 
-def test_bridge_requires_area_and_two_supported_ends():
+def test_bridge_requires_area_but_not_two_supported_ends():
     fill = box(0, 0, 12, 8)
     shore = box(0, 0, 4, 8)
     backing = unary_union([shore, box(8, 0, 12, 8)])
     assert not bridge_fill(fill, backing, .45, 1., 33.)[0]
-    assert not bridge_fill(fill, shore, .45, 1., 1.)[0]
+    cantilever, _ = bridge_fill(fill, shore, .45, 1., 1.)
+    assert cantilever
+    assert any(not all(shore.covers(Point(p)) for p in segment) for segment in cantilever)
+    assert bridge_fill(fill, box(20, 20, 21, 21), .45, 1., 1.)[0]
     small, _ = bridge_fill(fill, backing, .45, .5, 32.)
     large, coverage = bridge_fill(fill, backing, .45, 1., 32.)
     assert small and large
@@ -33,6 +36,28 @@ def test_bridge_requires_area_and_two_supported_ends():
     remaining = exclude_bridges(ordinary, coverage, .1)
     assert len(remaining) == 2
     assert all(LineString(s).intersection(coverage).length < 1e-8 for s in remaining)
+
+
+def test_generated_support_excludes_bridge_fill_across_configured_gap(libset, cube_stl):
+    from gcodeproducer.core.fdm.bridges import support_footprint
+    from gcodeproducer.core.geometry.region_mask import RegionMask
+
+    job = build_job('fdm', libset.machines.get('generic-220-fdm'), mesh=load_mesh(cube_stl),
+                    material=Profile('material', 'Gap test', values={'bridge_min_area': 1.}))
+    slab = box(0, 0, 12, 8)
+    base = RegionMask([0, 0], [12, 8], 1.)
+    mask = np.zeros_like(base.grid)
+    mask[2:10, 2:8] = True
+    footprint = support_footprint(base, mask)
+    assert footprint.equals(box(0, 0, 6, 8))
+    ring = np.asarray(slab.exterior.coords)[:-1]
+    job.settings['bridge_support_gap_layers'] = 1
+    job.layers = [Layer(0, .2, .2, support_region=footprint), Layer(1, .4, .2),
+                  Layer(2, .6, .2, contours=[ring], outline=[ring])]
+    FDMTopBottom().run(job, FDMTopBottom.defaults(), StageContext(None, None))
+    paths = [p for p in job.layers[2].paths if p.feature == 'bridge']
+    assert paths and all(LineString(p.points).intersection(footprint).length < 1e-8 for p in paths)
+    assert any(p.feature == 'top_infill' for p in job.layers[2].paths)
 
 
 @pytest.mark.parametrize('mode, feed, pwm', [('fixed', 1200, 204), ('modifier', 600, 64)])
