@@ -19,6 +19,7 @@ Workflow: fdm. Optional stage: no.
 |---|---|---|---|---|
 | `layer_height` — Layer height | float / mm | `0.2` | minimum 0.01; maximum 2 | Layer height. Height of every layer after the first. |
 | `first_layer_height` — First layer height | float / mm | `auto` | minimum 0.01; maximum 2; `auto` accepted | Layer height. auto = same as the layer height. |
+| `merge_shells` — Merge overlapping shells | bool | `False` | No schema bound | Mesh repair. Merge overlapping closed solid shells during slicing instead of treating their overlap as a hole. Original STL is unchanged; inspect the resulting layers in Preview. |
 
 ## fdm_skirt_brim
 

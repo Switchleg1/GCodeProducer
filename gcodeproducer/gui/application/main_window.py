@@ -1944,7 +1944,7 @@ class MainWindow(QMainWindow):
                       everywhere=self.cb_gen_everywhere.isChecked(), xy_distance=sp["xy_distance"],
                       gap=sp["z_gap_layers"], bottom_gap=sp["bottom_z_gap_layers"], min_area=sp["min_area"],
                       first_layer_height=flh, block_size=self.sp_place_size.value(),
-                      fill_holes=ms.fill_holes, edge_margin=ms.extend)
+                      fill_holes=ms.fill_holes, edge_margin=ms.extend, merge_shells=sl['merge_shells'])
         if wait:                                      # synchronous (tests / scripting)
             self._blocks_done(support_generate(**kwargs))
             return
@@ -2275,7 +2275,8 @@ class MainWindow(QMainWindow):
             self.log("The pipeline produced no G-code (is an output stage enabled?)")
             self._update_enabled()
             return
-        self.cam_warnings = out.get("warnings", [])
+        warnings = out.get("warnings", [])
+        self.cam_warnings = warnings if out["program"].machine == wf.CAM else []
         self.model_viewer.set_tab_bounds(out.get("tab_bounds", []))
         self.viewer.set_tab_bounds(out.get("tab_bounds", []))
         self.program, self.tp = out["program"], out["toolpath"]
@@ -2316,6 +2317,9 @@ class MainWindow(QMainWindow):
                                 "\n".join(self.cam_warnings[:15]) +
                                 "\n\nFlagged moves are coloured Conflict / Collision in Feature colour mode. Review the toolpath and full log before machining; these checks are approximate 2.5D, not a full collision simulation.",
                         record=False)
+
+        if warnings and self.program.machine == wf.FDM:
+            self.notify("fdm_mesh_warnings", "warning", "FDM mesh warning", "\n".join(warnings), record=False)
 
     def _slice_failed(self, tb):
         self.progress.setVisible(False)

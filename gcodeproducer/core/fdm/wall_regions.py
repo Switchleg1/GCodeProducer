@@ -18,7 +18,7 @@ def slice_region(contours):
     return region
 
 
-def _rings(region):
+def region_rings(region):
     for poly in polygons(region):
         poly = orient(poly, sign=1.)
         for ring in (poly.exterior, *poly.interiors):
@@ -39,7 +39,7 @@ def wall_levels(contours, width, count):
     levels = []
     for k in range(count):
         inset = region.buffer(-width*(k+.5), quad_segs=8)
-        levels.append(list(_rings(inset)))
+        levels.append(list(region_rings(inset)))
         if inset.is_empty:
             break
     return levels, levels[-1]

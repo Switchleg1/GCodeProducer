@@ -67,6 +67,7 @@ SCHEMA = [
 
 MESSAGES = {
     "cam_warnings": "CAM material / engagement warnings after generation",
+    "fdm_mesh_warnings": "FDM mesh warnings after slicing",
     "cam_stale_export": "Confirm saving out-of-date G-code (unchecked: save without asking)",
     "cam_warnings_export": "Confirm exporting with CAM warnings (unchecked: export without asking)",
     "cannot_slice": "Cannot slice / generate (setup error)",

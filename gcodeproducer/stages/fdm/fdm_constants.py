@@ -103,6 +103,9 @@ FDMSLICE_PARAMS = [
         Param("first_layer_height", "float", AUTO, unit="mm", min=0.01, max=2.0, step=0.02,
               allow_auto=True, hint=0.25, group="Layer height",
               help="auto = same as the layer height."),
+        Param("merge_shells", "bool", False, label="Merge overlapping shells", group="Mesh repair",
+              help="Merge overlapping closed solid shells during slicing instead of treating their overlap as a hole. "
+                   "Original STL is unchanged; inspect the resulting layers in Preview."),
     ]
 
 FDMSUPPORT_PARAMS = [

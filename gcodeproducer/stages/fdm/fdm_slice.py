@@ -30,7 +30,21 @@ class FDMSlice(SliceStage):
         # every layer from the bed up - empty layers under a model lifted off the bed
         # are kept so support can be built underneath it
         from gcodeproducer.core.fdm.support import slice_layers
-        layers = slice_layers(mesh, lh, flh)
+        overlaps = []
+        merge = params.get("merge_shells", False)
+        layers = slice_layers(mesh, lh, flh, merge_shells=merge, overlap_layers=overlaps)
+        if overlaps:
+            first, last = (layers[i] for i in (overlaps[0], overlaps[-1]))
+            msg = (f"Overlapping closed solid shells on {len(overlaps)} sliced layers "
+                   f"(first at Z{first.z:g} mm, last at Z{last.z:g} mm).")
+            if merge:
+                ctx.log(f"  {msg} Merged the overlap for slicing; source STL unchanged.")
+            else:
+                warning = (f"{msg} The overlap may slice as a hole. To merge the solids, turn on "
+                           "Layers → Mesh repair → Merge overlapping shells and slice again. "
+                           "Inspect the affected layers in Preview.")
+                job.warnings.append(warning)
+                ctx.log(f"FDM MESH WARNING: {warning}")
         ctx.progress(1.0)
         job.layers = layers
         empty = sum(1 for layer in layers if not layer.outline)

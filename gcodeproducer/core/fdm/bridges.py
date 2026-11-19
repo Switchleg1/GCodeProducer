@@ -3,7 +3,7 @@ import numpy as np
 from shapely import box, covers, length, intersection, linestrings, points, prepare, union_all
 
 from gcodeproducer.core.fdm.fdm_constants import BRIDGE_ANGLES
-from gcodeproducer.core.fdm.wall_regions import _rings
+from gcodeproducer.core.fdm.wall_regions import region_rings
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from gcodeproducer.core.geometry.infill import scan_fill
 
@@ -34,7 +34,7 @@ def bridge_fill(fill, supported, width, growth, min_area, support_material=None)
         region = patch.buffer(growth).intersection(fill) if growth else patch
         if sweeps:
             region = region.difference(union_all(sweeps))
-        rings = list(_rings(region))
+        rings = list(region_rings(region))
         best, score = None, (0, 0., 0.)
         for phi in BRIDGE_ANGLES:
             segs = scan_fill(rings, phi, width, width/2, 0.)

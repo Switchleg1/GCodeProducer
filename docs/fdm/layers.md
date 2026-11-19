@@ -12,6 +12,7 @@ and working contours for later stages.
 |---|---|---|
 | Layer height | 0.2 mm | Height of every layer after the first |
 | First layer height | `auto` | Explicit first height, or the normal height when auto |
+| Merge overlapping shells | Off | Under **Mesh repair**: combine overlapping closed solid shells during slicing |
 
 Both explicit heights accept 0.01–2.0 mm in the stage schema. That range is a
 software input range, not a nozzle recommendation. Nozzle min/max layer
@@ -36,6 +37,25 @@ support it physically.
 
 The process never controls centring, rotation or scale. Older references to a
 Layers “centre on bed” option are obsolete; use Model → Position/Center.
+
+## Overlapping shells
+
+Two closed solids in an STL can overlap even when there are no open edges.
+The normal even–odd slice rule can read the overlap as a hole. If slicing
+finds overlapping closed solids, it reports the affected layer count and Z
+range in **Messages**. The pop-up can be managed under **Settings → Messages**.
+
+To repair the slice, turn on **Layers → Mesh repair → Merge overlapping shells**
+and slice again. The slicer combines the solids on affected layers instead
+of cancelling their overlap; inward-wound cavities still subtract material.
+Review the affected layers in Preview and regenerate any automatic support
+blocks you created before enabling the option.
+
+This changes the toolpath, not the STL or the Prepare model. Leave the option
+off if the resulting shape is not what you want. This is not a general mesh
+repair: it does not close open edges or repair self-intersections within a
+single shell. For those cases, edit a copy in a mesh editor, repair the mesh
+there and import the corrected STL.
 
 ## Effects and inspection
 

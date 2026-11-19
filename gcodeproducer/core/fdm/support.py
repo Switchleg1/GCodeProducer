@@ -314,7 +314,8 @@ def tiled_blocks_from_columns(sup, layers, base, tile: float, gap: int = 1) -> l
     return blocks
 
 
-def slice_layers(mesh, layer_height: float, first_layer_height: float | None = None) -> list:
+def slice_layers(mesh, layer_height: float, first_layer_height: float | None = None, *,
+                 merge_shells=False, overlap_layers=None) -> list:
     """Every layer from the bed to the top of the mesh (empty ones included)."""
     from gcodeproducer.core.jobs.layer import Layer
     flh = first_layer_height or layer_height
@@ -326,21 +327,27 @@ def slice_layers(mesh, layer_height: float, first_layer_height: float | None = N
         heights.append((round(z, 4), h))
         planes.append(z - h * 0.5)
         z += layer_height
+    if merge_shells or overlap_layers is not None:
+        from .shell_merge import slice_with_shell_check
+        contours_by_layer = slice_with_shell_check(mesh, planes, merge_shells,
+                                                  overlap_layers if overlap_layers is not None else [])
+    else:
+        contours_by_layer = geometry.slice_planes(mesh, planes)
     return [Layer(index=i, z=z, height=h, contours=list(contours), outline=list(contours))
-            for i, ((z, h), contours) in enumerate(zip(heights, geometry.slice_planes(mesh, planes)))]
+            for i, ((z, h), contours) in enumerate(zip(heights, contours_by_layer))]
 
 
 def generate_blocks(mesh, layer_height: float = 0.2, line_width: float = 0.45, angle: float = 50.0,
                     everywhere: bool = False, xy_distance: float = 0.8, gap: int = 1, bottom_gap: int = 1,
                     min_area: float = 1.0, first_layer_height: float | None = None,
                     block_size: float | None = None, fill_holes: float = 0.0,
-                    edge_margin: float = 0.0) -> list:
+                    edge_margin: float = 0.0, merge_shells: bool = False) -> list:
     """Automatic support for a placed mesh, returned as editable blocks.
 
     ``block_size`` tiles the support with blocks of that size; None gives one
     bounding block per support island.
     """
-    layers = slice_layers(mesh, layer_height, first_layer_height)
+    layers = slice_layers(mesh, layer_height, first_layer_height, merge_shells=merge_shells)
     if len(layers) < 2:
         return []
     lo, hi = mesh.bounds
