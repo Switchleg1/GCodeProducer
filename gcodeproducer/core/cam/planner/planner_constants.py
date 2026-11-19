@@ -20,6 +20,9 @@ PHASE_FEATURES = {"approach": "air", "plunge": "plunge", "lead_in": "lead_in", "
 ENGAGEMENT_FEATURES = {"slot": "slot", "high": "high_engagement", "cut": "cut", "hsm": "hsm", "air": "air"}
 
 MIN_FEED = .0001             # mm/min: smaller effective feeds cannot be represented safely
+# Split sub-moves of these phases may be written as one G1. Lead-ins and
+# plunges stay separate so the replayed entry-depth checks keep their spans.
+MERGE_PHASES = frozenset(("cut", "link", "lead_out"))
 MOTION_CHUNK_SIZE = 4096     # flush serialized motion without keeping the full plan in RAM
 ENGAGED = 1e-6               # engagement above this counts as material contact
 SETTLE_PASSES = 3            # planar lead start-height settling iterations

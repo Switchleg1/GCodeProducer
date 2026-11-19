@@ -32,6 +32,23 @@ SCHEMA = [
           label="Maximum grid cells",
           help="Upper bound on height-field cells. When width x depth / resolution^2 exceeds it the grid is "
                "coarsened and a warning is issued."),
+    Param("cam_surface_resolution", "float", 0., min=0, max=5, unit="mm", decimals=3,
+          group="CAM planner resolution", label="3D surface grid",
+          help="Cell size of the model height grid used by 3D Contour. 0 = auto: the material grid "
+               "resolution, no coarser than tool diameter / 40 and no finer than 0.05 mm."),
+    Param("cam_surface_tolerance", "float", .005, min=.001, max=1, unit="mm", decimals=3,
+          group="CAM planner resolution", label="3D path tolerance",
+          help="Maximum deviation when simplifying 3D Contour paths. Larger values write fewer points "
+               "and can leave or remove up to this much more material along the surface."),
+    Param("cam_engagement_step", "float", 0., min=0, max=50, unit="mm", decimals=3,
+          group="CAM planner resolution", label="Engagement sample spacing",
+          help="Length of each sub-move measured for engagement, feed and material removal on XYZ moves. "
+               "0 = auto (half the tool radius, at least the material grid cell). Longer steps plan faster "
+               "but average engagement over more distance."),
+    Param("cam_merge_moves", "bool", True, group="CAM planner resolution",
+          label="Combine same-condition feed moves",
+          help="Write consecutive measured sub-moves of one straight move as a single G1 when phase, feed "
+               "and engagement band match. Every sub-move is still measured and removes material."),
     Param("highlight_conflicts", "bool", True, group="Warnings", label="Colour conflicts and collisions",
           help="Recolour flagged moves as Conflict / Collision features in Feature colour mode."),
     Param("default_material_limit", "float", 0.0, min=-1000, max=1000, unit="mm", group="Default operation settings",

@@ -297,6 +297,43 @@ def test_contour3d_clears_in_depth_limited_passes_then_follows_the_surface(libse
     assert_program_clear(job.program)
 
 
+def test_merged_feed_moves_keep_measurement_material_and_checks(libset):
+    def emitted(merge, step=0.):
+        job, _ = surface_job(libset, kind="contour3d")
+        job.preferences.update(cam_merge_moves=merge, cam_engagement_step=step)
+        generate(job, StageContext())
+        CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+        return job
+
+    from gcodeproducer.core.gcode.simulation import simulate
+    plain, merged = emitted(False), emitted(True)
+    feeds = [sum(line.cmd == "G1" for line in job.program.lines) for job in (plain, merged)]
+    assert feeds[1] < feeds[0]
+    assert plain.warnings == merged.warnings
+    for a, b in zip(plain.material_results, merged.material_results, strict=True):
+        np.testing.assert_allclose(a["heights"], b["heights"], atol=1e-3)
+    sim_plain, sim_merged = simulate(plain.program), simulate(merged.program)
+    assert sim_plain.dist.sum() == pytest.approx(sim_merged.dist.sum(), rel=1e-6)
+    # Peak engagement is preserved on merged lines.
+    assert max(l.engagement for l in merged.program.lines if l.note) == pytest.approx(
+        max(l.engagement for l in plain.program.lines if l.note))
+    assert_program_clear(merged.program)
+    # A longer engagement step samples (and so writes) fewer unmerged moves.
+    coarse = emitted(False, 4.)
+    assert sum(line.cmd == "G1" for line in coarse.program.lines) < feeds[0]
+
+
+def test_planner_resolution_preferences_reach_contour_geometry(libset):
+    lines = []
+    for tolerance, resolution in ((.005, 0.), (.2, 0.), (.005, .5)):
+        job, _ = surface_job(libset, kind="contour3d")
+        job.preferences.update(cam_surface_tolerance=tolerance, cam_surface_resolution=resolution)
+        generate(job, StageContext())
+        lines.append(sum(len(p.points) for layer in job.layers for p in layer.paths))
+        assert_clear_of_model(job, tolerance=max(.02, tolerance+.01))
+    assert lines[1] < lines[0] and lines[2] != lines[0]
+
+
 def test_contour3d_raises_floor_over_retained_areas_and_leaves_stock():
     surface = DropSurface(wedge_pocket(), (5, 5), (35, 25), .1, 2_000_000)
     region = box(12, 10, 28, 20)

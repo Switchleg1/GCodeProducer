@@ -14,14 +14,15 @@ def condition(state, a, b, radius, operation, tool, machine):
     return EngagementModel(operation, tool, machine).condition(HeightSampler(state), a, b, radius)
 
 
-def sample_step(radius, resolution):
-    return max(resolution, radius*SURFACE_MOVE_STEP_RADIUS)
+def sample_step(radius, resolution, spacing=0.):
+    """Engagement sub-move length; ``spacing`` 0 = automatic (half the tool radius)."""
+    return max(resolution, spacing if spacing > 0 else radius*SURFACE_MOVE_STEP_RADIUS)
 
 
-def split_move(a, b, radius, resolution):
+def split_move(a, b, radius, resolution, spacing=0.):
     """Bound the XY/Z span over which one cutting classification is applied."""
     a, b = np.asarray(a, float), np.asarray(b, float)
-    step = sample_step(radius, resolution)
+    step = sample_step(radius, resolution, spacing)
     count = max(1, int(math.ceil(max(np.linalg.norm(b[:2]-a[:2]), abs(b[2]-a[2]))/step)))
     for i in range(1, count+1):
         yield a+(b-a)*(i/count)

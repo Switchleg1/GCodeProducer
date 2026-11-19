@@ -48,7 +48,8 @@ def _simplify_mask(points, tolerance, previous=None):
 class SurfaceSimplifier:
     """Reuse decisions from just the previous band, for this operation only."""
 
-    def __init__(self):
+    def __init__(self, tolerance=SURFACE_SIMPLIFY):
+        self.tolerance = tolerance
         self._previous = []
 
     def __call__(self, paths):
@@ -56,7 +57,7 @@ class SurfaceSimplifier:
         for i, points in enumerate(paths):
             if len(points) < SURFACE_REUSE_MIN_POINTS:
                 current.append(None)
-                result.append(simplify3d(points))
+                result.append(simplify3d(points, self.tolerance))
                 continue
             prior = self._previous[i] if i < len(self._previous) else None
             if prior is not None and prior[0].shape == points.shape:
@@ -72,7 +73,7 @@ class SurfaceSimplifier:
                 context = mask, intervals, changed
             else:
                 context = None, (), None
-            mask, intervals = _simplify_mask(points, SURFACE_SIMPLIFY, context)
+            mask, intervals = _simplify_mask(points, self.tolerance, context)
             reduced = points[mask]
             current.append((points, mask, intervals, reduced))
             result.append(reduced)

@@ -122,11 +122,14 @@ colours and radial-engagement colours use this metadata; it is a **grid estimate
 not measured tooth load. Without allocated stock, the emitter assumes a
 conservative model-bounds blank and logs that limitation.
 
-Heights use a conservative upper-surface grid: the smaller of global material
-resolution and diameter/40, no finer than 0.05 mm. The cell cap may coarsen it
+Heights use a conservative upper-surface grid. By default (**3D surface grid**
+= 0) it is the smaller of global material resolution and diameter/40, no finer
+than 0.05 mm; an explicit value overrides that. The cell cap may coarsen it
 with a warning. Slopes retain extra stock (roughly one to four cells times
-slope); paths are simplified to 0.005 mm. Smaller stepover/resolution improves
-surface detail but increases computation and output size.
+slope); paths are simplified to **3D path tolerance** (default 0.005 mm).
+Smaller stepover/resolution improves surface detail but increases computation
+and output size. See [CAM planner resolution](../settings.md#cam-planner-resolution)
+for the speed/size trade-offs.
 
 ## Limits and safety
 

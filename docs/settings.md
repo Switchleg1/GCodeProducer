@@ -20,6 +20,10 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Lead-in start above material | 0.5 mm | Where a lead-in ramp begins above the current local material (also the rapid-down target). A plain plunge stops its rapid at the short retract clearance and feeds from there. |
 | Material grid resolution | 0.2 mm | Height-field cell size for current-material contact checks, lead entry heights and the Material display. |
 | Maximum grid cells | 2,000,000 | Memory guard. If `width × depth / resolution²` exceeds it the grid is coarsened and a warning is issued. |
+| 3D surface grid (CAM planner resolution) | 0 = auto | 3D Contour model height grid. See below. |
+| 3D path tolerance (CAM planner resolution) | 0.005 mm | 3D Contour path simplification. See below. |
+| Engagement sample spacing (CAM planner resolution) | 0 = auto | Length of measured XYZ sub-moves. See below. |
+| Combine same-condition feed moves (CAM planner resolution) | On | Writes matching measured sub-moves as one G1. See below. |
 | Colour conflicts and collisions | On | Moves flagged by the planner/stock checks are recoloured as the **Conflict** and **Collision** features in Feature colour mode. |
 | Material boundary limit (Default operation settings) | 0 mm | Initial value for new operations' *Material boundary limit* (see [Pocket](cam/operations.md#overcut-into-void-material)). |
 | Pocket overcut into void (Default operation settings) | 0 mm | Initial overcut for new Pocket operations. Existing operations keep their saved values. |
@@ -84,6 +88,23 @@ earlier operations actually having run. A path is dropped only when its
 are kept and their engagement classified normally. When a dropped path broke
 a stay-down chain the next path makes its own entry (short retract above the
 current material, or safe Z when short retracts are off).
+
+## CAM planner resolution
+
+These settings trade 3D accuracy against planning time, memory and G-code size.
+They apply to every CAM job and mark existing CAM output stale.
+
+| Setting | Default | Effect |
+|---|---|---|
+| 3D surface grid | 0 (auto) | Cell size of the drop-cutter height grid for 3D Contour. Auto uses the material grid resolution, no coarser than tool diameter / 40 and no finer than 0.05 mm. A coarser grid leaves more stock on slopes; it never cuts below the conservative surface. |
+| 3D path tolerance | 0.005 mm | Maximum deviation when simplifying 3D Contour paths. Larger values write fewer points; paths can deviate up to this much from the sampled surface heights, in either direction. |
+| Engagement sample spacing | 0 (auto) | Length of each XYZ sub-move measured for engagement, feed and material removal. Auto is half the tool radius (at least one material grid cell). Longer spacing plans faster but averages engagement over more distance. |
+| Combine same-condition feed moves | On | Consecutive measured sub-moves of one straight move are written as a single G1 when phase, feed and engagement band match; the merged line reports the peak engagement. Every sub-move is still measured and removes material. Lead-ins and plunges are never merged, so entry checks see the same spans. |
+
+On a 23-pass Baby Yoda 3D Contour test, combining moves alone cut the program
+from 473,632 to 68,318 lines (10.4 MB to 2.1 MB) with identical warnings;
+also setting a 0.02 mm path tolerance and 1.5 mm engagement spacing brought it
+to 41,373 lines and halved computation time. Results depend on the model.
 
 ## Material grid resolution
 

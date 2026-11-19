@@ -17,6 +17,17 @@ from .entry_exit_planner import EntryExitPlanner
 from .link_planner import LinkPlanner
 
 
+def _same_band(a, b):
+    if a is None or b is None:
+        return a is b
+    return (a.regime, a.hand, a.feed_factor, a.conflict) == (b.regime, b.hand, b.feed_factor, b.conflict)
+
+
+def _wider(a, b):
+    """Merged sub-moves report their peak engagement."""
+    return a if a is None or a.engagement >= b.engagement else b
+
+
 class MotionPlanner:
     def __init__(self, job, ctx, stock, position, rpm, *, consume=None):
         from collections import Counter
@@ -33,6 +44,8 @@ class MotionPlanner:
         self.short_retracts = bool(pref(job, "short_retracts"))
         self.lead_clearance = max(.05, float(pref(job, "lead_clearance")))
         self.travel_clearance = max(.1, float(pref(job, "retract_clearance")))
+        self.sample_spacing = max(0., float(pref(job, "cam_engagement_step")))
+        self.merge_moves = bool(pref(job, "cam_merge_moves"))
         self.machine = job.machine.resolved()
         from gcodeproducer.core.cam.engagement import engagement_band
         engagement_band(.5, self.machine)   # validate thresholds even for an all-air program
@@ -49,8 +62,9 @@ class MotionPlanner:
 
     # ------------------------------------------------------------- segments
     def add(self, phase, end=None, condition=None, rate=None, feature="rapid", comment=None,
-            words=None, force_feed=False):
-        start = self.position.copy() if end is not None else None
+            words=None, force_feed=False, start=None):
+        if end is not None and start is None:
+            start = self.position.copy()
         segment = MotionSegment(phase, start, None if end is None else np.asarray(end, float).copy(),
                                 condition, rate, feature, comment, self.layer, self.op, words, force_feed)
         self.plan.add(segment)
@@ -92,15 +106,30 @@ class MotionPlanner:
         Returns False when ``cleared_only`` and the move would meet current material.
         """
         from gcodeproducer.core.cam.surface_engagement import split_move
+        from .planner_constants import MERGE_PHASES
         target = np.asarray(target, float)
         sampler = self.sampler(state)
-        steps = split_move(self.position, target, self.radius, state.resolution) if split and state is not None else (target,)
+        split = split and state is not None
+        steps = (split_move(self.position, target, self.radius, state.resolution, self.sample_spacing)
+                 if split else (target,))
+        # Sub-moves of one straight move are collinear (up to emitted Z rounding).
+        merge = split and self.merge_moves and phase in MERGE_PHASES
+        pending = None                                  # [start, end, condition, rate, feature, force]
+
+        def flush():
+            nonlocal pending
+            if pending is not None:
+                first, last, condition, rate, feature, force = pending
+                self.add(phase, last, condition, rate, feature, comment, force_feed=force, start=first)
+                pending = None
+
         for q in steps:
             # Exact XY keeps planned stay-down endpoints matching; Z is the emitted value.
             q = np.array([q[0], q[1], float(format_number(q[2], 3))])
             if np.linalg.norm(q-self.position) < 1e-9:
                 continue
             if cleared_only and state is not None and state.contact(self.position, q, self.radius):
+                flush()
                 return False
             c = cond
             if measured and sampler is not None:
@@ -108,12 +137,23 @@ class MotionPlanner:
             drop, run = self.position[2]-q[2], float(np.linalg.norm(q[:2]-self.position[:2]))
             steep = drop > 1e-9 and drop > RAMP_TAN*run
             rate = self.policy.rate(phase, self.feed, self.plunge, c, steep)
+            feature = self.policy.feature(phase, c)
             start = self.position.copy()
-            self.add(phase, q, c, rate, self.policy.feature(phase, c), comment, force_feed=force_feed)
+            if pending is not None and pending[3] == rate and pending[4] == feature and _same_band(pending[2], c):
+                pending[1], pending[2] = q, _wider(pending[2], c)
+                self.position = q
+            else:
+                flush()
+                if merge:
+                    pending = [start, q, c, rate, feature, force_feed]
+                    self.position = q
+                else:
+                    self.add(phase, q, c, rate, feature, comment, force_feed=force_feed)
             force_feed = False
             if sampler is not None:
                 sampler.remove_move(start, q, self.radius)
             self.samples += 1
+        flush()
         return True
 
     def descend(self, state, xy, z):
@@ -239,8 +279,10 @@ class MotionPlanner:
         rate_key = None
         previous_group = getattr(job.layers[0], "cam_group", None) if job.layers else None
         from .move_estimate import estimate_cut_segments
-        estimated = estimate_cut_segments(job.layers, tool_map, first_tool, self.material.height)
-        ctx.log(f'  CAM estimate: ~{estimated:,} cut segments before entries, exits and links')
+        estimated = estimate_cut_segments(job.layers, tool_map, first_tool, self.material.height,
+                                          self.sample_spacing)
+        ctx.log(f'  CAM estimate: ~{estimated:,} sampled cut segments (before merging; entries, exits '
+                'and links not included)')
         n = max(1, len(job.layers))
         for li, layer in enumerate(job.layers):
             key = getattr(layer, "cam_operation_key", None)
@@ -291,7 +333,8 @@ class MotionPlanner:
         self.tool, self.data = tool, data
         self.plan.finish()
         self.report()
-        self.ctx.log(f'  CAM planned {self.samples:,} sampled feed segments')
+        self.ctx.log(f'  CAM planned {self.samples:,} sampled feed segments; '
+                     f'{self.plan.total:,} program segments written')
         return self.plan
 
     def report(self):

@@ -26,8 +26,10 @@ class Contour3dGenerator(OperationGenerator):
         from .surface_common import prepare_surface
         op, ctx, job = run.op, planning.ctx, planning.job
         region, surface_top = prepare_surface(run, selection, planning)
-        wanted = max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")),
-                                                 run.diameter/SURFACE_CELLS_PER_DIAMETER))
+        explicit = float(pref(job, "cam_surface_resolution"))
+        wanted = (max(.01, explicit) if explicit > 0 else
+                  max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")),
+                                                  run.diameter/SURFACE_CELLS_PER_DIAMETER)))
         minx, miny, maxx, maxy = region.bounds
         pad = run.radius+3*wanted
         surface = DropSurface(job.mesh, (minx-pad, miny-pad), (maxx+pad, maxy+pad), wanted,
@@ -40,7 +42,7 @@ class Contour3dGenerator(OperationGenerator):
         ceiling = min(run.start, surface_top)
         bands = [run.depth(i) for i in range(run.count) if run.depth(i) < surface_top-1e-6]
         produced = 0
-        simplifier = SurfaceSimplifier()
+        simplifier = SurfaceSimplifier(float(pref(job, "cam_surface_tolerance")))
         for z in bands:
             lines = self.band_paths(run, region, surface, floors, z, ceiling, planning, simplifier=simplifier)
             if not lines:
