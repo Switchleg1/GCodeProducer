@@ -92,7 +92,9 @@ patch in every direction, clipped to the printable fill region. The slicer
 tries straight parallel lines in several directions. Backed endpoints help
 choose a direction but are not required: unsupported fill on one-sided
 overhangs also gets the bridge settings. Bridge paths replace overlapping
-solid or sparse infill and can be inspected by feature in Preview.
+solid or sparse infill and can be inspected by feature in Preview. If the list
+shows **Bridge (none in this slice)**, check the selected material in Setup.
+The slice log reports that material’s bridge threshold or that bridging is off.
 
 - **Speed mode:** fixed mm/s or a percentage of the requested solid infill speed.
   Machine speed and volumetric flow limits still apply.

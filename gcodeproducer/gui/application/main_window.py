@@ -2439,9 +2439,13 @@ class MainWindow(QMainWindow):
         if tp is not None:
             solid = np.isin(tp.kind, SOLID_KINDS)
             present = set(np.unique(tp.feature[solid]).tolist())
-            for k, f in enumerate(tp.feature_names):
-                if k not in present:
-                    continue
+            features = [f for k, f in enumerate(tp.feature_names) if k in present]
+            if tp.machine == wf.FDM and 'bridge' not in features:
+                item = QListWidgetItem('Bridge (none in this slice)')
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
+                item.setToolTip('No bridge paths were generated. Check Bridging on the selected FDM material and re-slice.')
+                self.feature_list.addItem(item)
+            for f in features:
                 it = QListWidgetItem(feature_label(f))
                 if f in FEATURE_TOOLTIPS:
                     it.setToolTip(FEATURE_TOOLTIPS[f])

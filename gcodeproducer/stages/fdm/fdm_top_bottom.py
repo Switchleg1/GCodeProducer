@@ -30,6 +30,11 @@ class FDMTopBottom(SliceStage):
         top_n = params["top_layers"]
         bot_n = params["bottom_layers"]
         bridge_min = job.mat('bridge_min_area', 0.)
+        material = job.material.name if job.material is not None else 'no material selected'
+        if bridge_min > 0:
+            ctx.log(f'  Bridging: {material}, minimum unsupported area {bridge_min:g} mm²')
+        else:
+            ctx.log(f'  Bridging: off for {material} (minimum unsupported area is 0 mm²)')
         if top_n <= 0 and bot_n <= 0 and not bridge_min:
             return "top/bottom shells off"
         if job.mesh is None or not job.layers:

@@ -94,6 +94,20 @@ def test_retraction_dropdown_shows_only_relevant_distances(win):
     assert 'retract_open_only' not in step.params
 
 
+def test_preview_bridge_feature_distinguishes_absent_and_present(win):
+    from gcodeproducer.core.gcode.program import GCodeProgram
+    from gcodeproducer.core.gcode.toolpath import build_toolpath
+
+    program = GCodeProgram.from_text('G90\nM83\nG1 X10 E1 F1200')
+    for feature, expected in [('infill', 'Bridge (none in this slice)'), ('bridge', 'Bridge')]:
+        program.lines[-1].feature = feature
+        win.tp = build_toolpath(program)
+        win._refresh_feature_list()
+        names = [win.feature_list.item(i).text() for i in range(win.feature_list.count())]
+        assert expected in names
+        assert len([name for name in names if name.startswith('Bridge')]) == 1
+
+
 def test_camera_actions_are_grouped_in_toolbar(win):
     button = next(b for b in win.findChildren(QtWidgets.QToolButton) if b.text() == 'Camera views')
     assert [a.text() for a in button.menu().actions() if not a.isSeparator()] == [
