@@ -117,11 +117,12 @@ are **advisory warnings** attached to generated output, logged as
 dialog displays a limited number; inspect the full Log too. The checker caps
 its stored findings to avoid unbounded repetitive output.
 
-A warned program can still be inspected in Preview. Export asks for explicit
-confirmation. If model/material/setup changes after generation, CAM export
-requires regeneration so it is not silently exporting unchecked stale paths.
-Fixing a blank or tool setting requires generating again; acknowledging a
-dialog does not recalculate the result.
+A warned program can still be inspected in Preview. Export asks for
+confirmation by default. If model/material/setup changes after generation,
+saving can still write the previous program unchanged, with a separate
+out-of-date warning. Both prompts can be configured in **Settings → Messages**.
+Regenerate after fixing a blank or tool setting; saving or acknowledging a
+warning does not recalculate the result.
 
 ## What is not verified
 

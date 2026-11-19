@@ -152,8 +152,9 @@ Libraries, Settings and the pipeline dialog have local undo/redo shortcuts;
 history, including saved profile/process changes. History is bounded to 100
 transactions and lasts for this application session, not across restarts.
 
-Undoing a machining/printing input invalidates generated output; regenerate
-before export. View-only undo does not make paths stale. Undo also ignores
+Undoing a machining/printing input marks generated output out of date;
+regenerate to export G-code that reflects the restored setup. View-only undo
+does not make paths stale. Undo also ignores
 late results computed from an undone setup. History restores editor state,
 not exported files or a physical machine: exporting G-code, running/cancelling
 computation, and quitting are not reversible execution commands. Automatic
@@ -179,9 +180,10 @@ See [material state and leads](cam/material-state-and-leads.md).
 ![Toolpath preview](pictures/preview.jpg)
 
 Edits to placement, machine, process, consumables or CAM stock/setup make the
-preview **out of date**. Regenerate before relying on it. CAM export is blocked
-until paths are regenerated after edits; a program with safety warnings needs
-additional confirmation to export.
+preview **out of date**. **Save G-code** can still write the previous program
+unchanged after a warning. Regenerate to apply or check the new setup. CAM
+warnings on the generated program have a separate export prompt. Both prompts
+can be turned off or restored in **Settings → Messages**.
 
 ## Material boundary selection
 

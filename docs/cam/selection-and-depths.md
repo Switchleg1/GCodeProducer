@@ -106,7 +106,7 @@ edge wins.
   sources accept material references. They stay linked to blank top/bottom
   and size, rather than freezing the picked coordinates.
 - Picking fails clearly if material is unallocated. Changing the blank marks
-  CAM output stale; regenerate before export.
+  CAM output stale; regenerate to apply the changed blank to the G-code.
 
 ### Material-boundary Pocket
 

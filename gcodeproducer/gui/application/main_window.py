@@ -2326,21 +2326,26 @@ class MainWindow(QMainWindow):
         self.notify("slice_failed", "error", "Slice failed", tb.strip().splitlines()[-1])
 
     def save_gcode(self):
-        if self.program is None:
+        program = self.program
+        if program is None:
             return
-        if self.workflow == wf.CAM and self.stale:
-            self.notify("cam_stale_export", "warning", "Regenerate CAM paths",
-                        "The model, material or setup has changed. Regenerate paths to run stock checks before exporting.")
+        is_cam = program.machine == wf.CAM
+        if self.stale and not self.notify(
+                "cam_stale_export", "warning", "Save out-of-date G-code?",
+                "The preview was generated before your latest changes. Saving now writes the previous G-code unchanged. "
+                "To use or check the current setup, regenerate first. Save the previous G-code anyway?",
+                question=True, default_no=True):
             return
-        if self.workflow == wf.CAM and self.cam_warnings:
-            if QMessageBox.question(self, "Export with CAM warnings?",
-                                    "CAM material/engagement warnings remain. Export anyway?") != QMessageBox.StandardButton.Yes:
-                return
-        ext = ".gcode" if self.workflow == wf.FDM else ".nc"
+        if is_cam and self.cam_warnings and not self.notify(
+                "cam_warnings_export", "warning", "Export with CAM warnings?",
+                "The generated G-code has CAM warnings. Review the details in Messages. Save it anyway?",
+                question=True, default_no=True):
+            return
+        ext = ".nc" if is_cam else ".gcode"
         base = Path(self.model_path).with_suffix(ext) if self.model_path else Path("out" + ext)
         path, _ = QFileDialog.getSaveFileName(self, "Save G-code", str(base), "G-code (*.gcode *.nc *.g *.tap)")
         if path:
-            written = self.program.save(path)
+            written = program.save(path)
             if len(written) > 1:
                 self.statusBar().showMessage(f"Saved {len(written)} files, one per tool", 8000)
                 self.log("Manual tool changes: saved one file per tool, in order:\n  " + "\n  ".join(written))

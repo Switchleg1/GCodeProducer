@@ -111,14 +111,101 @@ def test_preview_bridge_feature_distinguishes_absent_and_present(win):
 def test_save_writes_one_file_per_tool_for_manual_changes(win, tmp_path, monkeypatch):
     from gcodeproducer.core.gcode.program import GCodeProgram
 
-    win.workflow = 'fdm'          # skip the CAM stale/warning prompts; saving is shared
     win.program = GCodeProgram.from_text('; tool one\nG0 X1\n; tool two\nG0 X2\n')
+    win.program.machine = 'cam'
     win.program.parts = [(0, 'T1 6 mm'), (2, 'T2 3 mm')]
     monkeypatch.setattr(QtWidgets.QFileDialog, 'getSaveFileName', lambda *a: (str(tmp_path / 'job.nc'), ''))
     win.save_gcode()
     assert sorted(p.name for p in tmp_path.glob('job*')) == ['job_01_T1-6-mm.nc', 'job_02_T2-3-mm.nc']
     assert (tmp_path / 'job_02_T2-3-mm.nc').read_text() == '; tool two\nG0 X2\n'
     assert 'one per tool' in win.statusBar().currentMessage()
+
+
+@pytest.mark.parametrize('workflow', ['cam', 'fdm'])
+def test_save_stale_preview_can_cancel_or_keep_and_remember(win, tmp_path, monkeypatch, workflow):
+    from gcodeproducer.core import app_settings
+    from gcodeproducer.core.gcode.program import GCodeProgram
+
+    if workflow == 'cam':
+        win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))
+        editor = win.cam_editor
+        editor.set_tools(win.libset['tool'].all())
+        editor.add_tool()
+        editor.add_operation()
+    text = '; previously generated\nG90\nG0 X1\n'
+    win.program = GCodeProgram.from_text(text)
+    win.program.machine = workflow
+    if workflow == 'cam':
+        editor.stock.setValue(editor.stock.value() + 1)
+        assert editor.operation().stock == editor.stock.value()
+    else:
+        win._set_stale()
+    assert win.stale
+    out = tmp_path / 'job.nc'
+    defaults = []
+
+    def choose_path(*args):
+        defaults.append(args[2])
+        return str(out), ''
+
+    monkeypatch.setattr(QtWidgets.QFileDialog, 'getSaveFileName', choose_path)
+    buttons = QtWidgets.QMessageBox.StandardButton
+    answers = iter([buttons.No, buttons.Yes])
+    shown = []
+
+    def answer(box):
+        shown.append(box.text())
+        assert box.defaultButton() == box.button(buttons.No)
+        box.checkBox().setChecked(True)
+        return next(answers)
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, 'exec', answer)
+    win.save_gcode()
+    assert not defaults and not out.exists()
+    assert app_settings.load(win.libset.root)['messages']['cam_stale_export']
+    win.save_gcode()
+    assert defaults[0].endswith('.nc' if workflow == 'cam' else '.gcode')
+    assert out.read_text() == text
+    assert not app_settings.load(win.libset.root)['messages']['cam_stale_export']
+    out.unlink()
+    win.save_gcode()
+    assert out.read_text() == text and win.stale
+    assert len(shown) == 2 and all('previous G-code unchanged' in t for t in shown)
+    assert win.messages.texts().count(shown[0]) == 3
+
+
+def test_cam_export_warning_is_configurable_for_generated_program(win, tmp_path, monkeypatch):
+    from gcodeproducer.core.gcode.program import GCodeProgram
+    from gcodeproducer.gui.dialogs.settings_dialog import SettingsDialog
+
+    # Switching workflows must not bypass warnings for the program being saved.
+    win.workflow = 'fdm'
+    win.program = GCodeProgram.from_text('G0 X1\n')
+    win.program.machine = 'cam'
+    win.cam_warnings = ['Check tool reach']
+    win._set_stale()
+    dialog = SettingsDialog(win.preferences, win)
+    dialog.message_checks['cam_stale_export'].setChecked(False)
+    win.preferences = dialog.result_values()
+    buttons = QtWidgets.QMessageBox.StandardButton
+    prompts = []
+
+    def decline(box):
+        prompts.append(box.windowTitle())
+        assert box.checkBox().text() == "Don't show this again"
+        return buttons.No
+
+    out = tmp_path / 'job.nc'
+    monkeypatch.setattr(QtWidgets.QMessageBox, 'exec', decline)
+    monkeypatch.setattr(QtWidgets.QFileDialog, 'getSaveFileName', lambda *a: (str(out), ''))
+    win.save_gcode()
+    assert prompts == ['Export with CAM warnings?'] and not out.exists()
+    dialog.message_checks['cam_warnings_export'].setChecked(False)
+    win.preferences = dialog.result_values()
+    win.save_gcode()
+    assert out.read_text() == 'G0 X1\n' and len(prompts) == 1
+    assert sum('generated G-code has CAM warnings' in t for t in win.messages.texts()) == 2
+    dialog.close()
 
 
 def test_camera_actions_are_grouped_in_toolbar(win):

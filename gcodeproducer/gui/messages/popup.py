@@ -10,9 +10,9 @@ def show_message(parent, prefs: dict, key: str, level: str, title: str, text: st
                  question: bool = False, default_no: bool = False) -> bool:
     """Pop-up with "Don't show this again". Returns True for OK/Yes (and when disabled).
 
-    Disabled messages are not shown; a disabled *question* is answered Yes, so only
-    questions whose skipping is safe (e.g. "outside build volume, continue?") use this.
-    Unchecking writes into ``prefs['messages']``; the caller persists ``prefs``.
+    Disabled messages are not shown; a disabled *question* permits the action as
+    if the user chose Yes. Checking "Don't show this again" stores the preference
+    in ``prefs['messages']``; the caller persists ``prefs``.
     """
     messages = prefs.setdefault("messages", {})
     if not messages.get(key, True):

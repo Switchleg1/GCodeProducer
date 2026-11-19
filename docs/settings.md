@@ -61,14 +61,14 @@ Each warning/error pop-up has a **Don't show this again** checkbox. Ticking
 it turns that message type off in **Settings → Messages** (saved
 immediately); **Show all** or **Restore Defaults** turns them back on. A
 suppressed message still appears in the Messages panel and briefly in the
-status bar, and the action it reports still happens or is still blocked —
-for example an out-of-date CAM export is still refused.
+status bar. Suppressing a pop-up does not bypass setup validation.
 
-For the *outside the build volume — slice anyway?* question, ticking the box
-together with **Yes** means "continue without asking"; a **No** answer is
-never remembered. Confirmations that protect output or data — exporting CAM
-with warnings, deleting profiles/processes, discarding unsaved changes — have
-no such checkbox and always ask. Deleting **reference geometry** is the one
+For warnings that ask whether to continue, ticking the box and choosing
+**Yes** means "continue without asking"; **No** is never remembered. This
+includes saving out-of-date G-code and exporting a CAM program with warnings;
+these are separate settings. Saving out-of-date G-code writes the existing
+program unchanged. Deleting profiles/processes and discarding unsaved changes
+still ask every time. Deleting **reference geometry** is the one
 deletion that can be remembered: Yes with the box ticked deletes later unused
 references without asking, until *Confirm deleting reference geometry* is
 switched back on here. References still in use are never deleted. The previous *Show warning dialog after
