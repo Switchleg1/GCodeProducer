@@ -152,6 +152,12 @@ class LibraryDialog(QDialog):
 
             show_bridge_fields(editor.values)
             editor.changed.connect(show_bridge_fields)
+        if p.kind == 'machine' and 'auto_tool_change' in editor.values:
+            def show_changer_fields(values):
+                editor.set_field_visible('max_tool_number', bool(values['auto_tool_change']))
+
+            show_changer_fields(editor.values)
+            editor.changed.connect(show_changer_fields)
         editor.changed.connect(lambda vals, pr=p: pr.values.update(vals))
         self.editor_area.setWidget(editor)
 

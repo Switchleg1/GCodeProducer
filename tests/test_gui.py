@@ -995,6 +995,20 @@ def test_material_tables_keep_order_mark_active_and_auto_depth_refreshes_after_s
     assert ed.stepdown.value()==1.2 and "Profile 30% D" in ed.cutting_summary.text()
 
 
+def test_highest_tool_number_shown_only_with_tool_changer(win):
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    machine = win.libset.machines.all('cam')[0]
+    dlg = LibraryDialog(win.libset, win, 'machine', machine.id)
+    editor = dlg.editor_area.widget()
+    highest = editor._widgets['max_tool_number']
+    assert editor.values['auto_tool_change'] and not highest.isHidden()
+    editor._setters['auto_tool_change'](False)
+    assert highest.isHidden()
+    editor._setters['auto_tool_change'](True)
+    assert not highest.isHidden()
+    dlg.reject()
+
+
 def test_tool_pocket_axial_pending_text_saves_before_dialog_closes(win):
     from gcodeproducer.gui.library_dialog import LibraryDialog
     from gcodeproducer.core.profiles import LibrarySet

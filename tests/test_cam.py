@@ -106,6 +106,17 @@ def test_operation_generation(libset, mesh, kind):
             assert path.points.max() <= 17 + 1e-6
 
 
+@pytest.mark.parametrize("auto, highest, warned", [(True, 0, []), (True, 2, []), (True, 1, [2]), (False, 1, [])])
+def test_tool_changer_range_warning(libset, mesh, auto, highest, warned):
+    ref = face_ref(mesh, 20)
+    job = job_for(libset, mesh, [Operation(name="first", geometry=[ref], end=Depth("top", -1))],
+                  [Operation(name="second", kind="engrave", geometry=[ref], end=Depth("top", -0.1))])
+    job.machine.values.update(auto_tool_change=auto, max_tool_number=highest)
+    slice_job(job)
+    found = [w for w in job.warnings if "outside the tool changer's range" in w]
+    assert [int(w.split()[2][1:]) for w in found] == warned
+
+
 def test_manual_tool_changes_split_one_self_contained_file_per_tool(libset, mesh, tmp_path):
     from pathlib import Path
     from gcodeproducer.core.gcode.program_parts import part_path

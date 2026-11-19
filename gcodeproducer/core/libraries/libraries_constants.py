@@ -42,6 +42,9 @@ def _machine_schema(workflow: str) -> list:
             Param("auto_tool_change", "bool", True, label="Automatic tool changer", group="Tool changes",
                   help="On: tool groups are joined in one program with M5 / T M6 / M3. Off: one G-code file "
                        "per tool group, each wrapped in the start and end G-code, for manual tool changes."),
+            Param("max_tool_number", "int", 0, min=0, max=999, label="Highest tool number", group="Tool changes",
+                  help="Largest T number the tool changer can load (pockets / slots). Generation warns when a "
+                       "tool group uses a higher one. 0 = no limit. Ignored without an automatic tool changer."),
             Param("spindle_min", "float", 6000.0, unit="rpm", group="Spindle"),
             Param("spindle_max", "float", 24000.0, unit="rpm", group="Spindle"),
             Param("units", "choice", "mm", choices=["mm", "inch"], group="Work area"),

@@ -25,7 +25,7 @@ class Sequencer:
         job.warnings = []
         tools = {t.id: t for t in job.tools}
         if job.m("auto_tool_change", True):   # manual changes are per file, not by T number
-            self.check_tool_numbers(setup, tools, planning)
+            self.check_tool_numbers(setup, tools, planning, int(job.m("max_tool_number", 0) or 0))
         for gi, group in enumerate(setup.groups):
             if group.tool_id not in tools:
                 raise ValueError(f"CAM tool '{group.tool_id}' is missing or not allowed by the machine")
@@ -42,12 +42,15 @@ class Sequencer:
         return f"{len(setup.groups)} tool groups, {len(planning.layers)} depth passes"
 
     @staticmethod
-    def check_tool_numbers(setup, tools, planning):
+    def check_tool_numbers(setup, tools, planning, highest=0):
         numbers = {}
         for group in setup.groups:
             tool = tools.get(group.tool_id)
             if tool is not None:
                 number = int(tool.get("tool_number", 1))
+                if highest and not 1 <= number <= highest:
+                    planning.warn(f"Tool number T{number} ({tool.name}) is outside the tool changer's range "
+                                  f"T1-T{highest}; the machine cannot load it.", "TOOL")
                 if number in numbers and numbers[number] != tool.id:
                     planning.warn(f"Tool number T{number} is shared by different tool profiles; "
                                   "verify the physical tool change.", "TOOL")

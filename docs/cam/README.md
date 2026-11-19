@@ -91,6 +91,11 @@ issues `T… M6`, and restarts the spindle (`M3 S…`). A real controller may ne
 additional tool-change macros, manual handling or offsets. The machine's
 start/end templates see the first and last active tool respectively.
 
+**Highest tool number** (same group, default 0 = no limit) is the largest T
+number the changer can load. Generation warns about any tool group whose tool
+number falls outside T1 to that limit. The field is hidden, and the check
+skipped, when the machine has no automatic tool changer.
+
 ### Machines without an automatic tool changer
 
 Turn off **Libraries → Machine → Tool changes → Automatic tool changer** to
