@@ -179,6 +179,13 @@ Contour) and the operator's tail-top part (40,335 lines) are byte-identical to
 
 ## 6. Performance and parallelism
 
+3D Contour reuses simplification results from the previous depth band when
+sampled XYZ coordinates are exactly unchanged. It can reuse a whole path or
+an unchanged subspan of the same simplification tree. The 0.005 mm tolerance
+and the flat-cutter surface sampling are unchanged. On the 182-band Baby Yoda
+job, path generation dropped from 154 s to 79 s with identical XYZ paths.
+This timing excludes motion planning and the independent output replay.
+
 A profile on the tail-top Waterfall job identified repeated height-grid sweep
 construction as a hot spot. In 0.1.12 the grid uses broadcast coordinate slices
 and caches the last move's sweep geometry per grid. Contact, engagement and

@@ -9,17 +9,18 @@ class Contour3dGenerator(OperationGenerator):
     needs_closed = True
     allows_sloped = True
 
-    def band_paths(self, run, region, surface, floors, z, ceiling, planning):
+    def band_paths(self, run, region, surface, floors, z, ceiling, planning, *, simplifier=None):
         """XYZ raster lines for one depth band — pure geometry on the drop surface."""
         from gcodeproducer.core.cam.surface_paths import surface_raster
         op = run.op
         return surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, z, op.stock,
-                              planning.ctx.log, floors, ceiling, strategy=op.strategy)
+                              planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier)
 
     def generate(self, run, selection, planning):
         from shapely.geometry import box
         from gcodeproducer.core.jobs.path import Path
         from gcodeproducer.core.cam.drop_surface import DropSurface
+        from gcodeproducer.core.cam.surface_simplifier import SurfaceSimplifier
         from gcodeproducer.core.cam.cam_constants import SURFACE_MIN_RESOLUTION, SURFACE_CELLS_PER_DIAMETER
         from gcodeproducer.core.settings.preferences import pref
         from .surface_common import prepare_surface
@@ -39,8 +40,9 @@ class Contour3dGenerator(OperationGenerator):
         ceiling = min(run.start, surface_top)
         bands = [run.depth(i) for i in range(run.count) if run.depth(i) < surface_top-1e-6]
         produced = 0
+        simplifier = SurfaceSimplifier()
         for z in bands:
-            lines = self.band_paths(run, region, surface, floors, z, ceiling, planning)
+            lines = self.band_paths(run, region, surface, floors, z, ceiling, planning, simplifier=simplifier)
             if not lines:
                 continue
             low = min(float(p[:, 2].min()) for p in lines)

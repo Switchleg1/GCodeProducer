@@ -24,6 +24,7 @@ SURFACE_TOLERANCE = 1e-3       # mm: model material this far above a level block
 SHADOW_SEAL = 1e-5             # mm: closes hairline gaps between projected triangles
 SURFACE_MIN_RESOLUTION = .05   # mm: finest drop-cutter height grid
 SURFACE_CELLS_PER_DIAMETER = 40
+SURFACE_REUSE_MIN_POINTS = 16  # cache simplification only for longer spans
 SURFACE_SIMPLIFY = .005        # mm: 3D polyline simplification tolerance
 SURFACE_MAX_POINTS = 2_000_000
 SURFACE_ENGAGEMENT_STATIONS = (.25, .75, 1.)

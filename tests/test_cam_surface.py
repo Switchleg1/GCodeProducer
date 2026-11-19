@@ -141,6 +141,34 @@ def test_drop_surface_is_conservative_and_close():
         DropSurface(wedge_pocket(), (5, 5), (5, 25), .1, 100)
 
 
+def test_surface_simplifier_reuses_unchanged_spans(monkeypatch):
+    from gcodeproducer.core.cam.surface_simplifier import SurfaceSimplifier
+
+    x = np.linspace(0, 16, 801)
+    first = np.column_stack((x, np.zeros_like(x), np.cos(x)*.1))
+    second = first.copy()
+    second[360:400, 2] *= .98
+    simplify = SurfaceSimplifier()
+    np.testing.assert_array_equal(simplify([first])[0], simplify3d(first))
+    expected = simplify3d(second)
+    norm = np.linalg.norm
+    calls = []
+
+    def count(*args, **kwargs):
+        calls.append(1)
+        return norm(*args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, 'norm', count)
+    reduced = simplify([second])[0]
+    reused_calls = len(calls)
+    np.testing.assert_array_equal(reduced, expected)
+    assert simplify([second.copy()])[0] is reduced
+    assert len(calls) == reused_calls
+    simplify3d(second)
+    assert reused_calls < len(calls) - reused_calls
+    np.testing.assert_array_equal(simplify([second[10:]])[0], simplify3d(second[10:]))
+
+
 def test_simplify3d_keeps_tolerance_and_ends():
     x = np.linspace(0, 10, 400)
     line = np.column_stack((x, np.zeros_like(x), np.where(x < 5, 0, -(x-5))))

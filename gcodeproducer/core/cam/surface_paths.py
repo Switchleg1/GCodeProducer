@@ -10,7 +10,8 @@ from shapely import BufferJoinStyle, contains_xy
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
-from .cam_constants import SURFACE_SIMPLIFY, SURFACE_MAX_POINTS
+from .cam_constants import SURFACE_MAX_POINTS
+from .surface_simplifier import simplify3d
 from .paths import _polygons, orient_contour, pocket_region
 
 
@@ -72,36 +73,8 @@ def waterfall_paths(shadow, allowed, radius, allowance, direction):
     return result
 
 
-def simplify3d(points, tolerance=SURFACE_SIMPLIFY):
-    """Douglas-Peucker in 3D: the result stays within ``tolerance`` of the sampled polyline."""
-    points = np.asarray(points, float)
-    if len(points) < 3:
-        return points
-    keep = np.zeros(len(points), bool)
-    keep[[0, -1]] = True
-    stack = [(0, len(points)-1)]
-    while stack:
-        first, last = stack.pop()
-        if last-first < 2:
-            continue
-        a, d = points[first], points[last]-points[first]
-        rel = points[first+1:last]-a
-        length = float(d @ d)
-        if length < 1e-24:
-            distance = np.linalg.norm(rel, axis=1)
-        else:
-            t = np.clip(rel @ d/length, 0, 1)
-            distance = np.linalg.norm(rel-t[:, None]*d, axis=1)
-        worst = int(distance.argmax())
-        if distance[worst] > tolerance:
-            middle = first+1+worst
-            keep[middle] = True
-            stack.extend(((first, middle), (middle, last)))
-    return points[keep]
-
-
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
-                   strategy="meander"):
+                   strategy="meander", *, simplifier=None):
     """Depth-clamped XYZ rasters, as meander or independent X/Y cutting lines.
 
     Meander alternates along the longer side and joins neighbouring passes
@@ -172,7 +145,7 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
             reverse = not reverse
     if current is not None:
         paths.append(current)
-    result = [simplify3d(p) for p in paths]
+    result = simplifier(paths) if simplifier is not None else [simplify3d(p) for p in paths]
     if log:
         log(f"    {sum(len(p) for p in paths)} surface samples reduced to {sum(len(p) for p in result)} points")
     return [p for p in result if len(p) >= 2]
