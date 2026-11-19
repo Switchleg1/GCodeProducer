@@ -26,8 +26,14 @@ If the selected Start is below the original stock/model surface, clearing
 begins at that surface so the material above Start is not skipped. For example,
 Start −4, End −10, stock top 0 and depth/pass 1 require passes starting at −1,
 not a first entry at −5. Waterfall can omit passes already cleared by earlier
-operations when **Remove air cutting** is enabled. Contour conservatively
-revisits upper material rather than assuming it was cleared.
+operations when **Remove air cutting** is enabled. Contour still plans every
+depth band, but with **Remove air cutting** on the motion planner checks each
+measured sub-move against the current material left by all earlier passes and
+tools. Stretches that touch nothing are not written: air gaps longer than two
+cutter diameters become a retract and re-entry, shorter ones are fed through,
+and paths entirely in air are dropped. The log reports the skipped length.
+Material only decreases, so skipping cannot leave material uncut. The usual
+rapid-clearance and entry checks apply to the new travels.
 
 Every depth is visited across all reachable areas before descending: the
 reachable area changes with depth, so surface operations do not use

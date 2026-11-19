@@ -46,6 +46,9 @@ class MotionPlanner:
         self.travel_clearance = max(.1, float(pref(job, "retract_clearance")))
         self.sample_spacing = max(0., float(pref(job, "cam_engagement_step")))
         self.merge_moves = bool(pref(job, "cam_merge_moves"))
+        self.skip_air = bool(pref(job, "skip_air_cuts"))
+        self.air_skipped = 0.
+        self.air_paths = 0
         self.machine = job.machine.resolved()
         from gcodeproducer.core.cam.engagement import engagement_band
         engagement_band(.5, self.machine)   # validate thresholds even for an all-air program
@@ -172,15 +175,63 @@ class MotionPlanner:
         self.rapid_xy(xy)
         rapid_to = self.links.descent_height(state, self.position[2], xy, z, lead)
         if rapid_to < self.position[2]-1e-9:
-            if state is not None and state.contact(self.position, np.r_[self.position[:2], rapid_to], self.radius):
+            if state is not None and state.contact(self.position, np.r_[self.position[:2], rapid_to], self.links.reach):
                 raise ValueError(f"{self.name}: rapid descent to the entry is not clear of current material")
             self.rapid_z(rapid_to)
         self.descend(state, xy, z)
 
     # ---------------------------------------------------------------- paths
+    def _material_runs(self, state, pts):
+        """Pieces of an XYZ path that touch current material, joined across short air gaps.
+
+        Material only ever decreases, so a sub-move clear of material now stays
+        clear while this path cuts: skipping it cannot leave material behind.
+        """
+        from gcodeproducer.core.cam.surface_engagement import split_move
+        from .planner_constants import AIR_GAP_DIAMETERS
+        subs = []                     # (start, end, ends an original vertex, touches material)
+        for i in range(len(pts)-1):
+            a = pts[i]
+            steps = list(split_move(a, pts[i+1], self.radius, state.resolution, self.sample_spacing))
+            for k, q in enumerate(steps):
+                subs.append((a, q, k == len(steps)-1, state.contact(a, q, self.radius)))
+                a = q
+        hits = [k for k, s in enumerate(subs) if s[3]]
+        if not hits:
+            return []
+        gap = AIR_GAP_DIAMETERS*2*self.radius
+        ranges, first, last = [], hits[0], hits[0]
+        for k in hits[1:]:
+            air = sum(float(np.linalg.norm(subs[j][1][:2]-subs[j][0][:2])) for j in range(last+1, k))
+            if air > gap:
+                ranges.append((first, last))
+                first = k
+            last = k
+        ranges.append((first, last))
+        if ranges == [(0, len(subs)-1)]:
+            return [pts]
+        runs = []
+        for s, e in ranges:
+            points = [subs[s][0]] + [subs[k][1] for k in range(s, e) if subs[k][2]] + [subs[e][1]]
+            runs.append(np.asarray(points, float))
+        kept = sum(float(np.linalg.norm(subs[k][1][:2]-subs[k][0][:2])) for s, e in ranges for k in range(s, e+1))
+        self.air_skipped += sum(float(np.linalg.norm(s[1][:2]-s[0][:2])) for s in subs) - kept
+        return runs
+
     def surface_path(self, pts):
-        """XYZ surface path: shared entry, lead-in only into material, measured cuts, cleared lead-out."""
+        """XYZ surface path, skipping stretches already cleared by earlier moves or tools."""
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
+        if not (self.skip_air and state is not None):
+            return self._surface_run(state, pts)
+        runs = self._material_runs(state, pts)
+        if not runs:
+            self.air_paths += 1
+            self.air_skipped += float(np.linalg.norm(np.diff(pts[:, :2], axis=0), axis=1).sum())
+        for run in runs:
+            self._surface_run(state, run)
+
+    def _surface_run(self, state, pts):
+        """XYZ surface path: shared entry, lead-in only into material, measured cuts, cleared lead-out."""
         config = self.config
         length = (config.lead_length if config is not None else 0) or 2*self.radius
         lead, kind = (self.entries.surface(state, pts, length, self.name)
@@ -346,6 +397,9 @@ class MotionPlanner:
         for kind, count in sorted(self.lead_kinds.items()):
             what = "circling the closed contour" if kind == "helix" else "back and forth along the open path"
             ctx.log(f"  {count} lead-in ramps longer than their path: {kind} ({what}) at <=10 degrees")
+        if self.air_skipped > 0:
+            ctx.log(f"  Remove air cutting: skipped {self.air_skipped:,.0f} mm of 3D moves through material "
+                    f"already cleared by earlier passes or tools ({self.air_paths} whole paths)")
         if self.surface_totals:
             ctx.log("  3D engagement moves: " + ", ".join(f"{kind}={self.surface_totals[kind]}"
                     for kind in ("slot", "high", "cut", "hsm", "air")))

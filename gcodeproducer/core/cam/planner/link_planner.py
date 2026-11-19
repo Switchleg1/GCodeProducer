@@ -6,6 +6,7 @@ height: one rule set for planar and surface paths.
 """
 from __future__ import annotations
 import numpy as np
+from .planner_constants import CLEARANCE_MARGIN
 
 
 class LinkPlanner:
@@ -15,6 +16,7 @@ class LinkPlanner:
         self.lead_clearance = float(lead_clearance)
         self.short_retracts = bool(short_retracts)
         self.radius = float(radius)
+        self.reach = self.radius + CLEARANCE_MARGIN   # rapid checks include emitted-coordinate rounding
 
     @staticmethod
     def linked(path, previous_end):
@@ -28,16 +30,16 @@ class LinkPlanner:
         if state is None or not self.short_retracts or here >= self.safe_z-1e-9 or here <= floor+1e-9:
             return False
         target_xy = np.asarray(target_xy, float)[:2]
-        return bool(state.height_at(target_xy, self.radius) <= here+1e-6
-                    and not state.contact(position, np.r_[target_xy, here], self.radius))
+        return bool(state.height_at(target_xy, self.reach) <= here+1e-6
+                    and not state.contact(position, np.r_[target_xy, here], self.reach))
 
     def travel_height(self, state, position, target_xy, entry_z):
         """Retract height for the XY travel: clearance above current material, never above safe Z."""
         if state is None or not self.short_retracts:
             return self.safe_z
         target_xy = np.asarray(target_xy, float)[:2]
-        top = max(state.max_height_along(position[:2], target_xy, self.radius),
-                  state.height_at(target_xy, self.radius))
+        top = max(state.max_height_along(position[:2], target_xy, self.reach),
+                  state.height_at(target_xy, self.reach))
         return max(min(self.safe_z, top+self.travel_clearance), float(entry_z))
 
     def descent_height(self, state, current_z, target_xy, entry_z, lead):
@@ -45,5 +47,5 @@ class LinkPlanner:
         if state is None or not self.short_retracts:
             return float(current_z)
         clearance = self.lead_clearance if lead else self.travel_clearance
-        local = state.height_at(np.asarray(target_xy, float)[:2], self.radius)+clearance
+        local = state.height_at(np.asarray(target_xy, float)[:2], self.reach)+clearance
         return max(float(entry_z), min(float(current_z), local))

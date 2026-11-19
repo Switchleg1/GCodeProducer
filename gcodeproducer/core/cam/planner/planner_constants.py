@@ -23,6 +23,12 @@ MIN_FEED = .0001             # mm/min: smaller effective feeds cannot be represe
 # Split sub-moves of these phases may be written as one G1. Lead-ins and
 # plunges stay separate so the replayed entry-depth checks keep their spans.
 MERGE_PHASES = frozenset(("cut", "link", "lead_out"))
+# XYZ air stretches longer than this many cutter diameters are replaced by a
+# retract and re-entry; shorter ones are fed through (cheaper than retracting).
+AIR_GAP_DIAMETERS = 2.
+# Rapid/clearance checks widen the cutter by this much: emitted coordinates are
+# rounded to 0.001 mm, which can move a grid cell from just outside to inside.
+CLEARANCE_MARGIN = .002
 MOTION_CHUNK_SIZE = 4096     # flush serialized motion without keeping the full plan in RAM
 ENGAGED = 1e-6               # engagement above this counts as material contact
 SETTLE_PASSES = 3            # planar lead start-height settling iterations

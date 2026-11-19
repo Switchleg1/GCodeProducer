@@ -323,6 +323,62 @@ def test_merged_feed_moves_keep_measurement_material_and_checks(libset):
     assert sum(line.cmd == "G1" for line in coarse.program.lines) < feeds[0]
 
 
+def test_second_tool_skips_3d_moves_through_material_already_removed(libset):
+    import copy
+    from gcodeproducer.core.cam import ToolGroup
+    from gcodeproducer.core.gcode.simulation import simulate
+
+    def emitted(skip):
+        job, op = surface_job(libset, kind="contour3d")
+        finish = copy.deepcopy(op)
+        finish.name = "Finish"
+        job.cam_setup.groups.append(ToolGroup(job.tools[0].id, [finish]))
+        job.preferences["skip_air_cuts"] = skip
+        logs = []
+        generate(job, StageContext())
+        CAMEmit().run(job, CAMEmit.defaults(), StageContext(logs.append))
+        second = {l.index for l in job.layers if l.cam_operation == "Finish"}
+        feeds = [i for i, l in enumerate(job.program.lines) if l.cmd == "G1" and l.layer in second]
+        return job, feeds, logs
+
+    kept, kept_feeds, _ = emitted(False)
+    skipped, skipped_feeds, logs = emitted(True)
+    # The identical second pass only rubs air: almost every feed move disappears.
+    assert len(skipped_feeds) < .1*len(kept_feeds)
+    assert any("Remove air cutting: skipped" in line for line in logs)
+    # The same material ends up removed and the output stays clear of the part.
+    np.testing.assert_allclose(kept.material_results[-1]["heights"], skipped.material_results[-1]["heights"],
+                               atol=1e-3)
+    assert skipped.warnings == kept.warnings
+    assert_program_clear(skipped.program)
+    # Whatever the second pass still cuts actually meets material.
+    sim = simulate(skipped.program)
+    cuts = [i for i in skipped_feeds if skipped.program.lines[i].feature not in ("air", "lead_out", "approach")]
+    assert all(sim.moved[i] for i in cuts)
+
+
+def test_partially_cleared_xyz_path_is_split_at_long_air_gaps():
+    from types import SimpleNamespace
+    from gcodeproducer.core.cam.height_stock import HeightStock
+    from gcodeproducer.core.cam.planner.motion_planner import MotionPlanner
+    from gcodeproducer.core.cam.stock import Stock
+
+    state = HeightStock(Stock(width=60, depth=10, height=10), .1)
+    state.heights[:, 100:450] = -10          # X10..X45 already cleared
+    planner = SimpleNamespace(radius=1., sample_spacing=0., air_skipped=0.)
+    path = np.array([[2., 5., -1.], [58., 5., -1.]])
+    runs = MotionPlanner._material_runs(planner, state, path)
+    assert len(runs) == 2
+    # The cutter's edge (radius 1) still reaches material until its centre is 1 mm inside the gap.
+    assert runs[0][0][0] == 2 and runs[0][-1][0] == pytest.approx(11, abs=.6)
+    assert runs[1][0][0] == pytest.approx(44, abs=.6) and runs[1][-1][0] == 58
+    assert planner.air_skipped == pytest.approx(33, abs=1.2)
+    # Short gaps (under two diameters) are fed through instead of retracting.
+    state.heights[:, 100:450] = 0
+    state.heights[:, 300:320] = -10
+    assert MotionPlanner._material_runs(planner, state, path) == [path]
+
+
 def test_planner_resolution_preferences_reach_contour_geometry(libset):
     lines = []
     for tolerance, resolution in ((.005, 0.), (.2, 0.), (.005, .5)):

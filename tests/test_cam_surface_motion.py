@@ -118,6 +118,11 @@ def motion_job(libset, lead_in=True, lead_out=True, repeat=False, parallel=False
 def test_xyz_leads_replace_only_contacting_entry_and_skip_cleared_repeat(libset):
     job, _ = motion_job(libset, repeat=True)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    # Remove air cutting (default): the cleared repeat writes no feed moves at all.
+    assert not any(l.cmd == 'G1' and l.layer == 1 for l in job.program.lines)
+    job, _ = motion_job(libset, repeat=True)
+    job.preferences['skip_air_cuts'] = False
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     lines = job.program.lines
     assert any(l.feature == 'lead_in' and l.layer == 0 for l in lines)
     assert any(l.feature == 'lead_out' and l.layer == 0 for l in lines)
@@ -148,6 +153,7 @@ def test_xyz_lead_toggles_are_independent_and_disabled_entry_plunges(libset):
 
 def test_xyz_cutting_types_feed_modifiers_and_preview_metadata(libset):
     job, _ = motion_job(libset, parallel=True, repeat=True)
+    job.preferences['skip_air_cuts'] = False    # keep the air repeat to check its feed
     ctx = StageContext()
     CAMEmit().run(job, CAMEmit.defaults(), ctx)
     sim = simulate(job.program)
@@ -169,6 +175,7 @@ def test_steep_air_only_surface_repeat_keeps_cut_base_instead_of_plunge_feed(lib
     for layer in job.layers:
         layer.z = -5
         layer.paths = [Path('cut', np.array([[13, 12, -1], [27, 12, -5.]]), width=3)]
+    job.preferences['skip_air_cuts'] = False    # keep the air repeat to check its feed
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     sim = simulate(job.program)
     air = [i for i, l in enumerate(job.program.lines) if l.cmd == 'G1' and l.feature == 'air' and l.layer == 1
