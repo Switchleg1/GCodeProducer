@@ -28,6 +28,23 @@ def _wider(a, b):
     return a if a is None or a.engagement >= b.engagement else b
 
 
+def _nearest_order(runs, position):
+    """Greedy nearest-start order (ties keep the planned order); pieces are not reversed."""
+    if len(runs) < 3:
+        return list(range(len(runs)))
+    starts = np.array([run[0, :2] for run in runs])
+    ends = np.array([run[-1, :2] for run in runs])
+    left = np.ones(len(runs), bool)
+    order, here = [], np.asarray(position, float)[:2]
+    for _ in range(len(runs)):
+        distance = np.where(left, np.hypot(*(starts-here).T), np.inf)
+        k = int(distance.argmin())
+        order.append(k)
+        left[k] = False
+        here = ends[k]
+    return order
+
+
 class MotionPlanner:
     def __init__(self, job, ctx, stock, position, rpm, *, consume=None):
         from collections import Counter
@@ -220,6 +237,29 @@ class MotionPlanner:
         self.air_skipped += sum(float(np.linalg.norm(s[1][:2]-s[0][:2])) for s in subs) - kept
         return runs
 
+    def surface_layer(self, paths):
+        """One XYZ depth band: drop air, then visit the remaining pieces nearest-first.
+
+        Splitting raster lines at cleared stretches leaves pieces at both ends of
+        many lines; visiting them in raster order would rapid back and forth across
+        the cleared middle. Pieces keep their cutting direction. Air is judged on
+        the material before the band, which stays valid: material only decreases.
+        """
+        state = self.material.height if self.material.height is not None else self.material.estimate_height()
+        if not (self.skip_air and state is not None):
+            for pts in paths:
+                self._surface_run(state, pts)
+            return
+        runs = []
+        for pts in paths:
+            pieces = self._material_runs(state, pts)
+            if not pieces:
+                self.air_paths += 1
+                self.air_skipped += float(np.linalg.norm(np.diff(pts[:, :2], axis=0), axis=1).sum())
+            runs.extend(pieces)
+        for k in _nearest_order(runs, self.position[:2]):
+            self._surface_run(state, runs[k])
+
     def surface_path(self, pts):
         """XYZ surface path, skipping stretches already cleared by earlier moves or tools."""
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
@@ -385,6 +425,11 @@ class MotionPlanner:
             if hasattr(layer, "cam_operation"):
                 self.comment(f"Operation: {layer.cam_operation}")
             previous_end = None   # never carry stay-down permission across depth/operation/tool boundaries
+            surface = [np.asarray(p.points, float) for p in layer.paths]
+            if surface and all(len(p) >= 2 and p.shape[1] == 3 for p in surface):
+                self.surface_layer(surface)
+                ctx.progress((li + 1) / n)
+                continue
             for path_index, path in enumerate(layer.paths):
                 pts = np.asarray(path.points, float)
                 if len(pts) < (1 if path.feature == "drill" else 2):

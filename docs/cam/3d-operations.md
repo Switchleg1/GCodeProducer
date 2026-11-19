@@ -31,7 +31,10 @@ depth band, but with **Remove air cutting** on the motion planner checks each
 measured sub-move against the current material left by all earlier passes and
 tools. Stretches that touch nothing are not written: air gaps longer than two
 cutter diameters become a retract and re-entry, shorter ones are fed through,
-and paths entirely in air are dropped. The log reports the skipped length.
+and paths entirely in air are dropped. The remaining pieces of each depth band
+are visited nearest-first (each keeps its cutting direction) instead of in
+raster order, which would rapid back and forth across cleared areas. The log
+reports the skipped length.
 Material only decreases, so skipping cannot leave material uncut. The usual
 rapid-clearance and entry checks apply to the new travels.
 
@@ -57,6 +60,9 @@ cutter-accessible region**, not just one contour along its wall.
 3. Choose **Cutting strategy → Wall-parallel contours / Raster lines X / Raster lines Y**, stepover, radial
    stock to leave and depth of cut. Stay-down links, lead ramps, cutting hand,
    engagement feeds and the material boundary limit work as for clearing.
+   Stock to leave is kept on the part only: where the selection reaches the
+   blank edge, the cutter edge still meets that edge (plus the material boundary
+   limit), so roughing leaves no wall of raw stock around the blank.
 4. Generate and inspect each depth and the calculated material outputs.
 
 Nested selected outlines alternate between boundary and island. Overlapping

@@ -9,7 +9,7 @@ class WaterfallGenerator(OperationGenerator):
     needs_closed = True
     allows_sloped = True
 
-    def level_paths(self, run, region, limit, z, planning):
+    def level_paths(self, run, region, limit, z, planning, edge=None):
         """(free region, areas) the cutter can clear at ``z`` — pure geometry, no material history."""
         from shapely.geometry import box
         from shapely.ops import unary_union
@@ -20,7 +20,8 @@ class WaterfallGenerator(OperationGenerator):
         active = [box(lo[0], lo[1], hi[0], hi[1]) for lo, hi in planning.tabs if z < hi[2]-1e-6]
         if active:
             blocked = unary_union([blocked]+active)
-        free = region if blocked.is_empty else region.difference(blocked)
+        base = region if edge is None else unary_union([region, edge])
+        free = base if blocked.is_empty else base.difference(blocked)
         if limit is not None:
             free = free.intersection(limit)
         free = free.buffer(0)
@@ -42,13 +43,23 @@ class WaterfallGenerator(OperationGenerator):
         from .surface_common import prepare_surface
         op, ctx, material = run.op, planning.ctx, planning.material
         region, surface_top = prepare_surface(run, selection, planning)
-        limit = None
+        limit = edge = None
         setup = planning.setup
         if setup.stock.allocated:
             lo_s, hi_s = setup.stock.bounds
-            limit = box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
-            if abs(op.material_limit+op.stock) > 1e-12:
-                limit = limit.buffer(op.material_limit+op.stock, join_style=BufferJoinStyle.mitre)
+            blank = box(lo_s[0], lo_s[1], hi_s[0], hi_s[1])
+            limit = blank
+            grow = op.material_limit+op.stock
+            if abs(grow) > 1e-12:
+                limit = blank.buffer(grow, join_style=BufferJoinStyle.mitre)
+            if grow > 1e-12:
+                # Clearing paths are offset by radius + stock to leave from every boundary. Stock
+                # to leave protects the part, not the blank: where the selection reaches the blank
+                # edge, extend it by the same amount so the cutter edge still meets that edge
+                # (plus the material boundary limit) instead of leaving a wall of raw stock.
+                edge = limit.difference(blank).intersection(
+                    region.buffer(grow+1e-6, join_style=BufferJoinStyle.mitre))
+                edge = None if edge.is_empty else edge
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
         produced = reachable = 0
@@ -56,7 +67,7 @@ class WaterfallGenerator(OperationGenerator):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, areas = self.level_paths(run, region, limit, z, planning)
+            free, areas = self.level_paths(run, region, limit, z, planning, edge)
             if areas is None:
                 ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
                 continue

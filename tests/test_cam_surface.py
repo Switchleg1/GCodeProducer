@@ -357,6 +357,20 @@ def test_second_tool_skips_3d_moves_through_material_already_removed(libset):
     assert all(sim.moved[i] for i in cuts)
 
 
+def test_xyz_pieces_are_visited_nearest_first_without_reversing():
+    from gcodeproducer.core.cam.planner.motion_planner import _nearest_order
+    # Meander lines cut only at both ends: raster order would cross the middle every time.
+    runs = []
+    for i in range(6):
+        pieces = ((0., 2.), (98., 100.)) if i % 2 == 0 else ((100., 98.), (2., 0.))
+        runs += [np.array([[float(i), a, -1.], [float(i), b, -1.]]) for a, b in pieces]
+    order = _nearest_order(runs, (0., 0.))
+    assert sorted(order) == list(range(len(runs)))
+    crossings = sum(abs(runs[a][-1, 1]-runs[b][0, 1]) > 50 for a, b in zip(order, order[1:]))
+    raster = sum(abs(runs[a][-1, 1]-runs[a+1][0, 1]) > 50 for a in range(len(runs)-1))
+    assert crossings == 1 and raster > 5
+
+
 def test_partially_cleared_xyz_path_is_split_at_long_air_gaps():
     from types import SimpleNamespace
     from gcodeproducer.core.cam.height_stock import HeightStock

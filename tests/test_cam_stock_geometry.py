@@ -118,6 +118,33 @@ def test_stock_pocket_uses_material_limit_even_without_overcut(libset,limit):
     assert abs(points).max()+1.5==pytest.approx(26+limit,abs=1e-6)
 
 
+@pytest.mark.parametrize("limit", [-1., 0., 1.])
+@pytest.mark.parametrize("stock", [0., 1.])
+def test_waterfall_stock_to_leave_protects_the_part_not_the_blank_edge(libset, limit, stock):
+    mesh=stepped_part()
+    mesh.triangles=mesh.triangles[:,::-1].copy()   # outward normals: Waterfall's model shadow needs them
+    job,op=job_for(mesh,[Reference("stock_face",[1])],libset)
+    job.cam_setup.stock.margin=6;job.cam_setup.stock.auto(mesh)
+    op.kind="waterfall";op.start=Depth("stock_top");op.end=Depth("absolute",-2)
+    op.material_limit=limit;op.stock=stock
+    generate(job,StageContext())
+    # Waterfall writes each machining area at a depth as its own layer: take them all.
+    points=np.concatenate([p.points for l in job.layers if l.z==-2 for p in l.paths])
+    # The cutter edge (radius 1.5) meets the blank edge (26) plus the material limit, whatever the
+    # stock to leave: no wall of raw stock is left around the blank.
+    assert abs(points).max()+1.5==pytest.approx(26+limit,abs=1e-6)
+    # Stock to leave still keeps the cutter off the part: the 48-gon annular boss (radius 3-10) at Z-2.
+    from shapely.geometry import Polygon
+    angle=np.arange(48)*2*np.pi/48
+    ring=lambda r: np.column_stack((r*np.cos(angle),r*np.sin(angle)))
+    boss=Polygon(ring(10),[ring(3)])
+    for layer in job.layers:
+        for path in layer.paths:
+            p=path.points
+            line=LineString(np.vstack((p,p[0])) if path.closed else p)
+            assert line.distance(boss)>=1.5+stock-.01      # round offsets are polygonal arcs
+
+
 def test_facing_stock_above_the_part_has_no_spurious_part_island(libset):
     mesh=stepped_part();job,op=job_for(mesh,[Reference("stock_face",[1])],libset)
     job.cam_setup.stock.top=2;job.cam_setup.stock.height+=2
