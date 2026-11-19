@@ -798,14 +798,15 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             new = dlg.result_values()
             changed = new != self.preferences
+            fdm_changed = new.get('fdm_travel_simplification') != self.preferences.get('fdm_travel_simplification')
             self.preferences = new
             self.cam_editor.defaults = new
             try:
                 app_settings.save(new, self.libset.root)
             except OSError as exc:
                 self.notify("settings_save_failed", "error", "Settings", f"Could not save settings: {exc}")
-            if changed and self.workflow == wf.CAM:
-                self._set_stale()      # generated output depends on CAM preferences
+            if (self.workflow == wf.CAM and changed) or (self.workflow == wf.FDM and fdm_changed):
+                self._set_stale()
 
     def _build_menu(self):
         m = self.menuBar().addMenu("&File")

@@ -43,8 +43,9 @@ def _visible_edges(poly, coords, points, i, ids, cache):
 
 
 class TravelRouter:
-    def __init__(self, outline, decimals):
+    def __init__(self, outline, decimals, *, simplification=0.):
         self.decimals = decimals
+        self.simplification = simplification
         self.detours = self.fallbacks = self.outside = self.bridges = 0
         region = Polygon()
         for ring in outline:
@@ -52,10 +53,11 @@ class TravelRouter:
                 part = Polygon(ring)
                 region = region.symmetric_difference(part if part.is_valid else part.buffer(0))
         self.region = region
-        self.islands = [(poly, None) for poly in polygons(region)]
+        self.islands = list(polygons(region))
         self._bridge_edges = {}
+        self._waypoints = {}
         self._visibility = {}  # per-island, per-layer waypoint visibility
-        for poly, _ in self.islands:
+        for poly in self.islands:
             prepare(poly)
 
     def route(self, start, end, extra):
@@ -72,7 +74,7 @@ class TravelRouter:
         pa, pb = Point(a), Point(b)
         limit = math.dist(a, b) + extra
         start_island = end_island = None
-        for i, (poly, vertices) in enumerate(self.islands):
+        for i, poly in enumerate(self.islands):
             inside_a, inside_b = poly.covers(pa), poly.covers(pb)
             if inside_a:
                 start_island = i
@@ -82,31 +84,9 @@ class TravelRouter:
                 continue
             if poly.covers(LineString((a, b))):
                 return direct
-            if vertices is None:
-                # Inset waypoints to leave room for rounded machine coordinates.
-                inner = poly.buffer(-TRAVEL_WAYPOINT_INSET, join_style=2).simplify(0)
-                vertices = set()
-                for part in polygons(inner):
-                    for ring in (part.exterior, *part.interiors):
-                        vertices.update((round(x, self.decimals), round(y, self.decimals))
-                                        for x, y in list(ring.coords)[:-1])
-                vertices = sorted(vertices)
-                self.islands[i] = poly, vertices
-            candidates = []
-            for p in vertices:
-                if p != a and p != b:
-                    lower = math.dist(a, p) + math.dist(p, b)
-                    if lower <= limit:
-                        candidates.append((lower, p))
-            # Keep the best lower bounds; raising the budget can only append
-            # less promising candidates, not disable a previously valid route.
-            candidates.sort()
-            options = [a, b, *(p for _, p in candidates[:TRAVEL_RETRY_VERTEX_LIMIT])]
-            first = TRAVEL_VERTEX_LIMIT + 2
-            visibility = self._visibility.setdefault(i, {})
-            waypoints = self._search(poly, options[:first], limit, visibility)
-            if waypoints is None and len(options) > first:
-                waypoints = self._search(poly, options, limit, visibility)
+            waypoints = self._route_inside(i, a, b, limit, self.simplification)
+            if waypoints is None and self.simplification > 0:
+                waypoints = self._route_inside(i, a, b, limit, 0.)
             if waypoints is not None:
                 self.detours += 1
                 return [*waypoints, end]
@@ -120,6 +100,35 @@ class TravelRouter:
         self.outside += int(start_island is not None or end_island is not None)
         return direct
 
+    def _route_inside(self, island, a, b, limit, tolerance):
+        poly = self.islands[island]
+        key = island, tolerance
+        if key not in self._waypoints:
+            # Simplify only candidate geometry. Every leg is checked against
+            # the original polygon, including the edges of its holes.
+            inset = max(TRAVEL_WAYPOINT_INSET, tolerance)
+            inner = poly.buffer(-inset, join_style=2).simplify(tolerance)
+            self._waypoints[key] = sorted({(round(x, self.decimals), round(y, self.decimals))
+                                           for part in polygons(inner)
+                                           for ring in (part.exterior, *part.interiors)
+                                           for x, y in list(ring.coords)[:-1]})
+        candidates = []
+        for p in self._waypoints[key]:
+            if p != a and p != b:
+                lower = math.dist(a, p) + math.dist(p, b)
+                if lower <= limit:
+                    candidates.append((lower, p))
+        if not candidates:
+            return None  # the direct leg has already been rejected
+        candidates.sort()
+        options = [a, b, *(p for _, p in candidates[:TRAVEL_RETRY_VERTEX_LIMIT])]
+        first = TRAVEL_VERTEX_LIMIT + 2
+        visibility = self._visibility.setdefault(island, {})
+        route = self._search(poly, options[:first], limit, visibility)
+        if route is None and len(options) > first:
+            route = self._search(poly, options, limit, visibility)
+        return route
+
     def crosses_open(self, start, route):
         """Classify the chosen travel, not the original straight line."""
         points = [tuple(round(v, self.decimals) for v in p) for p in (start, *route)]
@@ -128,7 +137,7 @@ class TravelRouter:
 
     def _bridge(self, a, b, i, j, limit):
         """Try the closest facing edges to shorten the portion in open air."""
-        source, dest = self.islands[i][0], self.islands[j][0]
+        source, dest = self.islands[i], self.islands[j]
         if (i, j) not in self._bridge_edges:
             p, q = nearest_points(source, dest)
             self._bridge_edges[i, j] = p.coords[0], q.coords[0]

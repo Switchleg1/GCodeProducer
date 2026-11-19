@@ -3,6 +3,10 @@ from __future__ import annotations
 from gcodeproducer.core.parameters.param import Param
 
 SCHEMA = [
+    Param("fdm_travel_simplification", "float", 0.1, min=0, unit="mm", decimals=3, group="FDM travel",
+          label="Travel waypoint simplification",
+          help="Simplify the waypoints used to avoid open spaces. Paths are checked against the original "
+               "outline, and detailed waypoints are tried if needed. 0 uses detailed waypoints only."),
     Param("skip_air_cuts", "bool", True, group="CAM toolpaths", label="Remove air cutting",
           help="Start each operation at the first depth that still holds material (estimated from earlier "
                "operations) and drop pocket contours that lie entirely in already-removed material. "

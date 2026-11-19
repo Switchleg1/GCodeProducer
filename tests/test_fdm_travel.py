@@ -59,6 +59,16 @@ def test_large_budget_does_not_disable_detours_on_dense_outlines():
     assert router.detours == 2
 
 
+def test_simplified_travel_checks_original_hole_and_can_fall_back():
+    a, b = (2, 5), (10, 5)
+    for tolerance in (.1, 20.):
+        router = TravelRouter([OUTER, HOLE], 3, simplification=tolerance)
+        route = router.route(a, b, 4.)
+        assert len(route) > 1
+        assert Polygon(OUTER, [HOLE]).covers(LineString([a, *route]))
+        assert ((0, 0.) in router._waypoints) == (tolerance == 20.)
+
+
 def test_island_jump_moves_to_facing_edges_when_budget_allows():
     other = [(16, 2), (23, 2), (23, 12), (16, 12)]
     router = TravelRouter([OUTER, other], 3)

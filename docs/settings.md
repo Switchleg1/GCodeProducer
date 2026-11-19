@@ -13,6 +13,7 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 
 | Setting | Default | Effect |
 |---|---|---|
+| Travel waypoint simplification (FDM travel) | 0.1 mm | Simplifies waypoint candidates for open-space detours. Legs are checked against the original outline; detailed waypoints are retried if needed. Set to 0 to use detailed waypoints only. |
 | Remove air cutting | On | CAM operations start at the first depth that still holds material (estimated from earlier operations in the same setup), pocket contours lying entirely in removed material are dropped, and operations/passes with nothing left to cut are skipped. Everything skipped is logged. |
 | Short retracts within cleared material | On | Between entries, stay at the current depth when the move and ramp start are clear of current material (e.g. the next depth pass of a pocket: no retract at all); otherwise retract only to *Short retract clearance* above the current material along the travel, then rapid down to the ramp start, instead of safe Z + feeding down through air. Needs allocated stock (without it, safe Z is used). Fixtures and clamps are not modelled: turn this off if anything stands above the material. |
 | Short retract clearance | 1 mm | Height of short rapid travels above the highest current material under the cutter along the move. |
@@ -26,7 +27,8 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Messages | all shown | Which pop-ups appear; see below. |
 
 Changing a setting marks an existing CAM result stale; regenerate before
-exporting. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
+exporting. Changing FDM travel waypoint simplification marks an existing FDM
+result stale. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
 or missing settings file silently falls back to defaults at start-up.
 Settings forms and CLI parameters share scalar/choice conversion: for example,
 saved `"false"` is false, not a truthy nonempty string. Null fields use declared

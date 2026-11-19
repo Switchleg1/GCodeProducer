@@ -22,6 +22,7 @@ import math, numpy as np
 from gcodeproducer.core.fdm.fdm_constants import WALL_FEATURES
 from gcodeproducer.core.fdm.path_order import closed_loop, ordered_paths
 from gcodeproducer.core.fdm.travel_router import TravelRouter
+from gcodeproducer.core.settings.preferences import pref
 from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm
 from gcodeproducer.stages.base.api import FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
@@ -126,6 +127,7 @@ class FDMEmit(SliceStage):
         n = max(1, len(job.layers))
         detours = fallbacks = outside = bridges = 0
         route_or_classify = detour > 0 or (params['retraction_mode'] in ('open', 'separate') and retract_len > 0)
+        simplification = pref(job, 'fdm_travel_simplification')
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -136,7 +138,8 @@ class FDMEmit(SliceStage):
             active_pwm = normal_pwm
             h = flh if layer.index == 0 else lh
             first = layer.index == 0
-            router = TravelRouter(layer.outline, b.dx) if route_or_classify else None
+            router = (TravelRouter(layer.outline, b.dx, simplification=simplification)
+                      if route_or_classify else None)
             paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
                      if job.settings.get("optimize_mixed_infill", True) else layer.paths)
             for path in paths:

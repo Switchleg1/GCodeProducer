@@ -82,7 +82,10 @@ This is a per-travel estimate, not a print time cap:
 it does not model acceleration, corner slowdown or retraction. The Messages
 log separates same-island detours, shortened island crossings, unresolved
 same-island crossings, and other open transitions. The search retries
-dense outlines with more waypoints, but remains bounded. An island crossing
+dense outlines with more waypoints, but remains bounded. **Settings → FDM
+travel → Travel waypoint simplification** controls the candidate outline
+(default 0.1 mm; 0 uses detailed waypoints only). The search still checks
+against the original outline and retries with detailed waypoints if needed. An island crossing
 still passes over open space even when shortened.
 
 Under **Seam → Perimeter start / stop**, **Fastest (nearest start)** puts the
