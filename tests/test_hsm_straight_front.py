@@ -1,10 +1,20 @@
 import math
 
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Point, box
 
 from tools.check_cambam_pocket import replay_strokes
-from tools.hsm_straight_front import frontier_edges, straight_advance, try_front_cut
+from tools.hsm_straight_front import eased_front_bite, frontier_edges, straight_advance, try_front_cut
+
+
+def test_eased_bite_removes_stock_and_ends_on_the_clearance_side():
+    pocket, stock = box(0, 0, 24, 14), box(5, 5, 15, 12)
+    path = eased_front_bite(((5., 5.), (15., 5.)), 1., .25, .25, .0025)
+    assert path[0] == (5., 3.75) and path[-1] == (15., 3.75)
+    assert all(a[0] < b[0] for a, b in zip(path, path[1:]))
+    remaining, peak = try_front_cut(pocket, stock, path, 1., contact_limit=60., sample_step=.05)
+    assert stock.area - remaining.area == pytest.approx(.821, abs=.002)
+    assert peak < 60. and Point(path[-1]).distance(remaining) >= 1.
 
 
 def test_straight_front_advances_at_low_contact():

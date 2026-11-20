@@ -18,14 +18,14 @@ from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
 from tools.hsm_tangent_link import forward_clearance
-from tools.hsm_straight_front import frontier_edges, straight_advance, straight_front_candidates
+from tools.hsm_straight_front import eased_front_bite, frontier_edges, straight_advance, straight_front_candidates
 
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
-               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False):
+               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -42,6 +42,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('early exits require clearance tapers and a roll-off radius')
     if with_neck_front and not (with_shallow_fronts and shallow_rolloff):
         raise ValueError('neck-front proposals require shallow fronts and roll-off')
+    if with_front_bites and not with_neck_front:
+        raise ValueError('front bites require neck-front proposals')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
     pocket = from_wkt(fixture.read_text(encoding='utf-8'))
     cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
@@ -102,6 +104,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                 for edge in frontier_edges(pocket, live, focus=focus):
                     if math.dist(*edge) < 2.:
                         continue
+                    if with_front_bites:
+                        yield eased_front_bite(edge, radius, .25, .25, .0025)
                     path = straight_advance(pocket, edge, radius, .25)
                     if path is not None:
                         cut = roll_off(path, shallow_rolloff, .0025)
@@ -175,6 +179,7 @@ if __name__ == '__main__':
     parser.add_argument('--min-departure', type=float, default=0., metavar='MM',
                         help='require a checked straight departure before ranking cuts')
     parser.add_argument('--prioritize-neck', action='store_true', help='rank checked cuts by removal east of X24 first')
+    parser.add_argument('--with-front-bites', action='store_true', help='try eased side cuts on the neck-facing frontier')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -184,7 +189,7 @@ if __name__ == '__main__':
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
                             require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
-                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck)
+                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

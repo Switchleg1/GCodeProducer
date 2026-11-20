@@ -320,6 +320,10 @@ so the stall is no longer caused by a trapped terminal heading.
 millimeter east of X24 first. Both runs stall at 57 cuts with the frontier
 ending at X27.75 mm. Neckward removal falls from 31.51 to 30.92 mm², so this
 ranking alone is not an improvement. All acceptance checks stay unchanged.
+`--with-front-bites` adds eased passes that enter and exit on the cleared
+side of a neck-facing edge. It adds one checked cut and 0.374 mm² of
+neckward removal at unchanged sampled peak. The run still stalls after
+58 cuts with 4,011.16 mm² reachable; it does not establish neck passage.
 
 ## Gate before another generator attempt
 
