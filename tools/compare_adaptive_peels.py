@@ -9,6 +9,7 @@ from shapely.geometry import LineString, Point, box
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from gcodeproducer.core.cam.adaptive_frontier import trace_frontier
 from gcodeproducer.core.cam.adaptive_link import choose_link
 from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
 
@@ -44,6 +45,14 @@ def main():
         print(f'{"Adaptive" if adaptive else "Fixed":<10} {len(peaks):>5} {max(peaks, default=0):>11.1%} '
               f'{np.linalg.norm(centre-start):>13.2f} {removed:>14.2f} {distance:>10.2f}')
     print('Local turns only; unequal removal. No cycle-time or whole-pocket comparison.')
+
+    trace = trace_frontier(start+seam, region, pocket.difference(Point(start).buffer(3.1, quad_segs=32)),
+                           turns=4, pitch=pitch, tool_radius=radius, limit=.18,
+                           min_loop_radius=1.5, max_loop_radius=2., cut_feed=800,
+                           travel_feed=1200, z_feed=150, lift=3)
+    print(f'Discovered course: {len(trace)} turns, {sum(c.peel.removed_area for c in trace):.2f} mm² removed, '
+          f'{max((c.peel.peak_engagement for c in trace), default=0):.1%} peak sampled engagement, '
+          f'{sum(c.link.minutes > 0 for c in trace)} transfer(s).')
 
     # A tight wall makes the straight course infeasible without steering and
     # shrinking. Keep the local experiment distinct from the lobe benchmark.

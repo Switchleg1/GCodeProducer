@@ -44,12 +44,14 @@ def choose_link(start, end, region, material, radius, *, travel_feed, z_feed, li
         point = Point(p)
         return valid.covers(point) and not stock.intersects(point.buffer(reach, quad_segs=quads))
 
-    if not clear_endpoint(end) or not clear_endpoint(start):
-        return None
     distance = float(np.linalg.norm(end-start))
     direct = np.vstack((start, end))
-    if distance <= 1e-9:
+    if np.array_equal(start, end) and valid.covers(Point(start)):
+        # No transfer at all: the cutter is already at this point. The peel
+        # evaluator will measure the next actual motion against live stock.
         return AdaptiveLink('stay_down', direct, 0.)
+    if not clear_endpoint(end) or not clear_endpoint(start):
+        return None
 
     def clear(points):
         line = LineString(points)

@@ -82,8 +82,17 @@ and the time estimate excludes acceleration.
 In the cleared corridor example, a 30 mm stay-down detour takes 1.50 s and
 beats the retract at 150 mm/min Z feed; at 1,200 mm/min the retract is faster
 (1.36 s). Both cases preserve the same coverage because travel removes no
-stock. Automatic branch discovery, creating safe entries into fresh stock,
-and completing residual areas remain open.
+stock.
+
+`adaptive_frontier.py` discovers candidate turns along the edges of existing
+cleared patches, allowing separate patches to compete rather than spending
+all trials in the nearest one. It also offers an exact continuation at the
+last turn's endpoint, with no repositioning cost. In a four-turn test in the
+broad lobe of the example pocket, starting in a pre-cleared patch, it removes
+20.73 mm² at 17.5% peak sampled engagement with one short initial transfer
+and no transfer between turns. This does not yet establish whole-pocket
+coverage or faster machining. Creating safe entries into fresh stock and
+clearing narrow-neck and corner residuals remain open; CAM output is unchanged.
 
 ## Comparison cases and gates
 
