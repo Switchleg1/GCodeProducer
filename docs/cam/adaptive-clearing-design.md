@@ -59,9 +59,16 @@ comparison inside the broad lobe of the synthetic pocket. It starts in a
 pre-cleared patch. The adaptive case peaks at 13.5% sampled engagement versus
 17.3% for fixed advance, but removes less material in those four turns. This
 is a test of stock-driven advance, not a demonstration of steady engagement,
-equal coverage, or time savings. Choosing the next heading and loop radius,
-covering corners and branches, and comparing checked links against retract
-time are still open.
+equal coverage, or time savings.
+
+The selector can also try a bounded fan of headings and change the radius
+smoothly during a turn. The local trace carries forward the exact endpoint,
+tangent direction and remaining stock; if no useful turn fits, it stops
+rather than inventing a connector. In the wall test, fixed heading and
+radius cannot advance; the steered trace shrinks from 2 to 1.4 mm and makes
+two connected turns before stopping. It removes only 0.30 mm², so this is
+not yet a practical whole-corner result. Global branch and entry selection,
+completion of residual areas, and travel-versus-retract timing remain open.
 
 ## Comparison cases and gates
 

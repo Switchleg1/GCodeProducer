@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from shapely.geometry import LineString, Point, box
 
-from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel
+from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
 
 
 @pytest.fixture
@@ -46,3 +46,23 @@ def test_peel_fails_closed_at_island_and_does_not_assume_entry_cleared(peel_case
     assert choose_peel(centre, seam, (1, 0), 1., 1., .14, blocked, material) is None
     assert choose_peel(centre, seam, (1, 0), 1., 1., .14, region, stock) is None
     assert choose_peel(centre, seam, (1, 0), 1., 1., .14, region, stock.difference(stock)) is None
+
+
+def test_trace_turns_and_shrinks_at_wall_without_repositioning(peel_case):
+    centre, seam, _, _, material = peel_case
+    region = box(2, 2, 12.04, 18)
+    assert choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material) is None
+    turns = trace_peels(centre, seam, (1, 0), 1., 1., .14, region, material,
+                        min_loop_radius=1.4, max_loop_radius=2.5, turns=8)
+    assert len(turns) == 2  # stops when no legal, useful next turn is found
+    assert abs(turns[0].centre[1] - centre[1]) > .1
+    assert np.linalg.norm(turns[0].seam) < np.linalg.norm(seam)
+    np.testing.assert_array_equal(turns[0].points[-1], turns[1].points[0])
+    a = turns[0].points[-1] - turns[0].points[-2]
+    b = turns[1].points[1] - turns[1].points[0]
+    assert np.dot(a, b) / (np.linalg.norm(a)*np.linalg.norm(b)) > .98
+    for choice in turns:
+        assert region.buffer(1e-7).covers(LineString(choice.points))
+        assert 0 < choice.peak_engagement <= .14
+        assert 1.4 <= np.linalg.norm(choice.seam) <= 2.5
+    assert material.area - turns[-1].remaining.area == pytest.approx(sum(p.removed_area for p in turns))

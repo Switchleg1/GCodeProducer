@@ -4,12 +4,12 @@ import sys
 
 import numpy as np
 from shapely import from_wkt
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, box
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel
+from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
 
 
 def main():
@@ -43,6 +43,18 @@ def main():
         print(f'{"Adaptive" if adaptive else "Fixed":<10} {len(peaks):>5} {max(peaks, default=0):>11.1%} '
               f'{np.linalg.norm(centre-start):>13.2f} {removed:>14.2f} {distance:>10.2f}')
     print('Local turns only; unequal removal. No cycle-time or whole-pocket comparison.')
+
+    # A tight wall makes the straight course infeasible without steering and
+    # shrinking. Keep the local experiment distinct from the lobe benchmark.
+    region = box(2, 2, 12.04, 18)
+    centre = np.array([10., 10.])
+    stock = box(0, 0, 40, 20).difference(Point(centre).buffer(3.01, quad_segs=32))
+    seam, heading = (0., 2.), (1., 0.)
+    fixed = choose_peel(centre, seam, heading, pitch, radius, limit, region, stock)
+    steered = trace_peels(centre, seam, heading, pitch, radius, limit, region, stock,
+                          min_loop_radius=1.4, max_loop_radius=2.5, turns=8)
+    print(f'Wall case: {int(fixed is not None)} fixed start(s), {len(steered)} continuous steered turns; '
+          f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
 
 
 if __name__ == '__main__':
