@@ -15,6 +15,9 @@ angle or a guarantee about cutter load.
 
 ## Research and choice
 
+See the [follow-up research notes](adaptive-research-notes.md) for what
+FreeCAD measures, the cornering evidence, and the offline comparison gate.
+
 - [FreeCAD Adaptive2d API](https://freecad.github.io/SourceDoc/d6/d4d/classAdaptivePath_1_1Adaptive2d.html), [source](https://github.com/FreeCAD/FreeCAD/blob/main/src/Mod/CAM/libarea/Adaptive.cpp), and [standalone bindings](https://github.com/kirberich/freecad-adaptive-clearing): the first baseline to try. The API accepts stock and separate machining boundaries; the bindings distinguish cuts and links. Compare raw geometry off-line, not FreeCAD-posted machine code. Do not assume its stepover factor equals our engagement setting or that a backend-labeled clear link is clear in our stock model. Check licensing, Windows packaging, and cancellation before deciding whether to ship a dependency.
 - [Fusion Adaptive Roughing](https://help.autodesk.com/cloudhelp/ENU/Fusion-CAM/files/GUID09E44604-DAD8-47D6-ADC6-C100869DE724.htm): a useful product reference for separate controls for optimal load, minimum corner radius, stepdown, and verified stay-down travel. Its published performance claims are not targets for this machine.
 - [Held and Pfeiffer, engagement-controlled pocket machining](https://doi.org/10.14733/cadaps.2025.731-747) and [Salzburg pocket decomposition research](https://www.cosy.sbg.ac.at/~held/projects/hsm/hsm.html): local machining circles and smooth transitions can advance from the cleared boundary. Decomposing a pocket at narrow necks gives each lobe a route and explicit coverage obligation. The engagement-control paper's construction is for pockets without holes; it is not a drop-in island solution.
