@@ -1,0 +1,48 @@
+import numpy as np
+import pytest
+from shapely.geometry import LineString, Point, box
+
+from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel
+
+
+@pytest.fixture
+def peel_case():
+    centre = np.array([10., 10.])
+    seam = np.array([0., 2.])
+    region = box(2, 2, 38, 18)
+    stock = box(0, 0, 40, 20)
+    material = stock.difference(Point(centre).buffer(3.01, quad_segs=32))
+    return centre, seam, region, stock, material
+
+
+def test_peel_reduces_advance_when_requested_turn_overloads(peel_case):
+    centre, seam, region, _, material = peel_case
+    wide = _turn(centre, seam, np.array([1., 0.]), 1, 1.)
+    assert evaluate_peel(wide, material, 1.)[0] > .14
+    assert evaluate_peel(wide, material, 1., abort_above=.14) is None
+    choice = choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material)
+    assert choice is not None and 0 < choice.advance < 1.
+    assert 0 < choice.peak_engagement <= .14
+    assert choice.removed_area == pytest.approx(material.area - choice.remaining.area)
+    assert region.covers(LineString(choice.points))
+    np.testing.assert_allclose(choice.points[0], centre+seam)
+    np.testing.assert_allclose(choice.points[-1], choice.centre+seam)
+    assert choice.length > 2*np.pi*np.linalg.norm(seam)
+
+
+def test_peel_uses_updated_stock_and_restarts_at_same_seam(peel_case):
+    centre, seam, region, _, material = peel_case
+    first = choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material)
+    second = choose_peel(first.centre, seam, (1, 0), 1., 1., .14, region, first.remaining)
+    assert first.advance != second.advance
+    np.testing.assert_array_equal(first.points[-1], second.points[0])
+    assert second.remaining.difference(first.remaining).area < 1e-8
+    assert second.peak_engagement <= .14
+
+
+def test_peel_fails_closed_at_island_and_does_not_assume_entry_cleared(peel_case):
+    centre, seam, region, stock, material = peel_case
+    blocked = region.difference(box(11.8, 9, 14, 11))
+    assert choose_peel(centre, seam, (1, 0), 1., 1., .14, blocked, material) is None
+    assert choose_peel(centre, seam, (1, 0), 1., 1., .14, region, stock) is None
+    assert choose_peel(centre, seam, (1, 0), 1., 1., .14, region, stock.difference(stock)) is None

@@ -6,7 +6,8 @@ The target is **consistent cutter engagement during cutting, with as little
 non-cutting time as practicable**. A recognizably curved toolpath is not
 sufficient. The current **Trochoidal** option is still a clipped spiral with
 local cleanup and checked links; it does not choose the next cutting move to
-control engagement. This review does not change the generated toolpath.
+control engagement. The experimental local peel selector below is not wired
+into the CAM operations and does not change the generated toolpath.
 
 ## What to take from the examples
 
@@ -41,6 +42,26 @@ CAM package, the link heights, or which colored moves actually touch stock.
    actual emitted G-code independently. Handle residual corners locally; if the
    planner cannot verify a cut or link, report the fallback rather than calling
    an unverified path adaptive.
+
+## Local peel prototype
+
+`gcodeproducer/core/cam/adaptive_peel.py` advances the center during each
+curved turn, keeping the seam and tangent continuous between successive
+turns. For a supplied heading and loop radius it tests a bounded set of
+advances against the cutter-centre region and updates simulated stock after
+each chord. It chooses the legal candidate that removes the most area per
+millimetre traveled without exceeding the sampled engagement limit. If no
+candidate fits or cuts usefully, it returns no cut. This uses the existing
+occupied-width proxy, not an analytical engagement-angle bound.
+
+Run `python tools/compare_adaptive_peels.py` for a reproducible four-turn
+comparison inside the broad lobe of the synthetic pocket. It starts in a
+pre-cleared patch. The adaptive case peaks at 13.5% sampled engagement versus
+17.3% for fixed advance, but removes less material in those four turns. This
+is a test of stock-driven advance, not a demonstration of steady engagement,
+equal coverage, or time savings. Choosing the next heading and loop radius,
+covering corners and branches, and comparing checked links against retract
+time are still open.
 
 ## Comparison cases and gates
 
