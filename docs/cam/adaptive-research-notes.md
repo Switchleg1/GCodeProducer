@@ -308,6 +308,10 @@ in a separate fixture, but does not get past the current two-lobe stall.
 `last_forward_clearance_mm` probes the full disk along the final heading.
 The stalled pose fits the disk but has no verified straight departure at
 0.0001 mm resolution. That does not rule out a curved departure.
+Requiring `--min-departure 0.25` before ranking changes which cuts win: the
+neck-facing trial reaches 48 accepted cuts at a 56.17° sampled peak, leaving
+4,024.89 mm² reachable. The departure probe checks the terminal chord
+heading against post-cut stock and walls; it does not emit that move.
 
 ## Gate before another generator attempt
 

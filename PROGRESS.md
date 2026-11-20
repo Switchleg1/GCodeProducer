@@ -53,4 +53,5 @@
 - `--with-neck-front` tries cuts from the easternmost 3 mm of the mapped frontier. Both extra proposals fail link clearance; the run remains at 23 cuts and 4,074.87 mm² reachable stock.
 - `--with-three-leg-links` tries two supplied waypoints after simpler links fail. A protected-island test verifies a route unavailable through either waypoint alone. The neck-facing trial still stalls at 23 cuts with 4,074.87 mm² reachable.
 - The final two-lobe pose fits the disk but has less than 0.0001 mm of checked straight departure in its current heading. The travel probe checks the whole swept centerline and does not rule out a curved departure.
-- Next: test changing the preceding cut's roll-off heading to leave a verified departure. Completion gates are in `GOAL.md`.
+- `--min-departure .25` rejects cuts unless the tool can depart in the terminal heading against post-cut stock. With neck-front proposals the trial reaches 48 accepted cuts instead of stalling at 23, leaving 4,024.89 mm² reachable at 56.17° peak.
+- Next: run this departure-gated variant past 48 cuts to find the next real stall. Completion gates are in `GOAL.md`.

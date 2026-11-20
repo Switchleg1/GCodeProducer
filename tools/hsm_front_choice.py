@@ -7,7 +7,7 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from tools.hsm_straight_front import try_front_cut
-from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link, forward_clearance
 
 
 class FrontChoice(NamedTuple):
@@ -21,8 +21,10 @@ class FrontChoice(NamedTuple):
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
                      link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None, require_clear_exit=False,
-                     with_three_leg_links=False):
+                     with_three_leg_links=False, min_departure=0.):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
+    if not math.isfinite(min_departure) or min_departure < 0:
+        raise ValueError('minimum departure must be nonnegative and finite')
     counts = diagnostics if diagnostics is not None else Counter()
 
     def reject(reason):
@@ -86,6 +88,13 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
         if require_clear_exit and not clear_at(cut[-1], remaining):
             reject('exit_clearance')
             continue
+        if min_departure:
+            tail = cut[-1]
+            previous = next(point for point in reversed(cut[:-1]) if point != tail)
+            departure = tuple(b-a for a, b in zip(previous, tail))
+            if forward_clearance(pocket, remaining, clearance, tail, departure, min_departure) < min_departure:
+                reject('departure_clearance')
+                continue
         counts['eligible'] += 1
         removed = stock.area - remaining.area
         travel = _length(link) + _length(cut)
