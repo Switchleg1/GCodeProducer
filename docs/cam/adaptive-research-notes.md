@@ -168,8 +168,11 @@ sample spacing. It fails the illustrative 95° trial limit despite improving
 coverage. Three staged tangent passes (1.8, 0.8, then 0.2 mm radius)
 leave the same 0.095 mm² and peak at 89.1–90.0° across 0.0125–0.05 mm
 sampling, with no measured outside sweep. The passes add 44.0 mm of feed
-including 27.2 mm of cleared returns after the reference cut: useful for
-isolating engagement, not yet an efficient general solution.
+including 27.2 mm of cleared returns after the reference cut. Fixture-specific
+cubic tangent returns reduce that to 18.5 mm; their sampled chord chains
+remove no stock, and the residual and contact peak are unchanged at both
+0.05 and 0.0125 mm contact spacing. This tests shorter links, not a general
+replacement or machine-time improvement.
 
 ## Gate before another generator attempt
 

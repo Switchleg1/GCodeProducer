@@ -76,6 +76,20 @@ def test_staged_cleanup_limits_contact_without_trading_away_coverage(step):
         assert sum(row['removed_stock_mm2'] for row in rows[index+2:index+5]) > 0.
 
 
+@pytest.mark.parametrize('step', [.05, .0125])
+def test_tangent_returns_shorten_travel_without_more_engagement_or_residual(step):
+    _, (baseline, _, _) = compare_staged_cleanup((1.8, .8, .2), step)
+    _, (blended, _, rows) = compare_staged_cleanup((1.8, .8, .2), step, blended_returns=True)
+    assert baseline['air_distance_mm'] - blended['air_distance_mm'] > 8.7
+    assert baseline['feed_distance_mm'] - blended['feed_distance_mm'] > 8.7
+    assert blended['reachable_residual_mm2'] == pytest.approx(baseline['reachable_residual_mm2'], abs=1e-8)
+    assert blended['outside_pocket_sweep_mm2'] < 1e-8
+    assert blended['sampled_peak_contact_deg'] == pytest.approx(baseline['sampled_peak_contact_deg'])
+    transfers = [row for row in rows if row['motion'] == 'blend']
+    assert len(transfers) == 3
+    assert all(row['removed_stock_mm2'] < 1e-8 for row in transfers)
+
+
 @pytest.mark.parametrize('fillets', [(), (.8, 1.8), (1.2, 1.2), (3.,), (0.,)])
 def test_staged_cleanup_requires_strictly_decreasing_positive_radii(fillets):
     with pytest.raises(ValueError, match='decrease strictly'):
