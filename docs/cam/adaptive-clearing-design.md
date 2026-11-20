@@ -4,12 +4,9 @@
 
 The target is **consistent cutter engagement during cutting, with as little
 non-cutting time as practicable**. A recognizably curved toolpath is not
-sufficient. The retired **Trochoidal** option was a clipped spiral with
-local cleanup and checked links; it does not choose the next cutting move to
-control engagement. The separate **Adaptive clearing** option now uses the selector for a bounded
-sequence of peels, followed by ordinary contour cleanup. See [usage and
-limits](toolpaths.md#adaptive-clearing). Full engagement-controlled clearance
-without that fallback remains experimental.
+sufficient. **Adaptive clearing** uses bounded stock-aware peel trials and
+rejects a pass if verified adaptive paths leave stock behind. It does not
+substitute ordinary contours at the same depth. See [usage and limits](toolpaths.md#adaptive-clearing).
 
 ## What to take from the examples
 
@@ -149,17 +146,6 @@ Letting half-turns compete routinely in the 48-turn two-lobe run reduced
 removal from 279.78 to 142.09 mm². They are therefore a fallback, not a
 replacement for productive full loops.
 
-## Integrated benchmark
-
-On the saved three-depth Stormtrooper Waterfall operation, Adaptive clearing
-produced eight connected peels per depth before contour cleanup. The Preview
-estimate was 6:14 versus 5:46 for wall-parallel. Both produced an existing
-cutting-hand conflict warning; neither reported rapid contact with stock.
-This is operation-only Preview timing, not a hardware test or a speedup.
-In 0.1.66 a 24-peel budget produced 24 peels per depth, but still needed
-24, 23 and 22 cleanup contours. Preview increased to 6:56, so the default
-budget stays at eight. More peels are useful for comparison, not a speed guarantee.
-
 ## Comparison cases and gates
 
 [adaptive-neck-pocket.wkt](../../examples/adaptive-neck-pocket.wkt) is a
@@ -169,18 +155,10 @@ its narrow neck. Use it along with a square corner, a pocket with an island,
 separated areas and the saved three-depth Waterfall case. The WKT is geometry
 for Shapely or test scripts, not a GUI import format.
 
-Geometry-only baseline on the synthetic pocket, with a 4 mm cutter, no
-allowance, climb and 40% stepover:
-
-| Generator | Centreline length | Output groups before travel planning |
-|---|---:|---:|
-| Wall-parallel contours | 2,559 mm | 21 closed contours |
-| Retired Trochoidal | 4,150 mm | 26 paths; 25 gaps without a cleared route |
-
-Both nominal cutter sweeps cover the cutter-centre region in this check.
-Contour count is **not** retract count, and centreline length is **not** cycle
-time. The saved Waterfall baseline gave approximately 5:46 for wall-parallel
-and 7:50 for the current spiral heuristic in Preview, not on hardware.
+Geometry-only baseline on the synthetic pocket: wall-parallel clearing
+produces 2,559 mm of centreline in 21 closed contours with a 4 mm cutter,
+no allowance, climb and 40% stepover. Contour count is **not** retract count,
+and centreline length is **not** cycle time.
 
 Judge a replacement at equal coverage, depth limits, tools, feed inputs and
 clearance rules. Record the length-weighted engagement spread around the

@@ -262,7 +262,7 @@ class CAMEditor(QWidget):
                 w.valueChanged.connect(self._edit)
         self.adaptive_peels = self.spin(1, ADAPTIVE_CAM_MAX_TURNS, ADAPTIVE_CAM_TURNS)
         self.adaptive_peels.setDecimals(0)
-        self.adaptive_peels.setToolTip("Maximum adaptive peels per depth plan. Contours clear the remaining stock. More peels may increase planning and machining time.")
+        self.adaptive_peels.setToolTip("Maximum adaptive peels per depth plan. Generation stops if a pass remains incomplete; it does not switch to contours.")
         self.adaptive_peels.valueChanged.connect(self._edit)
         form.addRow("Adaptive peel budget", self.adaptive_peels)
         self.stay_down = QCheckBox("Stay down between contours")

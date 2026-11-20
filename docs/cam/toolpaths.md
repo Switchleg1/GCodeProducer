@@ -8,8 +8,7 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 
 ## Adaptive clearing
 
-Choose **Adaptive clearing** for Pocket or 3D Waterfall. This first release
-combines stock-aware peels with wall-parallel cleanup. With a flat endmill,
+Choose **Adaptive clearing** for Pocket or 3D Waterfall. With a flat endmill,
 **Lead-in ramp** and **Stay down between contours** enabled, it tries a bounded
 sequence of curved cuts. It evaluates each trial against a planar stock model
 and caps the trial’s sampled engagement at 18%. It keeps a connected sequence
@@ -20,12 +19,13 @@ initial geometry from a nominal stock envelope.
 **Adaptive peel budget** sets the maximum number of peels per depth plan
 (default 8, up to 48). The planner searches for a peel it can reach without
 retracting, even if a cut requiring a retract would score higher. When the
-budget runs out or no verified stay-down peel remains, wall-parallel contours
-clear the rest. Areas protected by tabs use ordinary contours. The Log
-reports peel and cleanup counts and the reason for switching. The 18% trial limit is
-not a bound on actual tool load, and it does not apply to leads or cleanup.
-Inspect those sections in Preview; this strategy is not always faster than
-wall-parallel clearing. See the [design and benchmark](adaptive-clearing-design.md).
+budget runs out or no verified stay-down peel remains, generation stops if
+coverage is incomplete. It does not emit wall-parallel cleanup at the
+adaptive depth. Tab-protected areas are not supported. The error reports
+uncovered area and the reason for stopping. The 18% sampled-width limit is
+not a bound on actual tool load and does not apply to leads. Qualify depth
+per pass for the actual cutter and setup; do not carry an adaptive depth over
+to a different strategy without reviewing it. See the [design and benchmark](adaptive-clearing-design.md).
 
 ## Wall-parallel contours (default clearing strategy)
 

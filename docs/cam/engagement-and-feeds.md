@@ -12,7 +12,7 @@ The current machining engagement types are:
 | **Slot** | Approximately 95–100% | Machine modifier, initially 50% |
 
 HSM here names low horizontal engagement (labels say only *HSM*; the tooltip
-carries the explanation), not a new adaptive/trochoidal path
+carries the explanation), not a new adaptive clearing path
 strategy. Air is a separate no-contact result, not a fifth cutting type.
 The old user-facing names Low/Standard have been replaced by HSM/Cut. Stored
 keys `low_engagement_feed` / `standard_engagement_feed` remain compatibility

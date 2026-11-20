@@ -298,10 +298,8 @@ uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
-**Adaptive clearing** tries stock-aware curved peels, then clears the rest
-with wall-parallel contours. See [Adaptive clearing](toolpaths.md#adaptive-clearing).
-
-Saved Trochoidal operations reopen as Adaptive clearing. Regenerate to get the new paths.
+**Adaptive clearing** uses stock-aware curved peels and stops generation
+if it cannot cover the pass without a fallback. See [Adaptive clearing](toolpaths.md#adaptive-clearing).
 
 Historical captures (the clearing menu predates Adaptive clearing):
 
