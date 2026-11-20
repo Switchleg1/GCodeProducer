@@ -1,5 +1,6 @@
 """Read-only benchmark of the saved desktop CAM session (no G-code export)."""
 from pathlib import Path
+import argparse
 import json
 import sys
 import time
@@ -16,6 +17,15 @@ from gcodeproducer.core.settings import preferences
 
 
 def main():
+    from gcodeproducer.core.cam import adaptive_paths
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--point-budget', type=int, default=adaptive_paths.ADAPTIVE_CAM_POINT_LIMIT,
+                        help='override the adaptive point guard in this benchmark process only')
+    args = parser.parse_args()
+    if args.point_budget < 1:
+        parser.error('--point-budget must be positive')
+    adaptive_paths.ADAPTIVE_CAM_POINT_LIMIT = args.point_budget
     settings = QSettings('GCodeProducer', 'GCodeProducer')
     session = json.loads(settings.value('workSession/default'))
     if session['workflow'] != 'cam' or len(session['models']) != 1:
@@ -27,13 +37,15 @@ def main():
     job = build_job('cam', machine, mesh=load_mesh(model['path']), placement=Placement.from_dict(model['placement']),
                     tools=library.consumables_for(machine, 'tool'), cam_setup=setup,
                     preferences=preferences.load(library.root))
+    print(f'Benchmark: {Path(model["path"]).name}; adaptive point budget {args.point_budget}', flush=True)
     start = time.perf_counter()
     slice_job(job, log=lambda m: print(m, flush=True) if 'Adaptive' in m or 'DEBUG ONLY' in m else None)
     runtime = time.perf_counter()-start
     incomplete = any(w.startswith('DEBUG ONLY') for w in job.warnings)
     unsafe = any('rapid motion contacts' in w.lower() or 'intersects a protected holding tab' in w.lower()
                  for w in job.warnings)
-    report = dict(complete=not incomplete, safety_findings=unsafe, seconds=round(runtime, 2),
+    report = dict(complete=not incomplete, safety_findings=unsafe, point_budget=args.point_budget,
+                  seconds=round(runtime, 2),
                   preview_seconds=round(build_toolpath(job.program).stats['est_time_s'], 1),
                   layers=len(job.layers), lines=len(job.program.lines), warnings=job.warnings)
     print(json.dumps(report, ensure_ascii=False), flush=True)
