@@ -214,7 +214,11 @@ This does not validate travel to the start of either stroke.
 and checks the entire chord chain against progressive stock. In the
 rounded fixture the 3 mm turn removes 11.89 mm² at 69.8° sampled peak
 (0.05 mm spacing); a too-tight turn or a lower contact limit rejects the
-whole proposal rather than committing the first leg.
+whole proposal rather than committing the first leg. Corner waypoints can
+also be derived by offsetting and intersecting adjacent exposed stock edges.
+On the rectangular stock fixture a generated candidate removed 4.241 mm²
+at 45.14° peak sampled contact, with no hand-specified corner waypoints.
+Candidate selection and travel to its start are still separate checks.
 
 ## Gate before another generator attempt
 

@@ -2,7 +2,35 @@
 import math
 
 from tools.check_cambam_pocket import arc_points
-from tools.hsm_straight_front import try_front_cut
+from tools.hsm_straight_front import frontier_edges, try_front_cut
+
+
+def frontier_corner_poses(pocket, stock, radius, immersion, *, lead=0.):
+    """Yield offset waypoints at adjacent exposed edges, before cut validation."""
+    if (not all(map(math.isfinite, (radius, immersion, lead)))
+            or not 0 < immersion < radius or lead < 0):
+        raise ValueError('expected 0 < immersion < radius and a nonnegative lead')
+    edges = list(frontier_edges(pocket, stock))
+    successors = {}
+    for start, end in edges:
+        successors.setdefault(start, []).append(end)
+    offset = radius - immersion
+    for start, join in edges:
+        for end in successors.get(join, ()):
+            a, b = math.dist(start, join), math.dist(join, end)
+            ux, uy = ((q-p)/a for p, q in zip(start, join))
+            vx, vy = ((q-p)/b for p, q in zip(join, end))
+            cross = ux*vy-uy*vx
+            if abs(cross) < 1e-6:
+                continue
+            dx, dy = offset*(vy-uy), offset*(ux-vx)
+            shift = (dx*vy-dy*vx)/cross
+            if a+shift <= 0 or b+shift <= 0:
+                continue
+            entry = (start[0]+offset*uy-lead*ux, start[1]-offset*ux-lead*uy)
+            vertex = (join[0]+offset*uy+shift*ux, join[1]-offset*ux+shift*uy)
+            exit = (end[0]+offset*vy, end[1]-offset*vx)
+            yield entry, vertex, exit
 
 
 def filleted_corner(start, vertex, end, turn_radius, chord_error):

@@ -1,7 +1,8 @@
 import pytest
+from shapely.geometry import box
 
 from tools.hsm_corner_fixtures import corner_slot_fixtures
-from tools.hsm_front_corner import filleted_corner, try_corner_advance
+from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, try_corner_advance
 
 
 @pytest.mark.parametrize('direction', [1., -1.])
@@ -11,6 +12,25 @@ def test_fillet_trims_each_leg_and_turns_to_either_side(direction):
     assert points[1] == pytest.approx((4., 0.))
     assert points[-2] == pytest.approx((6., direction*2.))
     assert all(4. <= x <= 6. and 0. <= direction*y <= 2. for x, y in points[1:-1])
+
+
+def test_adjacent_live_edges_supply_a_checked_corner_without_manual_waypoints():
+    pocket = box(0, 0, 24, 18)
+    stock = box(5, 5, 15, 12)
+    candidates = list(frontier_corner_poses(pocket, stock, 1., .25, lead=1.))
+    assert len(candidates) == 4
+    poses = next(poses for poses in candidates if poses[0] == (4., 4.25))
+    assert poses == ((4., 4.25), (15.75, 4.25), (15.75, 12.))
+    _, remaining, peak = try_corner_advance(pocket, stock, *poses, 1., turn_radius=1.5,
+                                            chord_error=.00025, contact_limit=60., sample_step=.05)
+    assert stock.area - remaining.area == pytest.approx(4.241, abs=.001)
+    assert peak == pytest.approx(45.14, abs=.1)
+
+
+def test_frontier_corners_do_not_join_through_a_pocket_wall():
+    pocket = box(0, 0, 24, 18)
+    assert list(frontier_corner_poses(pocket, box(4, 5, 24, 18), 1., .25)) == [
+        ((3.25, 18.), (3.25, 4.25), (24., 4.25))]
 
 
 def test_fillet_rejects_a_reversal_or_insufficient_room():
