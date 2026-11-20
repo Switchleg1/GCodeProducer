@@ -20,7 +20,7 @@ from tools.hsm_straight_front import straight_front_candidates
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
-               shallow_rollon=0., with_shifted_joins=False):
+               shallow_rollon=0., with_shifted_joins=False, max_cuts=12):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -61,7 +61,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         return live_waypoints(pocket, live, pose[0], radius, spacing=3., rings=4, limit=8)
 
     diagnostics = []
-    cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=12,
+    cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=max_cuts,
                                        contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
                                        waypoints=waypoints,
                                        propose_waypoints=propose_waypoints if with_live_detours else None,
@@ -97,13 +97,14 @@ if __name__ == '__main__':
     parser.add_argument('--shallow-rollon', type=float, default=0., metavar='MM',
                         help='also try a tangent quarter-turn approach at this radius')
     parser.add_argument('--with-shifted-joins', action='store_true', help='also shift shallow joins by 2 and 4 mm')
+    parser.add_argument('--max-cuts', type=int, default=12, help='maximum accepted cuts in the offline trial')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
                             with_detours=args.with_detours, with_live_detours=args.with_live_detours,
                             with_shallow_fronts=args.with_shallow_fronts, shallow_runoff=args.shallow_runoff,
                             shallow_rolloff=args.shallow_rolloff, shallow_rollon=args.shallow_rollon,
-                            with_shifted_joins=args.with_shifted_joins)
+                            with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

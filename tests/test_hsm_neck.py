@@ -102,3 +102,12 @@ def test_shifted_joins_reach_cut_budget_with_stock_remaining():
     assert result['removed_mm2'] == pytest.approx(36.2043, abs=.002)
     assert result['reachable_residual_mm2'] == pytest.approx(4116.36, abs=.02)
     assert result['peak_contact_deg'] == pytest.approx(56.17, abs=.1)
+
+
+def test_larger_cut_budget_exposes_shifted_join_stall():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
+                        with_shifted_joins=True, max_cuts=48)
+    assert result['cut_count'] == 19 and result['stop'] == 'stalled'
+    assert result['reachable_residual_mm2'] == pytest.approx(4103.77, abs=.02)
+    assert result['last_selection_counts'] == {'start_clearance': 201, 'contact_limit': 34}

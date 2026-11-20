@@ -269,8 +269,11 @@ checks accept one additional cut, removing another 2.65 mm² at the same
 peak contact; 4,119.04 mm² reachable stock still remains. Adding
 `--with-shifted-joins` tries joining 2 or 4 mm farther along the initial
 straight. The trial reaches its 12-cut budget at the same 56.17° peak with
-4,116.36 mm² reachable stock remaining. A budget stop is not a coverage pass
-or proof that no further cut is possible.
+4,116.36 mm² reachable stock remaining. With `--max-cuts 48` the same trial
+stalls after 19 accepted cuts and leaves 4,103.77 mm² reachable. The final
+round rejects 201 starts on clearance and 34 cuts on sampled contact. Raising
+the benchmark budget distinguishes a real stall from the 12-cut budget stop;
+it does not change production settings or establish coverage.
 
 ## Gate before another generator attempt
 
