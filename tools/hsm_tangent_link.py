@@ -43,3 +43,15 @@ def cleared_tangent_link(pocket, stock, radius, start, end, outgoing, incoming, 
     if not stock.is_empty and axis.distance(stock) < required:
         return None
     return points
+
+
+def cleared_tangent_detour(pocket, stock, radius, start_pose, via_pose, end_pose, handle, *, margin=0.):
+    """Check both tangent legs against the same stock; never return a partial link."""
+    start, outgoing = start_pose
+    via, heading = via_pose
+    end, incoming = end_pose
+    first = cleared_tangent_link(pocket, stock, radius, start, via, outgoing, heading, handle, margin=margin)
+    if first is None:
+        return None
+    second = cleared_tangent_link(pocket, stock, radius, via, end, heading, incoming, handle, margin=margin)
+    return None if second is None else first + second[1:]

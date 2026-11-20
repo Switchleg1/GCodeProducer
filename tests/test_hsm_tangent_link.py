@@ -1,7 +1,7 @@
 import pytest
-from shapely.geometry import Polygon, box
+from shapely.geometry import LineString, Polygon, box
 
-from tools.hsm_tangent_link import cleared_tangent_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link
 
 
 def _link(pocket, stock, margin=0.):
@@ -31,3 +31,33 @@ def test_margin_rejects_boundary_tangency():
     pocket = box(0, 2, 10, 6)
     assert _link(pocket, Polygon()) is not None
     assert _link(pocket, Polygon(), margin=.002) is None
+
+
+@pytest.fixture
+def off_center_island():
+    island = box(10, 3, 14, 9)
+    pocket = box(0, 0, 24, 16).difference(island)
+    poses = tuple((xy, (1., 0.)) for xy in ((3., 6.), (12., 12.), (21., 6.)))
+    return pocket, poses
+
+
+def test_off_center_island_needs_both_legs_of_the_wider_detour(off_center_island):
+    pocket, (start, via, end) = off_center_island
+    stock = box(4, 0, 8, 2)
+    assert cleared_tangent_link(pocket, stock, 1., start[0], end[0], start[1], end[1], 2., margin=.1) is None
+    lower = ((12., 1.5), via[1])
+    assert cleared_tangent_detour(pocket, stock, 1., start, lower, end, 2., margin=.1) is None
+    points = cleared_tangent_detour(pocket, stock, 1., start, via, end, 2., margin=.1)
+    assert points.count(via[0]) == 1
+    assert points[0] == start[0] and points[-1] == end[0]
+    axis = LineString(points)
+    assert axis.length == pytest.approx(21.902, abs=.001)
+    assert axis.distance(pocket.boundary) > 1.6
+    assert axis.distance(stock) >= 1.1
+
+
+@pytest.mark.parametrize('x', [7, 17])
+def test_stock_can_block_either_leg_without_returning_a_partial_link(off_center_island, x):
+    pocket, poses = off_center_island
+    stock = box(x, 6, x+.5, 12)
+    assert cleared_tangent_detour(pocket, stock, 1., *poses, 2., margin=.1) is None

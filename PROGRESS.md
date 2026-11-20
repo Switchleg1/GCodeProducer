@@ -20,4 +20,5 @@
 - Offline tangent return links shorten the staged corner's added air travel from 27.21 to 18.48 mm. At two contact spacings, residual and sampled peak are unchanged and links remove no measured stock.
 - `tools/hsm_tangent_link.py` proposes cubic tangent chord chains and rejects full-disk overlap with stock or pocket holes. The stricter distance test detects a 0.000021 mm stock-side clearance shortfall on the fixture's first return despite zero measured area in the polygonal sweep; the trial remains diagnostic, not approved by the new checker.
 - Moving the return-to-cut join 0.1 mm upstream lets all three tangent returns pass the unchanged full-disk check against progressive stock at zero extra margin. Added air is 18.65 mm versus 27.21 mm with the staged baseline; residual and peak contact are effectively unchanged.
-- Next: exercise verified transfer proposals on the off-center island fixture, including a blocked direct return. Completion gates are in `GOAL.md`.
+- Off-center island test: the direct and narrow-side returns fail; a 21.90 mm two-leg tangent detour clears the wider side with a 0.1 mm extra planar margin. A stock rib on either leg rejects the whole proposal.
+- Next: map connected cutter-center regions on the two-lobe pocket so clearing can schedule front advances instead of selecting only local strokes. Completion gates are in `GOAL.md`.

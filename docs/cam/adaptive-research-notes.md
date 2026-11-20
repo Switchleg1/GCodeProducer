@@ -183,6 +183,12 @@ extra margin. Added air travel is 18.65 mm rather than 27.21 mm with the
 staged baseline, without changing the measured residual. This is a fixture
 result; no machine clearance or positive boundary margin is inferred.
 
+A separate off-center island fixture tests two tangent legs meeting at a
+provided waypoint. The direct and narrow-side proposals fail; the 21.90 mm
+wide-side detour passes with 0.1 mm extra planar margin. Both legs are
+checked against the same stock, and a stock rib blocking either leg rejects
+the entire detour. This does not yet find waypoints automatically.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input
