@@ -9,7 +9,7 @@ from shapely import union_all
 
 from .adaptive_branch import BranchChoice
 from .adaptive_entry import AdaptiveEntry
-from .adaptive_finish import AdaptiveFinish, checked_finish
+from .adaptive_finish import AdaptiveFinish, checked_finish, finish_geometry
 from .adaptive_pocket import plan_pocket
 from .cam_constants import (
     ADAPTIVE_CAM_COMPONENTS, ADAPTIVE_CAM_POINT_LIMIT,
@@ -61,9 +61,12 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
             local = [(p, sweep) for p, sweep in references if component.distance(Point(p[0])) <= 1e-7]
             target = union_all([sweep for _, sweep in local])
 
+            contours_here = [p for p, _ in reversed(local)]
+            finish_candidates = finish_geometry(contours_here, component, radius)
+
             def finish(position, remaining):
-                return checked_finish(position, [p for p, _ in reversed(local)], component, remaining,
-                                      radius, limit, target=target, **rates)
+                return checked_finish(position, contours_here, component, remaining,
+                                      radius, limit, target=target, candidates=finish_candidates, **rates)
 
             trial = plan_pocket(component, stock, top=0., depth=-(depth_step or op.stepdown),
                                 lead_angle=op.lead_angle, entry_budget=ADAPTIVE_CAM_POINT_LIMIT,

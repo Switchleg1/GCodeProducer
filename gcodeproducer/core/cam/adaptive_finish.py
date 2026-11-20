@@ -25,10 +25,12 @@ class AdaptiveFinish:
 
 
 def checked_finish(position, contours, region, material, radius, limit, *, travel_feed, z_feed, lift,
-                   target=None):
+                   target=None, candidates=None):
     """Try rounded finish passes without committing failed trials or sharp corners."""
-    for factor in ADAPTIVE_BLEND_RADIUS_FACTORS:
-        result = _trial_finish(position, contours, region, material, radius, limit, radius*factor,
+    if candidates is None:
+        candidates = finish_geometry(contours, region, radius)
+    for candidate in candidates:
+        result = _trial_finish(position, candidate, region, material, radius, limit,
                                travel_feed=travel_feed, z_feed=z_feed, lift=lift)
         if result is not None and (target is None or
                                    target.intersection(result.remaining).area <= ADAPTIVE_POCKET_AREA_EPS):
@@ -36,17 +38,30 @@ def checked_finish(position, contours, region, material, radius, limit, *, trave
     return None
 
 
-def _trial_finish(position, contours, region, material, radius, limit, blend, *, travel_feed, z_feed, lift):
-    points, stock, count, samples = [np.asarray(position)[None, :]], material, 0, 0
+def finish_geometry(contours, region, radius):
+    """Cache only geometry shared by finish trials at the same depth."""
     quads = ADAPTIVE_LINK_BUFFER_QUADS
     reach = radius/math.cos(math.pi/(2*quads)) + 1e-7
     valid = prep(region.buffer(1e-7))
-    for contour in contours:
-        line = LineString(np.vstack((contour, contour[0])))
-        if not line.buffer(reach, quad_segs=quads).intersects(stock):
+    sweeps = [LineString(np.vstack((p, p[0]))).buffer(reach, quad_segs=quads) for p in contours]
+    result = []
+    for factor in ADAPTIVE_BLEND_RADIUS_FACTORS:
+        entries = []
+        for contour, sweep in zip(contours, sweeps):
+            rounded = rounded_loop(contour, radius*factor)
+            if rounded is not None and not valid.covers(LineString(np.vstack((rounded, rounded[0])))):
+                rounded = None
+            entries.append((prep(sweep), rounded))
+        result.append(entries)
+    return result
+
+
+def _trial_finish(position, entries, region, material, radius, limit, *, travel_feed, z_feed, lift):
+    points, stock, count, samples = [np.asarray(position)[None, :]], material, 0, 0
+    for sweep, rounded in entries:
+        if not sweep.intersects(stock):
             continue
-        rounded = rounded_loop(contour, blend)
-        if rounded is None or not valid.covers(LineString(np.vstack((rounded, rounded[0])))):
+        if rounded is None:
             return None
         _, phased = _nearest_seam(rounded, position)
         link = choose_link(position, phased[0], region, stock, radius, travel_feed=travel_feed,

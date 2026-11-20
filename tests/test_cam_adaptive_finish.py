@@ -3,7 +3,7 @@ from shapely.geometry import LineString, Polygon, box
 
 from gcodeproducer.core.cam.adaptive_rounding import rounded_loop
 
-from gcodeproducer.core.cam.adaptive_finish import checked_finish
+from gcodeproducer.core.cam.adaptive_finish import checked_finish, finish_geometry
 
 
 def test_finish_accepts_light_stock_but_rejects_same_move_in_heavy_stock():
@@ -40,6 +40,20 @@ def test_finish_rejects_blend_across_a_protected_reentrant_corner():
     stock = box(5, .01, 6, .07)
     assert checked_finish((2., 0.), [contour], region, stock, 1., .18,
                           travel_feed=800, z_feed=150, lift=3) is None
+
+
+def test_finish_geometry_cache_still_checks_live_stock():
+    contour = np.array([[2., 2.], [8., 2.], [8., 8.], [2., 8.]])
+    region = box(1, 1, 9, 9)
+    light = box(3, 1.85, 7, 1.95)
+    opts = dict(travel_feed=800, z_feed=150, lift=3)
+    candidates = finish_geometry([contour], region, 1.)
+    direct = checked_finish((4., 8.), [contour], region, light, 1., .18, **opts)
+    cached = checked_finish((4., 8.), [contour], region, light, 1., .18, candidates=candidates, **opts)
+    np.testing.assert_array_equal(cached.points, direct.points)
+    assert cached.remaining.equals(direct.remaining)
+    heavy = box(3, 1, 7, 3)
+    assert checked_finish((4., 8.), [contour], region, heavy, 1., .18, candidates=candidates, **opts) is None
 
 
 def test_finish_rejects_an_unverified_transfer():
