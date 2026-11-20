@@ -5,6 +5,7 @@ from shapely.geometry import Point
 
 from tools.check_cambam_pocket import level_moves, replay_strokes
 from tools.hsm_corner_fixtures import corner_slot_fixtures
+from tools.hsm_corner_trial import compare_local_cleanup
 
 
 @pytest.mark.parametrize('name, stock_area, unreachable', [
@@ -50,3 +51,14 @@ def test_rounded_reference_leaves_more_reachable_stock_in_sharp_corner():
     assert rounded['reachable_residual_mm2'] < .001
     assert sharp['reachable_residual_mm2'] > .5
     assert rounded['sampled_peak_contact_deg'] < 100.
+
+
+@pytest.mark.parametrize('step', [.05, .025])
+def test_local_cleanup_reduces_residual_but_fails_trial_contact_limit(step):
+    (rough, _, _), (finished, _, rows) = compare_local_cleanup(contact_step=step)
+    assert rough['reachable_residual_mm2'] > 2.
+    assert finished['reachable_residual_mm2'] < .1
+    assert finished['outside_pocket_sweep_mm2'] < 1e-8
+    assert all(row['removed_stock_mm2'] < 1e-8 for row in rows[4:6])
+    assert rough['sampled_peak_contact_deg'] < 95.
+    assert finished['sampled_peak_contact_deg'] > 130.  # reject at the 95° trial limit

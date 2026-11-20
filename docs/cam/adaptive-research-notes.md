@@ -160,6 +160,13 @@ fixture but 2.228 mm² in the sharp one. The slot reference separately checks
 that a pre-cleared move registers zero contact and a fresh centerline slot
 matches the analytical contact for the chosen sampling step.
 
+`tools/hsm_corner_trial.py` compares the 3 mm reference turn with and
+without a 0.2 mm tangent local cleanup. The latter leaves 0.095 mm² instead
+of 2.228 mm² with no measured outside sweep; both connector strokes remove
+no stock in the model. But the cleanup peaks at 136–137° at 0.025 and 0.05 mm
+sample spacing. It fails the illustrative 95° trial limit despite improving
+coverage. Test lighter intermediate passes rather than accepting the path.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input
