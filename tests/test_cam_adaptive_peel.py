@@ -50,6 +50,30 @@ def test_expanding_peel_opens_more_stock_in_wide_area(peel_case):
         assert np.linalg.norm(restricted.seam) < 3.
 
 
+def test_pruned_search_selects_same_peel_as_exhaustive(peel_case, monkeypatch):
+    from gcodeproducer.core.cam import adaptive_peel
+
+    centre, seam, region, _, material = peel_case
+    args = (centre, seam, (1, 0), 1., 1., .18, region, material)
+    kwargs = dict(min_loop_radius=1.5, max_loop_radius=3., expand=True)
+    pruned = adaptive_peel.choose_steered_peel(*args, **kwargs)
+    monkeypatch.setattr(adaptive_peel, '_sweep_area_upper', lambda *_: float('inf'))
+    full = adaptive_peel.choose_steered_peel(*args, **kwargs)
+    assert pruned is not None and full is not None
+    np.testing.assert_array_equal(pruned.points, full.points)
+    assert pruned.peak_engagement == full.peak_engagement
+    assert pruned.remaining.equals(full.remaining)
+
+
+def test_sweep_bound_covers_chord_caps_at_tight_turns():
+    from shapely import union_all
+    from gcodeproducer.core.cam.adaptive_peel import _sweep_area_upper
+
+    points = np.array([[0., 0.], [2., 0.], [2.03, .1], [.08, .05], [1., -1.]])
+    sweep = union_all([LineString([a, b]).buffer(1.) for a, b in zip(points, points[1:])])
+    assert _sweep_area_upper(LineString(points), sweep, 1.) == pytest.approx(sweep.area, abs=1e-9)
+
+
 def test_peel_uses_updated_stock_and_restarts_at_same_seam(peel_case):
     centre, seam, region, _, material = peel_case
     first = choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material)

@@ -12,7 +12,7 @@ from shapely.prepared import prep
 from gcodeproducer.core.cam.cam_constants import (
     ADAPTIVE_PEEL_ADVANCE_FACTORS, ADAPTIVE_PEEL_CHORD_ERROR, ADAPTIVE_PEEL_MAX_SEGMENTS,
     ADAPTIVE_PEEL_MIN_SEGMENTS, ADAPTIVE_PEEL_SAMPLE_STEP_RADII,
-    ADAPTIVE_PEEL_HEADINGS, ADAPTIVE_PEEL_RADIUS_FACTORS,
+    ADAPTIVE_PEEL_HEADINGS, ADAPTIVE_PEEL_RADIUS_FACTORS, ADAPTIVE_LINK_BUFFER_QUADS,
 )
 from gcodeproducer.core.cam.engagement import measure_segments
 
@@ -80,6 +80,15 @@ def evaluate_peel(points, material, radius, *, abort_above=1.):
     return peak, removed, length, material.difference(local.difference(remaining))
 
 
+def _sweep_area_upper(line, material, tool_radius):
+    """Conservative area bound for a polyline's union of chord sweeps."""
+    quads = ADAPTIVE_LINK_BUFFER_QUADS
+    # Allow a full nominal arc step per half-angle, including GEOS rounding
+    # the number of facets at turns to the nearest integer.
+    reach = tool_radius / math.cos(math.pi/(2*quads)) + 1e-8
+    return material.intersection(line.buffer(reach, quad_segs=quads)).area
+
+
 def choose_peel(centre, seam, axis, pitch, tool_radius, limit, region, material, *, sense=1,
                 factors=ADAPTIVE_PEEL_ADVANCE_FACTORS, headings=(0.,), radii=(1.,),
                 min_loop_radius=None, max_loop_radius=None, expand=False):
@@ -117,8 +126,13 @@ def choose_peel(centre, seam, axis, pitch, tool_radius, limit, region, material,
     def consider(advance, step, scale):
         nonlocal best
         points = _turn(centre, seam, advance, sense, tool_radius, scale)
-        if not valid.covers(LineString(points)):
+        line = LineString(points)
+        if not valid.covers(line):
             return
+        if best is not None:
+            upper = _sweep_area_upper(line, material, tool_radius)
+            if upper + 1e-8 < best.removed_area/best.length * line.length:
+                return
         outcome = evaluate_peel(points, material, tool_radius, abort_above=limit)
         if outcome is None:
             return

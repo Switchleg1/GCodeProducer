@@ -123,8 +123,17 @@ An expanding turn grows the radius around the existing cleared core without
 moving its center or breaking the seam. It competes with translating turns
 on removal per path length, and must pass the same full-path containment and
 sampled engagement checks. Expansion removed more stock per turn here, but
-also traveled farther; the test does not establish a speedup. All three runs
-hit the turn budget with most stock still present. The prototype remains offline.
+also traveled farther; the test does not establish a machining speedup. All
+three runs hit the turn budget with most stock still present.
+
+The trial selector now skips expensive engagement replay when an enlarged
+sweep bounds the candidate's removal per millimetre below the best accepted
+cut. A trial that could win still receives the full progressive-stock check.
+In one paired 12-turn test planning fell from 77 s to 10 s, with identical
+selected XY points, links, peak sampled engagement and residual area. A
+48-turn run took 42 s to plan and removed 279.78 mm², leaving 4,221.10 mm²;
+there were three repositioning moves and peak sampled engagement was 16.7%.
+These are planning times, not machining times. The prototype remains offline.
 
 ## Comparison cases and gates
 
