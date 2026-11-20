@@ -67,4 +67,5 @@
 - `--section-x` compares terminal seed-connected spans to the wall-limited center domain. The narrow-bite baseline has Y21.51–23.89 open at X25.75, but no open span at X26 despite a 16.05 mm wall-limited width there.
 - `--with-section-bites` proposes eastward bows anchored inside the live open span. With the same gates, the trial stalls at cut 49, X23.495, with 4,036.97 mm² reachable versus cut 58, X25.998, and 4,011.16 mm² in the baseline.
 - `--section-bites-last` preserves all 58 baseline motions and adds one checked bow: X25.998 → X26.123, reachable residual 4,011.155 → 4,010.847 mm², unchanged 56.17° peak. It stalls at cut 59; all three final bows fail departure clearance.
-- Next: adjust the section-bite exit geometry to provide a checked departure at the new front without weakening the gate. Completion gates are in `GOAL.md`.
+- `--section-turn-exits` adds 0.25/0.5 mm retreat turns after last-resort bites. The trial stalls at cut 62, X26.365, with 4,010.116 mm² reachable, versus cut 59, X26.123 and 4,010.847 mm² without turns. Peak remains 56.17°; final bite rejections are six no-removal and three contact-limit, not departure.
+- Next: use live stock to choose the next bow's depth rather than retrying fixed amplitudes that cut nothing or overload. Completion gates are in `GOAL.md`.

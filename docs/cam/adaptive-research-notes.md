@@ -361,6 +361,10 @@ Existing link, contact, exit and departure checks are unchanged.
 checked bow: the connected edge advances from X25.998 to X26.123 and
 reachable residual drops by 0.309 mm². The three remaining bows fail the
 post-cut departure check; the neck probe is still disconnected.
+Adding `--section-turn-exits` offers quarter-turn retreats with 0.25 and
+0.5 mm radii, preserving the same departure gate. The 62-cut run reaches
+X26.365 with 4,010.116 mm² remaining. The final bows fail for no removal
+(six) or sampled contact (three), and the probe remains disconnected.
 
 ## Gate before another generator attempt
 

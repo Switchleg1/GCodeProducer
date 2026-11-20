@@ -23,4 +23,5 @@
   It is not a production tuning rule.
 - Section-bite probes assume east is neckward on this fixture. The 0.25/0.5 mm
   setbacks, 0.2 mm endpoint inset and three bow depths are trial dimensions,
-  not clearance guarantees or machining defaults.
+  not clearance guarantees or machining defaults. The 0.25/0.5 mm retreat
+  radii are likewise fixture probes and must pass the same post-cut checks.

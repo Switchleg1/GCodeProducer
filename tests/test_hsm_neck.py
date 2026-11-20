@@ -14,6 +14,13 @@ def test_section_bites_start_and_end_inside_clearance_and_bow_east():
         assert path[0][1] > path[-1][1]
         assert max(x for x, _ in path) > path[0][0]
     assert list(section_bites([box(0, 0, 12, 10)], box(1, 2, 5, 3), 2.)) == []
+    variants = list(section_bites([box(0, 0, 12, 10)], component, 2., turn_exits=True))
+    assert variants[::3] == paths and len(variants) == 18
+    for index, path in enumerate(paths):
+        for retreat in variants[3*index+1:3*index+3]:
+            assert retreat[:len(path)] == path
+            dx, dy = (b-a for a, b in zip(retreat[-2], retreat[-1]))
+            assert dx < 0 and abs(dy) < abs(dx)
 
 
 def test_terminal_sections_distinguish_open_spans_from_wall_domain():
