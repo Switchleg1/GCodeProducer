@@ -28,4 +28,5 @@
 - Offline tangent corner proposal checks both straights and the intervening turn as one cut. The rounded fixture removed 11.89 mm² with 69.8° sampled peak at 0.05 mm spacing. Too-tight and over-limit candidates commit nothing.
 - Offline corner waypoints now come from adjacent exposed stock edges. On the rectangular stock fixture, the generated fillet removes 4.241 mm² at 45.14° sampled peak; pocket-wall edges are excluded from pairing.
 - Offline frontier selection checks a tangent link and live-stock cut before ranking gain per total millimeter. It selects the same candidate in either input order in the fixture and returns no choice for blocked access, overload, or an incompatible same-pose heading.
-- Next: run repeated selection against updated stock in a seeded fixture and report useful progress versus a stall. Completion gates are in `GOAL.md`.
+- Bounded offline frontier runner updates stock and the tool pose after each accepted cut. A seeded two-pad case removes 2 of 16 mm² over two cuts, then reports a stall with 14 mm² remaining; budget stop and empty stock are separate outcomes.
+- Next: broaden the seeded fixture's candidate generation to advance past the first strips, while preserving checked transfer and honest residual reporting. Completion gates are in `GOAL.md`.

@@ -222,6 +222,10 @@ at 45.14° peak sampled contact, with no hand-specified corner waypoints.
 the proposed cut against the same live stock. It ranks accepted options by
 stock removed per millimeter of link plus cut, not by a machine-time
 estimate. When no checked candidate succeeds, it does not imply a retract.
+`tools/hsm_front_run.py` repeats that selection against updated stock and
+pose with a bounded cut budget. A deliberately restricted two-pad fixture
+removes 2 of 16 mm², then reports a stall and retains the 14 mm² residual.
+Empty stock and exhausted cut budget are distinct from a stalled planner.
 
 ## Gate before another generator attempt
 
