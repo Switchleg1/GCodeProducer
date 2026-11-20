@@ -28,6 +28,24 @@ def test_pocket_accounts_for_uncut_stock_when_budget_expires():
     assert job.residual_area == pytest.approx(job.remaining.intersection(region.buffer(1.)).area)
 
 
+def test_pocket_supplies_only_cut_depth_entry_history(monkeypatch):
+    from gcodeproducer.core.cam import adaptive_pocket
+
+    blank = box(0, 0, 20, 12)
+    captured = []
+
+    def capture(*args, waypoints, **kwargs):
+        captured.extend(waypoints)
+        return None
+
+    monkeypatch.setattr(adaptive_pocket, 'choose_frontier_peel', capture)
+    result = plan_pocket(blank.buffer(-1), blank, entry_budget=1, turn_budget=1, **SETTINGS)
+    entry, = result.steps
+    depth_points = {tuple(p[:2]) for p in entry.points if p[2] == SETTINGS['depth']}
+    assert captured and {tuple(p) for p in captured} <= depth_points
+    assert tuple(entry.points[-1, :2]) in {tuple(p) for p in captured}
+
+
 def test_pocket_reseeds_in_a_separate_fresh_patch():
     region = union_all([box(x-.25, -.25, x+.25, .25) for x in (0., 6.)])
     stock = union_all([Point(x, 0).buffer(1.15) for x in (0., 6.)])

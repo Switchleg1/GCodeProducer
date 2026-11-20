@@ -10,7 +10,9 @@ from shapely.geometry.base import BaseGeometry
 from gcodeproducer.core.cam.adaptive_branch import BranchChoice
 from gcodeproducer.core.cam.adaptive_entry import AdaptiveEntry, seed_entry
 from gcodeproducer.core.cam.adaptive_frontier import choose_frontier_peel
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_POCKET_AREA_EPS, RAMP_ANGLE
+from gcodeproducer.core.cam.cam_constants import (
+    ADAPTIVE_LINK_HISTORY_SAMPLES, ADAPTIVE_LINK_HISTORY_STEPS, ADAPTIVE_POCKET_AREA_EPS, RAMP_ANGLE,
+)
 from gcodeproducer.core.cam.lead_angle import lead_slope
 
 
@@ -24,7 +26,7 @@ class AdaptivePocket:
 
 
 def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
-                lead_angle=RAMP_ANGLE, **settings):
+                lead_angle=RAMP_ANGLE, use_link_history=True, **settings):
     """Try peels and, when stalled, try an entry in a fresh residual patch.
 
     The cutter-centre region must account for protection at every entry Z.
@@ -41,13 +43,17 @@ def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
     footprint = region.buffer(radius)
     initial_area = residual = material.intersection(footprint).area
     steps, position, continuation = [], None, None
+    supplied_waypoints = list(settings.pop('waypoints', ()))
+    history = []
     entries = turns = 0
     status = 'covered'
     while residual > ADAPTIVE_POCKET_AREA_EPS:
         if position is not None and turns >= turn_budget:
             status = 'turn_budget'
             break
-        choice = (choose_frontier_peel(position, region, material, continuation=continuation, **settings)
+        waypoints = supplied_waypoints + [p for sample in history for p in sample]
+        choice = (choose_frontier_peel(position, region, material, continuation=continuation,
+                                       waypoints=waypoints, **settings)
                   if position is not None else None)
         if choice is not None:
             peel = choice.peel
@@ -77,5 +83,13 @@ def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
             status = 'stalled'
             break
         steps.append(choice)
+        if use_link_history:
+            if isinstance(choice, AdaptiveEntry):
+                points = choice.points[choice.points[:, 2] == depth, :2]
+            else:
+                points = choice.peel.points
+            indices = np.linspace(0, len(points)-1, min(len(points), ADAPTIVE_LINK_HISTORY_SAMPLES), dtype=int)
+            history.append(points[indices])
+            history = history[-ADAPTIVE_LINK_HISTORY_STEPS:]
         position, material, residual = next_position, next_stock, next_area
     return AdaptivePocket(tuple(steps), material, initial_area, residual, status)

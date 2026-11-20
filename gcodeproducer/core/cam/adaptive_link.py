@@ -21,7 +21,7 @@ class AdaptiveLink:
 
 def choose_link(start, end, region, material, radius, *, travel_feed, z_feed, lift,
                 waypoints=()):
-    """Compare straight/one-waypoint travel with an already-qualified safe-Z transfer.
+    """Compare straight, one- and two-waypoint travel with an already-qualified safe-Z transfer.
 
     Caller supplies the cutter-centre region, current material at the cutting
     plane and the rise to a safe plane above stock, part and any fixtures. The
@@ -65,12 +65,27 @@ def choose_link(start, end, region, material, radius, *, travel_feed, z_feed, li
         return best
     if points.ndim != 2 or points.shape[1] != 2 or not np.isfinite(points).all():
         raise ValueError('Adaptive link waypoints must be finite XY pairs')
-    lengths = np.linalg.norm(points-start, axis=1) + np.linalg.norm(points-end, axis=1)
-    for i in np.argsort(lengths, kind='stable')[:ADAPTIVE_LINK_WAYPOINT_LIMIT]:
-        minutes = float(lengths[i]/travel_feed)
+    from_start = np.linalg.norm(points-start, axis=1)
+    to_end = np.linalg.norm(points-end, axis=1)
+    lengths = from_start + to_end
+    indices = np.argsort(lengths, kind='stable')[:ADAPTIVE_LINK_WAYPOINT_LIMIT]
+    indices = indices[lengths[indices]/travel_feed < best.minutes]
+    # A candidate leg with a repeated point is a stationary disk, not an
+    # invalid zero-length LineString. All moving legs use swept clearance.
+    def visible(a, b):
+        return clear_endpoint(a) if np.array_equal(a, b) else clear((a, b))
+
+    starts = [i for i in indices if visible(start, points[i])]
+    ends = [i for i in indices if visible(points[i], end)]
+    pairs = [(float((from_start[i]+np.linalg.norm(points[j]-points[i])+to_end[j])/travel_feed), i, j)
+             for i in starts for j in ends]
+    for minutes, i, j in sorted(pairs):
         if minutes >= best.minutes:
             break
-        route = np.vstack((start, points[i], end))
-        if clear(route):
-            return AdaptiveLink('stay_down', route, minutes)
+        if i == j or visible(points[i], points[j]):
+            mids = points[[i]] if i == j else points[[i, j]]
+            route = np.vstack((start, mids, end))
+            # Drop duplicate endpoints without changing any verified leg.
+            keep = np.r_[True, np.any(route[1:] != route[:-1], axis=1)]
+            return AdaptiveLink('stay_down', route[keep], minutes)
     return best

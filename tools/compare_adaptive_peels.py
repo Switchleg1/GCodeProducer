@@ -102,5 +102,15 @@ def main():
         print(f'  Z feed {feed:>4} mm/min: {link.kind}, {link.minutes*60:.2f} s estimated.')
 
 
+    blank = box(0, 0, 40, 30)
+    start, a, b, end = (5, 5), (5, 20), (27, 20), (27, 5)
+    material = blank.difference(LineString([start, a, b, end]).buffer(1.5))
+    print('Two-bend corridor, 3 mm lift:')
+    for feed in (150, 1200):
+        link = choose_link(start, end, blank.buffer(-radius), material, radius,
+                           travel_feed=1200, z_feed=feed, lift=3, waypoints=[a, b])
+        print(f'  Z feed {feed:>4} mm/min: {link.kind}, {link.minutes*60:.2f} s estimated.')
+
+
 if __name__ == '__main__':
     main()

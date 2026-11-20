@@ -22,6 +22,22 @@ def test_clear_detour_beats_slow_retract_but_not_fast_retract():
     assert fast.minutes == pytest.approx(np.hypot(15, 15)/1200 + 6/1200)
 
 
+def test_two_bend_return_uses_cleared_corridor_only_when_faster():
+    blank = box(0, 0, 40, 30)
+    start, a, b, end = (5, 5), (5, 20), (27, 20), (27, 5)
+    corridor = LineString([start, a, b, end]).buffer(1.5)
+    stock = blank.difference(corridor)
+    args = (start, end, blank.buffer(-1), stock, 1.)
+    assert choose_link(*args, travel_feed=1200, z_feed=150, lift=3, waypoints=[a]).kind == 'retract'
+    link = choose_link(*args, travel_feed=1200, z_feed=150, lift=3, waypoints=[a, b, (16, 5)])
+    assert link.kind == 'stay_down' and link.minutes == pytest.approx(52/1200)
+    np.testing.assert_array_equal(link.points, [start, a, b, end])
+    assert choose_link(*args, travel_feed=1200, z_feed=1200, lift=3, waypoints=[a, b]).kind == 'retract'
+    blocked = stock.union(box(15, 19, 17, 21))
+    assert choose_link(start, end, args[2], blocked, 1., travel_feed=1200, z_feed=150, lift=3,
+                       waypoints=[a, b]).kind == 'retract'
+
+
 def test_link_needs_a_verified_clear_landing_and_rejects_protected_island():
     region = box(1, 1, 29, 29).difference(box(12, 12, 17, 17))
     blank = box(0, 0, 30, 30)

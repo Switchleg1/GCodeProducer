@@ -73,7 +73,9 @@ not yet a practical whole-corner result.
 removed per estimated minute, including the whole candidate turn and its
 transfer. Each trial starts from the same material; only the winner returns
 updated stock. `adaptive_link.py` checks the full planar cutter sweep (with
-a rounding margin) for straight and one-waypoint routes. It compares a
+a rounding margin) for straight routes and routes with up to two bends. The
+pocket driver samples recent cutting paths at the active depth for waypoints;
+current stock and protected geometry are checked again for every leg. It compares a
 verified route against an XY transfer at a caller-qualified safe plane plus
 the Z lift and return. A destination with no verified clear landing is not
 eligible, even via retract. This does not certify fixtures or a safe plane,
@@ -81,8 +83,9 @@ and the time estimate excludes acceleration.
 
 In the cleared corridor example, a 30 mm stay-down detour takes 1.50 s and
 beats the retract at 150 mm/min Z feed; at 1,200 mm/min the retract is faster
-(1.36 s). Both cases preserve the same coverage because travel removes no
-stock.
+(1.36 s). A separate U-shaped corridor needs two bends: with the same feeds,
+a checked route takes 2.60 s versus a 3.50 s retract at slow Z feed. At fast
+Z feed, retracting takes 1.40 s and wins. These transfers remove no stock.
 
 `adaptive_frontier.py` discovers candidate turns along the edges of existing
 cleared patches, allowing separate patches to compete rather than spending
