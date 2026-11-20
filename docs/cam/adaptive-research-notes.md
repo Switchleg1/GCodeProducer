@@ -254,7 +254,10 @@ feed from 184.01 to 180.68 mm. This is a distance comparison, not a timing win.
 `--with-shallow-fronts` retries at 0.25 mm immersion after the normal
 selection fails, keeping previous cuts unchanged. It clears another 2.46 mm²
 at the same sampled peak, then stops because the new endpoint fails origin
-clearance. It does not bypass the clearance or contact gates.
+clearance. Increasing `--shallow-runoff` from 2 to 2.5 mm removes another
+0.375 mm² but does not clear the endpoint. At 3, 3.5, and 4.5 mm no shallow
+retry passes selection. The extra straight travel is not an exit strategy;
+no clearance or contact gate was relaxed.
 
 ## Gate before another generator attempt
 

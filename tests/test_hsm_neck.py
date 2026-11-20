@@ -62,3 +62,13 @@ def test_shallow_stall_retry_adds_one_checked_cut():
     assert result['removed_mm2'] == pytest.approx(31.4215, abs=.001)
     assert result['peak_contact_deg'] < 60.
     assert result['last_selection_counts'] == {'origin_clearance': 1}
+
+
+def test_shallow_exit_extension_does_not_bypass_origin_clearance():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=2.5)
+    assert result['cut_count'] == 10 and result['stop'] == 'stalled'
+    assert result['removed_mm2'] == pytest.approx(31.7965, abs=.001)
+    assert result['last_stock_distance_mm'] < 2.
+    assert result['last_selection_counts'] == {'origin_clearance': 1}
+    assert result['peak_contact_deg'] < 60.

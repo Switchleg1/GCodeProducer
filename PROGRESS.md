@@ -37,4 +37,5 @@
 - `--with-detours` checks seed-area waypoints after a failed direct link. With 0.5 mm runoff it extends the two-lobe trial from 3 to 9 cuts, clearing 18 mm² more at unchanged sampled peak. It still stalls with 4,123.60 mm² reachable residual.
 - `--with-live-detours` samples bounded, pose-relative waypoints and rechecks both legs. Matches fixed-waypoint coverage and peak contact while reducing total feed from 184.01 to 180.68 mm. Still stalls at 4,123.60 mm² reachable residual.
 - `--with-shallow-fronts` retries with 0.25 mm straight immersion only when normal proposals fail. It adds one checked cut (2.46 mm²) at unchanged peak, leaving 4,121.14 mm². The new endpoint is 1.999849 mm from stock and fails the 2 mm origin check.
-- Next: test a bounded exit extension for shallow passes and verify both the extended cut and the resulting pose. Completion gates are in `GOAL.md`.
+- `--shallow-runoff 2.5` adds 0.375 mm² of removal versus 2 mm runoff, but the endpoint still misses 2 mm stock clearance. At 3–4.5 mm runoff no shallow retry is accepted. Checks and engagement limit are unchanged.
+- Next: try a checked curved exit into already-cleared space instead of extending the cut farther in the same direction. Completion gates are in `GOAL.md`.
