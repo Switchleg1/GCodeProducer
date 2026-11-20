@@ -100,11 +100,20 @@ lap at cutting depth before moving to the cleared center. Only the flat lap
 is credited as removed material at that depth. The caller must qualify the
 flat cutter for ramping, flute reach, and safe approach to the stock surface.
 A 20 × 12 mm test cleared 11.29 mm² at depth with the entry and another
-2.79 mm² with two stay-down peels. The bounded two-lobe benchmark starts
-from fresh stock at 4° and removes 11.29 mm² with the entry lap and 7.94 mm²
-with four peels; 99.54% of the cutter-centre area still contains stock at
-that cutoff. This is an entry-to-peel test, not a full-pocket result. The
-adaptive prototype is still not wired into CAM output.
+2.79 mm² with two stay-down peels.
+
+`adaptive_pocket.py` now carries stock through the whole bounded run. If
+peeling stalls, it can start another helix in a residual patch large enough
+for it. It reports completion only when no measurable stock remains in the
+nominal cutter-reachable footprint. Otherwise it identifies the budget or
+entry/peel limit that stopped the run. It does not plan clearance-height
+travel to a new helix or fill a narrow residual by slotting.
+
+`python tools/compare_adaptive_peels.py --pocket-turns 12` starts the two-lobe
+outline in fresh stock with a 4° entry and a 2 mm cutter. One entry and 12
+peels removed 37.03 mm² and left 4,463.85 mm² of reachable stock at the turn
+budget. This is not a completed clearing cycle or an equal-coverage speed
+comparison. The prototype remains offline.
 
 ## Comparison cases and gates
 

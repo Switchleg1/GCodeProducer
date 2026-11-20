@@ -58,6 +58,7 @@ ADAPTIVE_BRANCH_LIMIT = 16
 ADAPTIVE_FRONTIER_SAMPLES = 12
 ADAPTIVE_ENTRY_RADIUS_FACTOR = .9  # less than cutter radius: the flat lap must cover the core
 ADAPTIVE_ENTRY_LIMIT = 20_000
+ADAPTIVE_POCKET_AREA_EPS = 1e-8  # mm²; numerical residue, not a machining tolerance
 
 REFERENCE_CHORD_ERROR = .01  # mm; circles are polygonal, not fitted G2/G3 arcs
 REFERENCE_MIN_SEGMENTS = 64

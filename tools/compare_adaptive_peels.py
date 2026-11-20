@@ -1,4 +1,5 @@
-"""Compare four local turns in the broad lobe of the research outline."""
+"""Compare local peels and measure residual stock in the research outline."""
+import argparse
 from pathlib import Path
 import sys
 
@@ -9,13 +10,19 @@ from shapely.geometry import LineString, Point, box
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from gcodeproducer.core.cam.adaptive_entry import seed_entry
+from gcodeproducer.core.cam.adaptive_entry import AdaptiveEntry
+from gcodeproducer.core.cam.adaptive_pocket import plan_pocket
 from gcodeproducer.core.cam.adaptive_frontier import trace_frontier
 from gcodeproducer.core.cam.adaptive_link import choose_link
 from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pocket-turns', type=int, default=12, help='maximum turns on fresh stock')
+    args = parser.parse_args()
+    if args.pocket_turns < 0:
+        parser.error('--pocket-turns must be nonnegative')
     pocket = from_wkt((ROOT / 'examples/adaptive-neck-pocket.wkt').read_text())
     start = np.array([103., 30.])
     heading = np.array([-1., 0.])
@@ -68,15 +75,14 @@ def main():
           f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
 
     fresh_region = pocket.buffer(-radius)
-    entry = seed_entry(fresh_region, pocket, radius=radius, top=0., depth=-1., lead_angle=4.)
-    seeded = trace_frontier(entry.points[-1, :2], fresh_region, entry.remaining, turns=4,
-                            pitch=.6, tool_radius=radius, limit=.18, min_loop_radius=.45,
-                            max_loop_radius=.85, cut_feed=800, travel_feed=1200, z_feed=150, lift=3.)
-    remaining = seeded[-1].peel.remaining if seeded else entry.remaining
-    residual = remaining.intersection(fresh_region).area
-    print(f'Fresh two-lobe pocket, 4° entry: {pocket.area-entry.remaining.area:.2f} mm² cleared by the entry lap, '
-          f'{sum(c.peel.removed_area for c in seeded):.2f} mm² by {len(seeded)} peels; '
-          f'{residual/fresh_region.area:.2%} of the cutter-centre area still contains stock.')
+    result = plan_pocket(fresh_region, pocket, top=0., depth=-1., lead_angle=4., entry_budget=2,
+                         turn_budget=args.pocket_turns, pitch=.6, tool_radius=radius, limit=.18,
+                         min_loop_radius=.45, max_loop_radius=.85, cut_feed=800, travel_feed=1200,
+                         z_feed=150, lift=3.)
+    entries = sum(isinstance(s, AdaptiveEntry) for s in result.steps)
+    print(f'Fresh two-lobe pocket: {result.status}, {entries} entries, {len(result.steps)-entries} peels; '
+          f'{result.initial_area-result.residual_area:.2f} mm² removed; '
+          f'{result.residual_area:.2f} mm² reachable stock remains.')
 
     blank = box(0, 0, 30, 30)
     start, via, end = (5, 5), (5, 20), (20, 20)
