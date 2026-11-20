@@ -3,11 +3,7 @@
 Python/PyQt6 application that produces **FDM and 2.5D / basic 3-axis CAM G-code from STL models**,
 with a desktop interface and command-line tools.
 
-![GCodeProducer Preview showing generated toolpaths and playback controls](docs/pictures/ui-preview-playback.png)
-
-**Early software:** the geometry kernel is minimal. CAM checks are advisory,
-not a full stock-removal, holder, or fixture simulation. Independently verify
-output before operating a machine.
+![GCodeProducer FDM Preview at layer 237 of 356, showing the pen holder's walls and internal infill](docs/pictures/ui-fdm-pen-holder-cutaway.png)
 
 ## Features
 
@@ -23,7 +19,7 @@ output before operating a machine.
 - **CAM:** ordered tool-change trees with Pocket, Profile, Slot, Drill, and Engrave
   operations, plus model-surface-limited 3D Waterfall full-area clearing
   and depth-limited 3D Contour (surface-following) passes; part/material picking, drawn reference circles/rectangles,
-  geometry-linked depths and wall-following pockets,
+  geometry-linked depths and wall-parallel, raster, or trochoidal clearing,
   machine-default climb/conventional/meander direction, and Slot/High/Cut/HSM feeds.
 - **CAM stock:** editable material/blank properties, margin-based Auto allocation,
   top-at-Z0 placement, current-material checks, leads, per-operation material outputs,

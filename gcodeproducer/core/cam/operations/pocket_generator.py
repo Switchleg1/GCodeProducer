@@ -6,7 +6,7 @@ from .operation_generator import OperationGenerator
 
 
 def pocket_paths(op, loops, region, diameter, direction, log=None):
-    """Wall-parallel or X/Y raster clearing paths for one planar pocket region (also used by Waterfall)."""
+    """Clearing paths for one planar pocket region (also used by Waterfall)."""
     from gcodeproducer.core.jobs.path import Path
     from gcodeproducer.core.geometry.infill import scan_fill
     from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths
@@ -19,6 +19,9 @@ def pocket_paths(op, loops, region, diameter, direction, log=None):
         paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
                       stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                  for i, (p, link) in enumerate(linked)]
+    elif strategy == "trochoidal":
+        from gcodeproducer.core.cam.trochoidal import trochoidal_paths
+        return trochoidal_paths(region, diameter, op.stock, op.stepover, direction, log)
     elif strategy in ("raster_x", "raster_y"):
         centre_region = region.buffer(-(diameter/2+op.stock))
         regions = [p for p, _ in boundary_paths(centre_region, direction)]

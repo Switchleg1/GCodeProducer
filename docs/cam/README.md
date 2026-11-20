@@ -17,8 +17,8 @@ T3 — drill
   Drill: selected hole rims
 ```
 
-Pocket clearing defaults to **wall-parallel contours**. Offset fronts adapt to
-both walls and islands, including square/circle transitions. The CAM machine
+Pocket and 3D Waterfall default to **wall-parallel contours**. They also offer
+X/Y raster and [Trochoidal](toolpaths.md#trochoidal-clearing) clearing. The CAM machine
 stores a default cutting direction—**Climb**, Conventional or Meander—with
 Climb as the default. Pocket/Profile operations may override it.
 

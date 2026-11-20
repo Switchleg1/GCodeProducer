@@ -57,7 +57,7 @@ cutter-accessible region**, not just one contour along its wall.
    identifies its complete stock rim, as in Pocket.
 2. Set Start/End. Selection-linked defaults use the selection's extrema. A
    flat rim needs End linked to a lower feature or set explicitly.
-3. Choose **Cutting strategy → Wall-parallel contours / Raster lines X / Raster lines Y**, stepover, radial
+3. Choose **Cutting strategy → Wall-parallel contours / Raster lines X / Raster lines Y / Trochoidal**, stepover, radial
    stock to leave and depth of cut. Stay-down links, lead ramps, cutting hand,
    engagement feeds and the material boundary limit work as for clearing.
    Stock to leave is kept on the part only: where the selection reaches the

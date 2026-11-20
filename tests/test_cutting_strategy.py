@@ -30,7 +30,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
             editor.kind.setCurrentIndex(editor.kind.findData(kind))
             editor.add_operation()
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
-            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y']
+            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Trochoidal']
                         if kind in ('pocket', 'waterfall') else
                         ['Meander', 'Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
             assert labels == expected
@@ -47,10 +47,11 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 editor.feed_controls['slotting_feed'].setValue(42)
                 assert editor.operation().slotting_feed == 42
             if expected:
-                editor.strategy.setCurrentIndex(editor.strategy.findData('raster_y'))
-                assert editor.operation().strategy == 'raster_y'
+                strategy = 'trochoidal' if kind in ('pocket', 'waterfall') else 'raster_y'
+                editor.strategy.setCurrentIndex(editor.strategy.findData(strategy))
+                assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
-                assert restored.groups[0].operations[-1].strategy == 'raster_y'
+                assert restored.groups[0].operations[-1].strategy == strategy
     finally:
         editor.close()
 
@@ -126,6 +127,37 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
     assert not any('uncleared entry depth' in w for w in job.warnings)
+
+
+@pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
+def test_trochoidal_strategy_uses_forward_advancing_loops_and_emits(libset, kind):
+    from gcodeproducer.core.cam import generate
+    from gcodeproducer.stages.cam_emit import CAMEmit
+    shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
+    job, _ = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
+                         end=Depth('absolute', -1), strategy='trochoidal')
+    job.cam_setup.reference_shapes = [shape]
+    generate(job, StageContext())
+    lanes = [p.points for layer in job.layers for p in layer.paths if not p.closed]
+    assert any(len(p) > 16 and np.ptp(p[:, 1]) > 0.5 for p in lanes)
+    assert any((np.diff(p[:, 0]).min() < -0.1 and np.diff(p[:, 0]).max() > 0.1) for p in lanes)
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert job.program.lines
+    assert not any('rapid motion contacts' in warning for warning in job.warnings)
+
+
+def test_trochoidal_lanes_do_not_cross_island_or_narrow_wall():
+    from shapely.geometry import LineString
+    from gcodeproducer.core.cam.trochoidal import trochoidal_paths
+    area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14))
+    paths = trochoidal_paths(area, 3., .1, 35, 'climb')
+    allowed = area.buffer(-1.6).buffer(1e-7)
+    for path in paths:
+        p = path.points
+        assert allowed.covers(LineString(np.vstack([p, p[0]]) if path.closed else p))
+    assert sum(p.closed for p in paths) == 2  # both wall and island cleanup
+    assert any(not p.closed and len(p.points) == 2 for p in paths)
+    assert any(not p.closed and len(p.points) > 16 for p in paths)
 
 
 def test_old_strategy_names_preserve_existing_behaviour():

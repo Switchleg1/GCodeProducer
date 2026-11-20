@@ -29,7 +29,7 @@ boundaries, or can be retained as per-selection height-only references.
 | Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
 | Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
-| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
+| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y and Trochoidal. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
 | Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
@@ -285,7 +285,7 @@ The operation's **Cutting strategy** field has operation-specific choices:
 
 | Operation | Choices |
 |---|---|
-| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y |
+| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y, Trochoidal |
 | 3D Contour | Meander, Raster lines X, Raster lines Y |
 | Profile, Slot, Drill, Engrave | Row hidden (no strategy control) |
 
@@ -296,6 +296,12 @@ between them. Contour **Meander** alternates along the area's longer axis and
 uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
+
+**Trochoidal** clears along lanes with advancing circular loops, using
+straight cuts where a loop would cross the cutter-clearance boundary. It
+finishes each area with wall and island passes. See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
+
+Historical captures (the clearing menu predates Trochoidal):
 
 ![Clearing strategy choices](../pictures/cam-cutting-strategy-clearing.png)
 

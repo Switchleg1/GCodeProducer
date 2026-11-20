@@ -51,6 +51,8 @@ of cancelling their overlap; inward-wound cavities still subtract material.
 Review the affected layers in Preview and regenerate any automatic support
 blocks you created before enabling the option.
 
+![Repaired pen holder sliced to about two-thirds height](../pictures/ui-fdm-pen-holder-cutaway.png)
+
 This changes the toolpath, not the STL or the Prepare model. Leave the option
 off if the resulting shape is not what you want. This is not a general mesh
 repair: it does not close open edges or repair self-intersections within a

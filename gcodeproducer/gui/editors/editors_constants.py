@@ -55,7 +55,7 @@ DEPTH_ROWS = (("start", "Start Z"), ("end", "End Z"))
 OPERATION_SIDES = ("outside", "inside")
 
 CLEARING_STRATEGIES = (("Wall-parallel contours", "contour"), ("Raster lines X", "raster_x"),
-                       ("Raster lines Y", "raster_y"))
+                       ("Raster lines Y", "raster_y"), ("Trochoidal", "trochoidal"))
 CUTTING_STRATEGIES = {
     "pocket": CLEARING_STRATEGIES,
     "waterfall": CLEARING_STRATEGIES,

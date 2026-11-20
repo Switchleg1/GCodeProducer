@@ -1,10 +1,26 @@
 [Documentation](../README.md) / [CAM](README.md)
 
-# Wall-following toolpaths and cutting direction
+# Clearing toolpaths and cutting direction
 
 Pocket **strategy** determines the XY geometry of clearing passes. **Cutting
 direction** determines how those paths are traversed. They are separate
 settings: selecting Climb does not by itself convert raster lines to contours.
+
+## Trochoidal clearing
+
+Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
+The cutter traces advancing circular loops along lanes aligned with the
+longer axis of the cutter-centre region. Stepover controls both lane spacing
+and maximum advance per loop (capped at 50% of tool diameter). The nominal
+loop radius is one quarter of the tool diameter.
+
+A loop is used only if its entire centreline fits inside the cutter-clearance
+region, including any islands and roughing clearance. Where it does not fit,
+the corresponding lane segment stays straight. A wall and island cleanup
+pass follows the lanes, so straight boundary segments may still appear.
+The loops are emitted as short `G1` moves, not `G2/G3` arcs. The planner still
+classifies the actual remaining-material engagement; this strategy does not
+guarantee a constant engagement or cutting hand.
 
 ## Wall-parallel contours (default clearing strategy)
 
