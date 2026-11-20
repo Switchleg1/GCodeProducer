@@ -1,7 +1,7 @@
 import pytest
 from shapely.geometry import LineString, Polygon, box
 
-from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link
 
 
 def _link(pocket, stock, margin=0.):
@@ -54,6 +54,19 @@ def test_off_center_island_needs_both_legs_of_the_wider_detour(off_center_island
     assert axis.length == pytest.approx(21.902, abs=.001)
     assert axis.distance(pocket.boundary) > 1.6
     assert axis.distance(stock) >= 1.1
+
+
+def test_three_legs_can_round_an_island_when_neither_single_waypoint_works():
+    pocket = box(0, 0, 24, 16).difference(box(8, 4, 16, 10))
+    start, end = ((3, 6), (0, 1)), ((21, 6), (0, -1))
+    vias = (((5, 12), (1, 0)), ((19, 12), (1, 0)))
+    stock = Polygon()
+    assert all(cleared_tangent_detour(pocket, stock, 1., start, via, end, 2.) is None for via in vias)
+    points = cleared_three_leg_link(pocket, stock, 1., start, end, vias, 2.)
+    assert points[0] == start[0] and points[-1] == end[0]
+    assert all(points.count(via[0]) == 1 for via in vias)
+    assert LineString(points).distance(pocket.boundary) >= 1.
+    assert cleared_three_leg_link(pocket, box(11, 11, 12, 13), 1., start, end, vias, 2.) is None
 
 
 @pytest.mark.parametrize('x', [7, 17])

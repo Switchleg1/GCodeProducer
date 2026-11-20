@@ -24,7 +24,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
-               with_neck_front=False):
+               with_neck_front=False, with_three_leg_links=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -118,7 +118,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        propose_waypoints=propose_waypoints if with_live_detours else None,
                                        propose_on_stall=propose_shallow if with_shallow_fronts else None,
                                        on_overload=report_overload if with_clearance_tapers else None,
-                                       require_clear_exit=require_clear_exit)
+                                       require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -161,6 +161,7 @@ if __name__ == '__main__':
     parser.add_argument('--require-clear-exit', action='store_true',
                         help='reject cuts that end without planar link clearance')
     parser.add_argument('--with-neck-front', action='store_true', help='also try the east side of mapped live frontier')
+    parser.add_argument('--with-three-leg-links', action='store_true', help='try two waypoints after direct and one-waypoint links fail')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -169,7 +170,8 @@ if __name__ == '__main__':
                             shallow_rolloff=args.shallow_rolloff, shallow_rollon=args.shallow_rollon,
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
-                            require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front)
+                            require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
+                            with_three_leg_links=args.with_three_leg_links)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

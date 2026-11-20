@@ -55,3 +55,25 @@ def cleared_tangent_detour(pocket, stock, radius, start_pose, via_pose, end_pose
         return None
     second = cleared_tangent_link(pocket, stock, radius, via, end, heading, incoming, handle, margin=margin)
     return None if second is None else first + second[1:]
+
+
+def cleared_three_leg_link(pocket, stock, radius, start, end, waypoints, handle, *, margin=0.):
+    """Find the shortest checked chain through two supplied waypoint poses."""
+    def leg(a, b):
+        return (cleared_tangent_link(pocket, stock, radius, a[0], b[0], a[1], b[1], handle, margin=margin)
+                if a[0] != b[0] else None)
+
+    waypoints = tuple(w for w in waypoints if w[0] not in (start[0], end[0]))
+    incoming = [(w, path) for w in waypoints if (path := leg(start, w)) is not None]
+    outgoing = [(w, path) for w in waypoints if (path := leg(w, end)) is not None]
+    best, best_length = None, math.inf
+    for a, first in incoming:
+        for b, last in outgoing:
+            middle = leg(a, b)
+            if middle is None:
+                continue
+            path = first + middle[1:] + last[1:]
+            length = sum(math.dist(p, q) for p, q in zip(path, path[1:]))
+            if length < best_length:
+                best, best_length = path, length
+    return best

@@ -302,6 +302,9 @@ neighborhood, not verified stay-down travel or proof of machinability.
 `--with-neck-front` tries the easternmost 3 mm of this map. On the clear-exit
 benchmark, two additional proposals reach the link check but fail it. The
 trial still stalls after 23 cuts, leaving 4,074.87 mm² reachable stock.
+`--with-three-leg-links` checks paths through two supplied waypoint poses
+when direct and one-waypoint links fail. It routes around a protected island
+in a separate fixture, but does not get past the current two-lobe stall.
 
 ## Gate before another generator attempt
 

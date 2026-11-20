@@ -7,7 +7,7 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from tools.hsm_straight_front import try_front_cut
-from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link
 
 
 class FrontChoice(NamedTuple):
@@ -20,7 +20,8 @@ class FrontChoice(NamedTuple):
 
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
-                     link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None, require_clear_exit=False):
+                     link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None, require_clear_exit=False,
+                     with_three_leg_links=False):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
     counts = diagnostics if diagnostics is not None else Counter()
 
@@ -71,6 +72,9 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
                                                  link_handle, margin=link_margin)
                           for via in waypoints if via[0] not in (xy, cut[0]))
                 link = min((route for route in routes if route is not None), key=_length, default=None)
+            if link is None and waypoints and with_three_leg_links:
+                link = cleared_three_leg_link(pocket, stock, radius, pose, (cut[0], incoming), waypoints,
+                                              link_handle, margin=link_margin)
             if link is None:
                 reject('link_clearance')
                 continue
