@@ -9,6 +9,7 @@ from shapely.geometry import LineString, Point, box
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from gcodeproducer.core.cam.adaptive_link import choose_link
 from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
 
 
@@ -55,6 +56,16 @@ def main():
                           min_loop_radius=1.4, max_loop_radius=2.5, turns=8)
     print(f'Wall case: {int(fixed is not None)} fixed start(s), {len(steered)} continuous steered turns; '
           f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
+
+    blank = box(0, 0, 30, 30)
+    start, via, end = (5, 5), (5, 20), (20, 20)
+    region = blank.buffer(-radius)
+    material = blank.difference(LineString([start, via, end]).buffer(1.5))
+    print('Cleared corridor, 3 mm lift:')
+    for feed in (150, 1200):
+        link = choose_link(start, end, region, material, radius, travel_feed=1200, z_feed=feed,
+                           lift=3, waypoints=[via])
+        print(f'  Z feed {feed:>4} mm/min: {link.kind}, {link.minutes*60:.2f} s estimated.')
 
 
 if __name__ == '__main__':
