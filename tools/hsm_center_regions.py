@@ -1,7 +1,9 @@
 """Offline connectivity map for a planar cutter-center domain."""
 import math
+from typing import NamedTuple
 
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 
@@ -28,3 +30,37 @@ def region_at(regions, xy):
     point = Point(xy)
     hits = [index for index, region in enumerate(regions) if region.covers(point)]
     return hits[0] if len(hits) == 1 else None
+
+
+class RegionWork(NamedTuple):
+    centers: Polygon
+    stock: BaseGeometry
+    seeds: tuple
+
+    @property
+    def needs_entry(self):
+        return self.stock.area > 0 and not self.seeds
+
+
+def map_region_work(pocket, stock, radius, seeds=(), *, margin=0.):
+    """Report live stock accessible from each center region and verified seed poses.
+
+    Stock at the edge of a region may also be accessible from another; union
+    the reported targets for totals, and recompute after cuts. A seed only
+    establishes its own clearance, not a stay-down route to the stock. An
+    unseeded region with work needs an entry or a newly verified cleared seed.
+    """
+    regions = center_regions(pocket, radius, margin=margin)
+    assigned = [[] for _ in regions]
+    for xy in seeds:
+        xy = tuple(xy)
+        index = region_at(regions, xy)
+        if index is None:
+            continue
+        point = Point(xy)
+        clearance = radius + margin
+        if (point.distance(pocket.boundary) >= clearance
+                and (stock.is_empty or point.distance(stock) >= clearance)):
+            assigned[index].append(xy)
+    return tuple(RegionWork(region, stock.intersection(region.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)),
+                            tuple(assigned[index])) for index, region in enumerate(regions))

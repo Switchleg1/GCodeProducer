@@ -196,7 +196,11 @@ clearance margin and maps seed locations to the resulting components. The
 saved two-lobe WKT is connected for a 4 mm cutter but split for a 14 mm
 cutter. A zero-width neck does not count as a connection. This is a map of
 geometric access, not a claim that a stay-down route through live stock is
-clear or that either lobe has a valid entry.
+clear or that either lobe has a valid entry. The offline work map assigns
+live stock to each region's sweep envelope and accepts only supplied seeds
+whose cutter disk clears the actual pocket boundary and current stock. An
+unseeded region with stock needs an entry or another verified seed. Sweep
+envelopes can overlap, so use their union for total reachable stock.
 
 ## Gate before another generator attempt
 

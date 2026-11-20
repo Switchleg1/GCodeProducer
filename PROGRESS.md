@@ -22,4 +22,5 @@
 - Moving the return-to-cut join 0.1 mm upstream lets all three tangent returns pass the unchanged full-disk check against progressive stock at zero extra margin. Added air is 18.65 mm versus 27.21 mm with the staged baseline; residual and peak contact are effectively unchanged.
 - Off-center island test: the direct and narrow-side returns fail; a 21.90 mm two-leg tangent detour clears the wider side with a 0.1 mm extra planar margin. A stock rib on either leg rejects the whole proposal.
 - Offline center-region map splits the two-lobe fixture into one component for a 4 mm cutter and two for a 14 mm cutter; a separate test rejects a zero-width neck connection after applying clearance margin.
-- Next: assign initial cleared seeds and remaining stock to these components, distinguishing places that need an independent entry from those reachable by advancing a cleared front. Completion gates are in `GOAL.md`.
+- The offline work map assigns accessible stock and checks supplied seed poses against the boundary and live stock. With only a left-side cleared seed, the split right lobe needs its own entry or verified seed; an empty lobe does not.
+- Next: derive a cleared-stock frontier from the seeded region and test a directed advance. Completion gates are in `GOAL.md`.
