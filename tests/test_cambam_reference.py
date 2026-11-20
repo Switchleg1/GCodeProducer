@@ -74,6 +74,18 @@ def test_sampled_contact_matches_a_precleared_straight_approach(side, subtract):
     assert sum(mm for _, mm in samples) == pytest.approx(2*advance)
 
 
+def test_replay_tags_projected_ramp_without_counting_it_as_coverage():
+    ramp = 'G21\nG90\nG0 X2 Y2 Z1\nG1 X5 Z-0.5\n'
+    text = ramp + 'G1 X12\nG1 X16\nG1 X5\nG1 X2\n'
+    pocket = box(0, 0, 20, 7)
+    report, _, rows = replay(pocket, 1., -.5, text, .0025, .5)
+    baseline, _, _ = replay(pocket, 1., -.5, text, .0025)
+    assert [r['contact_entry_uncertain'] for r in rows] == [True, False, False, True]
+    assert report['reachable_residual_mm2'] == baseline['reachable_residual_mm2']
+    assert 0 < report['entry_uncertain_samples'] < report['contact_samples']
+    assert report['sampled_peak_outside_entry_shadow_deg'] < report['sampled_peak_contact_deg']
+
+
 def test_contact_quantile_uses_distance_not_sample_count():
     assert distance_percentile([(10, 10.), (180, .2), (180, .2)], .95) == 10
 

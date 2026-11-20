@@ -73,7 +73,14 @@ def arc_points(start, end, offset, sign, chord_error):
 
 
 def level_moves(text, depth, chord_error):
-    """Yield numbered target-level XY moves; descent is outside this replay."""
+    """Yield only numbered target-level XY moves."""
+    for number, mode, points, length, at_level in _feed_moves(text, depth, chord_error):
+        if at_level:
+            yield number, mode, points, length
+
+
+def _feed_moves(text, depth, chord_error):
+    """Include above-plane feed projections for entry uncertainty tagging."""
     if not math.isfinite(chord_error) or chord_error <= 0:
         raise ValueError('chord error must be positive and finite')
     xyz = (None, None, None)
@@ -105,18 +112,19 @@ def level_moves(text, depth, chord_error):
                 raise ValueError(f'line {number}: unknown Z or motion below the target plane')
             if mode == 'G0' and ('X' in words or 'Y' in words) and depth in (start[2], xyz[2]):
                 raise ValueError(f'line {number}: XY rapid at target depth')
-            if mode == 'G0' or start[2] != depth or xyz[2] != depth:
+            if mode == 'G0':
                 continue
+            at_level = start[2] == depth == xyz[2]
             if None in (*start[:2], *xyz[:2]):
-                raise ValueError(f'line {number}: unknown XY at target depth')
-            if not arc and start[:2] == xyz[:2]:
+                raise ValueError(f'line {number}: unknown feed XY')
+            if not arc and start == xyz:
                 continue
             if arc:
                 points, length = arc_points(start[:2], xyz[:2], (words['I'], words['J']),
                                             1 if mode == 'G3' else -1, chord_error)
             else:
                 points, length = [start[:2], xyz[:2]], math.dist(start[:2], xyz[:2])
-            yield number, mode, points, length
+            yield number, mode, points, length, at_level
         else:
             raise ValueError(f'line {number}: unsupported command {mode}')
 
@@ -127,15 +135,33 @@ def replay(pocket, radius, depth, text, chord_error, contact_step=None):
     swept = Polygon()
     rows = []
     contacts = []
+    unaffected_contacts = []
+    affected_samples = 0
     remaining = pocket
-    for number, mode, points, length in level_moves(text, depth, chord_error):
-        stroke = LineString(points).buffer(radius, quad_segs=BUFFER_SEGMENTS)
+    entry_shadow = Polygon()
+    for number, mode, points, length, at_level in _feed_moves(text, depth, chord_error):
+        line = LineString(points)
+        if not at_level:
+            if contact_step is not None:
+                margin = chord_error + .001 if mode in ('G2', 'G3') else 0.
+                projection = line.buffer(radius + margin, quad_segs=BUFFER_SEGMENTS)
+                entry_shadow = entry_shadow.union(projection.intersection(remaining))
+            continue
+        stroke = line.buffer(radius, quad_segs=BUFFER_SEGMENTS)
         new = stroke.difference(swept)
         rows.append({'line': number, 'motion': mode, 'length_mm': length,
                      'new_sweep_mm2': new.area, 'new_pocket_sweep_mm2': new.intersection(pocket).area})
         if contact_step is not None:
             samples = list(sampled_contact(points, remaining, radius, contact_step, BUFFER_SEGMENTS))
             rows[-1]['sampled_peak_contact_deg'] = max((a for a, _ in samples), default=None)
+            affected = (not entry_shadow.is_empty
+                        and stroke.intersection(entry_shadow).area > CLEAR_AREA_MM2)
+            rows[-1]['contact_entry_uncertain'] = affected
+            if affected:
+                affected_samples += len(samples)
+                entry_shadow = entry_shadow.difference(stroke)
+            else:
+                unaffected_contacts.extend(samples)
             contacts.extend(samples)
             remaining = remaining.difference(stroke)
         swept = swept.union(stroke)
@@ -153,7 +179,10 @@ def replay(pocket, radius, depth, text, chord_error, contact_step=None):
     if contact_step is not None:
         report.update(contact_step_mm=contact_step, contact_samples=len(contacts),
                       sampled_peak_contact_deg=max((a for a, _ in contacts), default=None),
-                      sampled_p95_contact_deg=distance_percentile(contacts, .95))
+                      sampled_p95_contact_deg=distance_percentile(contacts, .95),
+                      entry_uncertain_samples=affected_samples,
+                      sampled_peak_outside_entry_shadow_deg=max((a for a, _ in unaffected_contacts), default=None),
+                      sampled_p95_outside_entry_shadow_deg=distance_percentile(unaffected_contacts, .95))
     return report, residual, rows
 
 

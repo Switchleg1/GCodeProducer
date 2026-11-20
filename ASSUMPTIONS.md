@@ -7,3 +7,5 @@
 - The supplied G-code uses metric absolute XYZ and incremental I/J. Target
   plane replay excludes the descent and lifts; its link classification is
   based on prior reconstructed sweeps, not a machine-clearance guarantee.
+- Above-plane feed projections flag potentially entry-affected strokes as a
+  group; they do not model the axial cutting edge or credit removal at depth.

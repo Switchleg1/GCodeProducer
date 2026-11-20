@@ -101,9 +101,12 @@ returns through prior sweeps, and reachable residual. Labels show sampled
 source line numbers; every stroke has a source line in its SVG tooltip.
 Replay uses only constant-depth XY strokes, not descent or lifts. Add
 `--contact-step 0.3` to sample contact angle against progressively removed
-stock. The reported peak and distance-weighted P95 include all at-depth
-travel, including free links; the first samples also lack material removed
-by the unmodeled ramp. Repeat at finer spacing before interpreting a spike.
+stock. Peak and distance-weighted P95 include at-depth links. Replay also
+reports a separate peak and P95 outside the projected entry footprint. A
+whole stroke is tagged uncertain if its sweep overlaps a feed projection
+from above the plane that has not already been swept at depth. The projection
+only tags uncertainty; it does not remove stock. Repeat at finer spacing
+before interpreting a spike.
 These are planar diagnostics, not a machine clearance or load guarantee.
 
 ## Proposed design decisions
