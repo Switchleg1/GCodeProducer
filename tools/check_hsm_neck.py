@@ -18,7 +18,8 @@ from tools.hsm_live_waypoints import live_waypoints
 from tools.hsm_straight_front import straight_front_candidates
 
 
-def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False, with_live_detours=False):
+def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
+               with_live_detours=False, with_shallow_fronts=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
@@ -36,6 +37,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False, with
                 if path is not None:
                     yield path
 
+    def propose_shallow(live, _pose):
+        return straight_front_candidates(pocket, live, radius, .25, min_edge=2., lead=2., runoff=2.)
+
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
     def propose_waypoints(live, pose):
@@ -45,7 +49,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False, with
     cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=12,
                                        contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
                                        waypoints=waypoints,
-                                       propose_waypoints=propose_waypoints if with_live_detours else None)
+                                       propose_waypoints=propose_waypoints if with_live_detours else None,
+                                       propose_on_stall=propose_shallow if with_shallow_fronts else None)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -69,10 +74,12 @@ if __name__ == '__main__':
                         help='extend the tangent exit and check it as part of the cut')
     parser.add_argument('--with-detours', action='store_true', help='try fixed seed-area waypoints after failed direct links')
     parser.add_argument('--with-live-detours', action='store_true', help='sample waypoints from current clearance')
+    parser.add_argument('--with-shallow-fronts', action='store_true', help='retry with 0.25 mm straight immersion when the main proposals fail')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
-                            with_detours=args.with_detours, with_live_detours=args.with_live_detours)
+                            with_detours=args.with_detours, with_live_detours=args.with_live_detours,
+                            with_shallow_fronts=args.with_shallow_fronts)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

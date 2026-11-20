@@ -251,6 +251,10 @@ reachable residual. Replacing fixed points with `--with-live-detours` samples
 nearby cleared positions and cardinal headings each round. Both legs still
 pass the same checks. It matches coverage and peak contact while reducing
 feed from 184.01 to 180.68 mm. This is a distance comparison, not a timing win.
+`--with-shallow-fronts` retries at 0.25 mm immersion after the normal
+selection fails, keeping previous cuts unchanged. It clears another 2.46 mm²
+at the same sampled peak, then stops because the new endpoint fails origin
+clearance. It does not bypass the clearance or contact gates.
 
 ## Gate before another generator attempt
 

@@ -53,3 +53,12 @@ def test_live_waypoints_match_fixed_detour_coverage_with_less_travel():
     assert live['reachable_residual_mm2'] == pytest.approx(fixed['reachable_residual_mm2'])
     assert live['peak_contact_deg'] == pytest.approx(fixed['peak_contact_deg'])
     assert live['feed_mm'] < fixed['feed_mm'] - 3.
+
+
+def test_shallow_stall_retry_adds_one_checked_cut():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True)
+    assert result['stop'] == 'stalled' and result['cut_count'] == 10
+    assert result['removed_mm2'] == pytest.approx(31.4215, abs=.001)
+    assert result['peak_contact_deg'] < 60.
+    assert result['last_selection_counts'] == {'origin_clearance': 1}
