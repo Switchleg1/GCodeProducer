@@ -10,7 +10,7 @@ from shapely.prepared import prep
 from .adaptive_branch import BranchChoice
 from .adaptive_entry import AdaptiveEntry
 from .adaptive_pocket import plan_pocket
-from .cam_constants import ADAPTIVE_CAM_COMPONENTS, ADAPTIVE_CAM_LIMIT, ADAPTIVE_CAM_TURNS, ADAPTIVE_LINK_BUFFER_QUADS
+from .cam_constants import ADAPTIVE_CAM_COMPONENTS, ADAPTIVE_CAM_LIMIT, ADAPTIVE_CAM_MAX_TURNS, ADAPTIVE_LINK_BUFFER_QUADS
 from .paths import contour_pocket, link_contours
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from gcodeproducer.core.jobs.path import Path
@@ -28,7 +28,11 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
     contours = contour_pocket([], radius, op.stock, op.stepover, direction, region=region)
     centre = region.buffer(-(radius+op.stock))
     starters, swept = [], []
-    left, accepted = ADAPTIVE_CAM_TURNS, 0
+    budget = op.adaptive_peels
+    if not isinstance(budget, int) or not 1 <= budget <= ADAPTIVE_CAM_MAX_TURNS:
+        raise ValueError(f'Adaptive peel budget must be between 1 and {ADAPTIVE_CAM_MAX_TURNS}')
+    left, accepted = budget, 0
+    stops = []
     if not tabs and tool_type == 'endmill' and op.lead_in and op.stay_down:
         for component in sorted(polygons(centre), key=lambda p: (-p.area, p.bounds))[:ADAPTIVE_CAM_COMPONENTS]:
             if not left:
@@ -46,7 +50,8 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
                                 travel_feed=cutting.feed if cutting else op.feed,
                                 z_feed=cutting.lead_feed if cutting else op.lead_feed, lift=radius,
                                 sense=-1 if direction == 'conventional' else 1,
-                                expand=True, half_turns=True)
+                                expand=True, half_turns=True, stay_down_only=True)
+            stops.append(trial.status)
             if not trial.steps or not isinstance(trial.steps[0], AdaptiveEntry):
                 continue
             entry = trial.steps[0].points
@@ -74,8 +79,20 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
             LineString(np.vstack((p, p[0]))).buffer(reach, quad_segs=quads))]
     cleanup = link_contours(contours, [], radius, op.stock, direction, op.stay_down, region=region)
     if log:
-        log(f'  {op.name}: Adaptive clearing: {accepted} peels, {len(cleanup)} cleanup contours' +
-            ('' if starters else ' (contour fallback; no eligible adaptive start)'))
+        reasons = {
+            'turn_budget': f'{budget}-peel planning budget reached',
+            'entry_budget': 'no further stay-down peel met the stock, boundary and engagement checks',
+            'no_entry': 'no entry orbit fits',
+            'stalled': 'no useful cut found',
+            'covered': 'trial stock cleared',
+        }
+        if tabs:
+            why = 'holding tabs require contour planning'
+        elif tool_type != 'endmill' or not op.lead_in or not op.stay_down:
+            why = 'adaptive peels require a flat endmill, lead-in and stay-down'
+        else:
+            why = '; '.join(dict.fromkeys(reasons[s] for s in stops)) or 'no candidate stock'
+        log(f'  {op.name}: Adaptive clearing: {accepted} peels, {len(cleanup)} cleanup contours ({why})')
     return starters + [Path('cut', p, closed=True, width=diameter, stay_down=link,
                             stay_down_from=tuple(cleanup[i-1][0][0]) if link else None)
                        for i, (p, link) in enumerate(cleanup)]

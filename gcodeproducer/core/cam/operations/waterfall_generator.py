@@ -34,7 +34,7 @@ class WaterfallGenerator(OperationGenerator):
                                tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
                                depth_step=min(run.step, run.start-z))
             paths = pocket_paths(op, [], free, run.diameter, run.direction,
-                                 planning.ctx.log if op.strategy in ('trochoidal', 'adaptive') else None,
+                                 planning.ctx.log if op.strategy == 'adaptive' else None,
                                  **options)
         except ValueError as exc:
             if "too small" not in str(exc):
@@ -91,8 +91,7 @@ class WaterfallGenerator(OperationGenerator):
                     planned = drop_air_paths(planned, remaining, run.radius, op.name, ctx.log)
                     if not planned:
                         continue
-                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining,
-                                                      link_region=free))
+                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining))
                 material.remove_planar(planned, z, run.radius)
                 run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
                 produced += 1

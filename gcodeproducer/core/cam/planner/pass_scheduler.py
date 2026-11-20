@@ -162,9 +162,8 @@ def schedule_planar(run, paths, region, planning):
                 ctx.log(f"  {op.name}: depth pass Z{z:g} lies entirely in removed material; pass skipped")
                 continue
             if op.kind != "drill":
-                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, ctx.log, remaining,
-                                                      link_region=region if not tabs else None))
-            if op.kind == "pocket" and op.strategy in ("contour", "trochoidal"):
+                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, ctx.log, remaining))
+            if op.kind == "pocket" and op.strategy in ("contour", "adaptive"):
                 ctx.log(f"  {op.name}: {sum(p.stay_down for p in planned)} stay-down links, "
                         f"{sum(not p.stay_down for p in planned)} safe-height entries per depth pass")
         if not planned:

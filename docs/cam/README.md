@@ -18,7 +18,7 @@ T3 — drill
 ```
 
 Pocket and 3D Waterfall default to **wall-parallel contours**. They also offer
-X/Y raster, [Trochoidal](toolpaths.md#trochoidal-clearing) and
+X/Y raster and
 [Adaptive clearing](toolpaths.md#adaptive-clearing). The CAM machine
 stores a default cutting direction—**Climb**, Conventional or Meander—with
 Climb as the default. Pocket/Profile operations may override it.

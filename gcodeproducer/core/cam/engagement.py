@@ -8,7 +8,7 @@ axial engagement, holders and fixtures are not modelled.
 """
 from __future__ import annotations
 
-from gcodeproducer.core.cam.cam_constants import FEED_FIELDS, TROCHOID_ENGAGEMENT_BATCH_DIAMETERS
+from gcodeproducer.core.cam.cam_constants import FEED_FIELDS, ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS
 from collections import Counter
 import math, numpy as np
 from shapely import covers, intersection, intersects, length, linestrings, prepare, total_bounds
@@ -134,7 +134,7 @@ def _conditions(measured, operation, tool, neutral=False, machine=None):
     return EngagementModel(operation, tool, machine or {}).classify(left, right, engagement, neutral)
 
 
-def plan_engagement(paths, job, operation, tool, log=None, initial_material=None, *, link_region=None):
+def plan_engagement(paths, job, operation, tool, log=None, initial_material=None):
     """Orient/annotate operation paths using incremental planar material removal.
 
     Measurement is the material model's planar sampler; classification is the
@@ -158,10 +158,6 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
     flipped = slots = handed = conflicts = 0
     previous = None
     warnings = []
-    valid = None
-    if link_region is not None and operation.strategy == 'trochoidal' and operation.stay_down:
-        from shapely.prepared import prep
-        valid = prep(link_region.buffer(-(radius+operation.stock)).buffer(1e-7))
 
     def measure_link(link):
         left, right, engagement, _ = sampler.measure_path(link, False, radius)
@@ -186,29 +182,18 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             condition = measure_link(np.array([previous, p[0]]))
             if not allowed(condition):
                 condition = None
-        if condition is None and valid is not None and previous is not None and path.closed:
-            from gcodeproducer.core.cam.trochoidal import nearby_seams
-            for i in nearby_seams(p, previous, radius):
-                link = np.array([previous, p[i]])
-                if not valid.covers(LineString(link)):
-                    continue
-                candidate = measure_link(link)
-                if allowed(candidate):
-                    p = path.points = np.roll(p, -i, axis=0)
-                    condition = candidate
-                    break
         path.stay_down = condition is not None
         path.stay_down_from = tuple(previous) if path.stay_down else None
         if condition is not None:
             path.link_condition = condition
             sampler.remove_path(np.array([previous, p[0]]), False, radius)
             totals[condition.regime] += 1
-        spiral = operation.strategy in ('trochoidal', 'adaptive') and not path.closed
+        spiral = operation.strategy == 'adaptive' and not path.closed
         if spiral and len(p) > 1:
             # Measure successive short stretches against stock left by the earlier
             # turns, rather than classifying the whole uncut pocket as a slot.
             distance = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
-            bands = np.floor(distance/(2*radius*TROCHOID_ENGAGEMENT_BATCH_DIAMETERS))
+            bands = np.floor(distance/(2*radius*ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS))
             limits = np.r_[0, np.flatnonzero(np.diff(bands[:-1]) > 0)+1, len(p)-1]
             measured = [[], [], [], []]
             for a, b in zip(limits, limits[1:]):

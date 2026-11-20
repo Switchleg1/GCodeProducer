@@ -25,7 +25,7 @@ class BranchChoice:
 
 def choose_branch(position, starts, region, material, *, pitch, tool_radius, limit,
                   min_loop_radius, max_loop_radius, cut_feed, travel_feed, z_feed,
-                  lift, waypoints=(), sense=1, expand=False, half_turns=False):
+                  lift, waypoints=(), sense=1, expand=False, half_turns=False, stay_down_only=False):
     """Rank nominated (center, seam, heading) triples by useful area per minute.
 
     All trials see the same current stock. Return only the winner and its
@@ -41,7 +41,7 @@ def choose_branch(position, starts, region, material, *, pitch, tool_radius, lim
         entry = np.asarray(centre, float) + np.asarray(seam, float)
         link = choose_link(position, entry, region, material, tool_radius, travel_feed=travel_feed,
                            z_feed=z_feed, lift=lift, waypoints=waypoints)
-        if link is None:
+        if link is None or (stay_down_only and link.kind != 'stay_down'):
             continue
         peel = choose_steered_peel(centre, seam, heading, pitch, tool_radius, limit, region, material,
                                    min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius,

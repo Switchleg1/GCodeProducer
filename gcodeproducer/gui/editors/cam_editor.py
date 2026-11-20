@@ -34,7 +34,7 @@ from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_MAX_TURNS, ADAPTIVE_CAM_TURNS, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -260,6 +260,11 @@ class CAMEditor(QWidget):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
+        self.adaptive_peels = self.spin(1, ADAPTIVE_CAM_MAX_TURNS, ADAPTIVE_CAM_TURNS)
+        self.adaptive_peels.setDecimals(0)
+        self.adaptive_peels.setToolTip("Maximum adaptive peels per depth plan. Contours clear the remaining stock. More peels may increase planning and machining time.")
+        self.adaptive_peels.valueChanged.connect(self._edit)
+        form.addRow("Adaptive peel budget", self.adaptive_peels)
         self.stay_down = QCheckBox("Stay down between contours")
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
@@ -430,6 +435,7 @@ class CAMEditor(QWidget):
         self.operation_form.setRowVisible(self.strategy, bool(choices))
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
         self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
+        self.operation_form.setRowVisible(self.adaptive_peels, bool(op and op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive'))
         self.strategy.clear()
         for label, value in choices:
             self.strategy.addItem(label, value)
@@ -457,6 +463,7 @@ class CAMEditor(QWidget):
             self.lead_out.setChecked(op.lead_out)
             self.lead_length.setValue(op.lead_length)
             self.lead_angle.setValue(op.lead_angle)
+            self.adaptive_peels.setValue(op.adaptive_peels)
             self.stepover.setValue(op.stepover)
             self.area_order.setCurrentIndex(self.area_order.findData(op.area_order))
             self.side.setCurrentIndex(self.side.findData(op.side))
@@ -481,7 +488,8 @@ class CAMEditor(QWidget):
         self.selectionChanged.emit()
 
     def _update_stay_down(self, op):
-        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "trochoidal", "adaptive"))
+        self.operation_form.setRowVisible(self.adaptive_peels, op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive')
+        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "adaptive"))
 
     def _edit(self, *_):
         if self._loading:
@@ -505,6 +513,7 @@ class CAMEditor(QWidget):
         op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
         op.lead_length = self.lead_length.value()
         op.lead_angle = self.lead_angle.value()
+        op.adaptive_peels = int(self.adaptive_peels.value())
         if op.kind == "profile" and self.side.currentData() is not None:
             op.side = self.side.currentData()
         op.stock = self.stock.value()

@@ -104,7 +104,7 @@ def test_unlinked_paths_travel_at_cut_depth_only_if_enabled(libset, short_retrac
 
     mesh = stepped_part()
     job, op = job_for(mesh, [floor_ref(mesh)], libset)
-    op.strategy = 'trochoidal'
+    op.strategy = 'adaptive'
     op.lead_out = True
     generate(job, StageContext())
     job.layers = job.layers[:1]

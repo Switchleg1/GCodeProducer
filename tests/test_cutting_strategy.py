@@ -30,7 +30,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
             editor.kind.setCurrentIndex(editor.kind.findData(kind))
             editor.add_operation()
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
-            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Trochoidal', 'Adaptive clearing']
+            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Adaptive clearing']
                         if kind in ('pocket', 'waterfall') else
                         ['Meander', 'Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
             assert labels == expected
@@ -55,6 +55,10 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
                 assert restored.groups[0].operations[-1].strategy == strategy
+                assert form.isRowVisible(editor.adaptive_peels) == (strategy == 'adaptive')
+                if strategy == 'adaptive':
+                    editor.adaptive_peels.setValue(24)
+                    assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].adaptive_peels == 24
     finally:
         editor.close()
 
@@ -133,96 +137,6 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 
 
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
-def test_trochoidal_strategy_emits_one_spiral_without_xy_rapids_at_depth(libset, kind):
-    from gcodeproducer.core.cam import generate
-    from gcodeproducer.stages.cam_emit import CAMEmit
-    shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
-    job, _ = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
-                         end=Depth('absolute', -1), strategy='trochoidal')
-    job.cam_setup.reference_shapes = [shape]
-    generate(job, StageContext())
-    assert len(job.layers) == 1 and len(job.layers[0].paths) == 1
-    assert not job.layers[0].paths[0].closed and len(job.layers[0].paths[0].points) >= 16
-    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
-    from gcodeproducer.core.gcode.simulation import simulate
-    sim = simulate(job.program)
-    cut_z = job.layers[0].z
-    at_depth = np.flatnonzero(sim.moved & np.isclose(sim.z, cut_z))
-    assert len(at_depth) > 16
-    assert all(job.program.lines[i].cmd == 'G1' for i in range(at_depth[0], at_depth[-1]+1) if sim.moved[i])
-    assert not any('rapid motion contacts' in warning for warning in job.warnings)
-
-
-def test_trochoidal_radius_grows_continuously_and_covers_the_corners():
-    from shapely import union_all
-    from shapely.geometry import LineString
-    from gcodeproducer.core.cam.trochoidal import trochoidal_paths
-
-    area = box(0, 0, 20, 20)
-    paths = trochoidal_paths(area, 3., 0., 40, 'climb')
-    assert not paths[0].closed
-    seed = paths[0].points[:40] - [10., 10.]
-    major = np.abs(seed[0]).argmax()
-    axes = np.full(2, .9)
-    axes[major] = 1.
-    # Test the continuous pitch, not just the envelope of a whole turn.
-    unit = seed/axes
-    angle = np.unwrap(np.arctan2(unit[:, 1], unit[:, 0]))
-    distance = np.linalg.norm(unit, axis=1)
-    np.testing.assert_allclose(distance, .3 + 1.2*(angle-angle[0])/(2*np.pi), atol=1e-12)
-    assert np.ptp(np.vstack([p.points for p in paths])[:, 0]) == pytest.approx(17.)
-    sweeps = [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points).buffer(1.49)
-              for p in paths]
-    assert area.buffer(-1.5).difference(union_all(sweeps)).area < 1e-6
-
-
-def test_trochoidal_fronts_and_links_do_not_cross_islands_or_disconnected_areas():
-    from shapely.geometry import LineString
-    from gcodeproducer.core.cam.trochoidal import trochoidal_paths
-
-    area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14)).union(box(38.5, 0, 46, 10))
-    paths = trochoidal_paths(area, 3., .1, 35, 'climb')
-    allowed = area.buffer(-1.6).buffer(1e-7)
-    assert len(paths) >= 2  # an unsafe connection remains a separate entry
-    for path in paths:
-        assert not path.closed
-        assert allowed.covers(LineString(path.points))
-    unlinked = trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False)
-    assert len(unlinked) > len(paths)
-
-
-def test_spiral_join_cannot_slot_across_uncut_stock():
-    from shapely.geometry import LineString
-    from shapely.prepared import prep
-    from gcodeproducer.core.cam.trochoidal import _connector
-
-    area = prep(box(0, 0, 20, 20))
-    a, b = np.array([2., 5.]), np.array([16., 5.])
-    # The straight join fits the pocket but not the swept stock.
-    partial = prep(LineString([a, [8., 5.]]).buffer(1.5))
-    assert _connector(a, b, area, [], [], partial, 1.5, 1.2) is None
-    # Previously swept transit and a final, one-stepover approach are allowed.
-    cleared = prep(LineString([a, [14.81, 5.]]).buffer(1.5))
-    np.testing.assert_array_equal(_connector(a, b, area, [], [], cleared, 1.5, 1.2), [a, b])
-
-
-def test_short_corner_arcs_are_replaced_by_local_spirals():
-    from shapely.geometry import LineString
-    from shapely.prepared import prep
-    from gcodeproducer.core.cam.trochoidal import _corner_spirals, _pieces, _spiral
-
-    area = box(1.5, 1.5, 18.5, 18.5)
-    walls = [LineString(area.exterior.coords)]
-    spiral, _ = _spiral(area, 1.2, 1, 100000)
-    global_arcs = _pieces(spiral, area, prep(area.buffer(1e-7)))
-    arcs, samples = _corner_spirals(area, global_arcs, walls, 1.5, 1.2, 1, 100000)
-    assert samples > 0
-    local = [arc for arc in arcs if not any(np.array_equal(arc, old) for old in global_arcs)]
-    assert local and all(prep(area.buffer(1e-7)).covers(LineString(p)) for p in local)
-    assert any(len(p) >= 16 and np.ptp(p[:, 0]) < 5 and np.ptp(p[:, 1]) < 5 for p in local)
-
-
-@pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
 def test_adaptive_strategy_emits_peels_and_cleanup(libset, kind):
     from gcodeproducer.core.cam import generate
     from gcodeproducer.stages.cam_emit import CAMEmit
@@ -259,6 +173,10 @@ def test_adaptive_cleanup_preserves_coverage_and_island_clearance():
 
 
 def test_old_strategy_names_preserve_existing_behaviour():
+    for kind in ('pocket', 'waterfall'):
+        setup = CAMSetup.from_dict({'groups': [{'tool_id': 'tool', 'operations': [
+            {'kind': kind, 'strategy': 'trochoidal', 'start': {}, 'end': {}}]}]})
+        assert setup.groups[0].operations[0].strategy == 'adaptive'
     assert Operation(kind='pocket', strategy='raster').strategy == 'raster_y'
     assert Operation(kind='waterfall', strategy='raster').strategy == 'raster_y'
     assert Operation(kind='contour3d').strategy == 'meander'

@@ -17,39 +17,15 @@ and uses the normal CAM lead planner, including the operation’s lead-in angle.
 Waterfall can use the stock left by previous passes; a planar Pocket plans its
 initial geometry from a nominal stock envelope.
 
-Contours clear anything not covered by the adaptive sequence. If no eligible
-sequence fits, or the area is protected by tabs, the strategy uses ordinary
-contours. The Log reports peel and cleanup counts. The 18% trial limit is
+**Adaptive peel budget** sets the maximum number of peels per depth plan
+(default 8, up to 48). The planner searches for a peel it can reach without
+retracting, even if a cut requiring a retract would score higher. When the
+budget runs out or no verified stay-down peel remains, wall-parallel contours
+clear the rest. Areas protected by tabs use ordinary contours. The Log
+reports peel and cleanup counts and the reason for switching. The 18% trial limit is
 not a bound on actual tool load, and it does not apply to leads or cleanup.
 Inspect those sections in Preview; this strategy is not always faster than
 wall-parallel clearing. See the [design and benchmark](adaptive-clearing-design.md).
-
-## Trochoidal clearing
-
-Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
-At each depth the cutter follows a continuous center-out spiral. Its radius
-grows while it turns: stepover sets the growth per revolution (capped at 50%
-of tool diameter), not a separate straight move between laps. The spiral is
-slightly elliptical, oriented along the pocket's bounding rectangle.
-
-Where clipping leaves short, alternating arcs in a corner, the planner
-checks what the main spiral and wall pass would leave behind. It uses small
-local elliptical spirals in those residual areas and keeps a clipped arc
-only if it is still needed for coverage.
-
-**Stay down between contours** can retrace a recent toolpath or link through
-stock already swept at that depth. A link must fit inside the cutter-clearance
-region, and it may enter unswept stock only over its final stepover. Simply
-fitting inside the pocket is not enough: a long link must not cut a slot.
-Where the search cannot find such a route, the planner retracts and re-enters.
-Links still receive ordinary engagement and feed checks.
-
-The spiral uses short `G1` chords. This is a continuous spiral pocketing
-strategy, not adaptive constant-engagement machining. See Sandvik's
-[trochoidal milling definition](https://www.sandvik.coromant.com/en-gb/knowledge/milling/milling-holes-cavities-pockets/slicing-trochoidal-milling)
-and the [spiral pocketing research at the University of Salzburg](https://www.cosy.sbg.ac.at/~held/projects/hsm/hsm.html).
-For the proposed engagement-driven replacement and benchmark outline, see
-[Adaptive clearing: design and comparison cases](adaptive-clearing-design.md).
 
 ## Wall-parallel contours (default clearing strategy)
 

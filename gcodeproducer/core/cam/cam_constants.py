@@ -15,8 +15,8 @@ KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engr
 SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
 
 STRATEGY_ALIASES = {
-    "pocket": {"raster": "raster_y"},
-    "waterfall": {"raster": "raster_y"},
+    "pocket": {"raster": "raster_y", "trochoidal": "adaptive"},
+    "waterfall": {"raster": "raster_y", "trochoidal": "adaptive"},
     "contour3d": {"contour": "meander", "raster": "meander"},
 }
 
@@ -34,16 +34,7 @@ SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
 SURFACE_LEAD_SETTLE = 8
 
-TROCHOID_CHORD_ERROR = .01   # mm; target chord tolerance for sampling the spiral
-TROCHOID_MIN_SEGMENTS = 16
-TROCHOID_MINOR_RATIO_LIMITS = (.5, .9)  # minor / major; keep the paths elliptical, including in square pockets
-TROCHOID_MAX_FRONTS = 10_000
-TROCHOID_POINT_BUDGET = 2_000_000
-TROCHOID_SEAM_TRIALS = 16
-TROCHOID_HISTORY_PIECES = 4
-TROCHOID_CORNER_ARC_DIAMETERS = 6.
-TROCHOID_RETURN_DIAMETERS = 12.
-TROCHOID_ENGAGEMENT_BATCH_DIAMETERS = 4.
+ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS = 4.
 
 ADAPTIVE_PEEL_ADVANCE_FACTORS = (1., .75, .5, .25, .125)
 ADAPTIVE_PEEL_CHORD_ERROR = .01
@@ -61,6 +52,7 @@ ADAPTIVE_FRONTIER_SAMPLES = 12
 ADAPTIVE_ENTRY_RADIUS_FACTOR = .9  # less than cutter radius: the flat lap must cover the core
 ADAPTIVE_ENTRY_LIMIT = 20_000
 ADAPTIVE_CAM_TURNS = 8
+ADAPTIVE_CAM_MAX_TURNS = 48
 ADAPTIVE_CAM_COMPONENTS = 4
 ADAPTIVE_CAM_LIMIT = .18  # sampled width limit for peel trials, not for entry or cleanup
 ADAPTIVE_POCKET_AREA_EPS = 1e-8  # mm²; numerical residue, not a machining tolerance

@@ -4,7 +4,7 @@
 
 The target is **consistent cutter engagement during cutting, with as little
 non-cutting time as practicable**. A recognizably curved toolpath is not
-sufficient. The current **Trochoidal** option is still a clipped spiral with
+sufficient. The retired **Trochoidal** option was a clipped spiral with
 local cleanup and checked links; it does not choose the next cutting move to
 control engagement. The separate **Adaptive clearing** option now uses the selector for a bounded
 sequence of peels, followed by ordinary contour cleanup. See [usage and
@@ -156,6 +156,9 @@ produced eight connected peels per depth before contour cleanup. The Preview
 estimate was 6:14 versus 5:46 for wall-parallel. Both produced an existing
 cutting-hand conflict warning; neither reported rapid contact with stock.
 This is operation-only Preview timing, not a hardware test or a speedup.
+In 0.1.66 a 24-peel budget produced 24 peels per depth, but still needed
+24, 23 and 22 cleanup contours. Preview increased to 6:56, so the default
+budget stays at eight. More peels are useful for comparison, not a speed guarantee.
 
 ## Comparison cases and gates
 
@@ -172,7 +175,7 @@ allowance, climb and 40% stepover:
 | Generator | Centreline length | Output groups before travel planning |
 |---|---:|---:|
 | Wall-parallel contours | 2,559 mm | 21 closed contours |
-| Current Trochoidal | 4,150 mm | 26 paths; 25 gaps without a cleared route |
+| Retired Trochoidal | 4,150 mm | 26 paths; 25 gaps without a cleared route |
 
 Both nominal cutter sweeps cover the cutter-centre region in this check.
 Contour count is **not** retract count, and centreline length is **not** cycle

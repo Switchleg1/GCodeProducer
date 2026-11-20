@@ -30,9 +30,9 @@ boundaries, or can be retained as per-selection height-only references.
 | Lead-in angle | 10° | Maximum ramp descent angle for this operation |
 | Lead length | 0 (auto) | The ramp length increases as needed to stay within the lead-in angle |
 | Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
-| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y, Trochoidal and Adaptive clearing. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
+| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y and Adaptive clearing. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
-| Stay down between contours | On | Wall-parallel, Trochoidal and Adaptive clearing: nearby paths use checked same-depth cutting-feed links; unsafe/disconnected links retract |
+| Stay down between contours | On | Wall-parallel and Adaptive clearing: nearby paths use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside or Inside; row visible only for Profile |
 | Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
@@ -286,7 +286,7 @@ The operation's **Cutting strategy** field has operation-specific choices:
 
 | Operation | Choices |
 |---|---|
-| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y, Trochoidal, Adaptive clearing |
+| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y, Adaptive clearing |
 | 3D Contour | Meander, Raster lines X, Raster lines Y |
 | Profile, Slot, Drill, Engrave | Row hidden (no strategy control) |
 
@@ -298,16 +298,12 @@ uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
-**Trochoidal** works outward in a continuous spiral, growing its radius
-while it turns rather than stepping over between closed laps. It uses small
-local spirals for residual corner material and connects pieces at cutting
-depth only where a cleared route or short local approach is available.
-See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
-
 **Adaptive clearing** tries stock-aware curved peels, then clears the rest
 with wall-parallel contours. See [Adaptive clearing](toolpaths.md#adaptive-clearing).
 
-Historical captures (the clearing menu predates Trochoidal and Adaptive clearing):
+Saved Trochoidal operations reopen as Adaptive clearing. Regenerate to get the new paths.
+
+Historical captures (the clearing menu predates Adaptive clearing):
 
 ![Clearing strategy choices](../pictures/cam-cutting-strategy-clearing.png)
 

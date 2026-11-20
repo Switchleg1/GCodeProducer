@@ -381,7 +381,7 @@ class MotionPlanner:
         target = np.asarray(path.points[0], float)
         if self.links.stay_at_depth(state, self.position, target, floor):
             return (target,)
-        if not index or self.config is None or self.config.strategy != 'trochoidal' or not self.config.stay_down:
+        if not index or self.config is None or self.config.strategy != 'adaptive' or not self.config.stay_down:
             return None
         samples = []
         for p in layer.paths[max(0, index-INWARD_ROUTE_SAMPLE_PATHS):index]:

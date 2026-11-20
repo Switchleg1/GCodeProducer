@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
-from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_TURNS, RAMP_ANGLE
 
 @dataclass
 class Operation:
@@ -17,7 +17,7 @@ class Operation:
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
-    strategy: str = "contour"          # Pocket/Waterfall: contour, raster_x/y, trochoidal, adaptive
+    strategy: str = "contour"          # Pocket/Waterfall: contour, raster_x/y, adaptive
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
     low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults
@@ -41,6 +41,8 @@ class Operation:
     height_references: list[Reference] = field(default_factory=list)  # picked but excluded from machining
 
     lead_angle: float = RAMP_ANGLE      # maximum lead-in descent, in degrees
+
+    adaptive_peels: int = ADAPTIVE_CAM_TURNS
 
     def __post_init__(self):
         if self.kind == "pocket" and self.protect_model:

@@ -90,7 +90,8 @@ def discover_starts(position, region, material, *, pitch, tool_radius,
 
 def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limit,
                          min_loop_radius, max_loop_radius, cut_feed, travel_feed, z_feed,
-                         lift, waypoints=(), sense=1, continuation=None, expand=False, half_turns=False):
+                         lift, waypoints=(), sense=1, continuation=None, expand=False, half_turns=False,
+                         stay_down_only=False):
     """Discover and rank one next cut; no new Z entry or coverage guarantee."""
     starts = discover_starts(position, region, material, pitch=pitch, tool_radius=tool_radius,
                              min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius, sense=sense)
@@ -98,7 +99,8 @@ def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limi
         starts = [continuation, *starts[:ADAPTIVE_BRANCH_LIMIT-1]]
     options = dict(pitch=pitch, tool_radius=tool_radius, limit=limit, min_loop_radius=min_loop_radius,
                    max_loop_radius=max_loop_radius, cut_feed=cut_feed, travel_feed=travel_feed,
-                   z_feed=z_feed, lift=lift, waypoints=waypoints, sense=sense, expand=expand)
+                   z_feed=z_feed, lift=lift, waypoints=waypoints, sense=sense, expand=expand,
+                   stay_down_only=stay_down_only)
     choice = choose_branch(position, starts, region, material, **options)
     if choice is None and half_turns:
         # A partial turn is a recovery option, not a competitor that can
