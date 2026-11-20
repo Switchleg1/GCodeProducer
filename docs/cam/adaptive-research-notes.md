@@ -92,10 +92,13 @@ remaining inside it as the geometric coverage reference.
 An exploratory sweep at Z−0.5 mm gives **6,092.3 mm² geometrically reachable**
 out of 6,099.0 mm² nominal. At 0.0025 mm arc chord error about **10.9 mm²** of
 reachable area remains, versus 12.3 mm² at 0.01 mm. This is a preliminary
-coverage measurement, not a pass tolerance or a clearance check. Next make
-it reproducible with ordered replay, a chord-error convergence check, and a
-residual map. Measure engagement separately; the stock assumption is not a
-claim about the original blank or physical setup.
+coverage measurement, not a pass tolerance or a clearance check. Reproduce it
+with `python tools/check_cambam_pocket.py pocket.cb pocket.gcode`. Run again
+with a finer `--chord-error` to inspect sensitivity; `--details replay.json`
+creates a new file with residual geometry and each stroke’s newly swept area.
+Replay uses only the constant-depth XY strokes, not the descent or lifts.
+Measure engagement separately; the stock assumption is not a claim about
+the original blank or physical setup.
 
 ## Proposed design decisions
 
