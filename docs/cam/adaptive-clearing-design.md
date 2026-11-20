@@ -95,13 +95,16 @@ coverage or faster machining.
 
 `adaptive_entry.py` can now start from fresh stock in the offline prototype.
 It picks an orbit inside the cutter-centre region, limits the descent using
-the actual chord lengths and the shared 10° ramp limit, and finishes a full
+the actual chord lengths and the supplied lead-in angle (10° by default), and finishes a full
 lap at cutting depth before moving to the cleared center. Only the flat lap
 is credited as removed material at that depth. The caller must qualify the
 flat cutter for ramping, flute reach, and safe approach to the stock surface.
 A 20 × 12 mm test cleared 11.29 mm² at depth with the entry and another
-2.79 mm² with two stay-down peels. Whole-pocket completion, especially through
-narrow necks and corners, remains unproven; CAM output is unchanged.
+2.79 mm² with two stay-down peels. The bounded two-lobe benchmark starts
+from fresh stock at 4° and removes 11.29 mm² with the entry lap and 7.94 mm²
+with four peels; 99.54% of the cutter-centre area still contains stock at
+that cutoff. This is an entry-to-peel test, not a full-pocket result. The
+adaptive prototype is still not wired into CAM output.
 
 ## Comparison cases and gates
 

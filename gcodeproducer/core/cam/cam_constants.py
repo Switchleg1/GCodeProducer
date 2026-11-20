@@ -83,7 +83,8 @@ FEED_FIELDS = {
 
 MAX_POINTS = 20000          # guard against absurdly many laps on a microscopic contour
 
-RAMP_ANGLE=10.0                       # matches the lead-in planner (core.cam_leads)
+RAMP_ANGLE = 10.0                     # default for legacy setups
+LEAD_ANGLE_RANGE = (.1, 89.)
 
 RAMP_TAN=math.tan(math.radians(RAMP_ANGLE))
 

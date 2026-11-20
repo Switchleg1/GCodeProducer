@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
 
 @dataclass
 class Operation:
@@ -32,12 +33,14 @@ class Operation:
     lead_feed: float = 300.
     lead_in: bool = True
     lead_out: bool = True
-    lead_length: float = 0.0            # 0 = auto: >= one diameter, with <=10-degree ramp
+    lead_length: float = 0.0            # 0 = auto: lengthens as needed to respect lead_angle
     overcut: float = 0.0                # Pocket/Waterfall: grow the removal region into void material
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
     area_order: str = "area"           # area: each area to full depth; depth: all areas at each depth
     protect_model: bool = False        # legacy input: migrates a surface-limited Pocket to Waterfall
     height_references: list[Reference] = field(default_factory=list)  # picked but excluded from machining
+
+    lead_angle: float = RAMP_ANGLE      # maximum lead-in descent, in degrees
 
     def __post_init__(self):
         if self.kind == "pocket" and self.protect_model:

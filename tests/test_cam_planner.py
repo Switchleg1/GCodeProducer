@@ -178,6 +178,25 @@ def test_planar_lead_in_uses_measured_band_and_operation_override(libset):
     assert set(np.round(sim.feed[rows], 6)) <= {90., 300.} | {s.rate for s in job.motion_plan.of("lead_in")}
 
 
+def test_operation_lead_angle_reaches_emitted_planar_ramp(libset):
+    job, _ = emitted(libset, lead_angle=4.)
+    sim = simulate(job.program)
+    ids = [i for i, line in enumerate(job.program.lines) if line.feature == 'lead_in' and sim.pz[i] > sim.z[i]]
+    assert ids
+    drops = sim.pz[ids] - sim.z[ids]
+    xy = np.hypot(sim.x[ids]-sim.px[ids], sim.y[ids]-sim.py[ids])
+    assert np.all(drops <= np.tan(np.deg2rad(4.))*xy + .0012)  # serialized XYZ precision
+    assert drops.sum()/xy.sum() > np.tan(np.deg2rad(3.))
+
+
+def test_surface_entry_uses_configured_angle():
+    from gcodeproducer.core.cam.surface_leads import surface_entry
+
+    path = np.array([[0., 0., -1.], [20., 0., -1.]])
+    ramp, _ = surface_entry(path, 0., 0., angle=4.)
+    assert np.linalg.norm(np.diff(ramp[:, :2], axis=0), axis=1).sum() == pytest.approx(1./np.tan(np.deg2rad(4.)))
+
+
 def test_planar_reentry_into_cleared_material_skips_the_ramp(libset):
     job, op = emitted(libset)
     first = len(job.motion_plan.of("lead_in"))

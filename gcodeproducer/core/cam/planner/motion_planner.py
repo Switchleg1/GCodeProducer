@@ -8,7 +8,7 @@ resulting segments and makes no decisions.
 """
 from __future__ import annotations
 import numpy as np
-from gcodeproducer.core.cam.cam_constants import RAMP_TAN
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, RAMP_TAN
 from gcodeproducer.core.gcode.parsing import format_number
 from .motion_segment import MotionSegment
 from .motion_plan import MotionPlan
@@ -159,7 +159,8 @@ class MotionPlanner:
             if measured and sampler is not None:
                 c = self.model.condition(sampler, self.position, q, self.radius)
             drop, run = self.position[2]-q[2], float(np.linalg.norm(q[:2]-self.position[:2]))
-            steep = drop > 1e-9 and drop > RAMP_TAN*run
+            max_slope = self.entries.ramp_slope if phase == 'lead_in' and self.entries is not None else RAMP_TAN
+            steep = drop > 1e-9 and drop > max_slope*run
             rate = self.policy.rate(phase, self.feed, self.plunge, c, steep)
             feature = self.policy.feature(phase, c)
             start = self.position.copy()
@@ -443,7 +444,8 @@ class MotionPlanner:
                 previous_group = group
             tool = self.tool = next_tool
             self.radius = float(tool.get("diameter", 0))/2 if tool else 0.
-            self.entries = EntryExitPlanner(self.safe_z, self.lead_clearance, self.radius)
+            self.entries = EntryExitPlanner(self.safe_z, self.lead_clearance, self.radius,
+                                            getattr(config, 'lead_angle', RAMP_ANGLE))
             self.links = LinkPlanner(self.safe_z, self.travel_clearance, self.lead_clearance, self.short_retracts, self.radius)
             self.model = EngagementModel(config, tool, self.machine)
             if data and (li == 0 or data.rpm != rpm):

@@ -11,8 +11,9 @@ from shapely.ops import polylabel
 
 from gcodeproducer.core.cam.cam_constants import (
     ADAPTIVE_ENTRY_LIMIT, ADAPTIVE_ENTRY_RADIUS_FACTOR, ADAPTIVE_PEEL_CHORD_ERROR,
-    ADAPTIVE_PEEL_MIN_SEGMENTS, RAMP_TAN,
+    ADAPTIVE_PEEL_MIN_SEGMENTS, RAMP_ANGLE,
 )
+from gcodeproducer.core.cam.lead_angle import lead_slope
 from gcodeproducer.core.cam.planner.planner_constants import CLEARANCE_MARGIN
 from gcodeproducer.core.geometry.polygon_parts import polygons
 
@@ -23,7 +24,7 @@ class AdaptiveEntry:
     remaining: BaseGeometry  # only credits the flat lap at cut depth
 
 
-def seed_entry(region, material, *, radius, top, depth, sense=1):
+def seed_entry(region, material, *, radius, top, depth, lead_angle=RAMP_ANGLE, sense=1):
     """Find a contained helix and finish a full lap at the requested Z.
 
     The caller must qualify the tool for ramping, the depth and flute reach,
@@ -33,6 +34,7 @@ def seed_entry(region, material, *, radius, top, depth, sense=1):
     if (not all(math.isfinite(v) for v in (radius, top, depth)) or radius <= 0
             or top <= depth or sense not in (-1, 1)):
         raise ValueError('Adaptive entry requires a positive tool radius and descending Z range')
+    slope = lead_slope(lead_angle)
     best = None
     for part in polygons(region):
         centre = polylabel(part, tolerance=ADAPTIVE_PEEL_CHORD_ERROR)
@@ -53,7 +55,7 @@ def seed_entry(region, material, *, radius, top, depth, sense=1):
         if not part.covers(ring):
             continue
         # Use the actual chord length, not the larger ideal circumference.
-        per_lap = RAMP_TAN * np.linalg.norm(np.diff(xy, axis=0), axis=1).min() * n
+        per_lap = slope * np.linalg.norm(np.diff(xy, axis=0), axis=1).min() * n
         if top-depth > per_lap*((ADAPTIVE_ENTRY_LIMIT-2)//n-1):
             continue
         laps = max(1, math.ceil((top-depth)/per_lap))

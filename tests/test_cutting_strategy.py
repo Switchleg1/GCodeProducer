@@ -41,6 +41,9 @@ def test_operation_specific_choices_and_hidden_rows(app):
             assert editor.side.isHidden() == (kind != 'profile')
             assert form.labelForField(editor.side).isHidden() == (kind != 'profile')
             assert [editor.side.itemText(i) for i in range(editor.side.count())] == ['Outside', 'Inside']
+            editor.lead_angle.setValue(4.5)
+            assert editor.operation().lead_angle == 4.5
+            assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].lead_angle == 4.5
             if kind == 'contour3d':
                 assert editor.lead_in.isEnabled() and editor.lead_out.isEnabled()
                 assert all(field.isEnabled() for field in editor.feed_controls.values())

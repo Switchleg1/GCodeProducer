@@ -8,7 +8,8 @@ All XY centres stay on the original validated cut path, so the ramp never
 leaves the region the operation already cuts. Exit follows already-cut line.
 """
 
-from gcodeproducer.core.cam.cam_constants import MAX_POINTS
+from gcodeproducer.core.cam.cam_constants import MAX_POINTS, RAMP_ANGLE
+from gcodeproducer.core.cam.lead_angle import lead_slope
 import numpy as np
 
 
@@ -94,15 +95,15 @@ def entry_path(points,closed,distance):
     return xy[::-1].copy(),kind
 
 
-def ramp(points,closed,depth,entry_z,length,angle=10.0):
+def ramp(points,closed,depth,entry_z,length,angle=RAMP_ANGLE):
     """(N,3) ramp; see :func:`ramp_entry`."""
     return ramp_entry(points,closed,depth,entry_z,length,angle)[0]
 
 
-def ramp_entry(points,closed,depth,entry_z,length,angle=10.0):
+def ramp_entry(points,closed,depth,entry_z,length,angle=RAMP_ANGLE):
     """Ramp from entry_z to depth along the path at <= ``angle`` degrees; never skipped
     for lack of contour length. Returns ((N,3), kind) or (None, None) only for a degenerate path."""
-    needed=max(float(length),abs(entry_z-depth)/np.tan(np.deg2rad(angle)),.01)
+    needed=max(float(length),abs(entry_z-depth)/lead_slope(angle),.01)
     xy,kind=entry_path(points,closed,needed)
     if xy is None:return None,None
     distance=np.r_[0,np.cumsum(np.linalg.norm(np.diff(xy,axis=0),axis=1))]

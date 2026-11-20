@@ -4,7 +4,8 @@ field for progress display and motion checks. Neither models fixtures/holders.
 
 from gcodeproducer.core.cam.planar_stock import PlanarStock
 from gcodeproducer.core.cam.height_stock import HeightStock
-from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, RAMP_TAN
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
+from gcodeproducer.core.cam.lead_angle import lead_slope
 import numpy as np
 
 
@@ -27,6 +28,8 @@ def simulate_material(job,program,log=None,*,sim=None):
     by_id={t.id:t.resolved() for t in job.tools}
     tools={int(by_id[t.id].get("tool_number",1)):by_id[t.id] for t in job.tools}
     layer_tools={layer.index:by_id.get(getattr(layer,"cam_tool_id",None)) for layer in job.layers}
+    angles = {layer.index: getattr(getattr(layer, 'cam_operation_config', None), 'lead_angle', RAMP_ANGLE)
+              for layer in job.layers}
     fallback=by_id[job.tools[0].id] if job.tools else None
     snapshots=[{"label":"Initial material","last_layer":-1,"positions":state.surface(),
                 "resolution":state.resolution,"heights":state.heights.copy()}]
@@ -70,7 +73,8 @@ def simulate_material(job,program,log=None,*,sim=None):
         if contact and line.feature in ("plunge","lead_in") and b[2]<a[2]:
             horizontal=float(np.linalg.norm(b[:2]-a[:2]))
             drop=float(a[2]-b[2])
-            if horizontal>1e-6 and drop<=horizontal*RAMP_TAN+1e-6:
+            angle = angles.get(line.layer, RAMP_ANGLE) if line.feature == 'lead_in' else RAMP_ANGLE
+            if horizontal>1e-6 and drop<=horizontal*lead_slope(angle)+1e-6:
                 pass  # ramped entry within the ramp angle: the tool tip descends gradually; walls beside it are side cutting
             else:
                 # Plunge (or over-steep ramp): material under the tool that this move itself descends
@@ -78,7 +82,7 @@ def simulate_material(job,program,log=None,*,sim=None):
                 doc=float(tool.get("max_doc",0) or 0)
                 uncleared=min(state.height_at(b[:2],radius),float(a[2]))-b[2]
                 if doc>0 and uncleared>doc+state.resolution:
-                    kind="plunge" if horizontal<=1e-6 else f"ramp steeper than {RAMP_ANGLE:g}°"
+                    kind="plunge" if horizontal<=1e-6 else f"ramp steeper than {angle:g}°"
                     warn(f"{label}: estimated uncleared entry depth {uncleared:g} mm ({kind}) exceeds tool depth/pass {doc:g}; verify prior clearing.")
         if sim.motion_cmd[i]=="G1" and spindle and line.feature in intended and line.op:
             state.cut(a,b,radius)

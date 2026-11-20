@@ -26,8 +26,9 @@ boundaries, or can be retained as per-selection height-only references.
 | Depth of cut (mm/pass) | Calculated while locked; editable while unlocked | Existing manual stepdowns reopen unlocked; automatic depths reopen locked |
 | Area order | Each area to full depth | Finish one area before moving to the next, or visit all areas at each depth. New-operation default is in Settings → Default operation settings; saved operations own their choice |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
-| Lead-in / lead-out | On | ≤10° ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
-| Lead length | 0 (auto) | Automatic length respects a 10° ramp slope when enough contour exists |
+| Lead-in / lead-out | On | Ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
+| Lead-in angle | 10° | Maximum ramp descent angle for this operation |
+| Lead length | 0 (auto) | The ramp length increases as needed to stay within the lead-in angle |
 | Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
 | Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y and Trochoidal. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
@@ -47,7 +48,7 @@ silently switching to another strategy.
 
 Each depth pass begins with an entry: a short retract above the current
 material (or safe Z for the first entry after start-up/tool change), a rapid
-to the ramp start just above the material, and a ≤10° lead-in along the path
+to the ramp start just above the material, and a lead-in along the path at the configured angle or shallower
 (helix/zigzag when the path is short) or, with lead-in off, a plunge from the
 short clearance. Wall-parallel pockets can then stay down between nearby
 contours when the full cutter-centre link is inside the permitted region.
@@ -343,7 +344,7 @@ undercut or changing-width geometry is not a general supported profiling case.
 3 mm outside each retained straight wall at zero stock allowance. A 0.3 mm
 allowance increases that offset to 3.3 mm. That can still place the cutter
 inside the allocated raw blank: with lead-in on, the entry ramps along the
-profile contour at ≤10°; with lead-in off the vertical entry must be
+profile contour at the configured lead-in angle or shallower; with lead-in off the vertical entry must be
 evaluated, not assumed to be in air.
 
 Climb/conventional/meander requests follow the machine default or operation

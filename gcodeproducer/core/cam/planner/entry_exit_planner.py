@@ -9,12 +9,15 @@ from __future__ import annotations
 import numpy as np
 from gcodeproducer.core.cam.leads import ramp_entry, exit_path
 from gcodeproducer.core.cam.surface_leads import surface_entry, surface_exit
-from gcodeproducer.core.cam.cam_constants import SURFACE_LEAD_SETTLE
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, SURFACE_LEAD_SETTLE
+from gcodeproducer.core.cam.lead_angle import lead_slope
 from .planner_constants import SETTLE_PASSES
 
 
 class EntryExitPlanner:
-    def __init__(self, safe_z, lead_clearance, radius):
+    def __init__(self, safe_z, lead_clearance, radius, lead_angle=RAMP_ANGLE):
+        self.lead_angle = lead_angle
+        self.ramp_slope = lead_slope(lead_angle)
         self.safe_z = float(safe_z)
         self.lead_clearance = float(lead_clearance)
         self.radius = float(radius)
@@ -43,7 +46,7 @@ class EntryExitPlanner:
         if len(points) < 2:
             return None, "degenerate"
         if top is not None:
-            lead, kind = ramp_entry(points, closed, z, float(top), length)
+            lead, kind = ramp_entry(points, closed, z, float(top), length, self.lead_angle)
             return lead, kind or "degenerate"
         surface = state.height_at(start, self.radius)
         lead = kind = None
@@ -51,7 +54,7 @@ class EntryExitPlanner:
             # The ramp starts just above the local material (lead clearance), settled over
             # both the path start and the ramp start, which moves with the ramp length.
             entry_z = min(self.safe_z, max(surface, z)+self.lead_clearance)
-            lead, kind = ramp_entry(points, closed, z, entry_z, length)
+            lead, kind = ramp_entry(points, closed, z, entry_z, length, self.lead_angle)
             if lead is None:
                 return None, "degenerate"
             above = state.height_at(lead[0, :2], self.radius)
@@ -70,7 +73,7 @@ class EntryExitPlanner:
         lead = kind = None
         for _ in range(SURFACE_LEAD_SETTLE):
             entry_z = min(self.safe_z, max(surface, first[2])+self.lead_clearance)
-            lead, kind = surface_entry(points, entry_z, length)
+            lead, kind = surface_entry(points, entry_z, length, self.lead_angle)
             above = state.height_at(lead[0, :2], self.radius)
             if above <= surface+1e-6:
                 break

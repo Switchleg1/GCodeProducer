@@ -34,7 +34,7 @@ from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KINDS
+from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -219,9 +219,13 @@ class CAMEditor(QWidget):
         form.addRow(self.lead_in)
         form.addRow(self.lead_out)
         self.lead_length = self.spin(0,1000,0)
-        self.lead_length.setSpecialValueText("Auto length / 10° ramp")
+        self.lead_length.setSpecialValueText("Auto length")
         self.lead_length.valueChanged.connect(self._edit)
         form.addRow("Lead length (mm)",self.lead_length)
+        self.lead_angle = self.spin(*LEAD_ANGLE_RANGE, RAMP_ANGLE)
+        self.lead_angle.setToolTip("Maximum descent angle of the lead-in ramp. Shallower angles need more horizontal travel.")
+        self.lead_angle.valueChanged.connect(self._edit)
+        form.addRow("Lead-in angle (°)", self.lead_angle)
         self.stepover = self.spin(1, 100, 40)
         self.area_order = QComboBox()
         self.area_order.addItem("Each area to full depth", "area")
@@ -452,6 +456,7 @@ class CAMEditor(QWidget):
             self.lead_in.setChecked(op.lead_in)
             self.lead_out.setChecked(op.lead_out)
             self.lead_length.setValue(op.lead_length)
+            self.lead_angle.setValue(op.lead_angle)
             self.stepover.setValue(op.stepover)
             self.area_order.setCurrentIndex(self.area_order.findData(op.area_order))
             self.side.setCurrentIndex(self.side.findData(op.side))
@@ -499,6 +504,7 @@ class CAMEditor(QWidget):
             value.setEnabled(unlock.isChecked())
         op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
         op.lead_length = self.lead_length.value()
+        op.lead_angle = self.lead_angle.value()
         if op.kind == "profile" and self.side.currentData() is not None:
             op.side = self.side.currentData()
         op.stock = self.stock.value()

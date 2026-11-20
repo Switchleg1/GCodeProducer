@@ -1,7 +1,8 @@
 """XYZ leads constrained to the validated surface path, never free tangent extensions."""
 import math
 import numpy as np
-from .cam_constants import MAX_POINTS, RAMP_TAN
+from .cam_constants import MAX_POINTS, RAMP_ANGLE
+from .lead_angle import lead_slope
 
 
 def _prefix(points, distance, depth=None, slope=None):
@@ -29,11 +30,11 @@ def _prefix(points, distance, depth=None, slope=None):
     return np.asarray(result)
 
 
-def surface_entry(points, entry_z, length):
-    """Return an open-path ramp ending at points[0], with <=10-degree descent.
+def surface_entry(points, entry_z, length, angle=RAMP_ANGLE):
+    """Return an open-path ramp ending at points[0], limited by ``angle``.
 
     Follow a safe prefix backwards, zigzagging when short. A prefix which rises
-    too steeply toward its interior cannot be approached downhill at <=10 degrees
+    too steeply toward its interior cannot be approached downhill at that angle
     from that side; shorten before that rise. Fail explicitly if no safe prefix
     remains instead of silently plunging or dipping below the model surface.
     """
@@ -43,10 +44,10 @@ def surface_entry(points, entry_z, length):
     drop = float(entry_z-p[0, 2])
     if not math.isfinite(drop) or drop <= 0:
         raise ValueError('3D Contour lead-in start must be above the surface path')
-    needed = max(float(length), drop/RAMP_TAN, .01)
+    needed = max(float(length), drop/lead_slope(angle), .01)
     prefix = _prefix(p, needed, p[0, 2], drop/needed)
     if len(prefix) < 2:
-        raise ValueError('3D Contour lead-in cannot fit a <=10 degree ramp along this surface path; '
+        raise ValueError(f'3D Contour lead-in cannot fit a <={angle:g} degree ramp along this surface path; '
                          'choose another entry/direction or explicitly disable lead-in')
     cycle = np.vstack((prefix, prefix[-2::-1]))
     lengths = np.linalg.norm(np.diff(cycle[:, :2], axis=0), axis=1)

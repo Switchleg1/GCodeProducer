@@ -130,14 +130,14 @@ For each entry (start of a pass, or a path that cannot stay down), the emitter:
 No feed move descends through air from safe Z or from a clearance plane. On
 the example flange + counterbore setup, every depth pass after the first
 of each operation (19 entries) now begins without any retract.
-3. Follows the selected path itself while ramping down to cutting Z, at no
-   more than about 10°. A closed loop is followed backwards from its seam so
-   the ramp arrives moving in the cut direction; an open line is followed
-   from its start.
+3. Follows the selected path down to cutting Z without exceeding the
+   operation’s lead-in angle (10° by default). A closed loop is followed
+   backwards from its seam so the ramp arrives moving in the cut direction;
+   an open line is followed from its start.
 4. Executes the normal path and eligible stay-down links.
 
 The ramp is never skipped for lack of length. When the path is shorter than
-the 10° ramp needs, the entry keeps following the same path:
+the configured ramp needs, the entry keeps following the same path:
 
 - **Closed contour — helix along the contour.** The ramp circles the loop
   as many times as needed, descending continuously. A 4 mm counterbore
@@ -189,7 +189,7 @@ remaining height-field material:
 - Unexpected/unclassified feed contact, spindle-off contact, below-bottom
   motion and excessive uncleared entry depth are reported. Entry depth is
   measured for vertical plunges and over-steep ramps only, counting material
-  the move itself descends through; a ≤10° helix or zigzag beside an uncut
+  the move itself descends through; a helix or zigzag within the configured lead-in angle beside an uncut
   wall is side cutting, not an axial plunge.
 - Intended G1 cuts, plunges and leads remove material only while the spindle
   is on. A rapid never removes material in the model.

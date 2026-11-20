@@ -113,7 +113,7 @@ uncleared stock.
   operation/tool/machine feed modifiers apply. Steep surface descents use the
   lower cut/lead base before the modifier; every feed remains machine-capped.
 - **Entries:** with **Lead-in ramp along contour** checked, an entry which
-  meets remaining material ramps along the validated XYZ path at ≤10°. Short
+  meets remaining material ramps along the validated XYZ path within the operation’s lead-in angle. Short
   usable prefixes zigzag as needed. Already-clear entries skip the ramp and
   descend through verified air. Unchecking retains an explicit plunge entry.
 - **Exits:** with **Lead-out along cleared contour** checked, a path that cut
@@ -123,7 +123,7 @@ uncleared stock.
 ![Contour leads and material-aware cutting features](../pictures/cam-contour-leads-engagement.png)
 
 Leads never extend an arbitrary tangent through a retained wall. If the usable
-surface rises too steeply to fit a protected ≤10° entry, generation reports an
+surface rises too steeply to fit a protected entry at the configured angle, generation reports an
 error instead of silently plunging. Choose another entry/direction or explicitly
 turn lead-in off only after checking plunge capability. A shorter requested lead
 can help where an unnecessarily long lead crosses a raised surface.

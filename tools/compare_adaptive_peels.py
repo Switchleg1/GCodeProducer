@@ -67,14 +67,16 @@ def main():
     print(f'Wall case: {int(fixed is not None)} fixed start(s), {len(steered)} continuous steered turns; '
           f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
 
-    fresh = box(0, 0, 20, 12)
-    fresh_region = fresh.buffer(-radius)
-    entry = seed_entry(fresh_region, fresh, radius=radius, top=0., depth=-1.)
-    seeded = trace_frontier(entry.points[-1, :2], fresh_region, entry.remaining, turns=2,
+    fresh_region = pocket.buffer(-radius)
+    entry = seed_entry(fresh_region, pocket, radius=radius, top=0., depth=-1., lead_angle=4.)
+    seeded = trace_frontier(entry.points[-1, :2], fresh_region, entry.remaining, turns=4,
                             pitch=.6, tool_radius=radius, limit=.18, min_loop_radius=.45,
                             max_loop_radius=.85, cut_feed=800, travel_feed=1200, z_feed=150, lift=3.)
-    print(f'Fresh stock: {fresh.area-entry.remaining.area:.2f} mm² cleared by the entry lap, '
-          f'{sum(c.peel.removed_area for c in seeded):.2f} mm² by {len(seeded)} peels.')
+    remaining = seeded[-1].peel.remaining if seeded else entry.remaining
+    residual = remaining.intersection(fresh_region).area
+    print(f'Fresh two-lobe pocket, 4° entry: {pocket.area-entry.remaining.area:.2f} mm² cleared by the entry lap, '
+          f'{sum(c.peel.removed_area for c in seeded):.2f} mm² by {len(seeded)} peels; '
+          f'{residual/fresh_region.area:.2%} of the cutter-centre area still contains stock.')
 
     blank = box(0, 0, 30, 30)
     start, via, end = (5, 5), (5, 20), (20, 20)

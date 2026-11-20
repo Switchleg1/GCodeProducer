@@ -74,7 +74,7 @@ setups without enabled operations fail generation.
 motion. The first entry after start-up or a tool change comes from safe Z.
 Later entries stay at depth across cleared material when that is verified,
 or use a short retract above the current material, then a rapid to just above
-the material and a ≤10° lead-in ramp (or a plunge at lead/plunge feed when
+the material and a ramp limited by the operation’s lead-in angle (10° by default) (or a plunge at lead/plunge feed when
 lead-in is off); see [material state and leads](material-state-and-leads.md).
 Wall-parallel pockets can then follow nearby contours
 using clearance-checked same-depth feed links. Blocked/disconnected links and
