@@ -177,7 +177,11 @@ checker measures the whole chord chain's clearance from stock and pocket
 boundaries, including holes. It found the first trial return roughly 0.000021
 mm short of cutter-radius clearance in reconstructed stock, even though the
 polygonal sweep reported zero removed area. Treat it as a rejected proposal,
-not grounds for reducing the clearance requirement.
+not grounds for reducing the clearance requirement. Moving the join 0.1 mm
+upstream lets all three returns pass the unchanged planar check with zero
+extra margin. Added air travel is 18.65 mm rather than 27.21 mm with the
+staged baseline, without changing the measured residual. This is a fixture
+result; no machine clearance or positive boundary margin is inferred.
 
 ## Gate before another generator attempt
 

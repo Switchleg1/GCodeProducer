@@ -90,6 +90,18 @@ def test_tangent_returns_shorten_travel_without_more_engagement_or_residual(step
     assert all(row['removed_stock_mm2'] < 1e-8 for row in transfers)
 
 
+@pytest.mark.parametrize('step', [.05, .0125])
+def test_checked_corner_return_keeps_coverage_and_shortens_clear_travel(step):
+    _, (baseline, _, _) = compare_staged_cleanup((1.8, .8, .2), step)
+    _, (checked, _, rows) = compare_staged_cleanup((1.8, .8, .2), step, checked_returns=True)
+    assert baseline['air_distance_mm'] - checked['air_distance_mm'] > 8.5
+    assert checked['reachable_residual_mm2'] == pytest.approx(baseline['reachable_residual_mm2'], abs=1e-8)
+    assert checked['outside_pocket_sweep_mm2'] < 1e-8
+    assert checked['sampled_peak_contact_deg'] < 95.
+    assert checked['sampled_peak_contact_deg'] == pytest.approx(baseline['sampled_peak_contact_deg'], abs=.02)
+    assert sum(row['motion'] == 'blend' for row in rows) == 3
+
+
 @pytest.mark.parametrize('fillets', [(), (.8, 1.8), (1.2, 1.2), (3.,), (0.,)])
 def test_staged_cleanup_requires_strictly_decreasing_positive_radii(fillets):
     with pytest.raises(ValueError, match='decrease strictly'):
