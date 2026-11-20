@@ -34,7 +34,7 @@ SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
 SURFACE_LEAD_SETTLE = 8
 
-TROCHOID_CHORD_ERROR = .01   # mm; linear moves approximate the rolling loops
+TROCHOID_CHORD_ERROR = .01   # mm; linear moves approximate the concentric circles
 TROCHOID_MIN_SEGMENTS = 16
 TROCHOID_POINT_BUDGET = 2_000_000
 

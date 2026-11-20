@@ -21,7 +21,7 @@ def pocket_paths(op, loops, region, diameter, direction, log=None):
                  for i, (p, link) in enumerate(linked)]
     elif strategy == "trochoidal":
         from gcodeproducer.core.cam.trochoidal import trochoidal_paths
-        return trochoidal_paths(region, diameter, op.stock, op.stepover, direction, log)
+        return trochoidal_paths(region, diameter, op.stock, op.stepover, direction, log, stay_down=op.stay_down)
     elif strategy in ("raster_x", "raster_y"):
         centre_region = region.buffer(-(diameter/2+op.stock))
         regions = [p for p, _ in boundary_paths(centre_region, direction)]

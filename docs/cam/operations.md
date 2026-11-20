@@ -31,7 +31,7 @@ boundaries, or can be retained as per-selection height-only references.
 | Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
 | Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y and Trochoidal. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
-| Stay down between contours | On | Wall-parallel pockets: nearby loops use checked same-depth cutting-feed links; unsafe/disconnected links retract |
+| Stay down between contours | On | Wall-parallel and Trochoidal clearing: nearby paths use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside or Inside; row visible only for Profile |
 | Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
@@ -273,7 +273,7 @@ depths, so a part that widens below the floor blocks the overcut at that
 width for the whole operation. Invalid STL sections fall back to their convex
 hull, which only ever protects more material.
 
-Not implemented: adaptive clearing, trochoidal motion, rest machining,
+Not implemented: adaptive constant-engagement clearing, rest machining,
 automatic rough/finish stock tracking, helical entry or machining from a full
 3D stock-removal simulation. Air-cut removal across operations is described
 in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) and
@@ -297,9 +297,10 @@ uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
-**Trochoidal** clears along lanes with advancing circular loops, using
-straight cuts where a loop would cross the cutter-clearance boundary. It
-finishes each area with wall and island passes. See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
+**Trochoidal** starts with a small circle near the center of each cutting
+area and clears outward through concentric circles. Where a circle meets a
+wall or island, the strategy cuts only the in-bounds arcs, then finishes
+with boundary passes. See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
 
 Historical captures (the clearing menu predates Trochoidal):
 

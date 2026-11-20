@@ -163,7 +163,7 @@ def schedule_planar(run, paths, region, planning):
                 continue
             if op.kind != "drill":
                 planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, ctx.log, remaining))
-            if op.kind == "pocket" and op.strategy == "contour":
+            if op.kind == "pocket" and op.strategy in ("contour", "trochoidal"):
                 ctx.log(f"  {op.name}: {sum(p.stay_down for p in planned)} stay-down links, "
                         f"{sum(not p.stay_down for p in planned)} safe-height entries per depth pass")
         if not planned:

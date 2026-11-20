@@ -130,7 +130,7 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 
 
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
-def test_trochoidal_strategy_uses_forward_advancing_loops_and_emits(libset, kind):
+def test_trochoidal_strategy_uses_circular_contours_and_emits(libset, kind):
     from gcodeproducer.core.cam import generate
     from gcodeproducer.stages.cam_emit import CAMEmit
     shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
@@ -138,26 +138,47 @@ def test_trochoidal_strategy_uses_forward_advancing_loops_and_emits(libset, kind
                          end=Depth('absolute', -1), strategy='trochoidal')
     job.cam_setup.reference_shapes = [shape]
     generate(job, StageContext())
-    lanes = [p.points for layer in job.layers for p in layer.paths if not p.closed]
-    assert any(len(p) > 16 and np.ptp(p[:, 1]) > 0.5 for p in lanes)
-    assert any((np.diff(p[:, 0]).min() < -0.1 and np.diff(p[:, 0]).max() > 0.1) for p in lanes)
+    assert any(p.closed and len(p.points) >= 16 for layer in job.layers for p in layer.paths)
+    assert any(p.stay_down for layer in job.layers for p in layer.paths)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert job.program.lines
     assert not any('rapid motion contacts' in warning for warning in job.warnings)
 
 
-def test_trochoidal_lanes_do_not_cross_island_or_narrow_wall():
+def test_trochoidal_starts_in_middle_and_clears_square_corners():
+    from shapely import union_all
     from shapely.geometry import LineString
     from gcodeproducer.core.cam.trochoidal import trochoidal_paths
-    area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14))
+
+    area = box(0, 0, 20, 20)
+    paths = trochoidal_paths(area, 3., 0., 40, 'climb')
+    assert paths[0].closed and paths[1].closed and paths[1].stay_down
+    for path, radius in zip(paths[:2], [1.2, 2.4]):
+        assert np.allclose(np.linalg.norm(path.points - [10., 10.], axis=1), radius)
+    assert any(not p.closed for p in paths)  # clipped corner arcs
+    sweeps = [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points).buffer(1.49)
+              for p in paths]
+    assert area.buffer(-1.5).difference(union_all(sweeps)).area < 1e-6
+
+
+def test_trochoidal_arcs_and_links_do_not_cross_islands_or_disconnected_areas():
+    from shapely.geometry import LineString
+    from gcodeproducer.core.cam.trochoidal import trochoidal_paths
+
+    area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14)).union(box(38.5, 0, 46, 10))
     paths = trochoidal_paths(area, 3., .1, 35, 'climb')
     allowed = area.buffer(-1.6).buffer(1e-7)
+    end = None
     for path in paths:
         p = path.points
         assert allowed.covers(LineString(np.vstack([p, p[0]]) if path.closed else p))
-    assert sum(p.closed for p in paths) == 2  # both wall and island cleanup
-    assert any(not p.closed and len(p.points) == 2 for p in paths)
-    assert any(not p.closed and len(p.points) > 16 for p in paths)
+        if path.stay_down:
+            assert tuple(end) == path.stay_down_from
+            assert np.linalg.norm(end - p[0]) <= 3.
+            assert np.array_equal(end, p[0]) or allowed.covers(LineString((end, p[0])))
+        end = p[0] if path.closed else p[-1]
+    assert any(not p.closed for p in paths) and any(p.stay_down for p in paths)
+    assert not any(p.stay_down for p in trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False))
 
 
 def test_old_strategy_names_preserve_existing_behaviour():

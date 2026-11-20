@@ -463,7 +463,7 @@ class CAMEditor(QWidget):
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
-            self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy == "contour")
+            self._update_stay_down(op)
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
                 sb.setEnabled(op.kind != "drill")
@@ -474,6 +474,9 @@ class CAMEditor(QWidget):
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
         self.selectionChanged.emit()
+
+    def _update_stay_down(self, op):
+        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "trochoidal"))
 
     def _edit(self, *_):
         if self._loading:
@@ -512,7 +515,7 @@ class CAMEditor(QWidget):
         op.stay_down = self.stay_down.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())
-        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy == "contour")
+        self._update_stay_down(op)
         item = self.tree.currentItem()
         item.setText(0, f"{KIND_LABELS.get(op.kind, op.kind.title())}: {op.name}" + (" (off)" if not op.enabled else ""))
         self.changed.emit()

@@ -9,18 +9,19 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 ## Trochoidal clearing
 
 Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
-The cutter traces advancing circular loops along lanes aligned with the
-longer axis of the cutter-centre region. Stepover controls both lane spacing
-and maximum advance per loop (capped at 50% of tool diameter). The nominal
-loop radius is one quarter of the tool diameter.
+At each depth the cutter starts with a small circle near the center of each
+connected cutting area, choosing an interior point with room for entry. It
+works outward through concentric circles. Stepover controls the radial
+spacing between circles (capped at 50% of the tool diameter).
 
-A loop is used only if its entire centreline fits inside the cutter-clearance
-region, including any islands and roughing clearance. Where it does not fit,
-the corresponding lane segment stays straight. A wall and island cleanup
-pass follows the lanes, so straight boundary segments may still appear.
-The loops are emitted as short `G1` moves, not `G2/G3` arcs. The planner still
-classifies the actual remaining-material engagement; this strategy does not
-guarantee a constant engagement or cutting hand.
+Where a full circle would cross a wall or island, only its in-bounds arcs
+are cut. Final wall and island passes clean up the boundary. **Stay down
+between contours** allows short feed links only when they fit inside the
+cutter-clearance region; otherwise the planner handles re-entry.
+
+The circles are emitted as short `G1` moves, not `G2/G3` arcs. This is
+center-out circular clearing, not adaptive constant-engagement machining.
+The planner still classifies engagement from the actual remaining material.
 
 ## Wall-parallel contours (default clearing strategy)
 
