@@ -134,7 +134,7 @@ def _conditions(measured, operation, tool, neutral=False, machine=None):
     return EngagementModel(operation, tool, machine or {}).classify(left, right, engagement, neutral)
 
 
-def plan_engagement(paths, job, operation, tool, log=None, initial_material=None):
+def plan_engagement(paths, job, operation, tool, log=None, initial_material=None, *, link_region=None):
     """Orient/annotate operation paths using incremental planar material removal.
 
     Measurement is the material model's planar sampler; classification is the
@@ -158,6 +158,22 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
     flipped = slots = handed = conflicts = 0
     previous = None
     warnings = []
+    valid = None
+    if link_region is not None and operation.strategy == 'trochoidal' and operation.stay_down:
+        from shapely.prepared import prep
+        valid = prep(link_region.buffer(-(radius+operation.stock)).buffer(1e-7))
+
+    def measure_link(link):
+        left, right, engagement, _ = sampler.measure_path(link, False, radius)
+        condition = model.classify(left, right, engagement)[0]
+        if condition.hand == 'mixed':
+            # A balanced frontal entry has no unique climb/conventional hand.
+            condition = CutCondition(condition.engagement, condition.regime, 'neutral', condition.feed_factor)
+        return condition
+
+    def allowed(condition):
+        return mode not in ('climb', 'conventional') or condition.hand in (mode, 'air', 'neutral')
+
     for path in paths:
         p = np.asarray(path.points, float)
         path.link_condition = None
@@ -165,23 +181,28 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                                not np.allclose(previous, path.stay_down_from, atol=1e-7, rtol=0)):
             path.stay_down = False
             path.stay_down_from = None
-        if previous is not None and path.stay_down and path.stay_down_from is not None:
-            link = np.array([previous, p[0]])
-            left, right, engagement, _ = sampler.measure_path(link, False, radius)
-            condition = model.classify(left, right, engagement)[0]
-            if condition.hand == "mixed":
-                # A balanced frontal entry cuts both sides; it cannot define a
-                # unique climb/conventional hand, just like a slot. Keep its
-                # measured engagement band (often high) for reduced entry feed.
-                condition = CutCondition(condition.engagement, condition.regime, "neutral", condition.feed_factor)
-            # Do not knowingly cut a one-sided connector against the requested hand.
-            if mode in ("climb", "conventional") and condition.hand not in (mode, "air", "neutral"):
-                path.stay_down = False
-                path.stay_down_from = None
-            else:
-                path.link_condition = condition
-                sampler.remove_path(link, False, radius)
-                totals[condition.regime] += 1
+        condition = None
+        if previous is not None and path.stay_down:
+            condition = measure_link(np.array([previous, p[0]]))
+            if not allowed(condition):
+                condition = None
+        if condition is None and valid is not None and previous is not None and path.closed:
+            from gcodeproducer.core.cam.trochoidal import nearby_seams
+            for i in nearby_seams(p, previous, radius):
+                link = np.array([previous, p[i]])
+                if not valid.covers(LineString(link)):
+                    continue
+                candidate = measure_link(link)
+                if allowed(candidate):
+                    p = path.points = np.roll(p, -i, axis=0)
+                    condition = candidate
+                    break
+        path.stay_down = condition is not None
+        path.stay_down_from = tuple(previous) if path.stay_down else None
+        if condition is not None:
+            path.link_condition = condition
+            sampler.remove_path(np.array([previous, p[0]]), False, radius)
+            totals[condition.regime] += 1
         measured = sampler.measure_path(p, path.closed, radius)
         left, right, engagement, lengths = measured
         slot_limit = float(machine_data.get("slot_engagement_threshold",95))/100-1e-9

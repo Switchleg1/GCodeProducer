@@ -6,7 +6,8 @@ height: one rule set for planar and surface paths.
 """
 from __future__ import annotations
 import numpy as np
-from .planner_constants import CLEARANCE_MARGIN
+from .planner_constants import (CLEARANCE_MARGIN, INWARD_ROUTE_CANDIDATES,
+                                INWARD_ROUTE_DETOUR_DIAMETERS)
 
 
 class LinkPlanner:
@@ -32,6 +33,25 @@ class LinkPlanner:
         target_xy = np.asarray(target_xy, float)[:2]
         return bool(state.height_at(target_xy, self.reach) <= here+1e-6
                     and not state.contact(position, np.r_[target_xy, here], self.reach))
+
+    def inward_waypoint(self, state, position, target_xy, candidates):
+        """One short dogleg via a prior cut, if both full cutter sweeps are clear."""
+        if state is None or not self.short_retracts or not len(candidates):
+            return None
+        xy, z = position[:2], position[2]
+        if (state.height_at(target_xy, self.reach) > z+1e-6
+                or state.height_at(xy, self.reach) > z+1e-6):
+            return None
+        lengths = np.linalg.norm(candidates-xy, axis=1) + np.linalg.norm(candidates-target_xy, axis=1)
+        limit = np.linalg.norm(target_xy-xy) + 2*self.radius*INWARD_ROUTE_DETOUR_DIAMETERS
+        for i in np.argsort(lengths, kind='stable')[:INWARD_ROUTE_CANDIDATES]:
+            if lengths[i] > limit:
+                break
+            via = np.r_[candidates[i], z]
+            if (not state.contact(position, via, self.reach)
+                    and not state.contact(via, np.r_[target_xy, z], self.reach)):
+                return candidates[i]
+        return None
 
     def travel_height(self, state, position, target_xy, entry_z):
         """Retract height for the XY travel: clearance above current material, never above safe Z."""

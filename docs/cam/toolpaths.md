@@ -9,22 +9,20 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 ## Trochoidal clearing
 
 Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
-At each depth the cutter starts with a small circle near the center of each
-connected cutting area, choosing an interior point with room for entry. It
-works outward through concentric circles. Stepover controls the radial
-spacing between circles (capped at 50% of the tool diameter).
+At each depth the cutter starts from an inset core and expands along rounded
+contours shaped to the pocket. A compact core can use a small circular start.
+Stepover sets the offset spacing (capped at 50% of tool diameter). The outermost
+passes follow the cutter-clearance boundary, including islands.
 
-Where a full circle would cross a wall or island, only its in-bounds arcs
-are cut. Final wall and island passes clean up the boundary. **Stay down
-between contours** allows short feed links only when they fit inside the
-cutter-clearance region. If a longer straight move to the next arc is
-already clear of stock at the cutting depth, **Short retracts within cleared
-material** lets the tool stay down for that move too. A blocked move still
-requires a retract.
+**Stay down between contours** prefers a nearby pass rather than visiting
+every disconnected front at the same offset. Cutting links must fit inside
+the cutter-clearance region and respect the selected cutting hand. With
+**Short retracts within cleared material** also enabled, the planner can
+try a two-leg travel through a recent cut when direct travel is blocked.
+Both legs must be clear at cutting depth; otherwise the planner retracts.
 
-The circles are emitted as short `G1` moves, not `G2/G3` arcs. This is
-center-out circular clearing, not adaptive constant-engagement machining.
-The planner still classifies engagement from the actual remaining material.
+Rounded contours use `G1` moves, not `G2/G3` arcs. This is not adaptive
+constant-engagement machining.
 
 ## Wall-parallel contours (default clearing strategy)
 

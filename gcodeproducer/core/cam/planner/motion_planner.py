@@ -118,7 +118,6 @@ class MotionPlanner:
             return
         self.add("travel", np.r_[xy, self.position[2]], rate=float(self.rapid_feed),
                  comment="stay at depth: cleared by the previous pass")
-        self.stay_count += 1
 
     def sampler(self, state):
         from .height_sampler import HeightSampler
@@ -312,11 +311,15 @@ class MotionPlanner:
         self._path_cut_material = False
         linked = self.links.linked(path, previous_end)
         floor = float(format_number(layer.z, 3))
+        route = None if linked else self.cleared_planar_route(live, layer, path_index, floor)
         if linked:
             self.feed_move(np.r_[start, self.position[2]], "link", live, path.link_condition,
                            "stay-down link", measured=False, force_feed=True)
-        elif path.feature != "drill" and self.cleared_at_cut_depth(live, start, floor):
-            self.travel_at_depth(start)
+        elif route is not None:
+            if any(np.linalg.norm(point-self.position[:2]) > 1e-9 for point in route):
+                self.stay_count += 1
+            for point in route:
+                self.travel_at_depth(point)
         else:
             want = config is not None and config.lead_in and len(pts) > 1
             lead, kind = self.entries.planar(live, pts, path.closed, layer.z, length) if want else (None, None)
@@ -329,6 +332,7 @@ class MotionPlanner:
                 if here > floor+1e-9 and self.links.stay_at_depth(live, self.position, target, floor):
                     lead, kind, stayed = down, down_kind, True
                     self.travel_at_depth(target)
+                    self.stay_count += 1
             if kind == "degenerate":
                 lead = None
                 warning = f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
@@ -355,9 +359,7 @@ class MotionPlanner:
         if (config is not None and config.lead_out and len(pts) > 1 and not (next_path and next_path.stay_down)
                 and (live is None or self._path_cut_material or not path.cut_conditions
                      or any(c.engagement > 1e-6 for c in path.cut_conditions))
-                and not (next_path and next_path.feature != "drill" and len(next_path.points) >= 2
-                         and len(next_path.points[0]) == 2
-                         and self.cleared_at_cut_depth(live, next_path.points[0], floor))):
+                and not (next_path and self.cleared_planar_route(live, layer, path_index+1, floor) is not None)):
             exit_points = self.entries.planar_exit(pts, path.closed, self.position[2], length)
             if exit_points is not None:
                 for q in exit_points[1:]:
@@ -367,9 +369,28 @@ class MotionPlanner:
                         break
         return self.position[:2].copy()
 
-    def cleared_at_cut_depth(self, state, target, floor):
-        return (abs(self.position[2] - floor) <= 1e-9
-                and self.links.stay_at_depth(state, self.position, target, floor))
+    def cleared_planar_route(self, state, layer, index, floor):
+        from .planner_constants import INWARD_ROUTE_SAMPLE_PATHS, INWARD_ROUTE_SAMPLES
+
+        if state is None or not self.links.short_retracts or abs(self.position[2]-floor) > 1e-9:
+            return None
+        path = layer.paths[index]
+        if path.feature == 'drill' or len(path.points) < 2 or len(path.points[0]) != 2:
+            return None
+        target = np.asarray(path.points[0], float)
+        if self.links.stay_at_depth(state, self.position, target, floor):
+            return (target,)
+        if not index or self.config is None or self.config.strategy != 'trochoidal' or not self.config.stay_down:
+            return None
+        samples = []
+        for p in layer.paths[max(0, index-INWARD_ROUTE_SAMPLE_PATHS):index]:
+            pts = np.asarray(p.points, float)
+            if len(pts) and pts.shape[1] == 2:
+                samples.append(pts[np.linspace(0, len(pts)-1, min(len(pts), INWARD_ROUTE_SAMPLES), dtype=int)])
+        if not samples:
+            return None
+        waypoint = self.links.inward_waypoint(state, self.position, target, np.vstack(samples))
+        return None if waypoint is None else (waypoint, target)
 
     # ----------------------------------------------------------------- loop
     def run(self, first_tool, first_data):

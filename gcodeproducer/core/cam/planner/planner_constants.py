@@ -29,6 +29,10 @@ AIR_GAP_DIAMETERS = 2.
 # Rapid/clearance checks widen the cutter by this much: emitted coordinates are
 # rounded to 0.001 mm, which can move a grid cell from just outside to inside.
 CLEARANCE_MARGIN = .002
+INWARD_ROUTE_CANDIDATES = 16
+INWARD_ROUTE_SAMPLE_PATHS = 4
+INWARD_ROUTE_SAMPLES = 16
+INWARD_ROUTE_DETOUR_DIAMETERS = 4.
 MOTION_CHUNK_SIZE = 4096     # flush serialized motion without keeping the full plan in RAM
 ENGAGED = 1e-6               # engagement above this counts as material contact
 SETTLE_PASSES = 3            # planar lead start-height settling iterations

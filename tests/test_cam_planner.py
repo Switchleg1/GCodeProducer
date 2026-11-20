@@ -97,6 +97,21 @@ def test_link_planner_heights_and_stay_down():
     assert links.descent_height(state, 1, (22, 22), -6, lead=False) == pytest.approx(-4)
 
 
+def test_inward_waypoint_routes_around_uncut_material():
+    stock = Stock(x=0, y=0, top=0, width=40, depth=40, height=10)
+    state = HeightStock(stock, .1)
+    a = np.array([5., 5., -2.])
+    b = np.array([15., 15., -2.])
+    via = np.array([5., 15., -2.])
+    state.cut(a, via, 3.)
+    state.cut(via, b, 3.)
+    links = LinkPlanner(10, 1, .5, True, 2.)
+    assert not links.stay_at_depth(state, a, b[:2], b[2])
+    candidates = np.array([[10., 10.], via[:2]])
+    np.testing.assert_array_equal(links.inward_waypoint(state, a, b[:2], candidates), via[:2])
+    assert links.inward_waypoint(state, a, b[:2], candidates[:1]) is None
+
+
 def emitted(libset, **fields):
     mesh = stepped_part()
     job, op = job_for(mesh, [floor_ref(mesh)], libset)

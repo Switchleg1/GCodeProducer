@@ -84,7 +84,8 @@ class WaterfallGenerator(OperationGenerator):
                     planned = drop_air_paths(planned, remaining, run.radius, op.name, ctx.log)
                     if not planned:
                         continue
-                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining))
+                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining,
+                                                      link_region=free))
                 material.remove_planar(planned, z, run.radius)
                 run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
                 produced += 1
