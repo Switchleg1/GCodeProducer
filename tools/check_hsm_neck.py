@@ -27,7 +27,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -135,7 +135,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
                                        min_departure=min_departure, priority_region=neck_target if prioritize_neck else None,
                                        priority_score=clearance_score if prioritize_clearance else None,
-                                       lookahead_width=lookahead_width)
+                                       lookahead_width=lookahead_width, lookahead_after=lookahead_after)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -219,6 +219,8 @@ if __name__ == '__main__':
     parser.add_argument('--with-wide-bites', action='store_true', help='also try a straight plateau between eased ramps')
     parser.add_argument('--lookahead-width', type=int, default=1,
                         help='preview a successor for this many top cuts (1 disables lookahead)')
+    parser.add_argument('--lookahead-after', type=int, default=0,
+                        help='number of accepted cuts before enabling lookahead')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -230,7 +232,8 @@ if __name__ == '__main__':
                             require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
                             with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites,
                             trace_clearance=args.trace_clearance, prioritize_clearance=args.prioritize_clearance,
-                            with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width)
+                            with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
+                            lookahead_after=args.lookahead_after)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

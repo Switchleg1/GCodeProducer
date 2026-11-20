@@ -26,3 +26,8 @@ def test_lookahead_prefers_checked_successor_and_only_commits_selected_paths():
     assert [cut.cut for cut in choices] == [far, follow] and reason == 'stalled'
     assert stock.area - remaining.area == pytest.approx(2.)
     assert diagnostics == [dict(Counter(eligible=2)), dict(Counter(eligible=1)), {}]
+    delayed, _, reason = run_front(pocket, stock, seed, propose, 1., lookahead_width=2,
+                                  lookahead_after=1, **settings)
+    assert [cut.cut for cut in delayed] == [near] and reason == 'stalled'
+    with pytest.raises(ValueError, match='lookahead_after'):
+        run_front(pocket, stock, seed, propose, 1., lookahead_after=-1, **settings)

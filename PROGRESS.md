@@ -63,4 +63,5 @@
 - `--with-wide-bites` holds the same 0.25 mm immersion across the middle half of an eased pass. The trial regresses to a 46-cut stall at X23.0 mm with 4,037.98 mm² reachable; keep the narrow-bite baseline.
 - `--lookahead-width 2` previews one checked successor from each of the top two picks, committing only the first. The controlled fixture avoids a greedy dead end. At a 24-cut neck budget, both reach X23 and 56.17° peak, but lookahead leaves 4,090.15 mm² versus 4,087.34 mm².
 - The trace now fingerprints each checked link and cut and reports its endpoint and removal. The two runs first diverge at cut 2: lookahead ends farther east (X22 vs X13.5), yet both clearance edges stay X23. Lookahead leaves 3.424 mm² less connected area at cut 24.
-- Next: evaluate previews near the existing X25.998 plateau rather than altering early seed-clearing cuts. Completion gates are in `GOAL.md`.
+- Delaying width-two lookahead until 53 accepted cuts preserves the early prefix but still stalls at cut 58, X25.998, with 4,011.181 mm² reachable (baseline 4,011.155 mm²). Peak stays 56.17° and the probe is not reached.
+- Next: inspect the terminal clearance boundary for a new neck-directed candidate family rather than repeating ranking trials. Completion gates are in `GOAL.md`.

@@ -18,3 +18,6 @@
   It does not model machining that area or an entry from above the stock.
   Stock removed east of X24 mm is a comparison metric for neckward progress,
   not evidence that the path has crossed the neck.
+- The 53-cut lookahead delay is specific to the pinned fixture: it starts
+  immediately before the baseline last advances its east edge (cut 54).
+  It is not a production tuning rule.

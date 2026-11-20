@@ -8,7 +8,7 @@ from tools.hsm_front_choice import choose_front_cut
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
               link_handle, link_margin=0., diagnostics=None, waypoints=(), propose_waypoints=None,
               propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0., priority_region=None,
-              priority_score=None, lookahead_width=1):
+              priority_score=None, lookahead_width=1, lookahead_after=0):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
@@ -19,6 +19,8 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
         raise ValueError('max_cuts must be a positive integer')
     if not isinstance(lookahead_width, int) or lookahead_width < 1:
         raise ValueError('lookahead_width must be a positive integer')
+    if not isinstance(lookahead_after, int) or lookahead_after < 0:
+        raise ValueError('lookahead_after must be a nonnegative integer')
     waypoints = tuple(waypoints)
     choices = []
     while len(choices) < max_cuts:
@@ -26,7 +28,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
             return choices, stock, 'stock_empty'
         counts = Counter()
         shortlist = []
-        preview = lookahead_width > 1 and len(choices) + 1 < max_cuts
+        preview = lookahead_width > 1 and lookahead_after <= len(choices) < max_cuts - 1
 
         def keep(key, candidate):
             shortlist.append((key, candidate))

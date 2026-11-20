@@ -346,7 +346,9 @@ neck budget both runs reach X23, but lookahead leaves 4,090.15 mm² instead of
 4,087.34 mm². The trace fingerprints link and cut coordinates to locate
 the first divergence: cut 2 ends at X22 with lookahead versus X13.5 with
 greedy selection, but neither moves the connected edge past X23. Keep
-greedy selection as the baseline.
+greedy selection as the baseline. Delaying width-two preview until 53 cuts
+(`--lookahead-after 53`) still stalls after 58 cuts at X25.998; reachable
+residual is 4,011.181 mm² versus 4,011.155 mm² without preview.
 
 ## Gate before another generator attempt
 
