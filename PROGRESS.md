@@ -23,4 +23,5 @@
 - Off-center island test: the direct and narrow-side returns fail; a 21.90 mm two-leg tangent detour clears the wider side with a 0.1 mm extra planar margin. A stock rib on either leg rejects the whole proposal.
 - Offline center-region map splits the two-lobe fixture into one component for a 4 mm cutter and two for a 14 mm cutter; a separate test rejects a zero-width neck connection after applying clearance margin.
 - The offline work map assigns accessible stock and checks supplied seed poses against the boundary and live stock. With only a left-side cleared seed, the split right lobe needs its own entry or verified seed; an empty lobe does not.
-- Next: derive a cleared-stock frontier from the seeded region and test a directed advance. Completion gates are in `GOAL.md`.
+- Offline linear-front proposal extracts exposed stock edges (not pocket walls) and offsets a directed side cut. In the straight fixture the 19 mm stroke removed 4.61 mm² at 42.3° sampled peak; extending to the wall was rejected.
+- Next: advance the straight front against updated stock and connect it to the corner trial without unchecked cutting transitions. Completion gates are in `GOAL.md`.

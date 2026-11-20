@@ -202,6 +202,12 @@ whose cutter disk clears the actual pocket boundary and current stock. An
 unseeded region with stock needs an entry or another verified seed. Sweep
 envelopes can overlap, so use their union for total reachable stock.
 
+`tools/hsm_straight_front.py` extracts exposed stock edges with material
+on the left and proposes a straight side cut at a specified radial
+immersion. The straight fixture removes 4.61 mm² in a 19 mm stroke at
+42.3° sampled peak; the untrimmed stroke into the end wall is rejected.
+This is a proposal, not a clearance check for entry or a coverage planner.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input
