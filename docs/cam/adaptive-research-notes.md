@@ -312,6 +312,10 @@ Requiring `--min-departure 0.25` before ranking changes which cuts win: the
 neck-facing trial reaches 48 accepted cuts at a 56.17° sampled peak, leaving
 4,024.89 mm² reachable. The departure probe checks the terminal chord
 heading against post-cut stock and walls; it does not emit that move.
+With `--max-cuts 96`, the same variant stalls after 57 cuts with 4,011.53 mm²
+reachable. The final selection rejects 578 starts, 38 contact overloads and
+10 exits. The last pose still has at least 4 mm of checked forward clearance,
+so the stall is no longer caused by a trapped terminal heading.
 
 ## Gate before another generator attempt
 

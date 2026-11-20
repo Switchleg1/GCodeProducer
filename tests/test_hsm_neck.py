@@ -159,12 +159,13 @@ def test_eastern_front_adds_proposals_but_does_not_bypass_link_checks():
     assert result['last_selection_counts']['link_clearance'] == 24
 
 
-def test_departure_gate_advances_beyond_neck_front_stall():
+def test_departure_gate_reaches_later_stall_with_clear_departure():
     result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
                         with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
-                        with_shifted_joins=True, max_cuts=48, with_clearance_tapers=True, with_early_exits=True,
+                        with_shifted_joins=True, max_cuts=96, with_clearance_tapers=True, with_early_exits=True,
                         require_clear_exit=True, with_neck_front=True, min_departure=.25)
-    assert result['stop'] == 'cut_budget' and result['cut_count'] == 48
-    assert result['reachable_residual_mm2'] == pytest.approx(4024.89, abs=.02)
+    assert result['stop'] == 'stalled' and result['cut_count'] == 57
+    assert result['reachable_residual_mm2'] == pytest.approx(4011.53, abs=.02)
+    assert result['last_selection_counts'] == {'start_clearance': 578, 'contact_limit': 38, 'exit_clearance': 10}
     assert result['last_forward_clearance_mm'] >= .25
     assert result['peak_contact_deg'] < 60.
