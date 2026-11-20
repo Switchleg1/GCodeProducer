@@ -11,6 +11,11 @@ def test_clearance_trace_includes_seed_and_matches_final_report():
     assert final['area_mm2'] - initial['area_mm2'] == pytest.approx(report['seed_clearance_gain_mm2'])
     assert final['east_x_mm'] == report['seed_clearance_east_x_mm']
     assert not final['reaches_probe']
+    assert initial['motion_sha256'] is None and initial['removed_mm2'] == 0.
+    assert len(bytes.fromhex(final['motion_sha256'])) == 32
+    assert final['motion_sha256'] == check_neck(trace_clearance=True)['clearance_trace'][-1]['motion_sha256']
+    assert final['end_xy_mm'] == report['last_xy_mm']
+    assert final['removed_mm2'] == pytest.approx(report['removed_mm2'])
 
 
 def test_straight_only_two_lobe_baseline_preserves_residual_on_stall():

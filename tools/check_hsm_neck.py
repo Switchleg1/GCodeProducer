@@ -1,5 +1,6 @@
 """Compare offline two-lobe front proposals on the same seeded pocket."""
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -175,9 +176,13 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             else:
                 travel += cut.travel_mm
                 component = connected_clearance(pocket, cut.remaining, seed[0], radius)
+            motion = None if cut is None else json.dumps((cut.link, cut.cut), separators=(',', ':'))
             trace.append({'cut': index, 'feed_mm': travel, 'area_mm2': component.area,
                           'east_x_mm': None if component.is_empty else component.bounds[2],
-                          'reaches_probe': component.covers(probe)})
+                          'reaches_probe': component.covers(probe),
+                          'motion_sha256': None if motion is None else hashlib.sha256(motion.encode('ascii')).hexdigest(),
+                          'end_xy_mm': seed[0] if cut is None else cut.cut[-1],
+                          'removed_mm2': 0. if cut is None else cut.removed_mm2})
         report['clearance_trace'] = trace
     return report
 
