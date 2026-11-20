@@ -7,7 +7,7 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from tools.hsm_straight_front import try_front_cut
-from tools.hsm_tangent_link import cleared_tangent_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link
 
 
 class FrontChoice(NamedTuple):
@@ -20,7 +20,7 @@ class FrontChoice(NamedTuple):
 
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
-                     link_handle, link_margin=0., diagnostics=None):
+                     link_handle, link_margin=0., diagnostics=None, waypoints=()):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
     counts = diagnostics if diagnostics is not None else Counter()
 
@@ -37,6 +37,7 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
             or (not stock.is_empty and origin.distance(stock) < clearance)):
         reject('origin_clearance')
         return None
+    waypoints = tuple(waypoints)
     best = None
     best_key = None
     for cut in candidates:
@@ -57,6 +58,11 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
         else:
             link = cleared_tangent_link(pocket, stock, radius, xy, cut[0], heading, incoming,
                                         link_handle, margin=link_margin)
+            if link is None and waypoints:
+                routes = (cleared_tangent_detour(pocket, stock, radius, pose, via, (cut[0], incoming),
+                                                 link_handle, margin=link_margin)
+                          for via in waypoints if via[0] not in (xy, cut[0]))
+                link = min((route for route in routes if route is not None), key=_length, default=None)
             if link is None:
                 reject('link_clearance')
                 continue
@@ -67,9 +73,13 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
         counts['eligible'] += 1
         remaining, peak = result
         removed = stock.area - remaining.area
-        travel = sum(math.dist(a, b) for chain in (link, cut) for a, b in zip(chain, chain[1:]))
+        travel = _length(link) + _length(cut)
         key = (removed/travel, removed, -travel)
         if best_key is None or key > best_key:
             best = FrontChoice(link, cut, remaining, peak, removed, travel)
             best_key = key
     return best
+
+
+def _length(points):
+    return sum(math.dist(a, b) for a, b in zip(points, points[1:]))

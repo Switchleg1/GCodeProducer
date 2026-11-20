@@ -6,7 +6,7 @@ from tools.hsm_front_choice import choose_front_cut
 
 
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
-              link_handle, link_margin=0., diagnostics=None):
+              link_handle, link_margin=0., diagnostics=None, waypoints=()):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
@@ -15,6 +15,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
     """
     if not isinstance(max_cuts, int) or max_cuts < 1:
         raise ValueError('max_cuts must be a positive integer')
+    waypoints = tuple(waypoints)
     choices = []
     while len(choices) < max_cuts:
         if stock.area <= CLEAR_AREA_MM2:
@@ -22,7 +23,8 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
         counts = Counter() if diagnostics is not None else None
         choice = choose_front_cut(pocket, stock, pose, propose(stock, pose), radius,
                                   contact_limit=contact_limit, sample_step=sample_step,
-                                  link_handle=link_handle, link_margin=link_margin, diagnostics=counts)
+                                  link_handle=link_handle, link_margin=link_margin, diagnostics=counts,
+                                  waypoints=waypoints)
         if diagnostics is not None:
             diagnostics.append(dict(counts))
         if choice is None:

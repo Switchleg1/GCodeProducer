@@ -243,8 +243,11 @@ next origin-clearance check stops the run. Reachable residual is 4,142.28
 mm². Adding `--corner-runoff 0.5` checks an extended tangent exit as part of
 candidate cuts. The final pose clears the 2 mm radius threshold, but the
 next selection still stalls: 62 link, 4 contact, and 2 boundary failures.
-Residual is 4,141.60 mm². Neither trial completes coverage or proves a timing
-win.
+Residual is 4,141.60 mm². Adding `--with-detours` tries fixed seed-area
+waypoints after direct links fail, checking both legs and choosing the
+shortest passing detour. It accepts nine cuts rather than three and removes
+18.00 mm² more at unchanged sampled peak. It still stalls with 4,123.60 mm²
+reachable residual; the trial does not demonstrate full coverage or a timing win.
 
 ## Gate before another generator attempt
 

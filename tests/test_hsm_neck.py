@@ -35,3 +35,12 @@ def test_corner_runoff_reaches_a_clear_origin_without_relaxing_cut_checks():
     assert trial['stop'] == 'stalled'
     assert 'origin_clearance' not in trial['last_selection_counts']
     assert trial['last_selection_counts']['link_clearance'] > 0
+
+
+def test_checked_detours_advance_beyond_direct_link_stall():
+    baseline = check_neck(with_corners=True, corner_runoff=.5)
+    trial = check_neck(with_corners=True, corner_runoff=.5, with_detours=True)
+    assert trial['cut_count'] == 9 and trial['stop'] == 'stalled'
+    assert trial['removed_mm2'] - baseline['removed_mm2'] == pytest.approx(18.)
+    assert trial['reachable_residual_mm2'] == pytest.approx(4123.60, abs=.02)
+    assert trial['peak_contact_deg'] == pytest.approx(baseline['peak_contact_deg'])
