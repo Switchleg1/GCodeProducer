@@ -48,6 +48,31 @@ def test_all_exposed_edges_clear_both_seeded_pads():
     assert max(c.peak_deg for c in choices) < 45.
 
 
+def test_last_resort_waits_for_both_existing_candidate_families():
+    calls = []
+
+    def primary(_stock, pose):
+        calls.append('primary')
+        return [[(4., 4.25), (10., 4.25)]] if pose == SEED else []
+
+    def shallow(_stock, _pose):
+        calls.append('shallow')
+        return []
+
+    def last(_stock, _pose):
+        calls.append('last')
+        return [[(13., 4.25), (19., 4.25)]]
+
+    diagnostics = []
+    cuts, _, reason = run_front(POCKET, STOCK, SEED, primary, 1., max_cuts=2,
+                                 contact_limit=60., sample_step=.05, link_handle=.5,
+                                 propose_on_stall=shallow, propose_last_resort=last, diagnostics=diagnostics)
+    assert calls == ['primary', 'primary', 'shallow', 'last']
+    assert [cut.cut[-1] for cut in cuts] == [(10., 4.25), (19., 4.25)]
+    assert diagnostics == [{'eligible': 1}, {'last_resort_eligible': 1}]
+    assert reason == 'cut_budget'
+
+
 def test_budget_and_empty_stock_do_not_report_a_stall():
     choices, remaining, reason = _run(_candidates, budget=1)
     assert len(choices) == 1 and remaining.area == pytest.approx(15.)

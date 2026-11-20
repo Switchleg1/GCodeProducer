@@ -357,6 +357,10 @@ Y14.12–30.17. The immediate blockage is live stock, not the pocket wall.
 open spans. Mixing them into shallow retries regresses to a 49-cut stall
 at X23.495 with 4,036.97 mm² reachable and 57.07° peak sampled contact.
 Existing link, contact, exit and departure checks are unchanged.
+`--section-bites-last` preserves the baseline's 58 motions, then adds one
+checked bow: the connected edge advances from X25.998 to X26.123 and
+reachable residual drops by 0.309 mm². The three remaining bows fail the
+post-cut departure check; the neck probe is still disconnected.
 
 ## Gate before another generator attempt
 

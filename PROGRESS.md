@@ -66,4 +66,5 @@
 - Delaying width-two lookahead until 53 accepted cuts preserves the early prefix but still stalls at cut 58, X25.998, with 4,011.181 mm² reachable (baseline 4,011.155 mm²). Peak stays 56.17° and the probe is not reached.
 - `--section-x` compares terminal seed-connected spans to the wall-limited center domain. The narrow-bite baseline has Y21.51–23.89 open at X25.75, but no open span at X26 despite a 16.05 mm wall-limited width there.
 - `--with-section-bites` proposes eastward bows anchored inside the live open span. With the same gates, the trial stalls at cut 49, X23.495, with 4,036.97 mm² reachable versus cut 58, X25.998, and 4,011.16 mm² in the baseline.
-- Next: evaluate section bites only after baseline candidates are exhausted, to isolate whether they extend the established neck front. Completion gates are in `GOAL.md`.
+- `--section-bites-last` preserves all 58 baseline motions and adds one checked bow: X25.998 → X26.123, reachable residual 4,011.155 → 4,010.847 mm², unchanged 56.17° peak. It stalls at cut 59; all three final bows fail departure clearance.
+- Next: adjust the section-bite exit geometry to provide a checked departure at the new front without weakening the gate. Completion gates are in `GOAL.md`.

@@ -75,7 +75,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -84,7 +84,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
-    if with_section_bites and not with_shallow_fronts:
+    if (with_section_bites or section_bites_last) and not with_shallow_fronts:
         raise ValueError('section bites require shallow fronts')
     if with_shifted_joins and not shallow_rollon:
         raise ValueError('shifted joins require a shallow roll-on radius')
@@ -167,8 +167,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                         yield from clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025)
 
         if with_section_bites:
-            component = connected_clearance(pocket, live, seed[0], radius)
-            yield from section_bites(regions, component, radius)
+            yield from propose_section_bites(live, pose)
+
+    def propose_section_bites(live, _pose):
+        component = connected_clearance(pocket, live, seed[0], radius)
+        return section_bites(regions, component, radius)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -190,7 +193,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
                                        min_departure=min_departure, priority_region=neck_target if prioritize_neck else None,
                                        priority_score=clearance_score if prioritize_clearance else None,
-                                       lookahead_width=lookahead_width, lookahead_after=lookahead_after)
+                                       lookahead_width=lookahead_width, lookahead_after=lookahead_after,
+                                       propose_last_resort=propose_section_bites if section_bites_last else None)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     last_heading = seed[1]
@@ -279,11 +283,14 @@ if __name__ == '__main__':
                         help='number of accepted cuts before enabling lookahead')
     parser.add_argument('--section-x', type=float, action='append', default=[],
                         help='report terminal center clearance and domain spans at this X (repeatable)')
-    parser.add_argument('--with-section-bites', action='store_true',
+    section_mode = parser.add_mutually_exclusive_group()
+    section_mode.add_argument('--with-section-bites', action='store_true',
                         help='try eastward bows across seed-connected sections during shallow retries')
+    section_mode.add_argument('--section-bites-last', action='store_true',
+                              help='try section bites only when the other families fail')
     args = parser.parse_args()
-    if args.with_section_bites and not args.with_shallow_fronts:
-        parser.error('--with-section-bites requires --with-shallow-fronts')
+    if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
+        parser.error('section bites require --with-shallow-fronts')
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
                             with_detours=args.with_detours, with_live_detours=args.with_live_detours,
@@ -295,7 +302,8 @@ if __name__ == '__main__':
                             with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites,
                             trace_clearance=args.trace_clearance, prioritize_clearance=args.prioritize_clearance,
                             with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
-                            lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites)
+                            lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
+                            section_bites_last=args.section_bites_last)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))
