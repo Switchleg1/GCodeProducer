@@ -297,9 +297,10 @@ uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
-**Trochoidal** starts from inset cores and works outward along rounded
-fronts that adapt to walls and islands. It prefers nearby links and can
-travel back through already cleared stock without retracting.
+**Trochoidal** works outward in concentric ellipses. It clips the arcs at
+walls and islands, then makes a separate boundary cleanup pass. It prefers
+nearby links and can travel back through already cleared stock without
+retracting.
 See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
 
 Historical captures (the clearing menu predates Trochoidal):

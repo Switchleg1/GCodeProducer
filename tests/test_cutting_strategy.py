@@ -145,7 +145,7 @@ def test_trochoidal_strategy_uses_circular_contours_and_emits(libset, kind):
     assert not any('rapid motion contacts' in warning for warning in job.warnings)
 
 
-def test_trochoidal_starts_in_middle_then_expands_with_rounded_fronts():
+def test_trochoidal_uses_real_ellipses_and_covers_the_corners():
     from shapely import union_all
     from shapely.geometry import LineString
     from gcodeproducer.core.cam.trochoidal import trochoidal_paths
@@ -153,10 +153,12 @@ def test_trochoidal_starts_in_middle_then_expands_with_rounded_fronts():
     area = box(0, 0, 20, 20)
     paths = trochoidal_paths(area, 3., 0., 40, 'climb')
     assert paths[0].closed and paths[1].closed and paths[1].stay_down
-    radii = np.linalg.norm(paths[0].points - [10., 10.], axis=1)
-    assert np.ptp(radii) < 1e-8 and radii.max() < 1.2  # circular seed
-    assert all(p.closed for p in paths)
-    assert len(paths[1].points) > 4  # rounded, wall-adapted front
+    seed = paths[0].points - [10., 10.]
+    major = np.abs(seed).max(axis=0).argmax()
+    axes = np.full(2, 1.08)
+    axes[major] = 1.2
+    np.testing.assert_allclose(((seed/axes)**2).sum(axis=1), 1., atol=1e-12)
+    assert any(not p.closed for p in paths[:-1])  # clipped ellipse arcs
     assert np.ptp(paths[-1].points[:, 0]) == pytest.approx(17.)
     sweeps = [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points).buffer(1.49)
               for p in paths]
@@ -179,7 +181,7 @@ def test_trochoidal_fronts_and_links_do_not_cross_islands_or_disconnected_areas(
             assert np.linalg.norm(end - p[0]) <= 3.
             assert np.array_equal(end, p[0]) or allowed.covers(LineString((end, p[0])))
         end = p[0] if path.closed else p[-1]
-    assert all(p.closed for p in paths) and any(p.stay_down for p in paths)
+    assert any(not p.closed for p in paths) and any(p.stay_down for p in paths)
     assert not any(p.stay_down for p in trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False))
 
 

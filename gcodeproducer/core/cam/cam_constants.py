@@ -34,6 +34,9 @@ SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
 SURFACE_LEAD_SETTLE = 8
 
+TROCHOID_CHORD_ERROR = .01   # mm; largest deviation from the parametric ellipse
+TROCHOID_MIN_SEGMENTS = 16
+TROCHOID_MINOR_RATIO_LIMITS = (.5, .9)  # minor / major; keep the paths elliptical, including in square pockets
 TROCHOID_MAX_FRONTS = 10_000
 TROCHOID_POINT_BUDGET = 2_000_000
 TROCHOID_SEAM_TRIALS = 16

@@ -9,20 +9,23 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 ## Trochoidal clearing
 
 Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
-At each depth the cutter starts from an inset core and expands along rounded
-contours shaped to the pocket. A compact core can use a small circular start.
-Stepover sets the offset spacing (capped at 50% of tool diameter). The outermost
-passes follow the cutter-clearance boundary, including islands.
+At each depth the cutter clears from the center outward in concentric
+ellipses. The long axis follows the pocket's oriented bounding rectangle;
+the short axis is 50–90% of the long axis. Stepover controls the growth in
+major radius (capped at 50% of tool diameter). Where an ellipse crosses a
+wall or island, only its in-bounds arcs are cut. A separate boundary pass
+cleans up walls and islands.
 
-**Stay down between contours** prefers a nearby pass rather than visiting
-every disconnected front at the same offset. Cutting links must fit inside
+**Stay down between contours** prefers nearby arcs within each band. Cutting links must fit inside
 the cutter-clearance region and respect the selected cutting hand. With
 **Short retracts within cleared material** also enabled, the planner can
 try a two-leg travel through a recent cut when direct travel is blocked.
 Both legs must be clear at cutting depth; otherwise the planner retracts.
 
-Rounded contours use `G1` moves, not `G2/G3` arcs. This is not adaptive
-constant-engagement machining.
+Ellipses use short `G1` chords with a maximum 0.01 mm chord error; standard
+`G2/G3` arcs are circular, not elliptical. Straight moves can still appear
+in links and boundary cleanup. This is not adaptive constant-engagement
+machining.
 
 ## Wall-parallel contours (default clearing strategy)
 
