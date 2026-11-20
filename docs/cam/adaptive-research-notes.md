@@ -64,6 +64,30 @@ including stock beyond a branch the tool never reaches. Use the medial tree
 as a candidate for organizing local strokes, not as a requirement to slice
 long straights into loops. No DLL dependency or source port at this stage.
 
+### Supplied CamBam flame example: measured output
+
+The supplied image shows a flame silhouette, not a dimensioned machining
+boundary. The G-code is a one-depth TrochoPock program: 3.175 mm cutter,
+Z−0.5 mm, 900 mm/min for the XY feeds. It spirals inward while descending
+(24 G2 moves), then reverses direction and winds back out at depth before
+branch slicing. There are no intermediate Z lifts. At depth there are 512
+G3 moves (about 6,084 mm) and 115 straight G1 moves (about 2,601 mm).
+
+With the XY arcs expanded under the incremental-I/J convention and each
+stroke buffered by the cutter radius, all 115 straight segments stayed
+inside the prior same-depth sweep in this reconstruction. The two longest
+were 92.6 and 74.4 mm. The straight return chords alone made up about 30%
+of the at-depth feed distance, even with zero retracts. They are not examples
+of long straight **cutting** passes. Report those separately: model each link
+against remaining stock and compare its cost with a shorter verified link
+or a retract, without penalizing productive straight cuts.
+
+This is an offline comparison, not proof of coverage, engagement, or machine
+clearance: the actual CamBam vectors, stock and allowance were not supplied.
+The native `.cb` file (or the source outline plus stock and operation settings)
+would let us measure those against the intended job, rather than against the
+area the program happens to sweep.
+
 ## Proposed design decisions
 
 1. **Separate coverage, load, and linking.** Use stock area removed per path length as a ranking aid; use occupied cutter-periphery angle during ordered stock replay to assess engagement. Neither is a force estimate. Keep legacy percentages separate. A diagnostic circle that straddles a straight stock face before a sweep measures all contact; an actual steady side cut has a previously cleared side. Test both so the metrics aren't accidentally conflated.
