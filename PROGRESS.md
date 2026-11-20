@@ -48,4 +48,5 @@
 - `--with-clearance-tapers` samples verified approach starts on the two-lobe fixture. Eight additional candidates reach the contact gate but exceed it; the run still stalls after 19 cuts with 4,103.77 mm² reachable.
 - Chord-indexed diagnostics locate the eight taper failures: four first exceed contact on the straight and four on the curved exit, none on the approach. Accepted path and residual are unchanged.
 - `--with-early-exits` checks tapered cuts with roll-offs 1 or 2 mm earlier. The trial stalls after 15 cuts at an uncleared endpoint, leaving 4,104.81 mm² reachable versus 4,103.77 mm² for the baseline. Peak sampled contact stays below 60°.
-- Next: test an endpoint-clearance gate before ranking optional early-exit candidates. Completion gates are in `GOAL.md`.
+- `--require-clear-exit` checks the endpoint against post-cut stock before ranking. With early exits enabled, the trial advances from 15 to 23 cuts, removes 77.69 mm², and stalls with 4,074.87 mm² reachable. Sampled peak is 56.64° under the unchanged 60° limit.
+- Next: identify which live-stock frontier remains accessible from the final clear pose, rather than tuning more exit variants. Completion gates are in `GOAL.md`.

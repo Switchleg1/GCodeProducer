@@ -20,7 +20,7 @@ class FrontChoice(NamedTuple):
 
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
-                     link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None):
+                     link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None, require_clear_exit=False):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
     counts = diagnostics if diagnostics is not None else Counter()
 
@@ -34,12 +34,12 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
     clearance = radius + link_margin
     walls = pocket.boundary
 
-    def clear_at(position):
+    def clear_at(position, material):
         point = Point(position)
         return (pocket.covers(point) and point.distance(walls) >= clearance
-                and (stock.is_empty or point.distance(stock) >= clearance))
+                and (material.is_empty or point.distance(material) >= clearance))
 
-    if not clear_at(xy):
+    if not clear_at(xy, stock):
         reject('origin_clearance')
         return None
     waypoints = tuple(waypoints)
@@ -61,7 +61,7 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
                 continue
             link = [xy]
         else:
-            if not clear_at(cut[0]):
+            if not clear_at(cut[0], stock):
                 reject('start_clearance')
                 continue
             link = cleared_tangent_link(pocket, stock, radius, xy, cut[0], heading, incoming,
@@ -78,8 +78,11 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
                                sample_step=sample_step, reject=reject, on_overload=on_overload)
         if result is None:
             continue
-        counts['eligible'] += 1
         remaining, peak = result
+        if require_clear_exit and not clear_at(cut[-1], remaining):
+            reject('exit_clearance')
+            continue
+        counts['eligible'] += 1
         removed = stock.area - remaining.area
         travel = _length(link) + _length(cut)
         key = (removed/travel, removed, -travel)

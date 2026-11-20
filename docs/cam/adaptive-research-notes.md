@@ -290,7 +290,11 @@ the approach. The diagnostic does not continue sampling a rejected cut.
 `--with-early-exits` tries starting the roll-off 1 or 2 mm earlier. The
 trial stalls after 15 accepted cuts on origin clearance, with 4,104.81 mm²
 reachable stock remaining versus 4,103.77 mm² without the change. Shorter
-travel at unequal coverage is not a timing improvement.
+travel at unequal coverage is not a timing improvement. Adding
+`--require-clear-exit` rejects candidates whose final pose cannot fit the
+cutter disk against post-cut stock and the pocket boundary. The gated
+trial makes 23 cuts and leaves 4,074.87 mm² reachable, with a 56.64° sampled
+peak. A clear exit does not guarantee that another eligible cut exists.
 
 ## Gate before another generator attempt
 
