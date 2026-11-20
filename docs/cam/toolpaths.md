@@ -17,8 +17,11 @@ Waterfall can use the stock left by previous passes; a planar Pocket plans its
 initial geometry from a nominal stock envelope.
 
 There is no peel-count cutoff. The planner keeps peeling until the remaining
-stock can be cleared with ordinary moves that **all** pass the same engagement
-check in cutting order, with verified stay-down transfers. A rejected finish
+stock can be cleared with finish moves that **all** pass the same engagement
+check in cutting order, with verified stay-down transfers. Finish moves can
+use long straight sides, but abrupt cutting corners get tangent circular
+blends. The planner checks the blended path for containment, engagement and
+coverage before accepting it; it does not retry with sharp corners. A rejected finish
 trial adds no moves. If the search stalls or hits its path-point resource guard
 while coverage is incomplete, the generated prefix is kept for debugging
 and marked **DEBUG ONLY** in Messages and the G-code. It skips subsequent

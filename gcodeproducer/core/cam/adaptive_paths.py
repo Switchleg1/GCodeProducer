@@ -62,11 +62,8 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
             target = union_all([sweep for _, sweep in local])
 
             def finish(position, remaining):
-                tail = checked_finish(position, [p for p, _ in reversed(local)], component, remaining,
-                                      radius, limit, **rates)
-                if tail is not None and target.intersection(tail.remaining).area <= ADAPTIVE_POCKET_AREA_EPS:
-                    return tail
-                return None
+                return checked_finish(position, [p for p, _ in reversed(local)], component, remaining,
+                                      radius, limit, target=target, **rates)
 
             trial = plan_pocket(component, stock, top=0., depth=-(depth_step or op.stepdown),
                                 lead_angle=op.lead_angle, entry_budget=ADAPTIVE_CAM_POINT_LIMIT,

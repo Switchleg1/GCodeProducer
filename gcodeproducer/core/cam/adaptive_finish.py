@@ -9,7 +9,11 @@ from shapely.geometry.base import BaseGeometry
 
 from .adaptive_link import choose_link
 from .adaptive_peel import evaluate_peel
-from .cam_constants import ADAPTIVE_CAM_POINT_LIMIT, ADAPTIVE_LINK_BUFFER_QUADS, ADAPTIVE_PEEL_SAMPLE_STEP_RADII
+from .adaptive_rounding import rounded_loop
+from .cam_constants import (
+    ADAPTIVE_BLEND_RADIUS_FACTORS, ADAPTIVE_CAM_POINT_LIMIT, ADAPTIVE_LINK_BUFFER_QUADS,
+    ADAPTIVE_PEEL_SAMPLE_STEP_RADII, ADAPTIVE_POCKET_AREA_EPS,
+)
 from .paths import _nearest_seam
 
 
@@ -20,12 +24,19 @@ class AdaptiveFinish:
     contours: int
 
 
-def checked_finish(position, contours, region, material, radius, limit, *, travel_feed, z_feed, lift):
-    """Accept a complete finish only if its cuts meet the same limit as peels.
+def checked_finish(position, contours, region, material, radius, limit, *, travel_feed, z_feed, lift,
+                   target=None):
+    """Try rounded finish passes without committing failed trials or sharp corners."""
+    for factor in ADAPTIVE_BLEND_RADIUS_FACTORS:
+        result = _trial_finish(position, contours, region, material, radius, limit, radius*factor,
+                               travel_feed=travel_feed, z_feed=z_feed, lift=lift)
+        if result is not None and (target is None or
+                                   target.intersection(result.remaining).area <= ADAPTIVE_POCKET_AREA_EPS):
+            return result
+    return None
 
-    Never add an engaged shortcut to a seam or a retract. A rejected trial
-    leaves the input stock untouched. Not a guarantee of actual cutter load.
-    """
+
+def _trial_finish(position, contours, region, material, radius, limit, blend, *, travel_feed, z_feed, lift):
     points, stock, count, samples = [np.asarray(position)[None, :]], material, 0, 0
     quads = ADAPTIVE_LINK_BUFFER_QUADS
     reach = radius/math.cos(math.pi/(2*quads)) + 1e-7
@@ -34,9 +45,10 @@ def checked_finish(position, contours, region, material, radius, limit, *, trave
         line = LineString(np.vstack((contour, contour[0])))
         if not line.buffer(reach, quad_segs=quads).intersects(stock):
             continue
-        if not valid.covers(line):
+        rounded = rounded_loop(contour, blend)
+        if rounded is None or not valid.covers(LineString(np.vstack((rounded, rounded[0])))):
             return None
-        _, phased = _nearest_seam(contour, position)
+        _, phased = _nearest_seam(rounded, position)
         link = choose_link(position, phased[0], region, stock, radius, travel_feed=travel_feed,
                            z_feed=z_feed, lift=lift)
         if link is None or link.kind != 'stay_down':
