@@ -150,6 +150,7 @@ operations limited by the model surface:
 - [Holding tabs: click side walls to retain rails to stock XY edges](holding-tabs.md)
 - [Engagement-aware direction and feed factors](engagement-and-feeds.md)
 - [Clearing strategies and cutting direction](toolpaths.md)
+- [Adaptive clearing restart plan](adaptive-restart-plan.md)
 - [Adaptive clearing research and comparison cases](adaptive-clearing-design.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)
