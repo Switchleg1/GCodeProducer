@@ -79,6 +79,27 @@ def shifted_roll_ons(path, turn_radius, chord_error, distances):
         yield roll_on([join, *path[1:]], turn_radius, chord_error)
 
 
+def tapered_roll_on(path, offset, run, chord_error):
+    """Approach a stock-left cut from a parallel line on the clearance side."""
+    if not all(math.isfinite(v) and v > 0 for v in (offset, run, chord_error)):
+        raise ValueError('expected positive offset, approach run and chord error')
+    start, end = path[:2]
+    length = math.dist(start, end)
+    if not length:
+        raise ValueError('expected a nonzero initial leg')
+    ux, uy = ((b-a)/length for a, b in zip(start, end))
+    # Cubic easing gives parallel tangents at both ends. Its maximum second
+    # derivative is 6*offset, bounding uniform chord interpolation error.
+    count = max(2, math.ceil(math.sqrt(6*offset/(8*chord_error))))
+    lead = []
+    for i in range(count):
+        t = i/count
+        back = (1-t)*run
+        lateral = (1-t)**2*(1+2*t)*offset
+        lead.append((start[0]-ux*back+uy*lateral, start[1]-uy*back-ux*lateral))
+    return [*lead, *path]
+
+
 def _quarter_exit(path, turn_radius, chord_error, sign):
     if not all(math.isfinite(v) and v > 0 for v in (turn_radius, chord_error)):
         raise ValueError('expected positive turn radius and chord error')

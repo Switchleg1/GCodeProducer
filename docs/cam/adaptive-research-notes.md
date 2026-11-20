@@ -273,7 +273,10 @@ straight. The trial reaches its 12-cut budget at the same 56.17° peak with
 stalls after 19 accepted cuts and leaves 4,103.77 mm² reachable. The final
 round rejects 201 starts on clearance and 34 cuts on sampled contact. Raising
 the benchmark budget distinguishes a real stall from the 12-cut budget stop;
-it does not change production settings or establish coverage.
+it does not change production settings or establish coverage. Adding
+`--with-taper` tests a parallel-start approach tapering 1.5 mm laterally
+over 4 mm. It does not improve this stall: three additional starts fail
+clearance and two further candidates exceed the sampled contact limit.
 
 ## Gate before another generator attempt
 

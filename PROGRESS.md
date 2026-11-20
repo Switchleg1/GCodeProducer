@@ -43,4 +43,5 @@
 - `--shallow-rollon 1` tries a checked tangent approach from the clearance side. It adds one cut and removes 2.65 mm² more than the curved-exit baseline at unchanged peak contact. The final pose clears stock, but the run still stalls with 4,119.04 mm² reachable residual.
 - `--with-shifted-joins` adds 2/4 mm shifted roll-on proposals. The seeded trial reaches its 12-cut budget, removing 36.20 mm² at unchanged 56.17° peak; 4,116.36 mm² reachable stock remains.
 - With `--max-cuts 48`, the shifted-join trial stalls after 19 accepted cuts, removing 48.79 mm² and leaving 4,103.77 mm² reachable. Final selection rejects 201 starts and 34 cuts for sampled contact; none fail intermediate link clearance.
-- Next: use the stall as a fixture for a front advance that creates a laterally clear approach rather than increasing the cut budget again. Completion gates are in `GOAL.md`.
+- `--with-taper` tries a parallel-start tapered entry (1.5 mm lateral offset over 4 mm). The two-lobe trial still stalls after 19 cuts with 4,103.77 mm² reachable; the final round adds three start rejections and two contact rejections.
+- Next: locate verified start zones using the cutter-center clearance geometry, rather than adding fixed approach offsets. Completion gates are in `GOAL.md`.

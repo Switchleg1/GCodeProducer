@@ -2,7 +2,7 @@ import pytest
 from shapely.geometry import box
 
 from tools.hsm_corner_fixtures import corner_slot_fixtures
-from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, roll_off, roll_on, try_corner_advance
+from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, roll_off, roll_on, tapered_roll_on, try_corner_advance
 
 
 @pytest.mark.parametrize('direction', [1., -1.])
@@ -47,6 +47,14 @@ def test_roll_on_preserves_straight_and_approaches_from_clearance_side():
     assert path[-2:] == straight
     assert path[0] == pytest.approx((0., 2.))
     assert all(0. <= x < 1. and 2. <= y < 3. for x, y in path[:-2])
+
+
+def test_tapered_approach_joins_from_parallel_clearance_side():
+    straight = [(5., 3.), (10., 3.)]
+    path = tapered_roll_on(straight, 1.5, 4., .0025)
+    assert path[0] == (1., 1.5)
+    assert path[-2:] == straight
+    assert all(a[0] < b[0] and a[1] < b[1] for a, b in zip(path[:-2], path[1:-1]))
 
 
 def test_fillet_rejects_a_reversal_or_insufficient_room():
