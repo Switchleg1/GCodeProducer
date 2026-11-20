@@ -8,10 +8,16 @@ import argparse
 import json
 import math
 import re
+import sys
 from pathlib import Path
 from xml.etree import ElementTree
 
 from shapely.geometry import LineString, Polygon, mapping
+
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.hsm_contact_replay import distance_percentile, sampled_contact
 
 
 WORD = re.compile(r'([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))')
@@ -114,28 +120,40 @@ def level_moves(text, depth, chord_error):
             raise ValueError(f'line {number}: unsupported command {mode}')
 
 
-def replay(pocket, radius, depth, text, chord_error):
+def replay(pocket, radius, depth, text, chord_error, contact_step=None):
     reachable = pocket.buffer(-radius, quad_segs=BUFFER_SEGMENTS).buffer(radius, quad_segs=BUFFER_SEGMENTS)
     reachable = reachable.intersection(pocket)
     swept = Polygon()
     rows = []
+    contacts = []
+    remaining = pocket
     for number, mode, points, length in level_moves(text, depth, chord_error):
         stroke = LineString(points).buffer(radius, quad_segs=BUFFER_SEGMENTS)
         new = stroke.difference(swept)
         rows.append({'line': number, 'motion': mode, 'length_mm': length,
                      'new_sweep_mm2': new.area, 'new_pocket_sweep_mm2': new.intersection(pocket).area})
+        if contact_step is not None:
+            samples = list(sampled_contact(points, remaining, radius, contact_step, BUFFER_SEGMENTS))
+            rows[-1]['sampled_peak_contact_deg'] = max((a for a, _ in samples), default=None)
+            contacts.extend(samples)
+            remaining = remaining.difference(stroke)
         swept = swept.union(stroke)
     if not rows:
         raise ValueError('no XY strokes at target depth')
     residual = reachable.difference(swept)
     clear = [row for row in rows if row['new_sweep_mm2'] <= CLEAR_AREA_MM2]
-    return {'depth_mm': depth, 'tool_diameter_mm': radius * 2, 'arc_chord_error_mm': chord_error,
+    report = {'depth_mm': depth, 'tool_diameter_mm': radius * 2, 'arc_chord_error_mm': chord_error,
             'nominal_mm2': pocket.area, 'reachable_mm2': reachable.area,
             'reachable_residual_mm2': residual.area, 'outside_pocket_sweep_mm2': swept.difference(pocket).area,
             'stroke_count': len(rows), 'feed_distance_mm': sum(r['length_mm'] for r in rows),
             'already_swept_stroke_count': len(clear),
             'already_swept_distance_mm': sum(r['length_mm'] for r in clear),
-            'already_swept_straight_count': sum(r['motion'] == 'G1' for r in clear)}, residual, rows
+            'already_swept_straight_count': sum(r['motion'] == 'G1' for r in clear)}
+    if contact_step is not None:
+        report.update(contact_step_mm=contact_step, contact_samples=len(contacts),
+                      sampled_peak_contact_deg=max((a for a, _ in contacts), default=None),
+                      sampled_p95_contact_deg=distance_percentile(contacts, .95))
+    return report, residual, rows
 
 
 def main():
@@ -143,11 +161,13 @@ def main():
     parser.add_argument('pocket', type=Path, help='native CamBam .cb file')
     parser.add_argument('gcode', type=Path, help='matching CamBam G-code')
     parser.add_argument('--chord-error', type=float, default=.0025, metavar='MM')
+    parser.add_argument('--contact-step', type=float, metavar='MM', help='also sample planar contact along each stroke')
     parser.add_argument('--details', type=Path, help='write a new JSON file with residual geometry and per-stroke data')
     args = parser.parse_args()
     try:
         pocket, radius, depth = read_pocket(args.pocket)
-        report, residual, rows = replay(pocket, radius, depth, args.gcode.read_text(encoding='utf-8-sig'), args.chord_error)
+        report, residual, rows = replay(pocket, radius, depth, args.gcode.read_text(encoding='utf-8-sig'),
+                                        args.chord_error, args.contact_step)
         if args.details:
             with args.details.open('x', encoding='utf-8') as out:
                 json.dump({'summary': report, 'residual_xy_mm': mapping(residual), 'strokes': rows}, out, indent=2)

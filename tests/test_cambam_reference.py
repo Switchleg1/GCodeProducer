@@ -1,9 +1,10 @@
 import math
 
 import pytest
-from shapely.geometry import box
+from shapely.geometry import LineString, box
 
 from tools.check_cambam_pocket import level_moves, read_pocket, replay
+from tools.hsm_contact_replay import distance_percentile, sampled_contact
 
 
 HEADER = 'G21\nG90\nG0 X2 Y2 Z3\nG1 Z-0.5\n'
@@ -42,6 +43,24 @@ def test_arc_direction_length_and_target_plane_only():
 def test_fails_on_unsupported_geometry(block):
     with pytest.raises(ValueError):
         list(level_moves(HEADER + block, -.5, .0025))
+
+
+@pytest.mark.parametrize('side, subtract', [(-3., 0.), (.5, 30.)])
+def test_sampled_contact_matches_a_precleared_straight_approach(side, subtract):
+    # At the next pose the previous radius-one disc hides the circle behind
+    # cos(theta) = -advance/2. For side cutting also clip at sin(theta) = .5.
+    advance = .02
+    prior = LineString([(-4, 0), (0, 0)]).buffer(1., quad_segs=256)
+    stock = box(-3, side, 3, 3).difference(prior)
+    samples = list(sampled_contact([(0, 0), (advance, 0), (2*advance, 0)], stock, 1., advance, 256))
+    angle = math.degrees(math.acos(-advance/2))
+    expected = 2*angle if side < 0 else angle - subtract
+    assert [a for a, _ in samples] == pytest.approx([expected, expected], abs=.04)
+    assert sum(mm for _, mm in samples) == pytest.approx(2*advance)
+
+
+def test_contact_quantile_uses_distance_not_sample_count():
+    assert distance_percentile([(10, 10.), (180, .2), (180, .2)], .95) == 10
 
 
 def test_reads_one_native_outline_but_rejects_explicit_stock(tmp_path):

@@ -96,9 +96,12 @@ coverage measurement, not a pass tolerance or a clearance check. Reproduce it
 with `python tools/check_cambam_pocket.py pocket.cb pocket.gcode`. Run again
 with a finer `--chord-error` to inspect sensitivity; `--details replay.json`
 creates a new file with residual geometry and each stroke’s newly swept area.
-Replay uses only the constant-depth XY strokes, not the descent or lifts.
-Measure engagement separately; the stock assumption is not a claim about
-the original blank or physical setup.
+Replay uses only constant-depth XY strokes, not descent or lifts. Add
+`--contact-step 0.3` to sample contact angle against progressively removed
+stock. The reported peak and distance-weighted P95 include all at-depth
+travel, including free links; the first samples also lack material removed
+by the unmodeled ramp. Repeat at finer spacing before interpreting a spike.
+These are planar diagnostics, not a machine clearance or load guarantee.
 
 ## Proposed design decisions
 
