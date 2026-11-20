@@ -189,6 +189,15 @@ wide-side detour passes with 0.1 mm extra planar margin. Both legs are
 checked against the same stock, and a stock rib blocking either leg rejects
 the entire detour. This does not yet find waypoints automatically.
 
+### Connected cutter-center regions
+
+`tools/hsm_center_regions.py` erodes the pocket by cutter radius plus any
+clearance margin and maps seed locations to the resulting components. The
+saved two-lobe WKT is connected for a 4 mm cutter but split for a 14 mm
+cutter. A zero-width neck does not count as a connection. This is a map of
+geometric access, not a claim that a stay-down route through live stock is
+clear or that either lobe has a valid entry.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input
