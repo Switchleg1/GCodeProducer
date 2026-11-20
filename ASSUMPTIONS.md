@@ -16,3 +16,5 @@
   from the legacy engagement percentage.
 - The two-lobe benchmark subtracts a synthetic seed area in the left lobe.
   It does not model machining that area or an entry from above the stock.
+  Stock removed east of X24 mm is a comparison metric for neckward progress,
+  not evidence that the path has crossed the neck.

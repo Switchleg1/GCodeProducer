@@ -7,7 +7,7 @@ from tools.hsm_front_choice import choose_front_cut
 
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
               link_handle, link_margin=0., diagnostics=None, waypoints=(), propose_waypoints=None,
-              propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0.):
+              propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0., priority_region=None):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
@@ -34,7 +34,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
                                     waypoints=routes,
                                     on_overload=report_overload if on_overload is not None else None,
                                     require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
-                                    min_departure=min_departure)
+                                    min_departure=min_departure, priority_region=priority_region)
 
         choice = select(propose)
         if choice is None and propose_on_stall is not None and not counts['origin_clearance']:

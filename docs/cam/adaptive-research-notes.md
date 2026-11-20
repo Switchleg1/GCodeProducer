@@ -316,6 +316,10 @@ With `--max-cuts 96`, the same variant stalls after 57 cuts with 4,011.53 mm²
 reachable. The final selection rejects 578 starts, 38 contact overloads and
 10 exits. The last pose still has at least 4 mm of checked forward clearance,
 so the stall is no longer caused by a trapped terminal heading.
+`--prioritize-neck` ranks already checked cuts by removal per traveled
+millimeter east of X24 first. Both runs stall at 57 cuts with the frontier
+ending at X27.75 mm. Neckward removal falls from 31.51 to 30.92 mm², so this
+ranking alone is not an improvement. All acceptance checks stay unchanged.
 
 ## Gate before another generator attempt
 

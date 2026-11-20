@@ -27,6 +27,18 @@ def test_selects_efficient_front_from_either_candidate_order():
         assert choice.peak_deg < 60 and stock.area == 70.
 
 
+def test_priority_region_changes_ranking_without_bypassing_contact_limit():
+    pocket = box(0, 0, 24, 18)
+    stock = box(5, 5, 9, 7).union(box(14, 3, 18, 5))
+    pose = ((3., 4.25), (1., 0.))
+    near = [(4., 4.25), (10., 4.25)]
+    far = [(13., 2.25), (19., 2.25)]
+    assert _choose(pocket, stock, pose, [far, near]).cut == near
+    options = dict(sample_step=.05, link_handle=.5, priority_region=box(12, 0, 24, 18))
+    assert choose_front_cut(pocket, stock, pose, [far, near], 1., contact_limit=60., **options).cut == far
+    assert choose_front_cut(pocket, stock, pose, [far, near], 1., contact_limit=20., **options) is None
+
+
 def test_blocked_access_and_overload_both_return_no_choice():
     pocket, stock = box(0, 0, 24, 18), box(5, 5, 15, 12)
     pose = ((3., 4.25), (1., 0.))

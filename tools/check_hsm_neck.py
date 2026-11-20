@@ -25,7 +25,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
-               with_neck_front=False, with_three_leg_links=False, min_departure=0.):
+               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -112,6 +112,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     def propose_waypoints(live, pose):
         return live_waypoints(pocket, live, pose[0], radius, spacing=3., rings=4, limit=8)
 
+    neck_target = pocket.intersection(box(24., 0., 134., 61.))
     diagnostics = []
     cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=max_cuts,
                                        contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
@@ -120,7 +121,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        propose_on_stall=propose_shallow if with_shallow_fronts else None,
                                        on_overload=report_overload if with_clearance_tapers else None,
                                        require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
-                                       min_departure=min_departure)
+                                       min_departure=min_departure, priority_region=neck_target if prioritize_neck else None)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -137,6 +138,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'reachable_residual_mm2': remaining.intersection(reachable).area,
             'last_selection_counts': diagnostics[-1] if diagnostics else {},
             'last_taper_contact_failures': dict(overload_phases.get(len(diagnostics)-1, {})),
+            'neckward_removed_mm2': stock.intersection(neck_target).difference(remaining).area,
             'feed_mm': sum(cut.travel_mm for cut in cuts),
             'peak_contact_deg': max((cut.peak_deg for cut in cuts), default=None),
             'last_xy_mm': last_xy,
@@ -172,6 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('--with-three-leg-links', action='store_true', help='try two waypoints after direct and one-waypoint links fail')
     parser.add_argument('--min-departure', type=float, default=0., metavar='MM',
                         help='require a checked straight departure before ranking cuts')
+    parser.add_argument('--prioritize-neck', action='store_true', help='rank checked cuts by removal east of X24 first')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -181,7 +184,7 @@ if __name__ == '__main__':
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
                             require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
-                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure)
+                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

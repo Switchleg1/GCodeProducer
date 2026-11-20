@@ -55,4 +55,5 @@
 - The final two-lobe pose fits the disk but has less than 0.0001 mm of checked straight departure in its current heading. The travel probe checks the whole swept centerline and does not rule out a curved departure.
 - `--min-departure .25` rejects cuts unless the tool can depart in the terminal heading against post-cut stock. With neck-front proposals the trial reaches 48 accepted cuts instead of stalling at 23, leaving 4,024.89 mm² reachable at 56.17° peak.
 - With `--max-cuts 96`, the departure-gated trial stalls at 57 cuts: 141.03 mm² removed, 4,011.53 mm² reachable residual, 56.17° sampled peak. Final selection rejects 578 starts, 38 contact overloads and 10 exits. Final pose has at least 4 mm of straight departure; frontier reaches only X27.75 mm.
-- Next: use the stalled geometry to compare a neck-directed stock advance against the current local area-per-distance ranking. Completion gates are in `GOAL.md`.
+- `--prioritize-neck` ranks eligible cuts by stock removal per travel millimeter east of X24 before overall efficiency. Both runs stall at 57 cuts and frontier X27.75 mm; neckward removal drops from 31.51 to 30.92 mm² under the priority rule. Keep the original ranking as baseline.
+- Next: test a neck-directed candidate that changes the cleared front itself, rather than reranking the same stock edges. Completion gates are in `GOAL.md`.
