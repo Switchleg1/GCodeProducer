@@ -21,7 +21,7 @@ from gcodeproducer.core.jobs.path import Path
 
 
 def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, cutting=None,
-                   tool_type='endmill', tabs=False, depth_step=None):
+                   tool_type='endmill', tabs=False, depth_step=None, warn=None, depth_label=''):
     """Use the normal CAM lead and feed planner for every emitted XY path.
 
     The trial helix only supplies an orbit and simulated bottom footprint;
@@ -69,33 +69,40 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
                 return None
 
             trial = plan_pocket(component, stock, top=0., depth=-(depth_step or op.stepdown),
-                                lead_angle=op.lead_angle, entry_budget=1, point_budget=ADAPTIVE_CAM_POINT_LIMIT,
+                                lead_angle=op.lead_angle, entry_budget=ADAPTIVE_CAM_POINT_LIMIT,
+                                point_budget=ADAPTIVE_CAM_POINT_LIMIT,
                                 finish=finish,
                                 pitch=diameter*min(op.stepover, 50.)/100, tool_radius=radius,
                                 limit=limit, min_loop_radius=.4*radius,
                                 max_loop_radius=3*radius, cut_feed=cutting.feed if cutting else op.feed,
                                 sense=-1 if direction == 'conventional' else 1,
-                                expand=True, half_turns=True, stay_down_only=True, **rates)
+                                expand=True, half_turns=True, stay_down_only=True, recover_heading=True, **rates)
             stops.append(trial.status)
             if not trial.steps or not isinstance(trial.steps[0], AdaptiveEntry):
                 continue
-            entry = trial.steps[0].points
-            xy = entry[entry[:, 2] == entry[-1, 2], :2]
-            points = [xy]
-            count = 0
-            for step in trial.steps[1:]:
-                if isinstance(step, AdaptiveFinish):
+            points = []
+
+            def flush():
+                if points:
+                    path = np.vstack(points)
+                    starters.append(Path('cut', path, width=diameter))
+                    swept.append(LineString(path).buffer(radius, quad_segs=quads))
+                    points.clear()
+
+            for step in trial.steps:
+                if isinstance(step, AdaptiveEntry):
+                    flush()
+                    entry = step.points
+                    points.append(entry[entry[:, 2] == entry[-1, 2], :2])
+                elif isinstance(step, AdaptiveFinish):
                     points.append(step.points[1:])
                     finished += step.contours
-                    break
-                if not isinstance(step, BranchChoice) or step.link.kind != 'stay_down':
-                    break
-                points.extend((step.link.points[1:], step.peel.points[1:]))
-                count += 1
-            accepted += count
-            path = np.vstack(points)
-            starters.append(Path('cut', path, width=diameter))
-            swept.append(LineString(path).buffer(radius, quad_segs=ADAPTIVE_LINK_BUFFER_QUADS))
+                elif isinstance(step, BranchChoice) and step.link.kind == 'stay_down':
+                    points.extend((step.link.points[1:], step.peel.points[1:]))
+                    accepted += 1
+                else:
+                    raise ValueError(f'{op.name}: adaptive plan contains an unsupported transfer')
+            flush()
     # Keep checking overall nominal coverage, even for unscheduled components.
     uncovered = required.difference(union_all(swept)).area
     if uncovered > ADAPTIVE_POCKET_AREA_EPS:
@@ -108,9 +115,13 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
             'covered': 'trial coverage did not satisfy the full coverage check',
         }
         why = '; '.join(dict.fromkeys(reasons[s] for s in stops)) or 'no eligible adaptive cut'
-        raise ValueError(f'{op.name}: Adaptive clearing left {uncovered:.3f} mm² of reference stock '
-                         f'at this depth ({why}). No contour fallback was generated. '
-                         'If using another strategy, set a suitable depth per pass before regenerating.')
-    if log:
+        where = f' at {depth_label}' if depth_label else ''
+        message = (f'DEBUG ONLY — incomplete adaptive clearing: {op.name}{where} left '
+                   f'{uncovered:.3f} mm² of reference stock after {accepted} peels and {len(starters)} entries ({why}). '
+                   'Partial toolpath; do not run on a machine.')
+        if not starters or warn is None:
+            raise ValueError(message)
+        warn(message)
+    elif log:
         log(f'  {op.name}: Adaptive clearing: {accepted} peels; {finished} engagement-checked finish contours; nominal coverage verified')
     return starters

@@ -32,7 +32,7 @@ class WaterfallGenerator(OperationGenerator):
             if op.strategy == 'adaptive':
                 options = dict(material=planning.material.planar_at(z), cutting=run.cutting,
                                tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
-                               depth_step=min(run.step, run.start-z))
+                               depth_step=min(run.step, run.start-z), warn=planning.mark_partial, depth_label=f'Z{z:g}')
             paths = pocket_paths(op, [], free, run.diameter, run.direction,
                                  planning.ctx.log if op.strategy == 'adaptive' else None,
                                  **options)
@@ -95,6 +95,8 @@ class WaterfallGenerator(OperationGenerator):
                 material.remove_planar(planned, z, run.radius)
                 run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
                 produced += 1
+            if planning.debug_partial:
+                break
         if not produced and reachable:
             ctx.log(f"  {op.name}: selected area already cleared by earlier operations; no cutting needed")
             return

@@ -91,7 +91,7 @@ def discover_starts(position, region, material, *, pitch, tool_radius,
 def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limit,
                          min_loop_radius, max_loop_radius, cut_feed, travel_feed, z_feed,
                          lift, waypoints=(), sense=1, continuation=None, expand=False, half_turns=False,
-                         stay_down_only=False):
+                         stay_down_only=False, recover_heading=False):
     """Discover and rank one next cut; no new Z entry or coverage guarantee."""
     starts = discover_starts(position, region, material, pitch=pitch, tool_radius=tool_radius,
                              min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius, sense=sense)
@@ -106,6 +106,14 @@ def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limi
         # A partial turn is a recovery option, not a competitor that can
         # displace a productive full turn in another candidate branch.
         choice = choose_branch(position, starts, region, material, half_turns=True, **options)
+    if choice is None and recover_heading and continuation is not None:
+        # A neck or island can leave useful stock lateral to the incoming
+        # tangent. Rotate the translation heading, not the seam or tangent.
+        centre, seam, axis = continuation
+        axis = np.asarray(axis)
+        normal = np.array([-axis[1], axis[0]])
+        alternatives = [(centre, seam, heading) for heading in (normal, -normal, -axis)]
+        choice = choose_branch(position, alternatives, region, material, half_turns=half_turns, **options)
     return choice
 
 

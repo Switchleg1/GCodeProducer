@@ -20,7 +20,11 @@ There is no peel-count cutoff. The planner keeps peeling until the remaining
 stock can be cleared with ordinary moves that **all** pass the same engagement
 check in cutting order, with verified stay-down transfers. A rejected finish
 trial adds no moves. If the search stalls or hits its path-point resource guard
-while coverage is incomplete, generation stops instead of falling back.
+while coverage is incomplete, the generated prefix is kept for debugging
+and marked **DEBUG ONLY** in Messages and the G-code. It skips subsequent
+depths and operations. Do not run that diagnostic program on a machine.
+If no path can be generated, the error remains. An exhausted local run can
+restart with a separate checked lead-in where a fresh entry fits.
 Tab-protected areas are not supported. The error reports uncovered area and
 the reason for stopping. The sampled-width limit is not a bound on actual
 tool load and does not apply to leads. Qualify depth

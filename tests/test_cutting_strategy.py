@@ -137,16 +137,25 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 
 
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
-def test_adaptive_strategy_rejects_partial_coverage_instead_of_emitting_cleanup(libset, kind, monkeypatch):
+def test_adaptive_incomplete_pass_exports_only_debug_prefix(libset, kind, monkeypatch):
+    from copy import deepcopy
     from gcodeproducer.core.cam import generate, adaptive_paths
+    from gcodeproducer.stages.cam_emit import CAMEmit
     monkeypatch.setattr(adaptive_paths, 'ADAPTIVE_CAM_POINT_LIMIT', 180)
     shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
-    job, _ = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
-                         end=Depth('absolute', -1), strategy='adaptive', lead_angle=4.)
+    job, op = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
+                          end=Depth('absolute', -2), strategy='adaptive', lead_angle=4.)
     job.cam_setup.reference_shapes = [shape]
-    with pytest.raises(ValueError, match='Adaptive clearing left .*No contour fallback was generated'):
-        generate(job, StageContext())
-    assert job.program is None
+    following = deepcopy(op)
+    following.name, following.strategy = 'Must not execute', 'contour'
+    job.cam_setup.groups[0].operations.append(following)
+    generate(job, StageContext())
+    assert len(job.layers) == 1 and len(job.layers[0].paths) == 1
+    assert not job.layers[0].paths[0].closed
+    assert any(w.startswith('DEBUG ONLY') for w in job.warnings)
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert job.program.to_text().startswith(';DEBUG ONLY')
+    assert 'Must not execute' not in job.program.to_text()
 
 
 def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():

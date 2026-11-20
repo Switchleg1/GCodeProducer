@@ -35,6 +35,11 @@ class Sequencer:
             for oi, op in enumerate(group.operations):
                 if op.enabled:
                     self.operation(job, planning, tool, gi, oi, op)
+                    if planning.debug_partial:
+                        ctx.log('DEBUG ONLY: remaining CAM depths and operations omitted after incomplete clearing.')
+                        break
+            if planning.debug_partial:
+                break
             ctx.progress((gi + 1) / max(1, len(setup.groups)))
         if not planning.layers:
             raise ValueError("CAM setup has no enabled operations that remove material")

@@ -7,7 +7,9 @@ non-cutting time as practicable**. A recognizably curved toolpath is not
 sufficient. **Adaptive clearing** plans stock-aware peels without a fixed
 peel count. It can finish with ordinary moves only if each move stays within
 the same sampled engagement limit against the stock left by prior moves.
-Unverified or incomplete passes are rejected, not exported. See [usage and limits](toolpaths.md#adaptive-clearing).
+Unverified moves are rejected. If a pass remains incomplete, the checked
+prefix is retained and clearly labeled debug-only. Later depths and operations
+are not generated. See [usage and limits](toolpaths.md#adaptive-clearing).
 
 ## What to take from the examples
 

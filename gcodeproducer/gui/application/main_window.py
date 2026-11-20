@@ -2521,7 +2521,7 @@ class MainWindow(QMainWindow):
         # CAM job warnings are added once from the result instead, so skip those prefixes here.
         if "WARNING:" in text and hasattr(self, "messages"):
             head, _, body = text.strip().partition("WARNING:")
-            if head.strip() not in ("STOCK", "ENGAGEMENT", "REACH", "TOOL", "LEAD"):
+            if head.strip() not in ("STOCK", "ENGAGEMENT", "REACH", "TOOL", "LEAD", "ADAPTIVE"):
                 self.messages.add("warning", body.strip(), head.strip().title())
 
     def notify(self, key, level, title, text, question=False, record=True, default_no=False):

@@ -65,6 +65,9 @@ class CAMEmit(SliceStage):
         first_data = resolve_cutting(job.machine,tool,stock,first_op) if tool else None
         safe_z = job.m("safe_z", 15.0)
         rpm = first_data.rpm if first_data else (tool.get("spindle_rpm",18000) if tool else job.m("spindle_max",18000))
+        debug = [w for w in job.warnings if w.startswith('DEBUG ONLY — incomplete adaptive clearing:')]
+        for warning in debug:
+            b.comment(warning.replace('—', '-').replace('mm²', 'mm^2'))
         self._start(b, job, tool, rpm, safe_z, log=ctx.log, cutting=first_data)
         from gcodeproducer.core.gcode.simulation import simulate
         start_state = simulate(b.program())
@@ -84,6 +87,8 @@ class CAMEmit(SliceStage):
                     # One self-contained file per tool: end G-code, then start G-code.
                     self._end(b, job, safe_z, tool=previous, log=ctx.log, cutting=previous_data)
                     parts.append((len(b.lines), _part_label(following)))
+                    for warning in debug:
+                        b.comment(warning.replace('—', '-').replace('mm²', 'mm^2'))
                     b.layer, b.op = s.layer, s.op
                     following_rpm = following_data.rpm if following_data else following.get("spindle_rpm", 18000)
                     self._start(b, job, following, following_rpm, safe_z, log=ctx.log, cutting=following_data)

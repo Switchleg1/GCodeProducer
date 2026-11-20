@@ -150,6 +150,8 @@ def schedule_planar(run, paths, region, planning):
     first_layer = len(planning.layers)
     cached_key, planned = None, None
     for ai, i, tab_key, area_paths in schedule:
+        if planning.debug_partial and i != 0:
+            continue
         z = max(end, start - (i + 1) * step)
         remaining = material.planar_at(z)
         key = (ai, tab_key, remaining.normalize().wkb if remaining is not None else b"unallocated")

@@ -98,4 +98,4 @@ class PocketGenerator(OperationGenerator):
                 raise ValueError(f"{op.name}: material boundary limit removes the whole pocket")
         return pocket_paths(op, loops, region, run.diameter, run.direction, ctx.log,
                             cutting=run.cutting, tool_type=run.tool.get('type', 'endmill'),
-                            tabs=bool(planning.tabs), depth_step=run.step), region
+                            tabs=bool(planning.tabs), depth_step=run.step, warn=planning.mark_partial), region

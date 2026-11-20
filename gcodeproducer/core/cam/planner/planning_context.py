@@ -16,6 +16,7 @@ class PlanningContext:
         self.tabs = tabs                 # resolved holding-tab bounds
         self.skip_air = skip_air
         self.layers = []
+        self.debug_partial = False
         self._shadow = None
 
     @property
@@ -33,6 +34,10 @@ class PlanningContext:
         if message not in self.job.warnings:
             self.job.warnings.append(message)
             self.ctx.log(f"{prefix} WARNING: {message}")
+
+    def mark_partial(self, message):
+        self.debug_partial = True
+        self.warn(message, 'ADAPTIVE')
 
     def add_warnings(self, warnings):
         for warning in warnings:
