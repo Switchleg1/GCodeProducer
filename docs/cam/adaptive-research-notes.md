@@ -266,7 +266,11 @@ the link after both endpoints clear. Trying more intermediate waypoints
 cannot fix blocked starts. Adding `--shallow-rollon 1` tries a tangent
 quarter-turn onto each shallow front from its clearance side. The unchanged
 checks accept one additional cut, removing another 2.65 mm² at the same
-peak contact; 4,119.04 mm² reachable stock still remains.
+peak contact; 4,119.04 mm² reachable stock still remains. Adding
+`--with-shifted-joins` tries joining 2 or 4 mm farther along the initial
+straight. The trial reaches its 12-cut budget at the same 56.17° peak with
+4,116.36 mm² reachable stock remaining. A budget stop is not a coverage pass
+or proof that no further cut is possible.
 
 ## Gate before another generator attempt
 

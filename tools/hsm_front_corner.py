@@ -66,6 +66,19 @@ def roll_on(path, turn_radius, chord_error):
     return _quarter_exit(path[::-1], turn_radius, chord_error, 1)[::-1]
 
 
+def shifted_roll_ons(path, turn_radius, chord_error, distances):
+    """Try joining farther along the initial straight without changing the exit."""
+    start, end = path[:2]
+    length = math.dist(start, end)
+    for distance in distances:
+        if not math.isfinite(distance) or distance <= 0:
+            raise ValueError('join shifts must be positive and finite')
+        if distance >= length:
+            continue
+        join = tuple(a+(b-a)*distance/length for a, b in zip(start, end))
+        yield roll_on([join, *path[1:]], turn_radius, chord_error)
+
+
 def _quarter_exit(path, turn_radius, chord_error, sign):
     if not all(math.isfinite(v) and v > 0 for v in (turn_radius, chord_error)):
         raise ValueError('expected positive turn radius and chord error')

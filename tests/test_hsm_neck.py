@@ -92,3 +92,13 @@ def test_shallow_rollon_recovers_one_checked_cut():
     assert result['removed_mm2'] == pytest.approx(33.525, abs=.002)
     assert result['peak_contact_deg'] < 60.
     assert result['last_stock_distance_mm'] > 2.
+
+
+def test_shifted_joins_reach_cut_budget_with_stock_remaining():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
+                        with_shifted_joins=True)
+    assert result['cut_count'] == 12 and result['stop'] == 'cut_budget'
+    assert result['removed_mm2'] == pytest.approx(36.2043, abs=.002)
+    assert result['reachable_residual_mm2'] == pytest.approx(4116.36, abs=.02)
+    assert result['peak_contact_deg'] == pytest.approx(56.17, abs=.1)
