@@ -334,7 +334,11 @@ through cut 58 even as connected area grows. `--prioritize-clearance`
 ranks already-verified cuts by their post-cut seed-connected east edge
 before local efficiency. On this fixture the run still stalls after 58
 cuts at X25.998, with the neck probe disconnected. The ranking does not
-relax access, contact, or exit checks.
+relax access, contact, or exit checks. `--with-wide-bites` adds a straight
+plateau at the same 0.25 mm immersion across the middle half of an eased
+pass. On the two-lobe fixture it stalls after 46 cuts at X23.0 with
+4,037.98 mm² reachable, worse than the narrow-bite baseline (58 cuts,
+X25.998, 4,011.16 mm²). The trial preserves all gates and is opt-in.
 
 ## Gate before another generator attempt
 

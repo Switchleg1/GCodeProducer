@@ -64,10 +64,11 @@ def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lea
                 yield points
 
 
-def eased_front_bite(edge, radius, immersion, clearance, chord_error):
-    """Approach and leave a stock-left edge tangentially without a return loop."""
+def eased_front_bite(edge, radius, immersion, clearance, chord_error, *, ramp_fraction=.5):
+    """Ease in and out of a stock-left edge, optionally holding full immersion between ramps."""
     if (not all(map(math.isfinite, (radius, immersion, clearance, chord_error)))
-            or not 0 < immersion < radius or clearance <= 0 or chord_error <= 0):
+            or not 0 < immersion < radius or clearance <= 0 or chord_error <= 0
+            or not 0 < ramp_fraction <= .5):
         raise ValueError('expected positive bite dimensions with immersion below cutter radius')
     (ax, ay), (bx, by) = edge
     length = math.hypot(bx-ax, by-ay)
@@ -76,10 +77,16 @@ def eased_front_bite(edge, radius, immersion, clearance, chord_error):
     tx, ty = (bx-ax)/length, (by-ay)/length
     amplitude = immersion + clearance
     chords = max(2, math.ceil(math.pi*math.sqrt(amplitude/(4*chord_error))))
+    if ramp_fraction == .5:
+        samples = ((i/chords, math.sin(math.pi*(i/chords))**2) for i in range(chords+1))
+    else:
+        # Each ramp has half the phase span of the original full bite.
+        halves = math.ceil(chords/2)
+        ramp = [(ramp_fraction*i/halves, math.sin(math.pi*i/(2*halves))**2) for i in range(halves+1)]
+        samples = [*ramp, *((1-t, depth) for t, depth in reversed(ramp))]
     points = []
-    for i in range(chords+1):
-        t = i/chords
-        lateral = radius + clearance - amplitude*math.sin(math.pi*t)**2
+    for t, depth in samples:
+        lateral = radius + clearance - amplitude*depth
         points.append((ax + (bx-ax)*t + ty*lateral, ay + (by-ay)*t - tx*lateral))
     return points
 

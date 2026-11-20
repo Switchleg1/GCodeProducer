@@ -17,6 +17,15 @@ def test_eased_bite_removes_stock_and_ends_on_the_clearance_side():
     assert peak < 60. and Point(path[-1]).distance(remaining) >= 1.
 
 
+def test_wide_bite_holds_immersion_between_tangent_ramps():
+    pocket, stock = box(0, 0, 24, 14), box(5, 5, 15, 12)
+    path = eased_front_bite(((5., 5.), (15., 5.)), 1., .25, .25, .0025, ramp_fraction=.25)
+    assert [(x, y) for x, y in path if y == 4.25] == [(7.5, 4.25), (12.5, 4.25)]
+    remaining, peak = try_front_cut(pocket, stock, path, 1., contact_limit=60., sample_step=.05)
+    assert stock.area - remaining.area > 1.25
+    assert peak < 60. and Point(path[-1]).distance(remaining) >= 1.
+
+
 def test_straight_front_advances_at_low_contact():
     pocket = box(0, 0, 24, 12)
     stock = box(4, 5, 24, 12)

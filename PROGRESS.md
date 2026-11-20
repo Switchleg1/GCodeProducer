@@ -60,4 +60,5 @@
 - The eased bite grows seed-connected center clearance by 0.229 mm² beyond baseline and shifts its east edge from X25.750 to X25.998. Neither run reaches the neck probe at (36, 23).
 - `--trace-clearance` records the seed-connected center area, east edge, neck probe and accumulated feed after each accepted cut. In the eased-bite run, the east edge is still X23 at cut 23, reaches X25.998 at cut 54, and stays there through cut 58 despite further area growth.
 - `--prioritize-clearance` ranks verified cuts by seed-connected eastward extent before stock-removal efficiency. The eased-bite trial still stalls after 58 cuts at X25.998 with 4,011.16 mm² reachable; the neck probe remains disconnected.
-- Next: test a wider shallow advance that can create a new cutter-center corridor instead of reranking the same candidates. Completion gates are in `GOAL.md`.
+- `--with-wide-bites` holds the same 0.25 mm immersion across the middle half of an eased pass. The trial regresses to a 46-cut stall at X23.0 mm with 4,037.98 mm² reachable; keep the narrow-bite baseline.
+- Next: test a short sequence of neck-directed cuts together before choosing the first cut, so locally productive cuts do not win at the expense of connected advance. Completion gates are in `GOAL.md`.
