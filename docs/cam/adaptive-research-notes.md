@@ -218,7 +218,10 @@ whole proposal rather than committing the first leg. Corner waypoints can
 also be derived by offsetting and intersecting adjacent exposed stock edges.
 On the rectangular stock fixture a generated candidate removed 4.241 mm²
 at 45.14° peak sampled contact, with no hand-specified corner waypoints.
-Candidate selection and travel to its start are still separate checks.
+`tools/hsm_front_choice.py` checks travel to each start and then samples
+the proposed cut against the same live stock. It ranks accepted options by
+stock removed per millimeter of link plus cut, not by a machine-time
+estimate. When no checked candidate succeeds, it does not imply a retract.
 
 ## Gate before another generator attempt
 
