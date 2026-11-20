@@ -172,7 +172,12 @@ including 27.2 mm of cleared returns after the reference cut. Fixture-specific
 cubic tangent returns reduce that to 18.5 mm; their sampled chord chains
 remove no stock, and the residual and contact peak are unchanged at both
 0.05 and 0.0125 mm contact spacing. This tests shorter links, not a general
-replacement or machine-time improvement.
+replacement or machine-time improvement. The separate offline tangent-link
+checker measures the whole chord chain's clearance from stock and pocket
+boundaries, including holes. It found the first trial return roughly 0.000021
+mm short of cutter-radius clearance in reconstructed stock, even though the
+polygonal sweep reported zero removed area. Treat it as a rejected proposal,
+not grounds for reducing the clearance requirement.
 
 ## Gate before another generator attempt
 

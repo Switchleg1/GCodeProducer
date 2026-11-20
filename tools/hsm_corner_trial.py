@@ -3,6 +3,7 @@ import math
 
 from tools.check_cambam_pocket import arc_points, replay_strokes
 from tools.hsm_corner_fixtures import corner_slot_fixtures
+from tools.hsm_tangent_link import tangent_chords
 
 
 def compare_local_cleanup(fillet=.2, contact_step=.05):
@@ -27,7 +28,7 @@ def compare_staged_cleanup(fillets, contact_step=.05, *, blended_returns=False):
         arc_start, arc_end = (23.-fillet, 1.), (23., 1.+fillet)
         arc, length = arc_points(arc_start, arc_end, (0., fillet), 1, chord_error)
         if blended_returns:
-            points = _return_blend(endpoint)
+            points = tangent_chords(endpoint, (20., 1.), (0., 1.), (1., 0.), .5)
             finish.append(('blend', points, sum(math.dist(a, b) for a, b in zip(points, points[1:]))))
         else:
             finish.extend([('G1', [endpoint, (20., 6.)]), ('G1', [(20., 6.), (20., 1.)])])
@@ -41,16 +42,3 @@ def compare_staged_cleanup(fillets, contact_step=.05, *, blended_returns=False):
         return replay_strokes(pocket, stock, 1., -.5, moves, chord_error, contact_step)
 
     return evaluate(rough), evaluate(rough + finish)
-
-
-def _return_blend(start):
-    """Fixture-specific cubic: leave north and arrive east, testing the swept chord chain."""
-    controls = (start, (start[0], start[1]+.5), (19.5, 1.), (20., 1.))
-    points = []
-    for i in range(129):
-        t = i/128
-        u = 1-t
-        weights = (u**3, 3*u*u*t, 3*u*t*t, t**3)
-        points.append(tuple(sum(weight * xy[axis] for weight, xy in zip(weights, controls))
-                            for axis in range(2)))
-    return points

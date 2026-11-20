@@ -18,4 +18,5 @@
 - Offline tangent profile cleanup on the sharp fixture reduces reachable residual from 2.228 to 0.095 mm² with no measured outside sweep, but peaks at 136–137° at 0.025/0.05 mm spacing. Reject it against the illustrative 95° trial limit.
 - Staged local profile trial (1.8, 0.8, 0.2 mm radii) reaches the same 0.095 mm² residual with 89.1–90.0° sampled peak at three spacings and no outside sweep. Adds 44.0 mm of feed including 27.2 mm of clear returns after the reference pass.
 - Offline tangent return links shorten the staged corner's added air travel from 27.21 to 18.48 mm. At two contact spacings, residual and sampled peak are unchanged and links remove no measured stock.
-- Next: generalize the verified tangent return into a stock-checked proposal with rejection for blocked corridors. Completion gates are in `GOAL.md`.
+- `tools/hsm_tangent_link.py` proposes cubic tangent chord chains and rejects full-disk overlap with stock or pocket holes. The stricter distance test detects a 0.000021 mm stock-side clearance shortfall on the fixture's first return despite zero measured area in the polygonal sweep; the trial remains diagnostic, not approved by the new checker.
+- Next: test alternate tangent routes on the corner using the strict checker without weakening its clearance requirement. Completion gates are in `GOAL.md`.
