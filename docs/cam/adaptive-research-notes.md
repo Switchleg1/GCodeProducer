@@ -339,6 +339,11 @@ plateau at the same 0.25 mm immersion across the middle half of an eased
 pass. On the two-lobe fixture it stalls after 46 cuts at X23.0 with
 4,037.98 mm² reachable, worse than the narrow-bite baseline (58 cuts,
 X25.998, 4,011.16 mm²). The trial preserves all gates and is opt-in.
+`--lookahead-width 2` checks a possible successor for each of the top two
+eligible cuts against that cut's resulting stock and pose, then commits only
+the first. It avoids a greedy dead end in a controlled fixture. At a 24-cut
+neck budget both runs reach X23, but lookahead leaves 4,090.15 mm² instead of
+4,087.34 mm². Keep greedy selection as the baseline.
 
 ## Gate before another generator attempt
 

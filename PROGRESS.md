@@ -61,4 +61,5 @@
 - `--trace-clearance` records the seed-connected center area, east edge, neck probe and accumulated feed after each accepted cut. In the eased-bite run, the east edge is still X23 at cut 23, reaches X25.998 at cut 54, and stays there through cut 58 despite further area growth.
 - `--prioritize-clearance` ranks verified cuts by seed-connected eastward extent before stock-removal efficiency. The eased-bite trial still stalls after 58 cuts at X25.998 with 4,011.16 mm² reachable; the neck probe remains disconnected.
 - `--with-wide-bites` holds the same 0.25 mm immersion across the middle half of an eased pass. The trial regresses to a 46-cut stall at X23.0 mm with 4,037.98 mm² reachable; keep the narrow-bite baseline.
-- Next: test a short sequence of neck-directed cuts together before choosing the first cut, so locally productive cuts do not win at the expense of connected advance. Completion gates are in `GOAL.md`.
+- `--lookahead-width 2` previews one checked successor from each of the top two picks, committing only the first. The controlled fixture avoids a greedy dead end. At a 24-cut neck budget, both reach X23 and 56.17° peak, but lookahead leaves 4,090.15 mm² versus 4,087.34 mm².
+- Next: trace the first divergence to see whether the bounded preview misses longer neckward advances. Completion gates are in `GOAL.md`.
