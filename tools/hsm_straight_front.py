@@ -30,15 +30,15 @@ def frontier_edges(pocket, stock):
                     yield (a, b) if aligned else (b, a)
 
 
-def straight_advance(pocket, edge, radius, immersion, *, lead=0.):
+def straight_advance(pocket, edge, radius, immersion, *, lead=0., runoff=0.):
     """Propose a parallel cut, offset into clearance by radius minus immersion.
 
-    The optional straight lead extends from the edge's start. Only the pocket
-    boundary is checked here; replay must verify stock contact and any entry.
+    Lead and runoff extend the line past either end of the edge. Only the
+    pocket boundary is checked here; replay must verify contact and access.
     """
-    if (not all(map(math.isfinite, (radius, immersion, lead)))
-            or not 0 < immersion < radius or lead < 0):
-        raise ValueError('expected 0 < immersion < radius and a nonnegative lead')
+    if (not all(map(math.isfinite, (radius, immersion, lead, runoff)))
+            or not 0 < immersion < radius or min(lead, runoff) < 0):
+        raise ValueError('expected 0 < immersion < radius and nonnegative lead/runoff')
     (ax, ay), (bx, by) = edge
     length = math.hypot(bx-ax, by-ay)
     if not length:
@@ -46,9 +46,20 @@ def straight_advance(pocket, edge, radius, immersion, *, lead=0.):
     tx, ty = (bx-ax)/length, (by-ay)/length
     offset = radius - immersion
     points = [(ax + ty*offset - tx*lead, ay - tx*offset - ty*lead),
-              (bx + ty*offset, by - tx*offset)]
+              (bx + ty*offset + tx*runoff, by - tx*offset + ty*runoff)]
     axis = LineString(points)
     return points if pocket.covers(axis) and axis.distance(pocket.boundary) >= radius else None
+
+
+def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lead=0., runoff=0.):
+    """Propose cuts from every sufficiently long exposed edge of live stock."""
+    if not math.isfinite(min_edge) or min_edge <= 0:
+        raise ValueError('expected a positive minimum edge length')
+    for edge in frontier_edges(pocket, stock):
+        if math.dist(*edge) >= min_edge:
+            points = straight_advance(pocket, edge, radius, immersion, lead=lead, runoff=runoff)
+            if points is not None:
+                yield points
 
 
 def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step):

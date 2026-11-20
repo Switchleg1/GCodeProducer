@@ -226,6 +226,10 @@ estimate. When no checked candidate succeeds, it does not imply a retract.
 pose with a bounded cut budget. A deliberately restricted two-pad fixture
 removes 2 of 16 mm², then reports a stall and retains the 14 mm² residual.
 Empty stock and exhausted cut budget are distinct from a stalled planner.
+Trying every sufficiently long exposed edge, with a checked approach and
+space to run off the end, then clears both pads in 16 cuts at 42.85° sampled
+peak contact. This demonstrates repeated progress on the seeded fixture,
+not coverage on the two-lobe pocket or a general entry strategy.
 
 ## Gate before another generator attempt
 

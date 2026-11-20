@@ -2,7 +2,7 @@ import pytest
 from shapely.geometry import Polygon, box
 
 from tools.hsm_front_run import run_front
-from tools.hsm_straight_front import frontier_edges, straight_advance
+from tools.hsm_straight_front import frontier_edges, straight_advance, straight_front_candidates
 
 
 POCKET = box(0, 0, 24, 12)
@@ -35,6 +35,17 @@ def test_runner_advances_from_new_pose_and_reports_live_residual_at_stall():
     assert [choice.removed_mm2 for choice in choices] == pytest.approx([1., 1.])
     assert remaining.area == pytest.approx(14.)
     assert reason == 'stalled'
+
+
+def test_all_exposed_edges_clear_both_seeded_pads():
+    def propose(stock, _pose):
+        return straight_front_candidates(POCKET, stock, 1., .25, min_edge=1., lead=1., runoff=1.)
+
+    choices, remaining, reason = _run(propose, budget=24)
+    assert reason == 'stock_empty' and remaining.is_empty
+    assert len(choices) == 16
+    assert sum(c.removed_mm2 for c in choices) == pytest.approx(16.)
+    assert max(c.peak_deg for c in choices) < 45.
 
 
 def test_budget_and_empty_stock_do_not_report_a_stall():
