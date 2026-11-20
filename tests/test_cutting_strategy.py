@@ -30,7 +30,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
             editor.kind.setCurrentIndex(editor.kind.findData(kind))
             editor.add_operation()
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
-            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Trochoidal']
+            expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Trochoidal', 'Adaptive clearing']
                         if kind in ('pocket', 'waterfall') else
                         ['Meander', 'Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
             assert labels == expected
@@ -50,7 +50,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 editor.feed_controls['slotting_feed'].setValue(42)
                 assert editor.operation().slotting_feed == 42
             if expected:
-                strategy = 'trochoidal' if kind in ('pocket', 'waterfall') else 'raster_y'
+                strategy = 'adaptive' if kind in ('pocket', 'waterfall') else 'raster_y'
                 editor.strategy.setCurrentIndex(editor.strategy.findData(strategy))
                 assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
@@ -220,6 +220,42 @@ def test_short_corner_arcs_are_replaced_by_local_spirals():
     local = [arc for arc in arcs if not any(np.array_equal(arc, old) for old in global_arcs)]
     assert local and all(prep(area.buffer(1e-7)).covers(LineString(p)) for p in local)
     assert any(len(p) >= 16 and np.ptp(p[:, 0]) < 5 and np.ptp(p[:, 1]) < 5 for p in local)
+
+
+@pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
+def test_adaptive_strategy_emits_peels_and_cleanup(libset, kind):
+    from gcodeproducer.core.cam import generate
+    from gcodeproducer.stages.cam_emit import CAMEmit
+
+    shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
+    job, _ = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
+                         end=Depth('absolute', -1), strategy='adaptive', lead_angle=4.)
+    job.cam_setup.reference_shapes = [shape]
+    generate(job, StageContext())
+    assert any(not p.closed and len(p.points) > 25 for layer in job.layers for p in layer.paths)
+    assert any(p.closed for layer in job.layers for p in layer.paths)
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert any(line.feature == 'lead_in' for line in job.program.lines)
+    assert not any('rapid motion contacts' in w or 'intersects a protected holding tab' in w for w in job.warnings)
+
+
+def test_adaptive_cleanup_preserves_coverage_and_island_clearance():
+    from shapely import union_all
+    from shapely.geometry import LineString
+    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
+
+    area = box(0, 0, 26, 16).difference(box(17, 6, 22, 10))
+    op = Operation(kind='pocket', strategy='adaptive', stock=.2)
+    paths = pocket_paths(op, [], area, 3., 'climb')
+    centre = area.buffer(-1.7)
+    def lines(paths):
+        return [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points) for p in paths]
+    assert all(centre.buffer(1e-7).covers(line) for line in lines(paths))
+    baseline = pocket_paths(Operation(kind='pocket', stock=.2), [], area, 3., 'climb')
+    nominal = union_all([line.buffer(1.5) for line in lines(baseline)])
+    actual = union_all([line.buffer(1.5) for line in lines(paths)])
+    assert nominal.difference(actual).area < 1e-7
+    assert all(p.closed for p in pocket_paths(op, [], area, 3., 'climb', tabs=True))
 
 
 def test_old_strategy_names_preserve_existing_behaviour():

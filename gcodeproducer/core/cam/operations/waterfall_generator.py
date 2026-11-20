@@ -10,7 +10,7 @@ class WaterfallGenerator(OperationGenerator):
     allows_sloped = True
 
     def level_paths(self, run, region, limit, z, planning, edge=None):
-        """(free region, areas) the cutter can clear at ``z`` — pure geometry, no material history."""
+        """(free region, areas) the cutter can clear at ``z``."""
         from shapely.geometry import box
         from shapely.ops import unary_union
         from gcodeproducer.core.cam.paths import machining_areas
@@ -28,8 +28,14 @@ class WaterfallGenerator(OperationGenerator):
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
+            options = {}
+            if op.strategy == 'adaptive':
+                options = dict(material=planning.material.planar_at(z), cutting=run.cutting,
+                               tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
+                               depth_step=min(run.step, run.start-z))
             paths = pocket_paths(op, [], free, run.diameter, run.direction,
-                                 planning.ctx.log if op.strategy == 'trochoidal' else None)
+                                 planning.ctx.log if op.strategy in ('trochoidal', 'adaptive') else None,
+                                 **options)
         except ValueError as exc:
             if "too small" not in str(exc):
                 raise

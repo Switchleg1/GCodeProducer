@@ -203,7 +203,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             path.link_condition = condition
             sampler.remove_path(np.array([previous, p[0]]), False, radius)
             totals[condition.regime] += 1
-        spiral = operation.strategy == 'trochoidal' and not path.closed
+        spiral = operation.strategy in ('trochoidal', 'adaptive') and not path.closed
         if spiral and len(p) > 1:
             # Measure successive short stretches against stock left by the earlier
             # turns, rather than classifying the whole uncut pocket as a slot.
@@ -230,7 +230,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         if mode and not neutral and abs(vote) > 1e-9:
             reverse = (desired == "climb" and vote < 0) or (desired == "conventional" and vote > 0)
             # A spiral must enter at its already chosen inner start, not run wall-in.
-            if reverse and (path.closed or operation.strategy != 'trochoidal'):
+            if reverse and not spiral:
                 p = np.vstack((p[0], p[:0:-1])) if path.closed else p[::-1].copy()
                 path.points = p
                 if not path.closed:

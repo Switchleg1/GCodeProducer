@@ -6,8 +6,10 @@ The target is **consistent cutter engagement during cutting, with as little
 non-cutting time as practicable**. A recognizably curved toolpath is not
 sufficient. The current **Trochoidal** option is still a clipped spiral with
 local cleanup and checked links; it does not choose the next cutting move to
-control engagement. The experimental local peel selector below is not wired
-into the CAM operations and does not change the generated toolpath.
+control engagement. The separate **Adaptive clearing** option now uses the selector for a bounded
+sequence of peels, followed by ordinary contour cleanup. See [usage and
+limits](toolpaths.md#adaptive-clearing). Full engagement-controlled clearance
+without that fallback remains experimental.
 
 ## What to take from the examples
 
@@ -145,7 +147,15 @@ tangent. In a tight-wall test the full turn was rejected; the half-turn
 removed 1.43 mm² at 6.8% peak sampled engagement without repositioning.
 Letting half-turns compete routinely in the 48-turn two-lobe run reduced
 removal from 279.78 to 142.09 mm². They are therefore a fallback, not a
-replacement for productive full loops. The prototype remains offline.
+replacement for productive full loops.
+
+## Integrated benchmark
+
+On the saved three-depth Stormtrooper Waterfall operation, Adaptive clearing
+produced eight connected peels per depth before contour cleanup. The Preview
+estimate was 6:14 versus 5:46 for wall-parallel. Both produced an existing
+cutting-hand conflict warning; neither reported rapid contact with stock.
+This is operation-only Preview timing, not a hardware test or a speedup.
 
 ## Comparison cases and gates
 

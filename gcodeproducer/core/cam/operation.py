@@ -17,7 +17,7 @@ class Operation:
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
-    strategy: str = "contour"          # Pocket/Waterfall: contour, raster_x/y, trochoidal; 3D Contour: meander, raster_x/y
+    strategy: str = "contour"          # Pocket/Waterfall: contour, raster_x/y, trochoidal, adaptive
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
     low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults

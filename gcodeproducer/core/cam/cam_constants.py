@@ -60,6 +60,9 @@ ADAPTIVE_BRANCH_LIMIT = 16
 ADAPTIVE_FRONTIER_SAMPLES = 12
 ADAPTIVE_ENTRY_RADIUS_FACTOR = .9  # less than cutter radius: the flat lap must cover the core
 ADAPTIVE_ENTRY_LIMIT = 20_000
+ADAPTIVE_CAM_TURNS = 8
+ADAPTIVE_CAM_COMPONENTS = 4
+ADAPTIVE_CAM_LIMIT = .18  # sampled width limit for peel trials, not for entry or cleanup
 ADAPTIVE_POCKET_AREA_EPS = 1e-8  # mm²; numerical residue, not a machining tolerance
 
 REFERENCE_CHORD_ERROR = .01  # mm; circles are polygonal, not fitted G2/G3 arcs

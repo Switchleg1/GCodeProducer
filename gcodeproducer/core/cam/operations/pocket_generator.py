@@ -5,7 +5,7 @@ import numpy as np
 from .operation_generator import OperationGenerator
 
 
-def pocket_paths(op, loops, region, diameter, direction, log=None):
+def pocket_paths(op, loops, region, diameter, direction, log=None, **adaptive_options):
     """Clearing paths for one planar pocket region (also used by Waterfall)."""
     from gcodeproducer.core.jobs.path import Path
     from gcodeproducer.core.geometry.infill import scan_fill
@@ -19,6 +19,9 @@ def pocket_paths(op, loops, region, diameter, direction, log=None):
         paths = [Path("cut", p, closed=True, width=diameter, stay_down=link,
                       stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                  for i, (p, link) in enumerate(linked)]
+    elif strategy == "adaptive":
+        from gcodeproducer.core.cam.adaptive_paths import adaptive_paths
+        return adaptive_paths(op, region, diameter, direction, log, **adaptive_options)
     elif strategy == "trochoidal":
         from gcodeproducer.core.cam.trochoidal import trochoidal_paths
         return trochoidal_paths(region, diameter, op.stock, op.stepover, direction, log, stay_down=op.stay_down)
@@ -96,4 +99,6 @@ class PocketGenerator(OperationGenerator):
             region = region.intersection(limit).buffer(0)
             if region.is_empty:
                 raise ValueError(f"{op.name}: material boundary limit removes the whole pocket")
-        return pocket_paths(op, loops, region, run.diameter, run.direction, ctx.log), region
+        return pocket_paths(op, loops, region, run.diameter, run.direction, ctx.log,
+                            cutting=run.cutting, tool_type=run.tool.get('type', 'endmill'),
+                            tabs=bool(planning.tabs), depth_step=run.step), region

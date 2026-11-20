@@ -6,6 +6,24 @@ Pocket **strategy** determines the XY geometry of clearing passes. **Cutting
 direction** determines how those paths are traversed. They are separate
 settings: selecting Climb does not by itself convert raster lines to contours.
 
+## Adaptive clearing
+
+Choose **Adaptive clearing** for Pocket or 3D Waterfall. This first release
+combines stock-aware peels with wall-parallel cleanup. With a flat endmill,
+**Lead-in ramp** and **Stay down between contours** enabled, it tries a bounded
+sequence of curved cuts. It evaluates each trial against a planar stock model
+and caps the trial’s sampled engagement at 18%. It keeps a connected sequence
+and uses the normal CAM lead planner, including the operation’s lead-in angle.
+Waterfall can use the stock left by previous passes; a planar Pocket plans its
+initial geometry from a nominal stock envelope.
+
+Contours clear anything not covered by the adaptive sequence. If no eligible
+sequence fits, or the area is protected by tabs, the strategy uses ordinary
+contours. The Log reports peel and cleanup counts. The 18% trial limit is
+not a bound on actual tool load, and it does not apply to leads or cleanup.
+Inspect those sections in Preview; this strategy is not always faster than
+wall-parallel clearing. See the [design and benchmark](adaptive-clearing-design.md).
+
 ## Trochoidal clearing
 
 Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.

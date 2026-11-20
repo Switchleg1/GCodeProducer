@@ -481,7 +481,7 @@ class CAMEditor(QWidget):
         self.selectionChanged.emit()
 
     def _update_stay_down(self, op):
-        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "trochoidal"))
+        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "trochoidal", "adaptive"))
 
     def _edit(self, *_):
         if self._loading:
