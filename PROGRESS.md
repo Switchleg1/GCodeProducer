@@ -40,4 +40,5 @@
 - `--shallow-runoff 2.5` adds 0.375 mm² of removal versus 2 mm runoff, but the endpoint still misses 2 mm stock clearance. At 3–4.5 mm runoff no shallow retry is accepted. Checks and engagement limit are unchanged.
 - A tangent quarter-turn at 1 mm runoff and 1 mm roll-off radius ends 2.455 mm from live stock under unchanged checks. The trial still stalls after 10 cuts, but now tests transfers from a clear origin; 4,121.69 mm² remain.
 - At the curved-exit stall, 78 proposals fail cutter clearance at their start, five fail contact and one fails the cut boundary. No proposal with a clear start fails along its link. Accepted cuts and residual are unchanged.
-- Next: generate shallow tangent approaches from cleared starts instead of spending more trials on intermediate link geometry. Completion gates are in `GOAL.md`.
+- `--shallow-rollon 1` tries a checked tangent approach from the clearance side. It adds one cut and removes 2.65 mm² more than the curved-exit baseline at unchanged peak contact. The final pose clears stock, but the run still stalls with 4,119.04 mm² reachable residual.
+- Next: derive cleared approach positions along the exposed edge instead of always joining at its first vertex. Completion gates are in `GOAL.md`.

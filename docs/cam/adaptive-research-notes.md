@@ -263,7 +263,10 @@ away from the frontier. It ends 2.455 mm from stock at unchanged peak sampled
 contact. The next selection still stalls: 78 proposals fail clearance at the cut
 start, five exceed contact and one fails the cut boundary. None fail along
 the link after both endpoints clear. Trying more intermediate waypoints
-cannot fix blocked starts.
+cannot fix blocked starts. Adding `--shallow-rollon 1` tries a tangent
+quarter-turn onto each shallow front from its clearance side. The unchanged
+checks accept one additional cut, removing another 2.65 mm² at the same
+peak contact; 4,119.04 mm² reachable stock still remains.
 
 ## Gate before another generator attempt
 

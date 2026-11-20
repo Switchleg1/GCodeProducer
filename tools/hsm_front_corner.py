@@ -58,6 +58,15 @@ def filleted_corner(start, vertex, end, turn_radius, chord_error):
 
 def roll_off(path, turn_radius, chord_error):
     """Append a tangent quarter turn to the right, away from a stock-left front."""
+    return _quarter_exit(path, turn_radius, chord_error, -1)
+
+
+def roll_on(path, turn_radius, chord_error):
+    """Prepend a tangent quarter turn from the clearance side of a stock-left front."""
+    return _quarter_exit(path[::-1], turn_radius, chord_error, 1)[::-1]
+
+
+def _quarter_exit(path, turn_radius, chord_error, sign):
     if not all(math.isfinite(v) and v > 0 for v in (turn_radius, chord_error)):
         raise ValueError('expected positive turn radius and chord error')
     start, end = path[-2:]
@@ -65,9 +74,9 @@ def roll_off(path, turn_radius, chord_error):
     if not length:
         raise ValueError('expected a nonzero final leg')
     ux, uy = ((b-a)/length for a, b in zip(start, end))
-    offset = (uy*turn_radius, -ux*turn_radius)
+    offset = (-sign*uy*turn_radius, sign*ux*turn_radius)
     exit = (end[0]+offset[0]+ux*turn_radius, end[1]+offset[1]+uy*turn_radius)
-    arc, _ = arc_points(end, exit, offset, -1, chord_error)
+    arc, _ = arc_points(end, exit, offset, sign, chord_error)
     return [*path, *arc[1:]]
 
 

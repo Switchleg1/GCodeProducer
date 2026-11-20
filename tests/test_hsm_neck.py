@@ -83,3 +83,12 @@ def test_earlier_shallow_rolloff_reaches_a_checked_origin():
     assert result['peak_contact_deg'] < 60.
     assert 'origin_clearance' not in result['last_selection_counts']
     assert result['last_selection_counts'] == {'start_clearance': 78, 'contact_limit': 5, 'cut_boundary': 1}
+
+
+def test_shallow_rollon_recovers_one_checked_cut():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.)
+    assert result['cut_count'] == 11 and result['stop'] == 'stalled'
+    assert result['removed_mm2'] == pytest.approx(33.525, abs=.002)
+    assert result['peak_contact_deg'] < 60.
+    assert result['last_stock_distance_mm'] > 2.
