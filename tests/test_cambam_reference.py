@@ -1,10 +1,13 @@
 import math
+from io import StringIO
+from xml.etree import ElementTree
 
 import pytest
 from shapely.geometry import LineString, box
 
 from tools.check_cambam_pocket import level_moves, read_pocket, replay
 from tools.hsm_contact_replay import distance_percentile, sampled_contact
+from tools.hsm_replay_overlay import write_overlay
 
 
 HEADER = 'G21\nG90\nG0 X2 Y2 Z3\nG1 Z-0.5\n'
@@ -20,6 +23,18 @@ def test_replay_counts_already_swept_returns_in_order():
     assert rows[1]['new_sweep_mm2'] == 0.
     assert rows[2]['new_sweep_mm2'] > 0.
     assert 0 < residual.area < report['reachable_mm2']
+
+
+def test_overlay_labels_source_lines_and_distinguishes_return_from_new_sweep():
+    out = StringIO()
+    write_overlay(out, box(0, 0, 10, 10), box(6, 6, 8, 8),
+                  [(12, [(2, 3), (5, 3)], False), (13, [(5, 3), (2, 3)], True)])
+    root = ElementTree.fromstring(out.getvalue())
+    strokes = root.findall('{*}polyline')
+    assert [(p.get('data-line'), p.get('data-role')) for p in strokes] == [('12', 'new'), ('13', 'prior')]
+    assert strokes[0].get('points').startswith('2.000000,-3.000000')
+    assert any(p.get('data-role') == 'residual' for p in root.findall('{*}path'))
+    assert {'12', '13'} <= {label.text for label in root.findall('{*}text')}
 
 
 def test_replay_tracks_outside_sweep_separately():

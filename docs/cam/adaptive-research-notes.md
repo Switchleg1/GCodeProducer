@@ -96,6 +96,9 @@ coverage measurement, not a pass tolerance or a clearance check. Reproduce it
 with `python tools/check_cambam_pocket.py pocket.cb pocket.gcode`. Run again
 with a finer `--chord-error` to inspect sensitivity; `--details replay.json`
 creates a new file with residual geometry and each stroke’s newly swept area.
+Use `--overlay replay.svg` for a numbered plan view separating new sweeps,
+returns through prior sweeps, and reachable residual. Labels show sampled
+source line numbers; every stroke has a source line in its SVG tooltip.
 Replay uses only constant-depth XY strokes, not descent or lifts. Add
 `--contact-step 0.3` to sample contact angle against progressively removed
 stock. The reported peak and distance-weighted P95 include all at-depth

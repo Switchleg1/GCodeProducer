@@ -18,6 +18,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.hsm_contact_replay import distance_percentile, sampled_contact
+from tools.hsm_replay_overlay import write_overlay
 
 
 WORD = re.compile(r'([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))')
@@ -163,11 +164,18 @@ def main():
     parser.add_argument('--chord-error', type=float, default=.0025, metavar='MM')
     parser.add_argument('--contact-step', type=float, metavar='MM', help='also sample planar contact along each stroke')
     parser.add_argument('--details', type=Path, help='write a new JSON file with residual geometry and per-stroke data')
+    parser.add_argument('--overlay', type=Path, help='write a new SVG plot with numbered strokes and residual stock')
     args = parser.parse_args()
     try:
         pocket, radius, depth = read_pocket(args.pocket)
-        report, residual, rows = replay(pocket, radius, depth, args.gcode.read_text(encoding='utf-8-sig'),
-                                        args.chord_error, args.contact_step)
+        text = args.gcode.read_text(encoding='utf-8-sig')
+        report, residual, rows = replay(pocket, radius, depth, text, args.chord_error, args.contact_step)
+        if args.overlay:
+            moves = level_moves(text, depth, args.chord_error)
+            strokes = ((number, points, row['new_sweep_mm2'] <= CLEAR_AREA_MM2)
+                       for (number, _, points, _), row in zip(moves, rows, strict=True))
+            with args.overlay.open('x', encoding='utf-8') as out:
+                write_overlay(out, pocket, residual, strokes)
         if args.details:
             with args.details.open('x', encoding='utf-8') as out:
                 json.dump({'summary': report, 'residual_xy_mm': mapping(residual), 'strokes': rows}, out, indent=2)

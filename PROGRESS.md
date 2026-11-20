@@ -11,4 +11,5 @@
 - `tools/check_cambam_pocket.py` now replays target-plane sweeps in order and can export residual geometry and per-stroke diagnostics. The supplied sample reproduces 10.87 mm² reachable residual and 2,604 mm of already swept travel (116 strokes, including all 115 straight moves).
 - Corner design: compare short boundary-following cleanup against a tangent blend into the tool-center contour, starting from identical stock and pose. No requirement for circular cuts or full-perimeter cleanup.
 - Sampled progressive planar cutter contact is now available in `tools/check_cambam_pocket.py --contact-step`. Side-cut and slot tests match analytical contact. CamBam all-travel P95 was 85.0° at 0.30 mm and 82.5° at 0.15 mm, with an unmodeled ramp that can inflate the peak. Sampling is not a clearance or load guarantee.
-- Next: add numbered stock-overlay plots and tag entry-affected samples. Freeze corner/slot fixture tolerances before building the replacement. Completion gates are in `GOAL.md`.
+- `tools/check_cambam_pocket.py --overlay` writes a numbered SVG showing target-plane strokes, already swept travel and reachable residual. Verified the CamBam sample overlay contains 627 strokes, 116 fully within prior sweeps.
+- Next: tag entry-affected samples and freeze corner/slot fixture tolerances before building the replacement. Completion gates are in `GOAL.md`.
