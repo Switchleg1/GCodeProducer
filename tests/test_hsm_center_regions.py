@@ -4,7 +4,7 @@ import pytest
 from shapely import from_wkt
 from shapely.geometry import Point, box
 
-from tools.hsm_center_regions import center_regions, cleared_start_intervals, map_region_work, nearby_frontier, region_at
+from tools.hsm_center_regions import center_regions, cleared_start_intervals, connected_clearance, map_region_work, nearby_frontier, region_at
 
 
 NECK_POCKET = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
@@ -33,6 +33,9 @@ def test_nearby_frontier_only_reports_seed_side_of_stock_barrier():
     stock = box(8, 0, 11, 10)
     front = nearby_frontier(pocket, stock, (3, 5), 1., extra_reach=.25)
     assert not front.is_empty
+    clearance = connected_clearance(pocket, stock, (3, 5), 1.)
+    assert clearance.bounds == (1., 1., 7., 9.)
+    assert not clearance.covers(Point(14, 5))
     assert front.bounds[0] == front.bounds[2] == 8.
     assert nearby_frontier(pocket, stock, (9, 5), 1., extra_reach=.25).is_empty
 

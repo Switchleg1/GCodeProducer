@@ -57,4 +57,5 @@
 - With `--max-cuts 96`, the departure-gated trial stalls at 57 cuts: 141.03 mm² removed, 4,011.53 mm² reachable residual, 56.17° sampled peak. Final selection rejects 578 starts, 38 contact overloads and 10 exits. Final pose has at least 4 mm of straight departure; frontier reaches only X27.75 mm.
 - `--prioritize-neck` ranks eligible cuts by stock removal per travel millimeter east of X24 before overall efficiency. Both runs stall at 57 cuts and frontier X27.75 mm; neckward removal drops from 31.51 to 30.92 mm² under the priority rule. Keep the original ranking as baseline.
 - `--with-front-bites` tries eased shallow cuts that enter and exit on the cleared side of neck-facing edges. One extra checked cut removes 0.374 mm² east of X24; the trial stalls after 58 cuts with 4,011.16 mm² reachable and the same 56.17° sampled peak.
-- Next: diagnose whether these passes expand connected cutter-center clearance at the neck, rather than using removed area alone. Completion gates are in `GOAL.md`.
+- The eased bite grows seed-connected center clearance by 0.229 mm² beyond baseline and shifts its east edge from X25.750 to X25.998. Neither run reaches the neck probe at (36, 23).
+- Next: use connected clearance growth to evaluate a succession of neck-directed advances rather than isolated stock removal. Completion gates are in `GOAL.md`.

@@ -12,7 +12,7 @@ from shapely.geometry import Point, box
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, nearby_frontier
+from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, connected_clearance, nearby_frontier
 from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
                                     shifted_roll_ons, tapered_roll_on)
 from tools.hsm_front_run import run_front
@@ -135,6 +135,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         last_heading = tuple(b-a for a, b in zip(previous, last_xy))
     departure = forward_clearance(pocket, remaining, radius, last_xy, last_heading, 2*radius)
     point = Point(last_xy)
+    initial_clearance = connected_clearance(pocket, stock, seed[0], radius)
+    clearance = connected_clearance(pocket, remaining, seed[0], radius)
     frontier = nearby_frontier(pocket, remaining, last_xy, radius, extra_reach=.25)
     return {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
@@ -143,6 +145,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_selection_counts': diagnostics[-1] if diagnostics else {},
             'last_taper_contact_failures': dict(overload_phases.get(len(diagnostics)-1, {})),
             'neckward_removed_mm2': stock.intersection(neck_target).difference(remaining).area,
+            'seed_clearance_gain_mm2': clearance.difference(initial_clearance).area,
+            'seed_clearance_east_x_mm': None if clearance.is_empty else clearance.bounds[2],
+            'seed_clearance_reaches_neck_probe': clearance.covers(Point(36., 23.)),
             'feed_mm': sum(cut.travel_mm for cut in cuts),
             'peak_contact_deg': max((cut.peak_deg for cut in cuts), default=None),
             'last_xy_mm': last_xy,

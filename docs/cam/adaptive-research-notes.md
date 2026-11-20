@@ -323,7 +323,10 @@ ranking alone is not an improvement. All acceptance checks stay unchanged.
 `--with-front-bites` adds eased passes that enter and exit on the cleared
 side of a neck-facing edge. It adds one checked cut and 0.374 mm² of
 neckward removal at unchanged sampled peak. The run still stalls after
-58 cuts with 4,011.16 mm² reachable; it does not establish neck passage.
+58 cuts with 4,011.16 mm² reachable. The seed-connected cutter-center
+component gains another 0.229 mm² over the no-bite baseline and reaches
+X25.998 instead of X25.750. Neither reaches the neck probe at (36, 23).
+These are planar geometric diagnostics, not verified machine routes.
 
 ## Gate before another generator attempt
 
