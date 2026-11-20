@@ -14,3 +14,5 @@
   not cutting data, machine clearance, or physical safety. The 95° corner
   trial threshold is diagnostic only, not a production setting or a conversion
   from the legacy engagement percentage.
+- The two-lobe benchmark subtracts a synthetic seed area in the left lobe.
+  It does not model machining that area or an entry from above the stock.

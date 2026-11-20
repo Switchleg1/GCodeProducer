@@ -30,4 +30,5 @@
 - Offline frontier selection checks a tangent link and live-stock cut before ranking gain per total millimeter. It selects the same candidate in either input order in the fixture and returns no choice for blocked access, overload, or an incompatible same-pose heading.
 - Bounded offline frontier runner updates stock and the tool pose after each accepted cut. A seeded two-pad case removes 2 of 16 mm² over two cuts, then reports a stall with 14 mm² remaining; budget stop and empty stock are separate outcomes.
 - Generating candidates from all sufficiently long exposed edges clears both seeded pads: 16 verified cuts remove all 16 mm², with 42.85° sampled peak and 140.59 mm of checked link plus cut travel. No change to transfer or contact checks.
-- Next: run the same generator on the two-lobe pocket and report where straight-only candidates stall, before adding tangent corner candidates. Completion gates are in `GOAL.md`.
+- `python tools/check_hsm_neck.py` pins the straight-only two-lobe baseline: one 13 mm link-plus-cut removes 3.00 mm² at 42.85° peak; stalls at (22, 28.5) with 4,149.56 mm² of reachable stock left.
+- Next: add candidate rejection diagnostics and compare tangent corner proposals on the same seeded geometry. Completion gates are in `GOAL.md`.
