@@ -9,6 +9,7 @@ from shapely.geometry import LineString, Point, box
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.adaptive_frontier import trace_frontier
 from gcodeproducer.core.cam.adaptive_link import choose_link
 from gcodeproducer.core.cam.adaptive_peel import _turn, choose_peel, evaluate_peel, trace_peels
@@ -65,6 +66,15 @@ def main():
                           min_loop_radius=1.4, max_loop_radius=2.5, turns=8)
     print(f'Wall case: {int(fixed is not None)} fixed start(s), {len(steered)} continuous steered turns; '
           f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
+
+    fresh = box(0, 0, 20, 12)
+    fresh_region = fresh.buffer(-radius)
+    entry = seed_entry(fresh_region, fresh, radius=radius, top=0., depth=-1.)
+    seeded = trace_frontier(entry.points[-1, :2], fresh_region, entry.remaining, turns=2,
+                            pitch=.6, tool_radius=radius, limit=.18, min_loop_radius=.45,
+                            max_loop_radius=.85, cut_feed=800, travel_feed=1200, z_feed=150, lift=3.)
+    print(f'Fresh stock: {fresh.area-entry.remaining.area:.2f} mm² cleared by the entry lap, '
+          f'{sum(c.peel.removed_area for c in seeded):.2f} mm² by {len(seeded)} peels.')
 
     blank = box(0, 0, 30, 30)
     start, via, end = (5, 5), (5, 20), (20, 20)

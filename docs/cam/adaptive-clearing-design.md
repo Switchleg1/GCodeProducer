@@ -91,8 +91,17 @@ last turn's endpoint, with no repositioning cost. In a four-turn test in the
 broad lobe of the example pocket, starting in a pre-cleared patch, it removes
 20.73 mm² at 17.5% peak sampled engagement with one short initial transfer
 and no transfer between turns. This does not yet establish whole-pocket
-coverage or faster machining. Creating safe entries into fresh stock and
-clearing narrow-neck and corner residuals remain open; CAM output is unchanged.
+coverage or faster machining.
+
+`adaptive_entry.py` can now start from fresh stock in the offline prototype.
+It picks an orbit inside the cutter-centre region, limits the descent using
+the actual chord lengths and the shared 10° ramp limit, and finishes a full
+lap at cutting depth before moving to the cleared center. Only the flat lap
+is credited as removed material at that depth. The caller must qualify the
+flat cutter for ramping, flute reach, and safe approach to the stock surface.
+A 20 × 12 mm test cleared 11.29 mm² at depth with the entry and another
+2.79 mm² with two stay-down peels. Whole-pocket completion, especially through
+narrow necks and corners, remains unproven; CAM output is unchanged.
 
 ## Comparison cases and gates
 
