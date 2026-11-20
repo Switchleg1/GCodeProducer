@@ -298,9 +298,9 @@ Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
 **Trochoidal** works outward in a continuous spiral, growing its radius
-while it turns rather than stepping over between closed laps. It clips at
-walls and islands and connects nearby pieces at cutting depth where a
-cutter-clearance route is available.
+while it turns rather than stepping over between closed laps. It uses small
+local spirals for residual corner material and connects pieces at cutting
+depth only where a cleared route or short local approach is available.
 See [Trochoidal clearing](toolpaths.md#trochoidal-clearing).
 
 Historical captures (the clearing menu predates Trochoidal):

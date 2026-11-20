@@ -14,13 +14,17 @@ grows while it turns: stepover sets the growth per revolution (capped at 50%
 of tool diameter), not a separate straight move between laps. The spiral is
 slightly elliptical, oriented along the pocket's bounding rectangle.
 
-Where walls or islands clip the spiral, **Stay down between contours** joins
-nearby pieces at cutting depth whenever it can find a route inside the
-cutter-clearance region. It can link through a recent cut or follow the
-boundary around an obstruction. Boundary cleanup can join the same path.
-Links are classified for engagement like other cutting moves; they are not
-assumed to be empty or traversed at rapid. Disconnected areas, new depth
-passes, and gaps with no verified in-region link still require entry.
+Where clipping leaves short, alternating arcs in a corner, the planner
+checks what the main spiral and wall pass would leave behind. It uses small
+local elliptical spirals in those residual areas and keeps a clipped arc
+only if it is still needed for coverage.
+
+**Stay down between contours** can retrace a recent toolpath or link through
+stock already swept at that depth. A link must fit inside the cutter-clearance
+region, and it may enter unswept stock only over its final stepover. Simply
+fitting inside the pocket is not enough: a long link must not cut a slot.
+Where the search cannot find such a route, the planner retracts and re-enters.
+Links still receive ordinary engagement and feed checks.
 
 The spiral uses short `G1` chords. This is a continuous spiral pocketing
 strategy, not adaptive constant-engagement machining. See Sandvik's

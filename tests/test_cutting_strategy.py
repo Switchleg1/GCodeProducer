@@ -157,7 +157,7 @@ def test_trochoidal_radius_grows_continuously_and_covers_the_corners():
 
     area = box(0, 0, 20, 20)
     paths = trochoidal_paths(area, 3., 0., 40, 'climb')
-    assert len(paths) == 1 and not paths[0].closed
+    assert not paths[0].closed
     seed = paths[0].points[:40] - [10., 10.]
     major = np.abs(seed[0]).argmax()
     axes = np.full(2, .9)
@@ -167,7 +167,7 @@ def test_trochoidal_radius_grows_continuously_and_covers_the_corners():
     angle = np.unwrap(np.arctan2(unit[:, 1], unit[:, 0]))
     distance = np.linalg.norm(unit, axis=1)
     np.testing.assert_allclose(distance, .3 + 1.2*(angle-angle[0])/(2*np.pi), atol=1e-12)
-    assert np.ptp(paths[0].points[:, 0]) == pytest.approx(17.)
+    assert np.ptp(np.vstack([p.points for p in paths])[:, 0]) == pytest.approx(17.)
     sweeps = [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points).buffer(1.49)
               for p in paths]
     assert area.buffer(-1.5).difference(union_all(sweeps)).area < 1e-6
@@ -180,12 +180,43 @@ def test_trochoidal_fronts_and_links_do_not_cross_islands_or_disconnected_areas(
     area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14)).union(box(38.5, 0, 46, 10))
     paths = trochoidal_paths(area, 3., .1, 35, 'climb')
     allowed = area.buffer(-1.6).buffer(1e-7)
-    assert len(paths) == 2  # one continuous path per connected area, never join across the gap
+    assert len(paths) >= 2  # an unsafe connection remains a separate entry
     for path in paths:
         assert not path.closed
         assert allowed.covers(LineString(path.points))
     unlinked = trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False)
     assert len(unlinked) > len(paths)
+
+
+def test_spiral_join_cannot_slot_across_uncut_stock():
+    from shapely.geometry import LineString
+    from shapely.prepared import prep
+    from gcodeproducer.core.cam.trochoidal import _connector
+
+    area = prep(box(0, 0, 20, 20))
+    a, b = np.array([2., 5.]), np.array([16., 5.])
+    # The straight join fits the pocket but not the swept stock.
+    partial = prep(LineString([a, [8., 5.]]).buffer(1.5))
+    assert _connector(a, b, area, [], [], partial, 1.5, 1.2) is None
+    # Previously swept transit and a final, one-stepover approach are allowed.
+    cleared = prep(LineString([a, [14.81, 5.]]).buffer(1.5))
+    np.testing.assert_array_equal(_connector(a, b, area, [], [], cleared, 1.5, 1.2), [a, b])
+
+
+def test_short_corner_arcs_are_replaced_by_local_spirals():
+    from shapely.geometry import LineString
+    from shapely.prepared import prep
+    from gcodeproducer.core.cam.trochoidal import _corner_spirals, _pieces, _spiral
+
+    area = box(1.5, 1.5, 18.5, 18.5)
+    walls = [LineString(area.exterior.coords)]
+    spiral, _ = _spiral(area, 1.2, 1, 100000)
+    global_arcs = _pieces(spiral, area, prep(area.buffer(1e-7)))
+    arcs, samples = _corner_spirals(area, global_arcs, walls, 1.5, 1.2, 1, 100000)
+    assert samples > 0
+    local = [arc for arc in arcs if not any(np.array_equal(arc, old) for old in global_arcs)]
+    assert local and all(prep(area.buffer(1e-7)).covers(LineString(p)) for p in local)
+    assert any(len(p) >= 16 and np.ptp(p[:, 0]) < 5 and np.ptp(p[:, 1]) < 5 for p in local)
 
 
 def test_old_strategy_names_preserve_existing_behaviour():
