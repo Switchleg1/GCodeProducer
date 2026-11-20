@@ -35,6 +35,35 @@ next entry is there. Flag near reversals under engagement, repeated sweeps
 removing negligible material, and long air returns. Plot review complements
 swept-stock replay; a smooth-looking plot cannot override it.
 
+### CamBam Trochoidal Pocket & Profile (MatMill)
+
+The supplied DLL reports file version **2.4.0.0**. Static inspection shows
+symbols for a medial tree, branch slicing, a spiral, and biarc connectors.
+The DLL was not run. The [author's release thread](https://cambamcnc.com/forum/index.php?topic=6209.0)
+links to the [MIT-licensed MatMill repository](https://github.com/jkmnt/matmill).
+The [source snapshot reviewed](https://github.com/jkmnt/matmill/tree/32179008194151e8cee3ae3635170c89eb15f355)
+reports assembly version 2.2.0.0; it is an algorithm reference, not a verified
+source match for the supplied binary or a license audit of its dependencies.
+
+MatMill opens a local cleared area with an expanding spiral, then advances
+circular cutting slices along a **medial tree**. The tree gives each slice a
+reason to be there: it opens more of a known branch toward the pocket ends.
+`topo.cs` builds the tree, `slicer.cs` searches along each branch for the next
+engagement-limited slice, and `path_gen.cs` can connect slices with biarcs or
+chords. This is a concrete alternative to the old planner's local loop search.
+Do not equate its slice engagement estimator with independent swept-stock
+replay: the reviewed source can stop tracing a branch if no slice meets its
+stepover limits. A smooth connector also says nothing about holder clearance.
+
+**Comparison plan:** add MatMill alongside FreeCAD, not behind it. First use
+native CamBam output from a closed pocket with a branch and a long straight
+side, with the entry, cutter and allowance recorded. Plot the spiral, cuts,
+and links separately and replay the actual output against the same stock.
+Then try the two-lobe and off-center island fixtures; record any residual,
+including stock beyond a branch the tool never reaches. Use the medial tree
+as a candidate for organizing local strokes, not as a requirement to slice
+long straights into loops. No DLL dependency or source port at this stage.
+
 ## Proposed design decisions
 
 1. **Separate coverage, load, and linking.** Use stock area removed per path length as a ranking aid; use occupied cutter-periphery angle during ordered stock replay to assess engagement. Neither is a force estimate. Keep legacy percentages separate. A diagnostic circle that straddles a straight stock face before a sweep measures all contact; an actual steady side cut has a previously cleared side. Test both so the metrics aren't accidentally conflated.
