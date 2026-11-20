@@ -46,4 +46,5 @@
 - `--with-taper` tries a parallel-start tapered entry (1.5 mm lateral offset over 4 mm). The two-lobe trial still stalls after 19 cuts with 4,103.77 mm² reachable; the final round adds three start rejections and two contact rejections.
 - Added offline clearance intervals along approach guides. Each returned span passes the full cutter-radius distance checks against stock, outer walls, and protected islands.
 - `--with-clearance-tapers` samples verified approach starts on the two-lobe fixture. Eight additional candidates reach the contact gate but exceed it; the run still stalls after 19 cuts with 4,103.77 mm² reachable.
-- Next: measure where the clearance-based tapers exceed contact to distinguish the approach from the cutting segment. Completion gates are in `GOAL.md`.
+- Chord-indexed diagnostics locate the eight taper failures: four first exceed contact on the straight and four on the curved exit, none on the approach. Accepted path and residual are unchanged.
+- Next: test shorter straight spans ending in an earlier roll-off, using the same contact gate. Completion gates are in `GOAL.md`.

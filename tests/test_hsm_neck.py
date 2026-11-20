@@ -120,3 +120,4 @@ def test_clearance_tapers_find_clear_starts_but_do_not_bypass_contact_limit():
     assert result['cut_count'] == 19 and result['stop'] == 'stalled'
     assert result['reachable_residual_mm2'] == pytest.approx(4103.77, abs=.02)
     assert result['last_selection_counts'] == {'start_clearance': 201, 'contact_limit': 42}
+    assert result['last_taper_contact_failures'] == {'straight': 4, 'exit': 4}

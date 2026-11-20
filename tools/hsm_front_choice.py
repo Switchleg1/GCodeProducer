@@ -20,7 +20,7 @@ class FrontChoice(NamedTuple):
 
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
-                     link_handle, link_margin=0., diagnostics=None, waypoints=()):
+                     link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
     counts = diagnostics if diagnostics is not None else Counter()
 
@@ -75,7 +75,7 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
                 reject('link_clearance')
                 continue
         result = try_front_cut(pocket, stock, cut, radius, contact_limit=contact_limit,
-                               sample_step=sample_step, reject=reject)
+                               sample_step=sample_step, reject=reject, on_overload=on_overload)
         if result is None:
             continue
         counts['eligible'] += 1

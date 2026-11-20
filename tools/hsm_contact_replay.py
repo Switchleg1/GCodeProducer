@@ -15,12 +15,18 @@ def sampled_contact(points, remaining, radius, step, quad_segs):
     measurement is one substep forward, not an entry assessment. The planar
     disk model and finite step are approximations, not a certified bound.
     """
+    for _, angle, distance in indexed_contact(points, remaining, radius, step, quad_segs):
+        yield angle, distance
+
+
+def indexed_contact(points, remaining, radius, step, quad_segs):
+    """Like sampled_contact, with the zero-based chord index prepended."""
     if not math.isfinite(step) or step <= 0:
         raise ValueError('contact step must be positive and finite')
     xs, ys = zip(*points)
     local = remaining.intersection(box(min(xs)-radius, min(ys)-radius,
                                        max(xs)+radius, max(ys)+radius))
-    for start, end in zip(points, points[1:]):
+    for index, (start, end) in enumerate(zip(points, points[1:])):
         distance = math.dist(start, end)
         if not distance:
             continue
@@ -29,7 +35,7 @@ def sampled_contact(points, remaining, radius, step, quad_segs):
         for k in range(1, count+1):
             t = k / count
             pose = end if k == count else tuple(a+(b-a)*t for a, b in zip(start, end))
-            yield contact_angle(pose, radius, local), distance / count
+            yield index, contact_angle(pose, radius, local), distance / count
             if not local.is_empty:
                 local = local.difference(LineString([last, pose]).buffer(radius, quad_segs=quad_segs))
             last = pose

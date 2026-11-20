@@ -6,7 +6,7 @@ from shapely.geometry.polygon import orient
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from tools.check_cambam_pocket import BUFFER_SEGMENTS, CLEAR_AREA_MM2
-from tools.hsm_contact_replay import sampled_contact
+from tools.hsm_contact_replay import indexed_contact
 
 
 def frontier_edges(pocket, stock):
@@ -62,7 +62,7 @@ def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lea
                 yield points
 
 
-def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step, reject=None):
+def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step, reject=None, on_overload=None):
     """Return (updated stock, sampled peak) only for a contained, useful cut.
 
     This trial commits one candidate, not the motion to reach its start. The
@@ -82,8 +82,10 @@ def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step, 
             reject('no_removal')
         return None
     peak = 0.
-    for angle, _ in sampled_contact(points, stock, radius, sample_step, BUFFER_SEGMENTS):
+    for segment, angle, _ in indexed_contact(points, stock, radius, sample_step, BUFFER_SEGMENTS):
         if angle > contact_limit:
+            if on_overload is not None:
+                on_overload(points, segment, angle)
             if reject is not None:
                 reject('contact_limit')
             return None

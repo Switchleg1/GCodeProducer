@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from shapely import from_wkt, union_all
@@ -49,7 +50,17 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                 if path is not None:
                     yield path
 
+    taper_candidate = None
+    taper_chords = 0
+    overload_phases = defaultdict(Counter)
+
+    def report_overload(round_index, path, segment, _angle):
+        if path is taper_candidate:
+            phase = 'approach' if segment < taper_chords else 'straight' if segment == taper_chords else 'exit'
+            overload_phases[round_index][phase] += 1
+
     def propose_shallow(live, _pose):
+        nonlocal taper_candidate, taper_chords
         for path in straight_front_candidates(pocket, live, radius, .25, min_edge=2., lead=2., runoff=shallow_runoff):
             cut = roll_off(path, shallow_rolloff, .0025) if shallow_rolloff else path
             yield cut
@@ -60,7 +71,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             if with_taper:
                 yield tapered_roll_on(cut, 1.5, 4., .0025)
             if with_clearance_tapers:
-                yield from clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025)
+                for taper in clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025):
+                    taper_candidate = taper
+                    taper_chords = len(taper) - len(cut)
+                    yield taper
+                    taper_candidate = None
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -72,7 +87,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
                                        waypoints=waypoints,
                                        propose_waypoints=propose_waypoints if with_live_detours else None,
-                                       propose_on_stall=propose_shallow if with_shallow_fronts else None)
+                                       propose_on_stall=propose_shallow if with_shallow_fronts else None,
+                                       on_overload=report_overload if with_clearance_tapers else None)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -82,6 +98,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'initial_stock_mm2': stock.area, 'removed_mm2': stock.area - remaining.area,
             'reachable_residual_mm2': remaining.intersection(reachable).area,
             'last_selection_counts': diagnostics[-1] if diagnostics else {},
+            'last_taper_contact_failures': dict(overload_phases.get(len(diagnostics)-1, {})),
             'feed_mm': sum(cut.travel_mm for cut in cuts),
             'peak_contact_deg': max((cut.peak_deg for cut in cuts), default=None),
             'last_xy_mm': last_xy,

@@ -284,6 +284,9 @@ holes. This identifies where an approach can start; it does not verify the
 link to that start or the cut that follows. `--with-clearance-tapers` samples
 those intervals for the two-lobe trial. Eight additional candidates pass the
 access checks but fail sampled contact, leaving the 19-cut stall unchanged.
+`last_taper_contact_failures` identifies the first over-limit chord per
+rejected taper: four on the straight and four on the curved exit, none on
+the approach. The diagnostic does not continue sampling a rejected cut.
 
 ## Gate before another generator attempt
 
