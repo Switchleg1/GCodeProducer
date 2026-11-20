@@ -5,6 +5,8 @@ from shapely.geometry import LineString
 from shapely.geometry.polygon import orient
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
+from tools.check_cambam_pocket import BUFFER_SEGMENTS, CLEAR_AREA_MM2
+from tools.hsm_contact_replay import sampled_contact
 
 
 def frontier_edges(pocket, stock):
@@ -47,3 +49,26 @@ def straight_advance(pocket, edge, radius, immersion, *, lead=0.):
               (bx + ty*offset, by - tx*offset)]
     axis = LineString(points)
     return points if pocket.covers(axis) and axis.distance(pocket.boundary) >= radius else None
+
+
+def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step):
+    """Return (updated stock, sampled peak) only for a contained, useful cut.
+
+    This trial commits one candidate, not the motion to reach its start. The
+    sampled limit is a diagnostic; resolution must be checked separately.
+    """
+    if (not math.isfinite(radius) or radius <= 0 or not 0 < contact_limit <= 360
+            or not math.isfinite(sample_step) or sample_step <= 0):
+        raise ValueError('invalid cutter radius, contact limit, or sample spacing')
+    axis = LineString(points)
+    if not axis.length or not pocket.covers(axis) or axis.distance(pocket.boundary) < radius:
+        return None
+    sweep = axis.buffer(radius, quad_segs=BUFFER_SEGMENTS)
+    if stock.intersection(sweep).area <= CLEAR_AREA_MM2:
+        return None
+    peak = 0.
+    for angle, _ in sampled_contact(points, stock, radius, sample_step, BUFFER_SEGMENTS):
+        if angle > contact_limit:
+            return None
+        peak = max(peak, angle)
+    return stock.difference(sweep), peak

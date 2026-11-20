@@ -24,4 +24,5 @@
 - Offline center-region map splits the two-lobe fixture into one component for a 4 mm cutter and two for a 14 mm cutter; a separate test rejects a zero-width neck connection after applying clearance margin.
 - The offline work map assigns accessible stock and checks supplied seed poses against the boundary and live stock. With only a left-side cleared seed, the split right lobe needs its own entry or verified seed; an empty lobe does not.
 - Offline linear-front proposal extracts exposed stock edges (not pocket walls) and offsets a directed side cut. In the straight fixture the 19 mm stroke removed 4.61 mm² at 42.3° sampled peak; extending to the wall was rejected.
-- Next: advance the straight front against updated stock and connect it to the corner trial without unchecked cutting transitions. Completion gates are in `GOAL.md`.
+- Offline front-cut gate commits only useful, contained strokes under the sampled contact limit. Two accepted 0.25 mm side cuts move the live front from Y5 to Y5.5; overloaded and zero-removal proposals commit nothing.
+- Next: apply the same transactional gate to a tangent straight-to-corner candidate so the connector and corner are checked as one cut. Completion gates are in `GOAL.md`.

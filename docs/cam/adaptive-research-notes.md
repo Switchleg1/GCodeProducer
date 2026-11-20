@@ -206,7 +206,10 @@ envelopes can overlap, so use their union for total reachable stock.
 on the left and proposes a straight side cut at a specified radial
 immersion. The straight fixture removes 4.61 mm² in a 19 mm stroke at
 42.3° sampled peak; the untrimmed stroke into the end wall is rejected.
-This is a proposal, not a clearance check for entry or a coverage planner.
+The offline front-cut gate rejects overload, out-of-bounds sweeps and
+zero-removal passes before updating stock. The straight fixture recomputes
+the stock edge after each accepted cut and advances it twice by 0.25 mm.
+This does not validate travel to the start of either stroke.
 
 ## Gate before another generator attempt
 

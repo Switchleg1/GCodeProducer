@@ -4,7 +4,7 @@ import pytest
 from shapely.geometry import box
 
 from tools.check_cambam_pocket import replay_strokes
-from tools.hsm_straight_front import frontier_edges, straight_advance
+from tools.hsm_straight_front import frontier_edges, straight_advance, try_front_cut
 
 
 def test_straight_front_advances_at_low_contact():
@@ -24,6 +24,22 @@ def test_straight_front_advances_at_low_contact():
     assert report['outside_pocket_sweep_mm2'] == 0.
     assert 4.5 < rows[0]['removed_stock_mm2'] < 5.
     assert 40. < report['sampled_peak_contact_deg'] < 60.
+
+
+def test_committed_cut_exposes_a_new_front_and_rejects_overload():
+    pocket = box(0, 0, 24, 12)
+    stock = box(4, 5, 24, 12)
+    first = straight_advance(pocket, ((4., 5.), (22., 5.)), 1., .25, lead=1.)
+    assert try_front_cut(pocket, stock, first, 1., contact_limit=30., sample_step=.025) is None
+    after, peak = try_front_cut(pocket, stock, first, 1., contact_limit=60., sample_step=.025)
+    assert peak < 60. and stock.area == 140.
+    assert ((4., 5.25), (22., 5.25)) in list(frontier_edges(pocket, after))
+    assert try_front_cut(pocket, after, first, 1., contact_limit=60., sample_step=.025) is None
+    second = straight_advance(pocket, ((4., 5.25), (21.5, 5.25)), 1., .25, lead=1.)
+    final, second_peak = try_front_cut(pocket, after, second, 1., contact_limit=60., sample_step=.025)
+    assert after.area - final.area > 4.
+    assert second_peak < 60.
+    assert ((4., 5.5), (21.5, 5.5)) in list(frontier_edges(pocket, final))
 
 
 def test_stock_hole_is_an_interior_frontier_not_a_pocket_wall():
