@@ -49,4 +49,5 @@
 - Chord-indexed diagnostics locate the eight taper failures: four first exceed contact on the straight and four on the curved exit, none on the approach. Accepted path and residual are unchanged.
 - `--with-early-exits` checks tapered cuts with roll-offs 1 or 2 mm earlier. The trial stalls after 15 cuts at an uncleared endpoint, leaving 4,104.81 mm² reachable versus 4,103.77 mm² for the baseline. Peak sampled contact stays below 60°.
 - `--require-clear-exit` checks the endpoint against post-cut stock before ranking. With early exits enabled, the trial advances from 15 to 23 cuts, removes 77.69 mm², and stalls with 4,074.87 mm² reachable. Sampled peak is 56.64° under the unchanged 60° limit.
-- Next: identify which live-stock frontier remains accessible from the final clear pose, rather than tuning more exit variants. Completion gates are in `GOAL.md`.
+- The final clear pose's connected clearance component has 76.37 mm of nearby stock frontier within cutter radius plus 0.25 mm. Its bounds end at X25 mm: it is still local to the left side. This is geometric proximity, not a checked route or cut.
+- Next: use the mapped frontier to test cuts that advance the left-side cleared area toward the neck. Completion gates are in `GOAL.md`.

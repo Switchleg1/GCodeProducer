@@ -12,7 +12,7 @@ from shapely.geometry import Point, box
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions
+from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, nearby_frontier
 from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
                                     shifted_roll_ons, tapered_roll_on)
 from tools.hsm_front_run import run_front
@@ -107,6 +107,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     point = Point(last_xy)
+    frontier = nearby_frontier(pocket, remaining, last_xy, radius, extra_reach=.25)
     return {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
             'initial_stock_mm2': stock.area, 'removed_mm2': stock.area - remaining.area,
@@ -116,6 +117,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'feed_mm': sum(cut.travel_mm for cut in cuts),
             'peak_contact_deg': max((cut.peak_deg for cut in cuts), default=None),
             'last_xy_mm': last_xy,
+            'nearby_frontier_mm': frontier.length,
+            'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
 

@@ -295,6 +295,10 @@ travel at unequal coverage is not a timing improvement. Adding
 cutter disk against post-cut stock and the pocket boundary. The gated
 trial makes 23 cuts and leaves 4,074.87 mm² reachable, with a 56.64° sampled
 peak. A clear exit does not guarantee that another eligible cut exists.
+`nearby_frontier_mm` measures exposed stock edges within cutter radius
+plus 0.25 mm of the clearance component containing the last pose. This
+trial reports 76.37 mm, all between X3.5 and X25 mm. It is a geometric
+neighborhood, not verified stay-down travel or proof of machinability.
 
 ## Gate before another generator attempt
 

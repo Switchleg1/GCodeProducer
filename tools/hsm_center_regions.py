@@ -55,6 +55,28 @@ def cleared_start_intervals(pocket, stock, start, end, radius, *, margin=0.):
     return tuple(sorted(intervals))
 
 
+def nearby_frontier(pocket, stock, xy, radius, *, extra_reach):
+    """Map stock edges near the pose's connected planar clearance component.
+
+    This is a geometric neighborhood, not a verified link or cutting plan.
+    """
+    if not math.isfinite(extra_reach) or extra_reach < 0:
+        raise ValueError('expected nonnegative extra reach')
+    point = Point(xy)
+    regions = center_regions(pocket, radius)
+    if (not pocket.covers(point) or point.distance(pocket.boundary) < radius
+            or (not stock.is_empty and point.distance(stock) < radius)):
+        return LineString()
+    excluded = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
+    components = [part for region in regions for part in polygons(region.difference(excluded))
+                  if part.covers(point)]
+    if len(components) != 1:
+        return LineString()
+    exposed = stock.intersection(pocket).boundary.difference(pocket.boundary)
+    neighborhood = components[0].buffer(radius + extra_reach, quad_segs=CENTER_BUFFER_SEGMENTS)
+    return exposed.intersection(neighborhood)
+
+
 def region_at(regions, xy):
     """Return the component index for a uniquely assigned seed, else None."""
     point = Point(xy)

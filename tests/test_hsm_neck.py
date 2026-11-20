@@ -141,6 +141,8 @@ def test_clear_exit_gate_advances_past_early_exit_stall():
                         require_clear_exit=True)
     assert result['cut_count'] == 23 and result['stop'] == 'stalled'
     assert result['reachable_residual_mm2'] == pytest.approx(4074.87, abs=.02)
+    assert result['nearby_frontier_mm'] == pytest.approx(76.37, abs=.02)
+    assert result['nearby_frontier_bounds_mm'][2] == pytest.approx(25.)
     assert result['last_selection_counts']['exit_clearance'] > 0
     assert 'origin_clearance' not in result['last_selection_counts']
     assert min(result['last_stock_distance_mm'], result['last_wall_distance_mm']) >= 2.
