@@ -277,6 +277,11 @@ it does not change production settings or establish coverage. Adding
 `--with-taper` tests a parallel-start approach tapering 1.5 mm laterally
 over 4 mm. It does not improve this stall: three additional starts fail
 clearance and two further candidates exceed the sampled contact limit.
+The offline `cleared_start_intervals` helper now clips an approach guide to
+live cutter-center clearance. Each returned span passes full-segment
+distance checks against remaining stock and the pocket boundary, including
+holes. This identifies where an approach can start; it does not verify the
+link to that start or the cut that follows.
 
 ## Gate before another generator attempt
 

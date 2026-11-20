@@ -2,7 +2,8 @@
 import math
 from typing import NamedTuple
 
-from shapely.geometry import Point, Polygon
+from shapely import get_parts
+from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
@@ -23,6 +24,35 @@ def center_regions(pocket, radius, *, margin=0.):
         raise ValueError('expected valid planar pocket polygons')
     centers = pocket.buffer(-(radius + margin), quad_segs=CENTER_BUFFER_SEGMENTS)
     return tuple(sorted((p for p in polygons(centers) if p.area > 0), key=lambda p: p.bounds))
+
+
+def cleared_start_intervals(pocket, stock, start, end, radius, *, margin=0.):
+    """Clip a straight guide to live clearance and return verified intervals in guide order.
+
+    Rounded buffer approximations propose intervals; a full-segment distance
+    check rejects any that cannot carry the complete cutter disk. These are
+    candidate start zones, not a route to them from the current pose.
+    """
+    regions = center_regions(pocket, radius, margin=margin)
+    guide = LineString((start, end))
+    if not guide.length:
+        return ()
+    required = radius + margin
+    # Pad the exclusion radius for the inscribed chords of round buffers.
+    padded = required / math.cos(math.pi / (4 * CENTER_BUFFER_SEGMENTS))
+    excluded = stock.buffer(padded, quad_segs=CENTER_BUFFER_SEGMENTS)
+    walls = pocket.boundary
+    intervals = []
+    for region in regions:
+        for part in get_parts(guide.intersection(region.difference(excluded))):
+            if (part.geom_type != 'LineString' or not part.length or not pocket.covers(part)
+                    or part.distance(walls) < required
+                    or (not stock.is_empty and part.distance(stock) < required)):
+                continue
+            a, b = sorted((guide.project(Point(part.coords[i])) for i in (0, -1)))
+            if b > a:
+                intervals.append((a, b))
+    return tuple(sorted(intervals))
 
 
 def region_at(regions, xy):

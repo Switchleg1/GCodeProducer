@@ -4,10 +4,28 @@ import pytest
 from shapely import from_wkt
 from shapely.geometry import Point, box
 
-from tools.hsm_center_regions import center_regions, map_region_work, region_at
+from tools.hsm_center_regions import center_regions, cleared_start_intervals, map_region_work, region_at
 
 
 NECK_POCKET = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
+
+
+def test_start_intervals_split_at_stock_and_keep_guide_order():
+    pocket = box(0, 0, 20, 10)
+    stock = box(8, 3, 11, 7)
+    intervals = cleared_start_intervals(pocket, stock, (20, 5), (0, 5), 1., margin=.25)
+    assert len(intervals) == 2
+    assert intervals[0] == pytest.approx((1.25, 7.75), abs=.001)
+    assert intervals[1] == pytest.approx((13.25, 18.75), abs=.001)
+    assert cleared_start_intervals(pocket, stock, (0, .9), (20, .9), 1.) == ()
+
+
+def test_start_intervals_exclude_protected_island_even_without_stock():
+    pocket = box(0, 0, 20, 10).difference(box(8, 3, 11, 7))
+    empty_stock = pocket.difference(pocket)
+    intervals = cleared_start_intervals(pocket, empty_stock, (0, 5), (20, 5), 1.)
+    assert intervals == ((1., 7.), (12., 19.))
+    assert cleared_start_intervals(pocket, empty_stock, (2, 5), (2, 5), 1.) == ()
 
 
 def test_neck_connects_small_cutter_but_splits_larger_cutter():
