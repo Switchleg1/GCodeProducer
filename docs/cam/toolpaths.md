@@ -30,6 +30,8 @@ The spiral uses short `G1` chords. This is a continuous spiral pocketing
 strategy, not adaptive constant-engagement machining. See Sandvik's
 [trochoidal milling definition](https://www.sandvik.coromant.com/en-gb/knowledge/milling/milling-holes-cavities-pockets/slicing-trochoidal-milling)
 and the [spiral pocketing research at the University of Salzburg](https://www.cosy.sbg.ac.at/~held/projects/hsm/hsm.html).
+For the proposed engagement-driven replacement and benchmark outline, see
+[Adaptive clearing: design and comparison cases](adaptive-clearing-design.md).
 
 ## Wall-parallel contours (default clearing strategy)
 
