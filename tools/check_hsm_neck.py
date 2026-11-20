@@ -17,13 +17,14 @@ from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_
                                     shifted_roll_ons, tapered_roll_on)
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
-from tools.hsm_straight_front import straight_front_candidates
+from tools.hsm_straight_front import frontier_edges, straight_advance, straight_front_candidates
 
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
-               with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False):
+               with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
+               with_neck_front=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -38,6 +39,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('tapered approaches require shallow proposals')
     if with_early_exits and not (with_clearance_tapers and shallow_rolloff):
         raise ValueError('early exits require clearance tapers and a roll-off radius')
+    if with_neck_front and not (with_shallow_fronts and shallow_rolloff):
+        raise ValueError('neck-front proposals require shallow fronts and roll-off')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
     pocket = from_wkt(fixture.read_text(encoding='utf-8'))
     cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
@@ -62,7 +65,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             phase = 'approach' if segment < taper_chords else 'straight' if segment == taper_chords else 'exit'
             overload_phases[round_index][phase] += 1
 
-    def propose_shallow(live, _pose):
+    def propose_shallow(live, pose):
         nonlocal taper_candidate, taper_chords
         for path in straight_front_candidates(pocket, live, radius, .25, min_edge=2., lead=2., runoff=shallow_runoff):
             cut = roll_off(path, shallow_rolloff, .0025) if shallow_rolloff else path
@@ -89,6 +92,19 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                         taper_chords = len(taper) - len(variant)
                         yield taper
                         taper_candidate = None
+
+        if with_neck_front:
+            front = nearby_frontier(pocket, live, pose[0], radius, extra_reach=.25)
+            if not front.is_empty:
+                _, y0, x1, y1 = front.bounds
+                focus = front.intersection(box(x1-3., y0-1., x1+1., y1+1.))
+                for edge in frontier_edges(pocket, live, focus=focus):
+                    if math.dist(*edge) < 2.:
+                        continue
+                    path = straight_advance(pocket, edge, radius, .25)
+                    if path is not None:
+                        cut = roll_off(path, shallow_rolloff, .0025)
+                        yield from clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -144,6 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--with-early-exits', action='store_true', help='try rolling off clearance tapers 1 or 2 mm earlier')
     parser.add_argument('--require-clear-exit', action='store_true',
                         help='reject cuts that end without planar link clearance')
+    parser.add_argument('--with-neck-front', action='store_true', help='also try the east side of mapped live frontier')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -152,7 +169,7 @@ if __name__ == '__main__':
                             shallow_rolloff=args.shallow_rolloff, shallow_rollon=args.shallow_rollon,
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
-                            require_clear_exit=args.require_clear_exit)
+                            require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

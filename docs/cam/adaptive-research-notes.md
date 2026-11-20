@@ -299,6 +299,9 @@ peak. A clear exit does not guarantee that another eligible cut exists.
 plus 0.25 mm of the clearance component containing the last pose. This
 trial reports 76.37 mm, all between X3.5 and X25 mm. It is a geometric
 neighborhood, not verified stay-down travel or proof of machinability.
+`--with-neck-front` tries the easternmost 3 mm of this map. On the clear-exit
+benchmark, two additional proposals reach the link check but fail it. The
+trial still stalls after 23 cuts, leaving 4,074.87 mm² reachable stock.
 
 ## Gate before another generator attempt
 

@@ -9,8 +9,8 @@ from tools.check_cambam_pocket import BUFFER_SEGMENTS, CLEAR_AREA_MM2
 from tools.hsm_contact_replay import indexed_contact
 
 
-def frontier_edges(pocket, stock):
-    """Yield straight frontier edges with stock on the left; omit pocket walls."""
+def frontier_edges(pocket, stock, *, focus=None):
+    """Yield stock-left frontier edges, optionally clipped to a mapped focus."""
     walls = pocket.boundary
     for part in polygons(stock.intersection(pocket)):
         oriented = orient(part, sign=1.)
@@ -21,6 +21,8 @@ def frontier_edges(pocket, stock):
                     continue
                 edge = LineString((start, end))
                 exposed = edge.difference(walls)
+                if focus is not None:
+                    exposed = exposed.intersection(focus)
                 pieces = exposed.geoms if exposed.geom_type == 'MultiLineString' else (exposed,)
                 for piece in pieces:
                     if piece.is_empty or piece.geom_type != 'LineString':

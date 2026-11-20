@@ -147,3 +147,13 @@ def test_clear_exit_gate_advances_past_early_exit_stall():
     assert 'origin_clearance' not in result['last_selection_counts']
     assert min(result['last_stock_distance_mm'], result['last_wall_distance_mm']) >= 2.
     assert result['peak_contact_deg'] < 60.
+
+
+def test_eastern_front_adds_proposals_but_does_not_bypass_link_checks():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
+                        with_shifted_joins=True, max_cuts=48, with_clearance_tapers=True, with_early_exits=True,
+                        require_clear_exit=True, with_neck_front=True)
+    assert result['cut_count'] == 23 and result['stop'] == 'stalled'
+    assert result['reachable_residual_mm2'] == pytest.approx(4074.87, abs=.02)
+    assert result['last_selection_counts']['link_clearance'] == 24
