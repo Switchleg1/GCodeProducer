@@ -11,7 +11,7 @@ def test_straight_only_two_lobe_baseline_preserves_residual_on_stall():
     assert result['reachable_residual_mm2'] == pytest.approx(4149.56, abs=.02)
     assert result['peak_contact_deg'] < 60.
     assert result['last_xy_mm'] == (22., 28.5)
-    assert result['last_selection_counts'] == {'link_clearance': 6, 'contact_limit': 3}
+    assert result['last_selection_counts'] == {'start_clearance': 5, 'link_clearance': 1, 'contact_limit': 3}
 
 
 def test_corner_proposals_improve_coverage_but_do_not_hide_a_stall():
@@ -82,4 +82,4 @@ def test_earlier_shallow_rolloff_reaches_a_checked_origin():
     assert result['last_wall_distance_mm'] > 2.
     assert result['peak_contact_deg'] < 60.
     assert 'origin_clearance' not in result['last_selection_counts']
-    assert result['last_selection_counts']['link_clearance'] > 0
+    assert result['last_selection_counts'] == {'start_clearance': 78, 'contact_limit': 5, 'cut_boundary': 1}

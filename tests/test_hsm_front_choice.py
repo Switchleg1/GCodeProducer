@@ -47,6 +47,18 @@ def test_counts_first_failed_gate_without_changing_selection():
     assert counts == {'cut_boundary': 1, 'no_removal': 1, 'contact_limit': 1}
 
 
+def test_distinguishes_blocked_start_from_blocked_link_interior():
+    pocket, stock = box(0, 0, 24, 18), box(5, 5, 15, 12)
+    xy = (2., 4.25)
+    stock = stock.union(box(2.95, 5.1, 3.05, 5.2))
+    counts = Counter()
+    choice = choose_front_cut(pocket, stock, (xy, (1., 0.)),
+                              [[(4., 4.25), (12., 4.25)], [(6., 4.25), (12., 4.25)]],
+                              1., contact_limit=60., sample_step=.05, link_handle=.5, diagnostics=counts)
+    assert choice is None
+    assert counts == {'link_clearance': 1, 'start_clearance': 1}
+
+
 def test_same_pose_is_not_a_bypass_for_clearance_or_heading():
     pocket, stock = box(0, 0, 24, 18), box(5, 5, 15, 12)
     cut = [(4., 4.25), (12., 4.25)]

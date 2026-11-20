@@ -31,10 +31,15 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
     if (not all(map(math.isfinite, (radius, link_margin, link_handle)))
             or radius <= 0 or link_margin < 0 or link_handle <= 0):
         raise ValueError('invalid cutter radius, link margin or handle')
-    origin = Point(xy)
     clearance = radius + link_margin
-    if (not pocket.covers(origin) or origin.distance(pocket.boundary) < clearance
-            or (not stock.is_empty and origin.distance(stock) < clearance)):
+    walls = pocket.boundary
+
+    def clear_at(position):
+        point = Point(position)
+        return (pocket.covers(point) and point.distance(walls) >= clearance
+                and (stock.is_empty or point.distance(stock) >= clearance))
+
+    if not clear_at(xy):
         reject('origin_clearance')
         return None
     waypoints = tuple(waypoints)
@@ -56,6 +61,9 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
                 continue
             link = [xy]
         else:
+            if not clear_at(cut[0]):
+                reject('start_clearance')
+                continue
             link = cleared_tangent_link(pocket, stock, radius, xy, cut[0], heading, incoming,
                                         link_handle, margin=link_margin)
             if link is None and waypoints:

@@ -39,4 +39,5 @@
 - `--with-shallow-fronts` retries with 0.25 mm straight immersion only when normal proposals fail. It adds one checked cut (2.46 mm²) at unchanged peak, leaving 4,121.14 mm². The new endpoint is 1.999849 mm from stock and fails the 2 mm origin check.
 - `--shallow-runoff 2.5` adds 0.375 mm² of removal versus 2 mm runoff, but the endpoint still misses 2 mm stock clearance. At 3–4.5 mm runoff no shallow retry is accepted. Checks and engagement limit are unchanged.
 - A tangent quarter-turn at 1 mm runoff and 1 mm roll-off radius ends 2.455 mm from live stock under unchanged checks. The trial still stalls after 10 cuts, but now tests transfers from a clear origin; 4,121.69 mm² remain.
-- Next: distinguish inaccessible candidate starts from blocked intermediate link shapes at the new stall. Completion gates are in `GOAL.md`.
+- At the curved-exit stall, 78 proposals fail cutter clearance at their start, five fail contact and one fails the cut boundary. No proposal with a clear start fails along its link. Accepted cuts and residual are unchanged.
+- Next: generate shallow tangent approaches from cleared starts instead of spending more trials on intermediate link geometry. Completion gates are in `GOAL.md`.

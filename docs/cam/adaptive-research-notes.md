@@ -260,7 +260,10 @@ retry passes selection. The extra straight travel is not an exit strategy;
 no clearance or contact gate was relaxed. With `--shallow-runoff 1
 --shallow-rolloff 1`, the shallow retry follows a checked tangent quarter-turn
 away from the frontier. It ends 2.455 mm from stock at unchanged peak sampled
-contact. The next selection still stalls, but not on origin clearance.
+contact. The next selection still stalls: 78 proposals fail clearance at the cut
+start, five exceed contact and one fails the cut boundary. None fail along
+the link after both endpoints clear. Trying more intermediate waypoints
+cannot fix blocked starts.
 
 ## Gate before another generator attempt
 
