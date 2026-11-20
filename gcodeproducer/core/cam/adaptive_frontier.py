@@ -90,7 +90,7 @@ def discover_starts(position, region, material, *, pitch, tool_radius,
 
 def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limit,
                          min_loop_radius, max_loop_radius, cut_feed, travel_feed, z_feed,
-                         lift, waypoints=(), sense=1, continuation=None):
+                         lift, waypoints=(), sense=1, continuation=None, expand=False):
     """Discover and rank one next cut; no new Z entry or coverage guarantee."""
     starts = discover_starts(position, region, material, pitch=pitch, tool_radius=tool_radius,
                              min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius, sense=sense)
@@ -99,7 +99,7 @@ def choose_frontier_peel(position, region, material, *, pitch, tool_radius, limi
     return choose_branch(position, starts, region, material, pitch=pitch, tool_radius=tool_radius,
                          limit=limit, min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius,
                          cut_feed=cut_feed, travel_feed=travel_feed, z_feed=z_feed, lift=lift,
-                         waypoints=waypoints, sense=sense)
+                         waypoints=waypoints, sense=sense, expand=expand)
 
 
 def trace_frontier(position, region, material, *, turns, **settings):

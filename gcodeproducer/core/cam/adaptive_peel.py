@@ -82,7 +82,7 @@ def evaluate_peel(points, material, radius, *, abort_above=1.):
 
 def choose_peel(centre, seam, axis, pitch, tool_radius, limit, region, material, *, sense=1,
                 factors=ADAPTIVE_PEEL_ADVANCE_FACTORS, headings=(0.,), radii=(1.,),
-                min_loop_radius=None, max_loop_radius=None):
+                min_loop_radius=None, max_loop_radius=None, expand=False):
     """Choose a legal useful turn by sampled engagement and removal per travel.
 
     ``region`` is already inset for cutter radius and allowance. Returns None
@@ -113,33 +113,41 @@ def choose_peel(centre, seam, axis, pitch, tool_radius, limit, region, material,
     axis = axis/norm
     side = np.array([-axis[1], axis[0]])
     best = None
+
+    def consider(advance, step, scale):
+        nonlocal best
+        points = _turn(centre, seam, advance, sense, tool_radius, scale)
+        if not valid.covers(LineString(points)):
+            return
+        outcome = evaluate_peel(points, material, tool_radius, abort_above=limit)
+        if outcome is None:
+            return
+        peak, area, length, remaining = outcome
+        if area > 1e-8 and length > 0 and (best is None or area/length > best.removed_area/best.length):
+            best = PeelChoice(points, centre+advance, seam*scale, step, peak, area, length, remaining)
+
     for heading in headings:
         angle = math.radians(heading)
         direction = math.cos(angle)*axis + math.sin(angle)*side
         for scale in scales:
             for factor in factors:
                 step = pitch*factor
-                advance = direction*step
-                points = _turn(centre, seam, advance, sense, tool_radius, scale)
-                if not valid.covers(LineString(points)):
-                    continue
-                outcome = evaluate_peel(points, material, tool_radius, abort_above=limit)
-                if outcome is None:
-                    continue
-                peak, area, length, remaining = outcome
-                if area <= 1e-8 or length <= 0:
-                    continue
-                if best is None or area/length > best.removed_area/best.length:
-                    best = PeelChoice(points, centre+advance, seam*scale, step, peak, area, length, remaining)
+                consider(direction*step, step, scale)
+    if expand and high > radius + 1e-9:
+        # In a broad patch, grow the cutting front all the way around the
+        # cleared core rather than constantly translating a small loop.
+        grown = dict.fromkeys(min(high, radius+pitch*factor) for factor in factors)
+        for end_radius in grown:
+            consider(np.zeros(2), 0., end_radius/radius)
     return best
 
 
 def choose_steered_peel(centre, seam, axis, pitch, tool_radius, limit, region, material, *,
-                        min_loop_radius, max_loop_radius, sense=1):
+                        min_loop_radius, max_loop_radius, sense=1, expand=False):
     """Search a small fan around the requested heading, with bounded changes in loop size."""
     return choose_peel(centre, seam, axis, pitch, tool_radius, limit, region, material, sense=sense,
                        headings=ADAPTIVE_PEEL_HEADINGS, radii=ADAPTIVE_PEEL_RADIUS_FACTORS,
-                       min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius)
+                       min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius, expand=expand)
 
 
 def trace_peels(centre, seam, axis, pitch, tool_radius, limit, region, material, *,

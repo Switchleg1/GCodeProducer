@@ -30,6 +30,26 @@ def test_peel_reduces_advance_when_requested_turn_overloads(peel_case):
     assert choice.length > 2*np.pi*np.linalg.norm(seam)
 
 
+def test_expanding_peel_opens_more_stock_in_wide_area(peel_case):
+    centre, seam, region, _, material = peel_case
+    args = (centre, seam, (1, 0), 1., 1., .18, region, material)
+    translated = choose_peel(*args, min_loop_radius=2., max_loop_radius=3.)
+    expanded = choose_peel(*args, min_loop_radius=2., max_loop_radius=3., expand=True)
+    assert expanded.advance == 0. and expanded.peak_engagement <= .18
+    np.testing.assert_array_equal(expanded.centre, centre)
+    np.testing.assert_array_equal(expanded.points[0], centre+seam)
+    np.testing.assert_array_equal(expanded.points[-1], centre+expanded.seam)
+    assert np.linalg.norm(expanded.seam) == pytest.approx(3.)
+    assert expanded.removed_area/expanded.length > translated.removed_area/translated.length
+    assert region.covers(LineString(expanded.points))
+    narrowed = box(2., 2., 12.4, 18.)
+    restricted = choose_peel(centre, seam, (1, 0), 1., 1., .18, narrowed, material,
+                             min_loop_radius=2., max_loop_radius=3., expand=True)
+    if restricted is not None:
+        assert narrowed.buffer(1e-7).covers(LineString(restricted.points))
+        assert np.linalg.norm(restricted.seam) < 3.
+
+
 def test_peel_uses_updated_stock_and_restarts_at_same_seam(peel_case):
     centre, seam, region, _, material = peel_case
     first = choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material)

@@ -10,6 +10,7 @@ from shapely.geometry import LineString, Point, box
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from gcodeproducer.core.cam.adaptive_branch import BranchChoice
 from gcodeproducer.core.cam.adaptive_entry import AdaptiveEntry
 from gcodeproducer.core.cam.adaptive_pocket import plan_pocket
 from gcodeproducer.core.cam.adaptive_frontier import trace_frontier
@@ -75,14 +76,20 @@ def main():
           f'{sum(p.removed_area for p in steered):.2f} mm² removed.')
 
     fresh_region = pocket.buffer(-radius)
-    result = plan_pocket(fresh_region, pocket, top=0., depth=-1., lead_angle=4., entry_budget=2,
-                         turn_budget=args.pocket_turns, pitch=.6, tool_radius=radius, limit=.18,
-                         min_loop_radius=.45, max_loop_radius=.85, cut_feed=800, travel_feed=1200,
-                         z_feed=150, lift=3.)
-    entries = sum(isinstance(s, AdaptiveEntry) for s in result.steps)
-    print(f'Fresh two-lobe pocket: {result.status}, {entries} entries, {len(result.steps)-entries} peels; '
-          f'{result.initial_area-result.residual_area:.2f} mm² removed; '
-          f'{result.residual_area:.2f} mm² reachable stock remains.')
+    print('Fresh two-lobe pocket: same entry, pitch, engagement limit, and turn budget.')
+    for label, max_radius, expand in (('Small loops', .85, False), ('Larger loops', 3., False),
+                                      ('Larger + expanding loops', 3., True)):
+        result = plan_pocket(fresh_region, pocket, top=0., depth=-1., lead_angle=4., entry_budget=2,
+                             turn_budget=args.pocket_turns, pitch=.6, tool_radius=radius, limit=.18,
+                             min_loop_radius=.45, max_loop_radius=max_radius, cut_feed=800, travel_feed=1200,
+                             z_feed=150, lift=3., expand=expand)
+        entries = sum(isinstance(s, AdaptiveEntry) for s in result.steps)
+        cuts = [s.peel for s in result.steps if isinstance(s, BranchChoice)]
+        print(f'{label}: {result.status}, {entries} entries, {len(cuts)} peels; '
+              f'{result.initial_area-result.residual_area:.2f} mm² removed; '
+              f'{sum(p.length for p in cuts):.2f} mm of peeling; '
+              f'{max((p.peak_engagement for p in cuts), default=0):.1%} peak; '
+              f'{result.residual_area:.2f} mm² reachable stock remains.')
 
     blank = box(0, 0, 30, 30)
     start, via, end = (5, 5), (5, 20), (20, 20)

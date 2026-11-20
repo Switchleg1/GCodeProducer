@@ -110,10 +110,21 @@ entry/peel limit that stopped the run. It does not plan clearance-height
 travel to a new helix or fill a narrow residual by slotting.
 
 `python tools/compare_adaptive_peels.py --pocket-turns 12` starts the two-lobe
-outline in fresh stock with a 4° entry and a 2 mm cutter. One entry and 12
-peels removed 37.03 mm² and left 4,463.85 mm² of reachable stock at the turn
-budget. This is not a completed clearing cycle or an equal-coverage speed
-comparison. The prototype remains offline.
+outline in fresh stock with a 4° entry and a 2 mm cutter. With an 18% sampled
+engagement limit and 12 turns, the results are:
+
+| Loop options | Stock removed (including entry) | Peeling distance | Peak sampled engagement |
+|---|---:|---:|---:|
+| Radius capped at 0.85 mm | 37.03 mm² | 57.54 mm | 14.4% |
+| Radius capped at 3 mm | 78.17 mm² | 170.62 mm | 16.9% |
+| 3 mm cap with center-out expansion | 84.80 mm² | 201.08 mm | 16.7% |
+
+An expanding turn grows the radius around the existing cleared core without
+moving its center or breaking the seam. It competes with translating turns
+on removal per path length, and must pass the same full-path containment and
+sampled engagement checks. Expansion removed more stock per turn here, but
+also traveled farther; the test does not establish a speedup. All three runs
+hit the turn budget with most stock still present. The prototype remains offline.
 
 ## Comparison cases and gates
 
