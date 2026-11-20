@@ -25,7 +25,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
-               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False):
+               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -138,7 +138,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     initial_clearance = connected_clearance(pocket, stock, seed[0], radius)
     clearance = connected_clearance(pocket, remaining, seed[0], radius)
     frontier = nearby_frontier(pocket, remaining, last_xy, radius, extra_reach=.25)
-    return {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
+    report = {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
             'initial_stock_mm2': stock.area, 'removed_mm2': stock.area - remaining.area,
             'reachable_residual_mm2': remaining.intersection(reachable).area,
@@ -156,6 +156,21 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if trace_clearance:
+        probe = Point(36., 23.)
+        trace = []
+        travel = 0.
+        for index, cut in enumerate((None, *cuts)):
+            if cut is None:
+                component = initial_clearance
+            else:
+                travel += cut.travel_mm
+                component = connected_clearance(pocket, cut.remaining, seed[0], radius)
+            trace.append({'cut': index, 'feed_mm': travel, 'area_mm2': component.area,
+                          'east_x_mm': None if component.is_empty else component.bounds[2],
+                          'reaches_probe': component.covers(probe)})
+        report['clearance_trace'] = trace
+    return report
 
 
 if __name__ == '__main__':
@@ -185,6 +200,7 @@ if __name__ == '__main__':
                         help='require a checked straight departure before ranking cuts')
     parser.add_argument('--prioritize-neck', action='store_true', help='rank checked cuts by removal east of X24 first')
     parser.add_argument('--with-front-bites', action='store_true', help='try eased side cuts on the neck-facing frontier')
+    parser.add_argument('--trace-clearance', action='store_true', help='include connected clearance after each cut')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -194,7 +210,8 @@ if __name__ == '__main__':
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
                             require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
-                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites)
+                            with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites,
+                            trace_clearance=args.trace_clearance)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

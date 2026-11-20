@@ -327,6 +327,10 @@ neckward removal at unchanged sampled peak. The run still stalls after
 component gains another 0.229 mm² over the no-bite baseline and reaches
 X25.998 instead of X25.750. Neither reaches the neck probe at (36, 23).
 These are planar geometric diagnostics, not verified machine routes.
+`--trace-clearance` reports seed-connected area, east edge, probe coverage
+and cumulative feed after each accepted cut. With eased bites, the edge
+is still at X23 after cut 23, reaches X25.998 at cut 54, and stays there
+through cut 58 even as connected area grows.
 
 ## Gate before another generator attempt
 

@@ -3,6 +3,16 @@ import pytest
 from tools.check_hsm_neck import check_neck
 
 
+def test_clearance_trace_includes_seed_and_matches_final_report():
+    report = check_neck(trace_clearance=True)
+    initial, final = report['clearance_trace']
+    assert initial['cut'] == 0 and initial['feed_mm'] == 0.
+    assert final['cut'] == report['cut_count'] == 1
+    assert final['area_mm2'] - initial['area_mm2'] == pytest.approx(report['seed_clearance_gain_mm2'])
+    assert final['east_x_mm'] == report['seed_clearance_east_x_mm']
+    assert not final['reaches_probe']
+
+
 def test_straight_only_two_lobe_baseline_preserves_residual_on_stall():
     result = check_neck()
     assert result['regions'] == 1
