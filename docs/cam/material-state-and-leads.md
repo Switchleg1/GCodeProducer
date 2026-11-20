@@ -113,13 +113,13 @@ Contour — uses the same entry/exit rules from the shared CAM motion planner
 
 For each entry (start of a pass, or a path that cannot stay down), the emitter:
 
-1. **Stays down when it can.** If the tool is already below safe Z and above
-   the new depth — normally on the floor of the pass just finished — and both
-   the straight move to the new ramp start and the ramp start itself are free
-   of *current* material under the full cutter radius, it moves across at that
-   height (a `G1` at the rapid XY feed, so the path is a guaranteed straight
-   line, not a G0 dog-leg) and ramps down from there. It does not go up at
-   all. The move carries the comment `stay at depth: cleared by the previous pass`.
+1. **Stays down when it can.** When a planar path starts at the current
+   cutting depth, the planner checks the whole straight move against current
+   stock. If the cutter sweep is already clear, it feeds straight to the next
+   start without a lead-out, retract, or new ramp. For a deeper pass, it can
+   similarly feed across the previous floor to a verified ramp start and ramp
+   down from there. These travels use `G1` at the rapid XY feed to guarantee a
+   straight line and carry the comment `stay at depth: cleared by the previous pass`.
 2. Otherwise it retracts only as far as needed: to **Short retract clearance**
    (default 1 mm) above the highest current material under the cutter along
    the XY travel, never above safe Z; rapids across; then **rapids down** to

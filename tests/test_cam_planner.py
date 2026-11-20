@@ -83,7 +83,12 @@ def test_link_planner_heights_and_stay_down():
     links = LinkPlanner(10, 1, .5, True, 2)
     position = np.array([20, 20, -5.])
     assert links.stay_at_depth(state, position, (22, 22), -6)
-    assert not links.stay_at_depth(state, position, (5, 5), -6)      # material at the target
+    assert links.stay_at_depth(state, position, (22, 22), -5)      # same cutting Z
+    assert not links.stay_at_depth(state, position, (22, 22), -4)  # higher entry
+    assert not links.stay_at_depth(state, position, (5, 5), -6)    # material at the target
+    assert not links.stay_at_depth(None, position, (22, 22), -5)   # no verified stock
+    state.heights[:, (state.x > 24) & (state.x < 25)] = 0
+    assert not links.stay_at_depth(state, position, (28, 20), -5)  # clear endpoints, blocked route
     assert not LinkPlanner(10, 1, .5, False, 2).stay_at_depth(state, position, (22, 22), -6)
     assert links.travel_height(state, position, (22, 22), -5) == pytest.approx(-4)
     assert links.travel_height(state, position, (5, 5), -5) == pytest.approx(1)

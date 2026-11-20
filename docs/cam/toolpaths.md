@@ -17,7 +17,10 @@ spacing between circles (capped at 50% of the tool diameter).
 Where a full circle would cross a wall or island, only its in-bounds arcs
 are cut. Final wall and island passes clean up the boundary. **Stay down
 between contours** allows short feed links only when they fit inside the
-cutter-clearance region; otherwise the planner handles re-entry.
+cutter-clearance region. If a longer straight move to the next arc is
+already clear of stock at the cutting depth, **Short retracts within cleared
+material** lets the tool stay down for that move too. A blocked move still
+requires a retract.
 
 The circles are emitted as short `G1` moves, not `G2/G3` arcs. This is
 center-out circular clearing, not adaptive constant-engagement machining.

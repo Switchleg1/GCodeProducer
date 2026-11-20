@@ -97,6 +97,38 @@ def test_stale_link_endpoint_metadata_forces_retract(libset):
     assert len(first)>=2
 
 
+@pytest.mark.parametrize('short_retracts', [True, False])
+def test_unlinked_paths_travel_at_cut_depth_only_if_enabled(libset, short_retracts):
+    from gcodeproducer.core.jobs.path import Path
+    from gcodeproducer.core.sim import simulate
+
+    mesh = stepped_part()
+    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    op.strategy = 'trochoidal'
+    op.lead_out = True
+    generate(job, StageContext())
+    job.layers = job.layers[:1]
+    layer = job.layers[0]
+    # The first path clears a strip twice; the long move to the second start
+    # lies inside the cleared strip, but carries no planned cutting-link tag.
+    layer.paths = [Path('cut', np.array([[-12., 0.], [12., 0.], [12., .5], [-12., .5], [-10., .25]])),
+                   Path('cut', np.array([[10., .25], [10., 1.]]))]
+    job.preferences = {'short_retracts': short_retracts}
+    job.warnings.clear()
+    CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
+    sim = simulate(job.program)
+    moves = [i for i, ln in enumerate(job.program.lines) if ln.comment and 'stay at depth' in ln.comment]
+    if short_retracts:
+        i, = moves
+        assert job.program.lines[i].cmd == 'G1'
+        assert sim.pz[i] == sim.z[i] == pytest.approx(layer.z)
+        assert sim.x[i] - sim.px[i] == pytest.approx(20.)
+        assert job.program.lines[i-1].feature != 'lead_out'
+    else:
+        assert not moves
+    assert not any('contacts current material' in w.lower() for w in job.warnings)
+
+
 def test_later_depth_entries_start_just_above_the_previous_floor(libset):
     from gcodeproducer.core.sim import simulate
     mesh=stepped_part()

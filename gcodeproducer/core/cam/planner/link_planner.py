@@ -25,9 +25,9 @@ class LinkPlanner:
                     and np.allclose(previous_end, path.stay_down_from, atol=1e-7, rtol=0))
 
     def stay_at_depth(self, state, position, target_xy, floor):
-        """Move across at the current Z (already below safe Z, above ``floor``) if verified clear."""
+        """Move at the current Z if it is at/above the entry floor and the sweep is clear."""
         here = float(position[2])
-        if state is None or not self.short_retracts or here >= self.safe_z-1e-9 or here <= floor+1e-9:
+        if state is None or not self.short_retracts or here >= self.safe_z-1e-9 or here < floor-1e-9:
             return False
         target_xy = np.asarray(target_xy, float)[:2]
         return bool(state.height_at(target_xy, self.reach) <= here+1e-6

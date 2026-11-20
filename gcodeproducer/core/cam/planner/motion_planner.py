@@ -113,7 +113,10 @@ class MotionPlanner:
 
     def travel_at_depth(self, xy):
         # G1 at rapid feed: a straight line is guaranteed (a G0 dog-leg is not).
-        self.add("travel", np.r_[np.asarray(xy, float)[:2], self.position[2]], rate=float(self.rapid_feed),
+        xy = np.asarray(xy, float)[:2]
+        if np.linalg.norm(xy - self.position[:2]) < 1e-9:
+            return
+        self.add("travel", np.r_[xy, self.position[2]], rate=float(self.rapid_feed),
                  comment="stay at depth: cleared by the previous pass")
         self.stay_count += 1
 
@@ -308,9 +311,12 @@ class MotionPlanner:
         length = (config.lead_length if config is not None else 0) or 2*self.radius
         self._path_cut_material = False
         linked = self.links.linked(path, previous_end)
+        floor = float(format_number(layer.z, 3))
         if linked:
             self.feed_move(np.r_[start, self.position[2]], "link", live, path.link_condition,
                            "stay-down link", measured=False, force_feed=True)
+        elif path.feature != "drill" and self.cleared_at_cut_depth(live, start, floor):
+            self.travel_at_depth(start)
         else:
             want = config is not None and config.lead_in and len(pts) > 1
             lead, kind = self.entries.planar(live, pts, path.closed, layer.z, length) if want else (None, None)
@@ -320,7 +326,7 @@ class MotionPlanner:
                 down, down_kind = (self.entries.planar(live, pts, path.closed, layer.z, length, top=here)
                                    if want and layer.z+1e-9 < here < self.safe_z-1e-9 else (None, None))
                 target = down[0, :2] if down is not None else start
-                if self.links.stay_at_depth(live, self.position, target, layer.z):
+                if here > floor+1e-9 and self.links.stay_at_depth(live, self.position, target, floor):
                     lead, kind, stayed = down, down_kind, True
                     self.travel_at_depth(target)
             if kind == "degenerate":
@@ -348,7 +354,10 @@ class MotionPlanner:
         next_path = layer.paths[path_index+1] if path_index+1 < len(layer.paths) else None
         if (config is not None and config.lead_out and len(pts) > 1 and not (next_path and next_path.stay_down)
                 and (live is None or self._path_cut_material or not path.cut_conditions
-                     or any(c.engagement > 1e-6 for c in path.cut_conditions))):
+                     or any(c.engagement > 1e-6 for c in path.cut_conditions))
+                and not (next_path and next_path.feature != "drill" and len(next_path.points) >= 2
+                         and len(next_path.points[0]) == 2
+                         and self.cleared_at_cut_depth(live, next_path.points[0], floor))):
             exit_points = self.entries.planar_exit(pts, path.closed, self.position[2], length)
             if exit_points is not None:
                 for q in exit_points[1:]:
@@ -357,6 +366,10 @@ class MotionPlanner:
                         self.ctx.log(f"  {name}: lead-out crosses uncertain remaining cells; retracting instead")
                         break
         return self.position[:2].copy()
+
+    def cleared_at_cut_depth(self, state, target, floor):
+        return (abs(self.position[2] - floor) <= 1e-9
+                and self.links.stay_at_depth(state, self.position, target, floor))
 
     # ----------------------------------------------------------------- loop
     def run(self, first_tool, first_data):
