@@ -62,7 +62,7 @@ def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lea
                 yield points
 
 
-def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step):
+def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step, reject=None):
     """Return (updated stock, sampled peak) only for a contained, useful cut.
 
     This trial commits one candidate, not the motion to reach its start. The
@@ -73,13 +73,19 @@ def try_front_cut(pocket, stock, points, radius, *, contact_limit, sample_step):
         raise ValueError('invalid cutter radius, contact limit, or sample spacing')
     axis = LineString(points)
     if not axis.length or not pocket.covers(axis) or axis.distance(pocket.boundary) < radius:
+        if reject is not None:
+            reject('cut_boundary')
         return None
     sweep = axis.buffer(radius, quad_segs=BUFFER_SEGMENTS)
     if stock.intersection(sweep).area <= CLEAR_AREA_MM2:
+        if reject is not None:
+            reject('no_removal')
         return None
     peak = 0.
     for angle, _ in sampled_contact(points, stock, radius, sample_step, BUFFER_SEGMENTS):
         if angle > contact_limit:
+            if reject is not None:
+                reject('contact_limit')
             return None
         peak = max(peak, angle)
     return stock.difference(sweep), peak

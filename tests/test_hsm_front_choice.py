@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pytest
 from shapely.geometry import box
 
@@ -32,6 +34,17 @@ def test_blocked_access_and_overload_both_return_no_choice():
     rib = box(3.4, 5.1, 3.6, 5.2)
     assert _choose(pocket, stock.union(rib), pose, [cut]) is None
     assert _choose(pocket, stock, pose, [cut], limit=20.) is None
+
+
+def test_counts_first_failed_gate_without_changing_selection():
+    pocket, stock = box(0, 0, 24, 18), box(5, 5, 15, 12)
+    xy = (3., 4.25)
+    counts = Counter()
+    choice = choose_front_cut(pocket, stock, (xy, (1., 0.)),
+                              [[xy, (28., 4.25)], [xy, (3.5, 4.25)], [xy, (12., 4.25)]],
+                              1., contact_limit=20., sample_step=.05, link_handle=.5, diagnostics=counts)
+    assert choice is None
+    assert counts == {'cut_boundary': 1, 'no_removal': 1, 'contact_limit': 1}
 
 
 def test_same_pose_is_not_a_bypass_for_clearance_or_heading():

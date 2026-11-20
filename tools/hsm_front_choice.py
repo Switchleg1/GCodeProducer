@@ -1,5 +1,6 @@
 """Offline selection of a useful frontier cut from a cleared pose."""
 import math
+from collections import Counter
 from typing import NamedTuple
 
 from shapely.geometry import Point
@@ -19,8 +20,13 @@ class FrontChoice(NamedTuple):
 
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
-                     link_handle, link_margin=0.):
+                     link_handle, link_margin=0., diagnostics=None):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
+    counts = diagnostics if diagnostics is not None else Counter()
+
+    def reject(reason):
+        counts[reason] += 1
+
     xy, heading = pose
     if (not all(map(math.isfinite, (radius, link_margin, link_handle)))
             or radius <= 0 or link_margin < 0 or link_handle <= 0):
@@ -29,29 +35,36 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
     clearance = radius + link_margin
     if (not pocket.covers(origin) or origin.distance(pocket.boundary) < clearance
             or (not stock.is_empty and origin.distance(stock) < clearance)):
+        reject('origin_clearance')
         return None
     best = None
     best_key = None
     for cut in candidates:
         if cut is None or len(cut) < 2:
+            reject('invalid_candidate')
             continue
         incoming = tuple(b-a for a, b in zip(cut[0], cut[1]))
         if not math.hypot(*incoming):
+            reject('invalid_candidate')
             continue
         if xy == cut[0]:
             dot = sum(a*b for a, b in zip(heading, incoming))
             cross = heading[0]*incoming[1] - heading[1]*incoming[0]
             if dot <= 0 or abs(cross) > 1e-9*dot:
+                reject('heading')
                 continue
             link = [xy]
         else:
             link = cleared_tangent_link(pocket, stock, radius, xy, cut[0], heading, incoming,
                                         link_handle, margin=link_margin)
             if link is None:
+                reject('link_clearance')
                 continue
-        result = try_front_cut(pocket, stock, cut, radius, contact_limit=contact_limit, sample_step=sample_step)
+        result = try_front_cut(pocket, stock, cut, radius, contact_limit=contact_limit,
+                               sample_step=sample_step, reject=reject)
         if result is None:
             continue
+        counts['eligible'] += 1
         remaining, peak = result
         removed = stock.area - remaining.area
         travel = sum(math.dist(a, b) for chain in (link, cut) for a, b in zip(chain, chain[1:]))

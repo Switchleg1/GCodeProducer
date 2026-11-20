@@ -232,7 +232,11 @@ peak contact. This demonstrates repeated progress on the seeded fixture,
 not a general entry strategy. `python tools/check_hsm_neck.py` reproduces
 the straight-only baseline on the two-lobe WKT with a synthetic pre-cleared
 left-side seed: one cut removes 3.00 mm² before stalling at (22, 28.5),
-leaving 4,149.56 mm² of geometrically reachable stock.
+leaving 4,149.56 mm² of geometrically reachable stock. At the stall,
+`last_selection_counts` reports six failed links and three cuts that passed
+the link check but exceeded the sampled contact limit. Counts record the
+first failed gate per candidate passed to the selector; they do not include
+paths filtered out during proposal generation.
 
 ## Gate before another generator attempt
 
