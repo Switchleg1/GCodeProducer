@@ -33,4 +33,5 @@
 - `python tools/check_hsm_neck.py` pins the straight-only two-lobe baseline: one 13 mm link-plus-cut removes 3.00 mm² at 42.85° peak; stalls at (22, 28.5) with 4,149.56 mm² of reachable stock left.
 - Straight-only two-lobe stall diagnostics: six candidates fail tangent link clearance and three fail the sampled contact limit after passing the link gate. The accepted cut and residual are unchanged.
 - `check_hsm_neck.py --with-corners` uses unchanged stock and limits. It accepts two tangent corners and one straight, removes 10.29 mm² versus 3.00 mm², and stalls at the next origin clearance check with 4,142.28 mm² reachable stock remaining.
-- Next: measure clearance at the last accepted corner endpoint and test a checked tangent runout so the next link can start from a verified pose. Completion gates are in `GOAL.md`.
+- `--corner-runoff .5` verifies a tangent exit as part of the cut. It restores 2.828 mm of stock-side clearance at the final pose without changing limits; 4,141.60 mm² remain and the next selection still stalls (62 link, 4 contact, 2 boundary failures).
+- Next: test alternate verified transfer routes from the cleared pose rather than loosening clearance. Completion gates are in `GOAL.md`.

@@ -23,3 +23,15 @@ def test_corner_proposals_improve_coverage_but_do_not_hide_a_stall():
     assert trial['reachable_residual_mm2'] == pytest.approx(4142.28, abs=.02)
     assert trial['peak_contact_deg'] < 60.
     assert trial['stop'] == 'stalled' and trial['last_selection_counts'] == {'origin_clearance': 1}
+    assert trial['last_stock_distance_mm'] == pytest.approx(1.9998494)
+
+
+def test_corner_runoff_reaches_a_clear_origin_without_relaxing_cut_checks():
+    trial = check_neck(with_corners=True, corner_runoff=.5)
+    assert trial['last_stock_distance_mm'] > 2.
+    assert trial['last_wall_distance_mm'] > 2.
+    assert trial['peak_contact_deg'] < 60.
+    assert trial['reachable_residual_mm2'] == pytest.approx(4141.60, abs=.02)
+    assert trial['stop'] == 'stalled'
+    assert 'origin_clearance' not in trial['last_selection_counts']
+    assert trial['last_selection_counts']['link_clearance'] > 0

@@ -5,11 +5,11 @@ from tools.check_cambam_pocket import arc_points
 from tools.hsm_straight_front import frontier_edges, try_front_cut
 
 
-def frontier_corner_poses(pocket, stock, radius, immersion, *, lead=0.):
+def frontier_corner_poses(pocket, stock, radius, immersion, *, lead=0., runoff=0.):
     """Yield offset waypoints at adjacent exposed edges, before cut validation."""
-    if (not all(map(math.isfinite, (radius, immersion, lead)))
-            or not 0 < immersion < radius or lead < 0):
-        raise ValueError('expected 0 < immersion < radius and a nonnegative lead')
+    if (not all(map(math.isfinite, (radius, immersion, lead, runoff)))
+            or not 0 < immersion < radius or min(lead, runoff) < 0):
+        raise ValueError('expected 0 < immersion < radius and nonnegative lead/runoff')
     edges = list(frontier_edges(pocket, stock))
     successors = {}
     for start, end in edges:
@@ -29,7 +29,7 @@ def frontier_corner_poses(pocket, stock, radius, immersion, *, lead=0.):
                 continue
             entry = (start[0]+offset*uy-lead*ux, start[1]-offset*ux-lead*uy)
             vertex = (join[0]+offset*uy+shift*ux, join[1]-offset*ux+shift*uy)
-            exit = (end[0]+offset*vy, end[1]-offset*vx)
+            exit = (end[0]+offset*vy+runoff*vx, end[1]-offset*vx+runoff*vy)
             yield entry, vertex, exit
 
 

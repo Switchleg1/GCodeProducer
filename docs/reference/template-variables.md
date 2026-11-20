@@ -15,7 +15,7 @@ Values are evaluated for the job, not taken from these examples. See
 | `model` | General | fdm, cam | Model file name | `bracket.stl` |
 | `date` | General | fdm, cam | Date the G-code was produced (YYYY-MM-DD) | `2025-01-31` |
 | `time` | General | fdm, cam | Time the G-code was produced (HH:MM) | `14:05` |
-| `version` | General | fdm, cam | GCodeProducer version | `0.1.104` |
+| `version` | General | fdm, cam | GCodeProducer version | `0.1.105` |
 | `bed_x` | Machine | fdm, cam | Bed / work area size X (mm) | `220.0` |
 | `bed_y` | Machine | fdm, cam | Bed / work area size Y (mm) | `220.0` |
 | `max_height` | Machine | fdm, cam | Build / work height (mm) | `250.0` |

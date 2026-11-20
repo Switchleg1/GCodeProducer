@@ -240,7 +240,11 @@ paths filtered out during proposal generation. With `--with-corners`, the
 same benchmark also tries 3 mm tangent blends. It accepts two corners and
 one straight, removing 10.29 mm² at 56.17° peak sampled contact before the
 next origin-clearance check stops the run. Reachable residual is 4,142.28
-mm². This improves coverage but is neither a completed cut nor a timing win.
+mm². Adding `--corner-runoff 0.5` checks an extended tangent exit as part of
+candidate cuts. The final pose clears the 2 mm radius threshold, but the
+next selection still stalls: 62 link, 4 contact, and 2 boundary failures.
+Residual is 4,141.60 mm². Neither trial completes coverage or proves a timing
+win.
 
 ## Gate before another generator attempt
 
