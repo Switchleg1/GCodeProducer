@@ -82,11 +82,20 @@ of long straight **cutting** passes. Report those separately: model each link
 against remaining stock and compare its cost with a shorter verified link
 or a retract, without penalizing productive straight cuts.
 
-This is an offline comparison, not proof of coverage, engagement, or machine
-clearance: the actual CamBam vectors, stock and allowance were not supplied.
-The native `.cb` file (or the source outline plus stock and operation settings)
-would let us measure those against the intended job, rather than against the
-area the program happens to sweep.
+The supplied native `.cb` clarifies the test: the machining boundary is a
+six-vertex concave polygon, not a trace of the flame image. The operation
+lists zero roughing allowance, a 3.175 mm end mill and target Z−0.5 mm.
+No explicit stock dimensions are set. For a closed-pocket benchmark, assume
+initial material fills the polygon and use the area a disk can sweep while
+remaining inside it as the geometric coverage reference.
+
+An exploratory sweep at Z−0.5 mm gives **6,092.3 mm² geometrically reachable**
+out of 6,099.0 mm² nominal. At 0.0025 mm arc chord error about **10.9 mm²** of
+reachable area remains, versus 12.3 mm² at 0.01 mm. This is a preliminary
+coverage measurement, not a pass tolerance or a clearance check. Next make
+it reproducible with ordered replay, a chord-error convergence check, and a
+residual map. Measure engagement separately; the stock assumption is not a
+claim about the original blank or physical setup.
 
 ## Proposed design decisions
 
