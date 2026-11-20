@@ -44,3 +44,12 @@ def test_checked_detours_advance_beyond_direct_link_stall():
     assert trial['removed_mm2'] - baseline['removed_mm2'] == pytest.approx(18.)
     assert trial['reachable_residual_mm2'] == pytest.approx(4123.60, abs=.02)
     assert trial['peak_contact_deg'] == pytest.approx(baseline['peak_contact_deg'])
+
+
+def test_live_waypoints_match_fixed_detour_coverage_with_less_travel():
+    fixed = check_neck(with_corners=True, corner_runoff=.5, with_detours=True)
+    live = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True)
+    assert live['stop'] == 'stalled' and live['cut_count'] == fixed['cut_count']
+    assert live['reachable_residual_mm2'] == pytest.approx(fixed['reachable_residual_mm2'])
+    assert live['peak_contact_deg'] == pytest.approx(fixed['peak_contact_deg'])
+    assert live['feed_mm'] < fixed['feed_mm'] - 3.

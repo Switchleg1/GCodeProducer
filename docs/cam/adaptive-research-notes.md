@@ -247,7 +247,10 @@ Residual is 4,141.60 mm². Adding `--with-detours` tries fixed seed-area
 waypoints after direct links fail, checking both legs and choosing the
 shortest passing detour. It accepts nine cuts rather than three and removes
 18.00 mm² more at unchanged sampled peak. It still stalls with 4,123.60 mm²
-reachable residual; the trial does not demonstrate full coverage or a timing win.
+reachable residual. Replacing fixed points with `--with-live-detours` samples
+nearby cleared positions and cardinal headings each round. Both legs still
+pass the same checks. It matches coverage and peak contact while reducing
+feed from 184.01 to 180.68 mm. This is a distance comparison, not a timing win.
 
 ## Gate before another generator attempt
 
