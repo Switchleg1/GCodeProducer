@@ -1,15 +1,16 @@
-"""Center-out elliptical clearing for Pocket and Waterfall."""
+"""Continuous center-out spiral clearing for Pocket and Waterfall."""
 from __future__ import annotations
 
 import math
 
 import numpy as np
 from shapely.geometry import LineString, Point
-from shapely.ops import linemerge, polylabel
+from shapely.ops import linemerge, polylabel, substring
 from shapely.prepared import prep
 
 from gcodeproducer.core.cam.cam_constants import (
-    TROCHOID_CHORD_ERROR, TROCHOID_MAX_FRONTS, TROCHOID_MIN_SEGMENTS, TROCHOID_MINOR_RATIO_LIMITS,
+    TROCHOID_CHORD_ERROR, TROCHOID_HISTORY_PIECES, TROCHOID_MAX_FRONTS,
+    TROCHOID_MIN_SEGMENTS, TROCHOID_MINOR_RATIO_LIMITS,
     TROCHOID_POINT_BUDGET, TROCHOID_SEAM_TRIALS,
 )
 from gcodeproducer.core.cam.paths import _nearest_seam, boundary_paths
@@ -44,58 +45,106 @@ def _axes(component):
     return np.array([u, ratio*np.array([-u[1], u[0]])])
 
 
-def _pieces(points, component, valid, middle, sense):
-    line = LineString(np.vstack((points, points[0])))
+def _pieces(line, component, valid):
+    """Clip without adding artificial wall edges; retain unwrapped spiral order."""
     if valid.covers(line):
-        return [(points, True)]
-    clipped = line.intersection(component)
-    if clipped.geom_type == 'MultiLineString':
-        clipped = linemerge(clipped)
-    lines = [clipped] if clipped.geom_type == 'LineString' else getattr(clipped, 'geoms', ())
-    pieces = []
+        return [np.asarray(line.coords)]
+    cut = line.intersection(component)
+    lines = [cut] if cut.geom_type == 'LineString' else [p for p in getattr(cut, 'geoms', ())
+                                                       if p.geom_type == 'LineString']
+    if len(lines) > 1:
+        cut = linemerge(lines)
+        lines = [cut] if cut.geom_type == 'LineString' else list(cut.geoms)
+    positioned = []
     for part in lines:
-        if part.geom_type != 'LineString' or part.length <= 1e-6:
+        if part.length <= 1e-6:
             continue
         xy = np.asarray(part.coords)
-        p = xy - middle
-        turn = (p[:-1, 0]*p[1:, 1] - p[:-1, 1]*p[1:, 0]).sum()
-        pieces.append((xy if turn*sense > 0 else xy[::-1], False))
-    return sorted(pieces, key=lambda p: tuple(p[0][0]))
+        a, b = line.project(Point(xy[0])), line.project(Point(xy[-1]))
+        positioned.append((a, xy) if a <= b else (b, xy[::-1]))
+    return [xy for _, xy in sorted(positioned, key=lambda item: item[0])]
 
 
-def _append_band(paths, band, previous, valid, diameter, stay_down):
-    """Prefer short validated links without moving a pass ahead of its inner band."""
-    while band:
+def _wall_route(ring, a, b):
+    pa, pb = ring.project(Point(a)), ring.project(Point(b))
+    if pa > pb:
+        return _wall_route(ring, b, a)[::-1]
+    if pb-pa <= ring.length-(pb-pa):
+        coords = np.asarray(substring(ring, pa, pb).coords)
+    else:
+        coords = np.vstack((substring(ring, 0., pa).coords[::-1],
+                            substring(ring, pb, ring.length).coords[-2::-1]))
+    return np.vstack((a, coords, b))
+
+
+def _connector(a, b, valid, walls, history):
+    if np.linalg.norm(b-a) < 1e-9:
+        return np.vstack((a, b))
+    direct = LineString((a, b))
+    if valid.covers(direct):
+        return np.vstack((a, b))
+    # Try already traversed points before following the wall. Validation is in
+    # the cutter-centre region; the engagement planner still rates any cutting.
+    if history:
+        points = np.vstack(history)
+        lengths = np.linalg.norm(points-a, axis=1) + np.linalg.norm(points-b, axis=1)
+        for i in np.argsort(lengths, kind='stable')[:TROCHOID_SEAM_TRIALS]:
+            xy = np.vstack((a, points[i], b))
+            if valid.covers(LineString(xy)):
+                return xy
+    for wall in walls:
+        if wall.distance(Point(a)) > 1e-7 or wall.distance(Point(b)) > 1e-7:
+            continue
+        route = _wall_route(wall, a, b)
+        if valid.covers(LineString(route)):
+            return route
+    return None
+
+
+def _stitch(pieces, walls, valid, diameter, stay_down, budget):
+    result, chunks, end, history, used = [], [], None, [], 0
+    pieces = list(pieces)
+    while pieces:
         index = 0
-        points, closed = band[0]
-        linked = False
-        if previous is not None:
-            starts = []
-            for i, (p, is_closed) in enumerate(band[:TROCHOID_SEAM_TRIALS]):
-                if is_closed:
-                    d, p = _nearest_seam(p, previous)
-                else:
-                    d = float(np.sum((p[0]-previous)**2))
-                starts.append((d, i, p, is_closed))
-            starts.sort(key=lambda item: item[:2])
-            _, index, points, closed = starts[0]
-            if stay_down:
-                for distance, i, p, is_closed in starts:
-                    if distance > diameter**2:
-                        break
-                    sweep = Point(p[0]) if distance < 1e-18 else LineString((previous, p[0]))
-                    if valid.covers(sweep):
-                        index, points, closed, linked = i, p, is_closed, True
-                        break
-        band.pop(index)
-        paths.append(Path('cut', points, closed=closed, width=diameter, stay_down=linked,
-                          stay_down_from=tuple(previous) if linked else None))
-        previous = points[0] if closed else points[-1]
-    return previous
+        if stay_down and end is not None and not pieces[0][1]:
+            # Once the spiral is clipped, prefer nearby arcs over crossing the
+            # pocket repeatedly to complete all fragments of the same turn.
+            candidates = []
+            for i, (p, closed) in enumerate(pieces[:TROCHOID_SEAM_TRIALS]):
+                if closed:
+                    break
+                d = np.linalg.norm(p[0]-end)
+                candidates.append((d, i))
+            for distance, i in sorted(candidates):
+                if distance < 1e-9 or valid.covers(LineString((end, pieces[i][0][0]))):
+                    index = i
+                    break
+        xy, closed = pieces.pop(index)
+        if closed and end is not None:
+            _, xy = _nearest_seam(xy, end)
+        if closed:
+            xy = np.vstack((xy, xy[0]))
+        link = _connector(end, xy[0], valid, walls, history) if end is not None and stay_down else None
+        if link is None and chunks:
+            result.append(Path('cut', np.vstack(chunks), width=diameter))
+            chunks, history = [], []
+        if link is not None and len(link) > 2:
+            chunks.append(link[1:-1])
+            used += len(link)-2
+        chunks.append(xy)
+        used += len(xy)
+        if used > budget:
+            raise ValueError('Trochoidal pocket has too many points after linking; simplify geometry')
+        end = xy[-1]
+        history.append(xy[np.linspace(0, len(xy)-1, min(len(xy), TROCHOID_SEAM_TRIALS), dtype=int)])
+        history = history[-TROCHOID_HISTORY_PIECES:]
+    if chunks:
+        result.append(Path('cut', np.vstack(chunks), width=diameter))
+    return result, used
 
 
 def trochoidal_paths(region, diameter, allowance, stepover, direction, log=None, *, stay_down=True):
-    """Concentric ellipse sweeps, clipped at walls and islands, then boundary cleanup."""
+    """Grow the radius continuously at cutting Z, then follow the cleanup boundary."""
     centre = region.buffer(-(diameter/2+allowance))
     if centre.is_empty:
         raise ValueError('Trochoidal pocket is too small for this tool and stock allowance')
@@ -105,34 +154,40 @@ def trochoidal_paths(region, diameter, allowance, stepover, direction, log=None,
     paths, vertices = [], 0
     for component in sorted(polygons(centre), key=lambda p: p.bounds):
         axes = _axes(component)
-        seed = polylabel(component, tolerance=max(TROCHOID_CHORD_ERROR, spacing*.1))
+        seed = component.centroid
+        if not component.contains(seed) or seed.distance(component.boundary) < spacing*.5:
+            seed = polylabel(component, tolerance=max(TROCHOID_CHORD_ERROR, spacing*.1))
         if not component.contains(seed):
             seed = component.representative_point()
         middle = np.array([seed.x, seed.y])
         local = (np.asarray(component.exterior.coords)-middle) @ np.linalg.inv(axes)
         far = np.linalg.norm(local, axis=1).max()
-        first = min(spacing, seed.distance(component.boundary)*.5)
+        first = min(spacing*.25, seed.distance(component.boundary)*.5)
         valid = prep(component.buffer(1e-7))
-        previous = None
-        count = math.floor((far-first)/spacing) + 1
+        # One uninterrupted parametric curve, not closed laps with a step at the seam.
+        count = max(1, math.ceil((far-first)/spacing))
         if count > TROCHOID_MAX_FRONTS:
-            raise ValueError('Trochoidal pocket needs too many ellipses; increase stepover')
+            raise ValueError('Trochoidal pocket needs too many turns; increase stepover')
+        sense = -1 if direction == 'conventional' else 1
+        turns = []
         for i in range(count):
-            major = first + i*spacing
-            sense = -1 if direction == 'conventional' or (direction == 'meander' and i % 2) else 1
-            # The affine map scales the unit-circle chord error by at most the major radius.
-            angle_step = 2*math.asin(math.sqrt(min(1., TROCHOID_CHORD_ERROR/(2*major))))
+            bound = first + (i+2)*spacing
+            angle_step = 2*math.asin(math.sqrt(min(1., TROCHOID_CHORD_ERROR/(2*bound))))
             n = max(TROCHOID_MIN_SEGMENTS, math.ceil(math.pi/angle_step))
             vertices += n
             if vertices > TROCHOID_POINT_BUDGET:
                 raise ValueError('Trochoidal pocket has too many samples; increase stepover or simplify geometry')
-            angle = np.arange(n) * (sense*2*math.pi/n)
-            ring = middle + major*(np.column_stack((np.cos(angle), np.sin(angle))) @ axes)
-            band = _pieces(ring, component, valid, middle, sense)
-            previous = _append_band(paths, band, previous, valid, diameter, stay_down)
-        walls = [(p, True) for p, _ in boundary_paths(component, direction, len(paths))]
-        vertices += sum(len(p) for p, _ in walls)
-        if vertices > TROCHOID_POINT_BUDGET:
-            raise ValueError('Trochoidal pocket has too many boundary points; simplify geometry')
-        _append_band(paths, walls, previous, valid, diameter, stay_down)
+            turn = i + np.arange(n+(i == count-1))/n
+            angle = sense*2*math.pi*turn
+            major = first + spacing*turn
+            turns.append(middle + major[:, None]*(np.column_stack((np.cos(angle), np.sin(angle))) @ axes))
+        spiral = LineString(np.vstack(turns))
+        pieces = [(p, False) for p in _pieces(spiral, component, valid)]
+        pieces.extend((p, True) for p, _ in boundary_paths(component, direction, len(paths)))
+        walls = [LineString(ring.coords) for ring in (component.exterior, *component.interiors)]
+        planned, used = _stitch(pieces, walls, valid, diameter, stay_down, TROCHOID_POINT_BUDGET-vertices)
+        vertices += used
+        paths.extend(planned)
+        if log and len(planned) > 1 and stay_down:
+            log(f'  Trochoidal pocket: {len(planned)-1} gap(s) require re-entry; no in-region link was found')
     return paths

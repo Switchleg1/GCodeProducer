@@ -9,23 +9,23 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 ## Trochoidal clearing
 
 Choose **Trochoidal** in **Cutting strategy** for Pocket or 3D Waterfall.
-At each depth the cutter clears from the center outward in concentric
-ellipses. The long axis follows the pocket's oriented bounding rectangle;
-the short axis is 50–90% of the long axis. Stepover controls the growth in
-major radius (capped at 50% of tool diameter). Where an ellipse crosses a
-wall or island, only its in-bounds arcs are cut. A separate boundary pass
-cleans up walls and islands.
+At each depth the cutter follows a continuous center-out spiral. Its radius
+grows while it turns: stepover sets the growth per revolution (capped at 50%
+of tool diameter), not a separate straight move between laps. The spiral is
+slightly elliptical, oriented along the pocket's bounding rectangle.
 
-**Stay down between contours** prefers nearby arcs within each band. Cutting links must fit inside
-the cutter-clearance region and respect the selected cutting hand. With
-**Short retracts within cleared material** also enabled, the planner can
-try a two-leg travel through a recent cut when direct travel is blocked.
-Both legs must be clear at cutting depth; otherwise the planner retracts.
+Where walls or islands clip the spiral, **Stay down between contours** joins
+nearby pieces at cutting depth whenever it can find a route inside the
+cutter-clearance region. It can link through a recent cut or follow the
+boundary around an obstruction. Boundary cleanup can join the same path.
+Links are classified for engagement like other cutting moves; they are not
+assumed to be empty or traversed at rapid. Disconnected areas, new depth
+passes, and gaps with no verified in-region link still require entry.
 
-Ellipses use short `G1` chords with a maximum 0.01 mm chord error; standard
-`G2/G3` arcs are circular, not elliptical. Straight moves can still appear
-in links and boundary cleanup. This is not adaptive constant-engagement
-machining.
+The spiral uses short `G1` chords. This is a continuous spiral pocketing
+strategy, not adaptive constant-engagement machining. See Sandvik's
+[trochoidal milling definition](https://www.sandvik.coromant.com/en-gb/knowledge/milling/milling-holes-cavities-pockets/slicing-trochoidal-milling)
+and the [spiral pocketing research at the University of Salzburg](https://www.cosy.sbg.ac.at/~held/projects/hsm/hsm.html).
 
 ## Wall-parallel contours (default clearing strategy)
 

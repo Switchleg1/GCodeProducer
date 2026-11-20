@@ -8,7 +8,7 @@ axial engagement, holders and fixtures are not modelled.
 """
 from __future__ import annotations
 
-from gcodeproducer.core.cam.cam_constants import FEED_FIELDS
+from gcodeproducer.core.cam.cam_constants import FEED_FIELDS, TROCHOID_ENGAGEMENT_BATCH_DIAMETERS
 from collections import Counter
 import math, numpy as np
 from shapely import covers, intersection, intersects, length, linestrings, prepare, total_bounds
@@ -203,7 +203,22 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             path.link_condition = condition
             sampler.remove_path(np.array([previous, p[0]]), False, radius)
             totals[condition.regime] += 1
-        measured = sampler.measure_path(p, path.closed, radius)
+        spiral = operation.strategy == 'trochoidal' and not path.closed
+        if spiral and len(p) > 1:
+            # Measure successive short stretches against stock left by the earlier
+            # turns, rather than classifying the whole uncut pocket as a slot.
+            distance = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
+            bands = np.floor(distance/(2*radius*TROCHOID_ENGAGEMENT_BATCH_DIAMETERS))
+            limits = np.r_[0, np.flatnonzero(np.diff(bands[:-1]) > 0)+1, len(p)-1]
+            measured = [[], [], [], []]
+            for a, b in zip(limits, limits[1:]):
+                stretch = p[a:b+1]
+                for values, part in zip(measured, sampler.measure_path(stretch, False, radius)):
+                    values.append(part)
+                sampler.remove_path(stretch, False, radius)
+            measured = [np.concatenate(parts) for parts in measured]
+        else:
+            measured = sampler.measure_path(p, path.closed, radius)
         left, right, engagement, lengths = measured
         slot_limit = float(machine_data.get("slot_engagement_threshold",95))/100-1e-9
         neutral = float(lengths[engagement >= slot_limit].sum()) >= .75*max(float(lengths.sum()), 1e-12)
@@ -214,7 +229,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             desired = "climb" if handed % 2 == 0 else "conventional"
         if mode and not neutral and abs(vote) > 1e-9:
             reverse = (desired == "climb" and vote < 0) or (desired == "conventional" and vote > 0)
-            if reverse:
+            # A spiral must enter at its already chosen inner start, not run wall-in.
+            if reverse and (path.closed or operation.strategy != 'trochoidal'):
                 p = np.vstack((p[0], p[:0:-1])) if path.closed else p[::-1].copy()
                 path.points = p
                 if not path.closed:
@@ -241,7 +257,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                            f"Segments cutting the other hand are highlighted as Conflict.")
                 if message not in warnings:
                     warnings.append(message)
-        sampler.remove_path(p, path.closed, radius)
+        if not spiral or len(p) < 2:
+            sampler.remove_path(p, path.closed, radius)
         loop = np.vstack((p, p[0])) if path.closed else p
         previous = loop[-1]
     if log:

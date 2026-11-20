@@ -34,12 +34,14 @@ SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
 SURFACE_LEAD_SETTLE = 8
 
-TROCHOID_CHORD_ERROR = .01   # mm; largest deviation from the parametric ellipse
+TROCHOID_CHORD_ERROR = .01   # mm; target chord tolerance for sampling the spiral
 TROCHOID_MIN_SEGMENTS = 16
 TROCHOID_MINOR_RATIO_LIMITS = (.5, .9)  # minor / major; keep the paths elliptical, including in square pockets
 TROCHOID_MAX_FRONTS = 10_000
 TROCHOID_POINT_BUDGET = 2_000_000
 TROCHOID_SEAM_TRIALS = 16
+TROCHOID_HISTORY_PIECES = 4
+TROCHOID_ENGAGEMENT_BATCH_DIAMETERS = 4.
 
 REFERENCE_CHORD_ERROR = .01  # mm; circles are polygonal, not fitted G2/G3 arcs
 REFERENCE_MIN_SEGMENTS = 64

@@ -130,7 +130,7 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 
 
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
-def test_trochoidal_strategy_uses_circular_contours_and_emits(libset, kind):
+def test_trochoidal_strategy_emits_one_spiral_without_xy_rapids_at_depth(libset, kind):
     from gcodeproducer.core.cam import generate
     from gcodeproducer.stages.cam_emit import CAMEmit
     shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
@@ -138,28 +138,36 @@ def test_trochoidal_strategy_uses_circular_contours_and_emits(libset, kind):
                          end=Depth('absolute', -1), strategy='trochoidal')
     job.cam_setup.reference_shapes = [shape]
     generate(job, StageContext())
-    assert any(p.closed and len(p.points) >= 16 for layer in job.layers for p in layer.paths)
-    assert any(p.stay_down for layer in job.layers for p in layer.paths)
+    assert len(job.layers) == 1 and len(job.layers[0].paths) == 1
+    assert not job.layers[0].paths[0].closed and len(job.layers[0].paths[0].points) >= 16
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
-    assert job.program.lines
+    from gcodeproducer.core.gcode.simulation import simulate
+    sim = simulate(job.program)
+    cut_z = job.layers[0].z
+    at_depth = np.flatnonzero(sim.moved & np.isclose(sim.z, cut_z))
+    assert len(at_depth) > 16
+    assert all(job.program.lines[i].cmd == 'G1' for i in range(at_depth[0], at_depth[-1]+1) if sim.moved[i])
     assert not any('rapid motion contacts' in warning for warning in job.warnings)
 
 
-def test_trochoidal_uses_real_ellipses_and_covers_the_corners():
+def test_trochoidal_radius_grows_continuously_and_covers_the_corners():
     from shapely import union_all
     from shapely.geometry import LineString
     from gcodeproducer.core.cam.trochoidal import trochoidal_paths
 
     area = box(0, 0, 20, 20)
     paths = trochoidal_paths(area, 3., 0., 40, 'climb')
-    assert paths[0].closed and paths[1].closed and paths[1].stay_down
-    seed = paths[0].points - [10., 10.]
-    major = np.abs(seed).max(axis=0).argmax()
-    axes = np.full(2, 1.08)
-    axes[major] = 1.2
-    np.testing.assert_allclose(((seed/axes)**2).sum(axis=1), 1., atol=1e-12)
-    assert any(not p.closed for p in paths[:-1])  # clipped ellipse arcs
-    assert np.ptp(paths[-1].points[:, 0]) == pytest.approx(17.)
+    assert len(paths) == 1 and not paths[0].closed
+    seed = paths[0].points[:40] - [10., 10.]
+    major = np.abs(seed[0]).argmax()
+    axes = np.full(2, .9)
+    axes[major] = 1.
+    # Test the continuous pitch, not just the envelope of a whole turn.
+    unit = seed/axes
+    angle = np.unwrap(np.arctan2(unit[:, 1], unit[:, 0]))
+    distance = np.linalg.norm(unit, axis=1)
+    np.testing.assert_allclose(distance, .3 + 1.2*(angle-angle[0])/(2*np.pi), atol=1e-12)
+    assert np.ptp(paths[0].points[:, 0]) == pytest.approx(17.)
     sweeps = [LineString(np.vstack([p.points, p.points[0]]) if p.closed else p.points).buffer(1.49)
               for p in paths]
     assert area.buffer(-1.5).difference(union_all(sweeps)).area < 1e-6
@@ -172,17 +180,12 @@ def test_trochoidal_fronts_and_links_do_not_cross_islands_or_disconnected_areas(
     area = box(0, 0, 38, 20).difference(box(10, 3.5, 28, 14)).union(box(38.5, 0, 46, 10))
     paths = trochoidal_paths(area, 3., .1, 35, 'climb')
     allowed = area.buffer(-1.6).buffer(1e-7)
-    end = None
+    assert len(paths) == 2  # one continuous path per connected area, never join across the gap
     for path in paths:
-        p = path.points
-        assert allowed.covers(LineString(np.vstack([p, p[0]]) if path.closed else p))
-        if path.stay_down:
-            assert tuple(end) == path.stay_down_from
-            assert np.linalg.norm(end - p[0]) <= 3.
-            assert np.array_equal(end, p[0]) or allowed.covers(LineString((end, p[0])))
-        end = p[0] if path.closed else p[-1]
-    assert any(not p.closed for p in paths) and any(p.stay_down for p in paths)
-    assert not any(p.stay_down for p in trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False))
+        assert not path.closed
+        assert allowed.covers(LineString(path.points))
+    unlinked = trochoidal_paths(area, 3., .1, 35, 'climb', stay_down=False)
+    assert len(unlinked) > len(paths)
 
 
 def test_old_strategy_names_preserve_existing_behaviour():

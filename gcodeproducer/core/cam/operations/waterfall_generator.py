@@ -28,7 +28,8 @@ class WaterfallGenerator(OperationGenerator):
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
-            paths = pocket_paths(op, [], free, run.diameter, run.direction)
+            paths = pocket_paths(op, [], free, run.diameter, run.direction,
+                                 planning.ctx.log if op.strategy == 'trochoidal' else None)
         except ValueError as exc:
             if "too small" not in str(exc):
                 raise
