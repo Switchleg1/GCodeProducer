@@ -330,7 +330,11 @@ These are planar geometric diagnostics, not verified machine routes.
 `--trace-clearance` reports seed-connected area, east edge, probe coverage
 and cumulative feed after each accepted cut. With eased bites, the edge
 is still at X23 after cut 23, reaches X25.998 at cut 54, and stays there
-through cut 58 even as connected area grows.
+through cut 58 even as connected area grows. `--prioritize-clearance`
+ranks already-verified cuts by their post-cut seed-connected east edge
+before local efficiency. On this fixture the run still stalls after 58
+cuts at X25.998, with the neck probe disconnected. The ranking does not
+relax access, contact, or exit checks.
 
 ## Gate before another generator attempt
 

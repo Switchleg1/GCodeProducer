@@ -59,4 +59,5 @@
 - `--with-front-bites` tries eased shallow cuts that enter and exit on the cleared side of neck-facing edges. One extra checked cut removes 0.374 mm² east of X24; the trial stalls after 58 cuts with 4,011.16 mm² reachable and the same 56.17° sampled peak.
 - The eased bite grows seed-connected center clearance by 0.229 mm² beyond baseline and shifts its east edge from X25.750 to X25.998. Neither run reaches the neck probe at (36, 23).
 - `--trace-clearance` records the seed-connected center area, east edge, neck probe and accumulated feed after each accepted cut. In the eased-bite run, the east edge is still X23 at cut 23, reaches X25.998 at cut 54, and stays there through cut 58 despite further area growth.
-- Next: use the trace plateau to test candidate selection based on connected eastward advance rather than local removal alone. Completion gates are in `GOAL.md`.
+- `--prioritize-clearance` ranks verified cuts by seed-connected eastward extent before stock-removal efficiency. The eased-bite trial still stalls after 58 cuts at X25.998 with 4,011.16 mm² reachable; the neck probe remains disconnected.
+- Next: test a wider shallow advance that can create a new cutter-center corridor instead of reranking the same candidates. Completion gates are in `GOAL.md`.

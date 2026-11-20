@@ -25,7 +25,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
-               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False):
+               with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
+               prioritize_clearance=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -117,6 +118,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         return live_waypoints(pocket, live, pose[0], radius, spacing=3., rings=4, limit=8)
 
     neck_target = pocket.intersection(box(24., 0., 134., 61.))
+    def clearance_score(live):
+        component = connected_clearance(pocket, live, seed[0], radius)
+        return round(component.bounds[2], 6) if not component.is_empty else -math.inf
+
     diagnostics = []
     cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=max_cuts,
                                        contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
@@ -125,7 +130,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        propose_on_stall=propose_shallow if with_shallow_fronts else None,
                                        on_overload=report_overload if with_clearance_tapers else None,
                                        require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
-                                       min_departure=min_departure, priority_region=neck_target if prioritize_neck else None)
+                                       min_departure=min_departure, priority_region=neck_target if prioritize_neck else None,
+                                       priority_score=clearance_score if prioritize_clearance else None)
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -201,6 +207,7 @@ if __name__ == '__main__':
     parser.add_argument('--prioritize-neck', action='store_true', help='rank checked cuts by removal east of X24 first')
     parser.add_argument('--with-front-bites', action='store_true', help='try eased side cuts on the neck-facing frontier')
     parser.add_argument('--trace-clearance', action='store_true', help='include connected clearance after each cut')
+    parser.add_argument('--prioritize-clearance', action='store_true', help='rank verified cuts by seed-connected eastward extent first')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -211,7 +218,7 @@ if __name__ == '__main__':
                             with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits,
                             require_clear_exit=args.require_clear_exit, with_neck_front=args.with_neck_front,
                             with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites,
-                            trace_clearance=args.trace_clearance)
+                            trace_clearance=args.trace_clearance, prioritize_clearance=args.prioritize_clearance)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))
