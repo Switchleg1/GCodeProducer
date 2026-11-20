@@ -121,3 +121,14 @@ def test_clearance_tapers_find_clear_starts_but_do_not_bypass_contact_limit():
     assert result['reachable_residual_mm2'] == pytest.approx(4103.77, abs=.02)
     assert result['last_selection_counts'] == {'start_clearance': 201, 'contact_limit': 42}
     assert result['last_taper_contact_failures'] == {'straight': 4, 'exit': 4}
+
+
+def test_early_exit_trial_stalls_on_origin_clearance_before_matching_baseline_coverage():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
+                        with_shifted_joins=True, max_cuts=48, with_clearance_tapers=True, with_early_exits=True)
+    assert result['cut_count'] == 15 and result['stop'] == 'stalled'
+    assert result['reachable_residual_mm2'] == pytest.approx(4104.81, abs=.02)
+    assert result['last_selection_counts'] == {'origin_clearance': 1}
+    assert result['last_stock_distance_mm'] < 2.
+    assert result['peak_contact_deg'] < 60.

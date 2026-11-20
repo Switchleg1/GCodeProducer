@@ -287,6 +287,10 @@ access checks but fail sampled contact, leaving the 19-cut stall unchanged.
 `last_taper_contact_failures` identifies the first over-limit chord per
 rejected taper: four on the straight and four on the curved exit, none on
 the approach. The diagnostic does not continue sampling a rejected cut.
+`--with-early-exits` tries starting the roll-off 1 or 2 mm earlier. The
+trial stalls after 15 accepted cuts on origin clearance, with 4,104.81 mm²
+reachable stock remaining versus 4,103.77 mm² without the change. Shorter
+travel at unequal coverage is not a timing improvement.
 
 ## Gate before another generator attempt
 

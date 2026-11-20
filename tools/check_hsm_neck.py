@@ -22,7 +22,7 @@ from tools.hsm_straight_front import straight_front_candidates
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
-               shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False, with_clearance_tapers=False):
+               shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False, with_clearance_tapers=False, with_early_exits=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -35,6 +35,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shifted joins require a shallow roll-on radius')
     if (with_taper or with_clearance_tapers) and not with_shallow_fronts:
         raise ValueError('tapered approaches require shallow proposals')
+    if with_early_exits and not (with_clearance_tapers and shallow_rolloff):
+        raise ValueError('early exits require clearance tapers and a roll-off radius')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
     pocket = from_wkt(fixture.read_text(encoding='utf-8'))
     cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
@@ -71,11 +73,21 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             if with_taper:
                 yield tapered_roll_on(cut, 1.5, 4., .0025)
             if with_clearance_tapers:
-                for taper in clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025):
-                    taper_candidate = taper
-                    taper_chords = len(taper) - len(cut)
-                    yield taper
-                    taper_candidate = None
+                variants = [cut]
+                start, end = path
+                length = math.dist(start, end)
+                if with_early_exits:
+                    for trim in (1., 2.):
+                        if length - trim <= radius:
+                            continue
+                        early_end = tuple(b - (b-a)*trim/length for a, b in zip(start, end))
+                        variants.append(roll_off([start, early_end], shallow_rolloff, .0025))
+                for variant in variants:
+                    for taper in clearance_tapers(pocket, live, variant, radius, offset=1.5, run=4., chord_error=.0025):
+                        taper_candidate = taper
+                        taper_chords = len(taper) - len(variant)
+                        yield taper
+                        taper_candidate = None
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -124,6 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--max-cuts', type=int, default=12, help='maximum accepted cuts in the offline trial')
     parser.add_argument('--with-taper', action='store_true', help='try tapered entries on shallow cuts')
     parser.add_argument('--with-clearance-tapers', action='store_true', help='sample tapered starts from live clearance')
+    parser.add_argument('--with-early-exits', action='store_true', help='try rolling off clearance tapers 1 or 2 mm earlier')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -131,7 +144,7 @@ if __name__ == '__main__':
                             with_shallow_fronts=args.with_shallow_fronts, shallow_runoff=args.shallow_runoff,
                             shallow_rolloff=args.shallow_rolloff, shallow_rollon=args.shallow_rollon,
                             with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
-                            with_clearance_tapers=args.with_clearance_tapers)
+                            with_clearance_tapers=args.with_clearance_tapers, with_early_exits=args.with_early_exits)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

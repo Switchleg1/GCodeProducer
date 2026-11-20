@@ -47,4 +47,5 @@
 - Added offline clearance intervals along approach guides. Each returned span passes the full cutter-radius distance checks against stock, outer walls, and protected islands.
 - `--with-clearance-tapers` samples verified approach starts on the two-lobe fixture. Eight additional candidates reach the contact gate but exceed it; the run still stalls after 19 cuts with 4,103.77 mm² reachable.
 - Chord-indexed diagnostics locate the eight taper failures: four first exceed contact on the straight and four on the curved exit, none on the approach. Accepted path and residual are unchanged.
-- Next: test shorter straight spans ending in an earlier roll-off, using the same contact gate. Completion gates are in `GOAL.md`.
+- `--with-early-exits` checks tapered cuts with roll-offs 1 or 2 mm earlier. The trial stalls after 15 cuts at an uncleared endpoint, leaving 4,104.81 mm² reachable versus 4,103.77 mm² for the baseline. Peak sampled contact stays below 60°.
+- Next: test an endpoint-clearance gate before ranking optional early-exit candidates. Completion gates are in `GOAL.md`.
