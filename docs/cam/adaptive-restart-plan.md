@@ -66,6 +66,10 @@ complete coverage.
    meet a time target. Report slicing time separately from estimated machine
    time and hardware validation.
 
-**First implementation batch:** add the first-depth diagnostic and a FreeCAD
-comparison harness for the two-lobe fixture. Do not alter production motion
-until the coverage and engagement verifier can judge both candidate paths.
+**Implementation status:** `core/cam/hsm_contact.py` measures the occupied
+cutter-periphery angle at a planar pose from remaining stock, without using
+the old planner’s width estimate. It adds disjoint contact patches and
+excludes zero-width tangencies. This is neither an in-motion engagement
+limit nor a force model. Next, add ordered swept-stock replay, first-depth
+diagnostics, and a FreeCAD comparison harness. Do not alter production
+motion until the verifier can judge both candidate paths.
