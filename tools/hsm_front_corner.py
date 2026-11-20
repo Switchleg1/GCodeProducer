@@ -2,6 +2,7 @@
 import math
 
 from tools.check_cambam_pocket import arc_points
+from tools.hsm_center_regions import cleared_start_intervals
 from tools.hsm_straight_front import frontier_edges, try_front_cut
 
 
@@ -98,6 +99,21 @@ def tapered_roll_on(path, offset, run, chord_error):
         lateral = (1-t)**2*(1+2*t)*offset
         lead.append((start[0]-ux*back+uy*lateral, start[1]-uy*back-ux*lateral))
     return [*lead, *path]
+
+
+def clearance_tapers(pocket, stock, path, radius, *, offset, run, chord_error):
+    """Sample tapered joins whose starts lie in verified live clearance."""
+    start, end = path[:2]
+    length = math.dist(start, end)
+    if length <= radius:
+        return
+    heading = tuple((b-a)/length for a, b in zip(start, end))
+    guide_start = tapered_roll_on(path, offset, run, chord_error)[0]
+    guide_end = tuple(x + d*(length-radius) for x, d in zip(guide_start, heading))
+    for lo, hi in cleared_start_intervals(pocket, stock, guide_start, guide_end, radius):
+        for shift in (lo + .1*(hi-lo), (lo+hi)/2):
+            join = tuple(x + d*shift for x, d in zip(start, heading))
+            yield tapered_roll_on([join, *path[1:]], offset, run, chord_error)
 
 
 def _quarter_exit(path, turn_radius, chord_error, sign):

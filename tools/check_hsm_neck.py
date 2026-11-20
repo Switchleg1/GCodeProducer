@@ -12,7 +12,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions
-from tools.hsm_front_corner import (filleted_corner, frontier_corner_poses, roll_off, roll_on,
+from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
                                     shifted_roll_ons, tapered_roll_on)
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
@@ -21,7 +21,7 @@ from tools.hsm_straight_front import straight_front_candidates
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
-               shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False):
+               shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False, with_clearance_tapers=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -32,7 +32,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
     if with_shifted_joins and not shallow_rollon:
         raise ValueError('shifted joins require a shallow roll-on radius')
-    if with_taper and not with_shallow_fronts:
+    if (with_taper or with_clearance_tapers) and not with_shallow_fronts:
         raise ValueError('tapered approaches require shallow proposals')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
     pocket = from_wkt(fixture.read_text(encoding='utf-8'))
@@ -59,6 +59,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                     yield from shifted_roll_ons(cut, shallow_rollon, .0025, (2., 4.))
             if with_taper:
                 yield tapered_roll_on(cut, 1.5, 4., .0025)
+            if with_clearance_tapers:
+                yield from clearance_tapers(pocket, live, cut, radius, offset=1.5, run=4., chord_error=.0025)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -104,13 +106,15 @@ if __name__ == '__main__':
     parser.add_argument('--with-shifted-joins', action='store_true', help='also shift shallow joins by 2 and 4 mm')
     parser.add_argument('--max-cuts', type=int, default=12, help='maximum accepted cuts in the offline trial')
     parser.add_argument('--with-taper', action='store_true', help='try tapered entries on shallow cuts')
+    parser.add_argument('--with-clearance-tapers', action='store_true', help='sample tapered starts from live clearance')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
                             with_detours=args.with_detours, with_live_detours=args.with_live_detours,
                             with_shallow_fronts=args.with_shallow_fronts, shallow_runoff=args.shallow_runoff,
                             shallow_rolloff=args.shallow_rolloff, shallow_rollon=args.shallow_rollon,
-                            with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper)
+                            with_shifted_joins=args.with_shifted_joins, max_cuts=args.max_cuts, with_taper=args.with_taper,
+                            with_clearance_tapers=args.with_clearance_tapers)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

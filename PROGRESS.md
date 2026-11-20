@@ -45,4 +45,5 @@
 - With `--max-cuts 48`, the shifted-join trial stalls after 19 accepted cuts, removing 48.79 mm² and leaving 4,103.77 mm² reachable. Final selection rejects 201 starts and 34 cuts for sampled contact; none fail intermediate link clearance.
 - `--with-taper` tries a parallel-start tapered entry (1.5 mm lateral offset over 4 mm). The two-lobe trial still stalls after 19 cuts with 4,103.77 mm² reachable; the final round adds three start rejections and two contact rejections.
 - Added offline clearance intervals along approach guides. Each returned span passes the full cutter-radius distance checks against stock, outer walls, and protected islands.
-- Next: feed verified intervals into the two-lobe approach generator and compare against the pinned 19-cut stall. Completion gates are in `GOAL.md`.
+- `--with-clearance-tapers` samples verified approach starts on the two-lobe fixture. Eight additional candidates reach the contact gate but exceed it; the run still stalls after 19 cuts with 4,103.77 mm² reachable.
+- Next: measure where the clearance-based tapers exceed contact to distinguish the approach from the cutting segment. Completion gates are in `GOAL.md`.

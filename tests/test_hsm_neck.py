@@ -111,3 +111,12 @@ def test_larger_cut_budget_exposes_shifted_join_stall():
     assert result['cut_count'] == 19 and result['stop'] == 'stalled'
     assert result['reachable_residual_mm2'] == pytest.approx(4103.77, abs=.02)
     assert result['last_selection_counts'] == {'start_clearance': 201, 'contact_limit': 34}
+
+
+def test_clearance_tapers_find_clear_starts_but_do_not_bypass_contact_limit():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1., shallow_rollon=1.,
+                        with_shifted_joins=True, max_cuts=48, with_clearance_tapers=True)
+    assert result['cut_count'] == 19 and result['stop'] == 'stalled'
+    assert result['reachable_residual_mm2'] == pytest.approx(4103.77, abs=.02)
+    assert result['last_selection_counts'] == {'start_clearance': 201, 'contact_limit': 42}

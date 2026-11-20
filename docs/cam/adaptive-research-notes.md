@@ -281,7 +281,9 @@ The offline `cleared_start_intervals` helper now clips an approach guide to
 live cutter-center clearance. Each returned span passes full-segment
 distance checks against remaining stock and the pocket boundary, including
 holes. This identifies where an approach can start; it does not verify the
-link to that start or the cut that follows.
+link to that start or the cut that follows. `--with-clearance-tapers` samples
+those intervals for the two-lobe trial. Eight additional candidates pass the
+access checks but fail sampled contact, leaving the 19-cut stall unchanged.
 
 ## Gate before another generator attempt
 
