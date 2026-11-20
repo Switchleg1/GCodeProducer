@@ -82,7 +82,7 @@ def main():
         result = plan_pocket(fresh_region, pocket, top=0., depth=-1., lead_angle=4., entry_budget=2,
                              turn_budget=args.pocket_turns, pitch=.6, tool_radius=radius, limit=.18,
                              min_loop_radius=.45, max_loop_radius=max_radius, cut_feed=800, travel_feed=1200,
-                             z_feed=150, lift=3., expand=expand)
+                             z_feed=150, lift=3., expand=expand, half_turns=expand)
         entries = sum(isinstance(s, AdaptiveEntry) for s in result.steps)
         cuts = [s.peel for s in result.steps if isinstance(s, BranchChoice)]
         print(f'{label}: {result.status}, {entries} entries, {len(cuts)} peels; '

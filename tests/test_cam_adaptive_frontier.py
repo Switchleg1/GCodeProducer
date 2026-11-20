@@ -24,6 +24,27 @@ def test_frontier_discovers_both_cleared_patches_but_not_virgin_stock():
         np.testing.assert_allclose([-seam[1], seam[0]], heading*np.linalg.norm(seam))
 
 
+def test_frontier_uses_half_turn_only_as_recovery(monkeypatch):
+    from gcodeproducer.core.cam import adaptive_frontier
+
+    centre, seam, heading = (10., 10.), (0., 2.), (-1., 0.)
+    region = box(2., 2., 10.1, 18.)
+    stock = box(0., 0., 30., 20.).difference(Point(centre).buffer(3.01, quad_segs=32))
+    monkeypatch.setattr(adaptive_frontier, 'discover_starts', lambda *a, **k: [])
+    args = ((10., 12.), region, stock)
+    opts = dict(pitch=1., tool_radius=1., min_loop_radius=2., max_loop_radius=2.,
+                continuation=(centre, seam, heading), **RATES)
+    assert adaptive_frontier.choose_frontier_peel(*args, **opts) is None
+    recovered = adaptive_frontier.choose_frontier_peel(*args, half_turns=True, **opts)
+    assert recovered is not None and recovered.link.minutes == 0
+    np.testing.assert_array_equal(recovered.peel.seam, (0., -2.))
+    broad = (args[0], box(2., 2., 28., 18.), stock)
+    normal = adaptive_frontier.choose_frontier_peel(*broad, **opts)
+    enabled = adaptive_frontier.choose_frontier_peel(*broad, half_turns=True, **opts)
+    assert normal is not None and enabled is not None
+    np.testing.assert_array_equal(enabled.peel.points, normal.peel.points)
+
+
 def test_frontier_trace_continues_without_reentry_from_a_cleared_seed():
     example = Path(__file__).resolve().parents[1] / 'examples/adaptive-neck-pocket.wkt'
     pocket = from_wkt(example.read_text())

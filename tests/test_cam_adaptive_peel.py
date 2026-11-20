@@ -74,6 +74,18 @@ def test_sweep_bound_covers_chord_caps_at_tight_turns():
     assert _sweep_area_upper(LineString(points), sweep, 1.) == pytest.approx(sweep.area, abs=1e-9)
 
 
+def test_half_turn_recovers_where_full_turn_hits_wall(peel_case):
+    centre, seam, _, _, material = peel_case
+    narrow = box(2., 2., 10.1, 18.)
+    args = (centre, seam, (-1., 0.), 1., 1., .18, narrow, material)
+    assert choose_peel(*args) is None
+    choice = choose_peel(*args, half_turns=True)
+    assert choice is not None and choice.removed_area == pytest.approx(1.427, abs=.001)
+    assert choice.peak_engagement <= .18 and narrow.covers(LineString(choice.points))
+    np.testing.assert_array_equal(choice.seam, -seam)
+    np.testing.assert_array_equal(choice.points[-1], choice.centre + choice.seam)
+
+
 def test_peel_uses_updated_stock_and_restarts_at_same_seam(peel_case):
     centre, seam, region, _, material = peel_case
     first = choose_peel(centre, seam, (1, 0), 1., 1., .14, region, material)

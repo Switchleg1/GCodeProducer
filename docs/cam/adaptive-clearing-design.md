@@ -133,7 +133,16 @@ In one paired 12-turn test planning fell from 77 s to 10 s, with identical
 selected XY points, links, peak sampled engagement and residual area. A
 48-turn run took 42 s to plan and removed 279.78 mm², leaving 4,221.10 mm²;
 there were three repositioning moves and peak sampled engagement was 16.7%.
-These are planning times, not machining times. The prototype remains offline.
+These are planning times, not machining times.
+
+When no useful full turn fits at any candidate start, the prototype can try
+shorter half-turns under the same engagement and containment checks. The
+next turn starts from the exact end of the half-turn and preserves its
+tangent. In a tight-wall test the full turn was rejected; the half-turn
+removed 1.43 mm² at 6.8% peak sampled engagement without repositioning.
+Letting half-turns compete routinely in the 48-turn two-lobe run reduced
+removal from 279.78 to 142.09 mm². They are therefore a fallback, not a
+replacement for productive full loops. The prototype remains offline.
 
 ## Comparison cases and gates
 

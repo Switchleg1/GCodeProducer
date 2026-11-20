@@ -25,7 +25,7 @@ class BranchChoice:
 
 def choose_branch(position, starts, region, material, *, pitch, tool_radius, limit,
                   min_loop_radius, max_loop_radius, cut_feed, travel_feed, z_feed,
-                  lift, waypoints=(), sense=1, expand=False):
+                  lift, waypoints=(), sense=1, expand=False, half_turns=False):
     """Rank nominated (center, seam, heading) triples by useful area per minute.
 
     All trials see the same current stock. Return only the winner and its
@@ -45,7 +45,7 @@ def choose_branch(position, starts, region, material, *, pitch, tool_radius, lim
             continue
         peel = choose_steered_peel(centre, seam, heading, pitch, tool_radius, limit, region, material,
                                    min_loop_radius=min_loop_radius, max_loop_radius=max_loop_radius,
-                                   sense=sense, expand=expand)
+                                   sense=sense, expand=expand, half_turns=half_turns)
         if peel is None:
             continue
         choice = BranchChoice(index, link, peel, link.minutes + peel.length/cut_feed)
