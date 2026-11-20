@@ -210,6 +210,11 @@ The offline front-cut gate rejects overload, out-of-bounds sweeps and
 zero-removal passes before updating stock. The straight fixture recomputes
 the stock edge after each accepted cut and advances it twice by 0.25 mm.
 This does not validate travel to the start of either stroke.
+`tools/hsm_front_corner.py` joins two straight legs with a tangent fillet
+and checks the entire chord chain against progressive stock. In the
+rounded fixture the 3 mm turn removes 11.89 mm² at 69.8° sampled peak
+(0.05 mm spacing); a too-tight turn or a lower contact limit rejects the
+whole proposal rather than committing the first leg.
 
 ## Gate before another generator attempt
 

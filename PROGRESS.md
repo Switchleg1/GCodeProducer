@@ -25,4 +25,5 @@
 - The offline work map assigns accessible stock and checks supplied seed poses against the boundary and live stock. With only a left-side cleared seed, the split right lobe needs its own entry or verified seed; an empty lobe does not.
 - Offline linear-front proposal extracts exposed stock edges (not pocket walls) and offsets a directed side cut. In the straight fixture the 19 mm stroke removed 4.61 mm² at 42.3° sampled peak; extending to the wall was rejected.
 - Offline front-cut gate commits only useful, contained strokes under the sampled contact limit. Two accepted 0.25 mm side cuts move the live front from Y5 to Y5.5; overloaded and zero-removal proposals commit nothing.
-- Next: apply the same transactional gate to a tangent straight-to-corner candidate so the connector and corner are checked as one cut. Completion gates are in `GOAL.md`.
+- Offline tangent corner proposal checks both straights and the intervening turn as one cut. The rounded fixture removed 11.89 mm² with 69.8° sampled peak at 0.05 mm spacing. Too-tight and over-limit candidates commit nothing.
+- Next: derive straight-to-corner candidates from consecutive live frontier edges instead of supplied waypoints. Completion gates are in `GOAL.md`.
