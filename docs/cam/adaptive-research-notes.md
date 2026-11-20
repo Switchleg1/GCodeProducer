@@ -143,6 +143,18 @@ frozen tolerances. An overloaded profile isn't a cleanup fallback: take
 smaller cuts or report the remaining stock. Compare verified candidates by
 cut time and transfer time, including any extra entry, not by arc count.
 
+### Fixed corner and slot inputs
+
+`tools/hsm_corner_fixtures.py` defines four one-plane inputs for a 2 mm
+cutter. The corner pair shares a 24 × 14 mm envelope, a local 0.5 mm stock
+band, and the same cleared incoming pose. Only the corner radius changes
+(0 or 4 mm). The slot pair has 6 mm and 2.4 mm widths and a pre-cleared 5 mm
+approach. Tests lock initial and geometrically unreachable areas to 0.001 mm²
+for these inputs; that is a fixture regression tolerance, not permission to
+leave stock, gouge, or exceed engagement. In particular, do not assume a
+slot barely wider than the cutter admits a path at the same engagement as
+the wide slot.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input

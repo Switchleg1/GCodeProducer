@@ -9,3 +9,6 @@
   based on prior reconstructed sweeps, not a machine-clearance guarantee.
 - Above-plane feed projections flag potentially entry-affected strokes as a
   group; they do not model the axial cutting edge or credit removal at depth.
+- Synthetic corner and slot fixtures use a 2 mm flat cutter at one fixed
+  plane with known pre-cleared stock. They compare geometry and contact,
+  not cutting data, machine clearance, or physical safety.

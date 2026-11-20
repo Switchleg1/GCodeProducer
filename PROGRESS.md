@@ -13,4 +13,5 @@
 - Sampled progressive planar cutter contact is now available in `tools/check_cambam_pocket.py --contact-step`. Side-cut and slot tests match analytical contact. CamBam all-travel P95 was 85.0° at 0.30 mm and 82.5° at 0.15 mm, with an unmodeled ramp that can inflate the peak. Sampling is not a clearance or load guarantee.
 - `tools/check_cambam_pocket.py --overlay` writes a numbered SVG showing target-plane strokes, already swept travel and reachable residual. Verified the CamBam sample overlay contains 627 strokes, 116 fully within prior sweeps.
 - Entry uncertainty now flags strokes overlapping earlier above-plane feed projections without crediting ramp coverage. At 0.15 mm, CamBam had 321 flagged samples; peak/P95 outside those strokes were 93.7°/82.5°, versus 360°/82.5° overall.
-- Next: pin corner/slot fixture geometry, initial cleared stock and tolerances before building the replacement. Completion gates are in `GOAL.md`.
+- Pinned four offline corner/slot inputs in `tools/hsm_corner_fixtures.py`; tests verify the approach disk is already clear and measure the unreachable portion of initial stock separately.
+- Next: drive analytical corner and slot paths through shared replay with these fixtures, then compare corner cleanup and tangent blends. Completion gates are in `GOAL.md`.
