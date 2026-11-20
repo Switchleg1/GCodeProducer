@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_TURNS, RAMP_ANGLE
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, RAMP_ANGLE
 
 @dataclass
 class Operation:
@@ -42,7 +42,7 @@ class Operation:
 
     lead_angle: float = RAMP_ANGLE      # maximum lead-in descent, in degrees
 
-    adaptive_peels: int = ADAPTIVE_CAM_TURNS
+    adaptive_engagement: float = ADAPTIVE_CAM_LIMIT * 100  # sampled width, percent of cutter diameter
 
     def __post_init__(self):
         if self.kind == "pocket" and self.protect_model:

@@ -9,21 +9,21 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 ## Adaptive clearing
 
 Choose **Adaptive clearing** for Pocket or 3D Waterfall. With a flat endmill,
-**Lead-in ramp** and **Stay down between contours** enabled, it tries a bounded
-sequence of curved cuts. It evaluates each trial against a planar stock model
-and caps the trial’s sampled engagement at 18%. It keeps a connected sequence
+**Lead-in ramp** and **Stay down between contours** enabled, it plans curved
+peels against a planar stock model. **Adaptive engagement (%)** sets the
+maximum sampled cutter-width engagement (default 18%). It keeps a connected sequence
 and uses the normal CAM lead planner, including the operation’s lead-in angle.
 Waterfall can use the stock left by previous passes; a planar Pocket plans its
 initial geometry from a nominal stock envelope.
 
-**Adaptive peel budget** sets the maximum number of peels per depth plan
-(default 8, up to 48). The planner searches for a peel it can reach without
-retracting, even if a cut requiring a retract would score higher. When the
-budget runs out or no verified stay-down peel remains, generation stops if
-coverage is incomplete. It does not emit wall-parallel cleanup at the
-adaptive depth. Tab-protected areas are not supported. The error reports
-uncovered area and the reason for stopping. The 18% sampled-width limit is
-not a bound on actual tool load and does not apply to leads. Qualify depth
+There is no peel-count cutoff. The planner keeps peeling until the remaining
+stock can be cleared with ordinary moves that **all** pass the same engagement
+check in cutting order, with verified stay-down transfers. A rejected finish
+trial adds no moves. If the search stalls or hits its path-point resource guard
+while coverage is incomplete, generation stops instead of falling back.
+Tab-protected areas are not supported. The error reports uncovered area and
+the reason for stopping. The sampled-width limit is not a bound on actual
+tool load and does not apply to leads. Qualify depth
 per pass for the actual cutter and setup; do not carry an adaptive depth over
 to a different strategy without reviewing it. See the [design and benchmark](adaptive-clearing-design.md).
 

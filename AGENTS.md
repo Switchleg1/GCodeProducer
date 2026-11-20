@@ -17,4 +17,5 @@ with `python tools/generate_reference.py` after a version change.
 - Isolate `GCODEPRODUCER_LIBRARY` and `GCODEPRODUCER_SETTINGS` in tests/captures;
   never alter the operator's actual library or settings.
 - Update relevant offline guides for user-visible changes. Run generated-reference
-  checks, pytest and `git diff --check` before finishing.
+  checks, relevant pytest tests and `git diff --check` before finishing. Reserve
+  the full suite for broad changes, release checks, or explicit requests.

@@ -10,6 +10,7 @@ from shapely.geometry.base import BaseGeometry
 from gcodeproducer.core.cam.adaptive_branch import BranchChoice
 from gcodeproducer.core.cam.adaptive_entry import AdaptiveEntry, seed_entry
 from gcodeproducer.core.cam.adaptive_frontier import choose_frontier_peel
+from gcodeproducer.core.cam.adaptive_finish import AdaptiveFinish
 from gcodeproducer.core.cam.cam_constants import (
     ADAPTIVE_LINK_HISTORY_SAMPLES, ADAPTIVE_LINK_HISTORY_STEPS, ADAPTIVE_POCKET_AREA_EPS, RAMP_ANGLE,
 )
@@ -18,23 +19,25 @@ from gcodeproducer.core.cam.lead_angle import lead_slope
 
 @dataclass(frozen=True)
 class AdaptivePocket:
-    steps: tuple[AdaptiveEntry | BranchChoice, ...]
+    steps: tuple[AdaptiveEntry | BranchChoice | AdaptiveFinish, ...]
     remaining: BaseGeometry
     initial_area: float
     residual_area: float
     status: str
 
 
-def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
-                lead_angle=RAMP_ANGLE, use_link_history=True, **settings):
+def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget=None, point_budget=None,
+                lead_angle=RAMP_ANGLE, use_link_history=True, finish=None, **settings):
     """Try peels and, when stalled, try an entry in a fresh residual patch.
 
     The cutter-centre region must account for protection at every entry Z.
     An entry step does not plan travel at clearance height to its start.
     This experiment neither emits G-code nor fills residuals by slotting.
     """
-    if not isinstance(entry_budget, int) or entry_budget < 1 or not isinstance(turn_budget, int) or turn_budget < 0:
-        raise ValueError('Adaptive pocket needs a positive entry budget and nonnegative turn budget')
+    if (not isinstance(entry_budget, int) or entry_budget < 1
+            or (turn_budget is not None and (not isinstance(turn_budget, int) or turn_budget < 0))
+            or (point_budget is not None and (not isinstance(point_budget, int) or point_budget < 1))):
+        raise ValueError('Invalid adaptive pocket work budget')
     radius = settings['tool_radius']
     if not all(math.isfinite(v) for v in (radius, top, depth)) or radius <= 0 or top <= depth:
         raise ValueError('Adaptive pocket requires a positive radius and descending Z range')
@@ -45,10 +48,18 @@ def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
     steps, position, continuation = [], None, None
     supplied_waypoints = list(settings.pop('waypoints', ()))
     history = []
-    entries = turns = 0
+    entries = turns = samples = 0
     status = 'covered'
     while residual > ADAPTIVE_POCKET_AREA_EPS:
-        if position is not None and turns >= turn_budget:
+        if position is not None and finish is not None:
+            tail = finish(position, material)
+            if tail is not None and (point_budget is None or samples + len(tail.points) <= point_budget):
+                next_area = tail.remaining.intersection(footprint).area
+                if residual - next_area > ADAPTIVE_POCKET_AREA_EPS:
+                    steps.append(tail)
+                    material, residual, status = tail.remaining, next_area, 'checked_finish'
+                    break
+        if position is not None and turn_budget is not None and turns >= turn_budget:
             status = 'turn_budget'
             break
         waypoints = supplied_waypoints + [p for sample in history for p in sample]
@@ -78,6 +89,10 @@ def plan_pocket(region, material, *, top, depth, entry_budget, turn_budget,
             next_position = choice.points[-1, :2]
             continuation = None
             entries += 1
+        samples += len(choice.peel.points) + len(choice.link.points) if isinstance(choice, BranchChoice) else len(choice.points)
+        if point_budget is not None and samples > point_budget:
+            status = 'point_budget'
+            break
         next_area = next_stock.intersection(footprint).area
         if residual - next_area <= ADAPTIVE_POCKET_AREA_EPS:
             status = 'stalled'

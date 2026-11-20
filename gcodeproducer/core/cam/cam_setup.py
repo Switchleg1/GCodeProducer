@@ -33,6 +33,7 @@ class CAMSetup:
             ops = []
             for item in g.get("operations", []):
                 d = dict(item)
+                d.pop('adaptive_peels', None)  # retired per-depth planning cutoff
                 d["geometry"] = [Reference(**r) for r in d.get("geometry", [])]
                 d["height_references"] = [Reference(**r) for r in d.get("height_references", [])]
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])

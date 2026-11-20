@@ -55,10 +55,10 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
                 assert restored.groups[0].operations[-1].strategy == strategy
-                assert form.isRowVisible(editor.adaptive_peels) == (strategy == 'adaptive')
+                assert form.isRowVisible(editor.adaptive_engagement) == (strategy == 'adaptive')
                 if strategy == 'adaptive':
-                    editor.adaptive_peels.setValue(24)
-                    assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].adaptive_peels == 24
+                    editor.adaptive_engagement.setValue(24)
+                    assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].adaptive_engagement == 24
     finally:
         editor.close()
 
@@ -137,11 +137,12 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 
 
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
-def test_adaptive_strategy_rejects_partial_coverage_instead_of_emitting_cleanup(libset, kind):
-    from gcodeproducer.core.cam import generate
+def test_adaptive_strategy_rejects_partial_coverage_instead_of_emitting_cleanup(libset, kind, monkeypatch):
+    from gcodeproducer.core.cam import generate, adaptive_paths
+    monkeypatch.setattr(adaptive_paths, 'ADAPTIVE_CAM_POINT_LIMIT', 180)
     shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
     job, _ = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
-                         end=Depth('absolute', -1), strategy='adaptive', lead_angle=4., adaptive_peels=1)
+                         end=Depth('absolute', -1), strategy='adaptive', lead_angle=4.)
     job.cam_setup.reference_shapes = [shape]
     with pytest.raises(ValueError, match='Adaptive clearing left .*No contour fallback was generated'):
         generate(job, StageContext())
@@ -154,7 +155,7 @@ def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():
 
     area = box(-3, -3, 3, 3)
     stock = Point(0, 0).buffer(1)
-    op = Operation(kind='waterfall', strategy='adaptive', adaptive_peels=1)
+    op = Operation(kind='waterfall', strategy='adaptive')
     paths = pocket_paths(op, [], area, 3., 'climb', material=stock)
     assert paths and all(not p.closed for p in paths)
     assert stock.difference(LineString(paths[0].points).buffer(1.5)).area < 1e-8
@@ -165,7 +166,7 @@ def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():
 def test_old_strategy_names_preserve_existing_behaviour():
     for kind in ('pocket', 'waterfall'):
         setup = CAMSetup.from_dict({'groups': [{'tool_id': 'tool', 'operations': [
-            {'kind': kind, 'strategy': 'trochoidal', 'start': {}, 'end': {}}]}]})
+            {'kind': kind, 'strategy': 'trochoidal', 'adaptive_peels': 8, 'start': {}, 'end': {}}]}]})
         assert setup.groups[0].operations[0].strategy == 'adaptive'
     assert Operation(kind='pocket', strategy='raster').strategy == 'raster_y'
     assert Operation(kind='waterfall', strategy='raster').strategy == 'raster_y'
