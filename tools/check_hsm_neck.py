@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from shapely import from_wkt, union_all
-from shapely.geometry import Point, box
+from shapely.geometry import LineString, Point, box
 
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -22,12 +22,44 @@ from tools.hsm_tangent_link import forward_clearance
 from tools.hsm_straight_front import eased_front_bite, frontier_edges, straight_advance, straight_front_candidates
 
 
+def clearance_sections(regions, component, xs):
+    """Separate wall-limited spans from seed-connected open spans."""
+    domain = union_all(regions)
+
+    def spans(geometry):
+        if geometry.is_empty:
+            return
+        if hasattr(geometry, 'geoms'):
+            for part in geometry.geoms:
+                yield from spans(part)
+        elif geometry.length > 0:
+            yield geometry.bounds[1], geometry.bounds[3]
+
+    def intervals(geometry):
+        merged = []
+        for lo, hi in sorted(spans(geometry)):
+            if merged and lo <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
+            else:
+                merged.append((lo, hi))
+        return merged
+
+    report = []
+    for x in xs:
+        if not math.isfinite(x):
+            raise ValueError('section X must be finite')
+        section = LineString([(x, domain.bounds[1]), (x, domain.bounds[3])]) if not domain.is_empty else LineString()
+        report.append({'x_mm': x, 'domain_y_mm': intervals(section.intersection(domain)),
+                       'connected_y_mm': intervals(section.intersection(component))})
+    return report
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=()):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -166,6 +198,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if section_xs:
+        report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:
         probe = Point(36., 23.)
         trace = []
@@ -221,6 +255,8 @@ if __name__ == '__main__':
                         help='preview a successor for this many top cuts (1 disables lookahead)')
     parser.add_argument('--lookahead-after', type=int, default=0,
                         help='number of accepted cuts before enabling lookahead')
+    parser.add_argument('--section-x', type=float, action='append', default=[],
+                        help='report terminal center clearance and domain spans at this X (repeatable)')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
@@ -233,7 +269,7 @@ if __name__ == '__main__':
                             with_three_leg_links=args.with_three_leg_links, min_departure=args.min_departure, prioritize_neck=args.prioritize_neck, with_front_bites=args.with_front_bites,
                             trace_clearance=args.trace_clearance, prioritize_clearance=args.prioritize_clearance,
                             with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
-                            lookahead_after=args.lookahead_after)
+                            lookahead_after=args.lookahead_after, section_xs=args.section_x)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

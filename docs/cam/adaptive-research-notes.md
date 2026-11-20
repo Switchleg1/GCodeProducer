@@ -349,6 +349,10 @@ greedy selection, but neither moves the connected edge past X23. Keep
 greedy selection as the baseline. Delaying width-two preview until 53 cuts
 (`--lookahead-after 53`) still stalls after 58 cuts at X25.998; reachable
 residual is 4,011.181 mm² versus 4,011.155 mm² without preview.
+Repeat `--section-x` to compare the terminal seed-connected spans with the
+wall-limited center domain. In the no-preview baseline, the open span is
+Y21.51–23.89 at X25.75 and empty at X26, where the wall-limited span is
+Y14.12–30.17. The immediate blockage is live stock, not the pocket wall.
 
 ## Gate before another generator attempt
 

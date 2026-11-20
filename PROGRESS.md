@@ -64,4 +64,5 @@
 - `--lookahead-width 2` previews one checked successor from each of the top two picks, committing only the first. The controlled fixture avoids a greedy dead end. At a 24-cut neck budget, both reach X23 and 56.17° peak, but lookahead leaves 4,090.15 mm² versus 4,087.34 mm².
 - The trace now fingerprints each checked link and cut and reports its endpoint and removal. The two runs first diverge at cut 2: lookahead ends farther east (X22 vs X13.5), yet both clearance edges stay X23. Lookahead leaves 3.424 mm² less connected area at cut 24.
 - Delaying width-two lookahead until 53 accepted cuts preserves the early prefix but still stalls at cut 58, X25.998, with 4,011.181 mm² reachable (baseline 4,011.155 mm²). Peak stays 56.17° and the probe is not reached.
-- Next: inspect the terminal clearance boundary for a new neck-directed candidate family rather than repeating ranking trials. Completion gates are in `GOAL.md`.
+- `--section-x` compares terminal seed-connected spans to the wall-limited center domain. The narrow-bite baseline has Y21.51–23.89 open at X25.75, but no open span at X26 despite a 16.05 mm wall-limited width there.
+- Next: generate a shallow advance across that live stock face using the measured open span for approach and exit; keep the existing checks. Completion gates are in `GOAL.md`.

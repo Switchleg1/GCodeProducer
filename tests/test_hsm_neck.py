@@ -1,6 +1,17 @@
 import pytest
+from shapely.geometry import box
 
-from tools.check_hsm_neck import check_neck
+from tools.check_hsm_neck import check_neck, clearance_sections
+
+
+def test_terminal_sections_distinguish_open_spans_from_wall_domain():
+    domain = box(0, 0, 10, 10)
+    connected = box(0, 2, 6, 3).union(box(0, 5, 6, 7)).union(box(0, 2, 1, 7))
+    assert clearance_sections([domain], connected, [4, 8, 11]) == [
+        {'x_mm': 4, 'domain_y_mm': [(0., 10.)], 'connected_y_mm': [(2., 3.), (5., 7.)]},
+        {'x_mm': 8, 'domain_y_mm': [(0., 10.)], 'connected_y_mm': []},
+        {'x_mm': 11, 'domain_y_mm': [], 'connected_y_mm': []},
+    ]
 
 
 def test_clearance_trace_includes_seed_and_matches_final_report():
