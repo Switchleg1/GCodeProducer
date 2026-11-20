@@ -5,7 +5,7 @@ from shapely.geometry import Point
 
 from tools.check_cambam_pocket import level_moves, replay_strokes
 from tools.hsm_corner_fixtures import corner_slot_fixtures
-from tools.hsm_corner_trial import compare_local_cleanup
+from tools.hsm_corner_trial import compare_local_cleanup, compare_staged_cleanup
 
 
 @pytest.mark.parametrize('name, stock_area, unreachable', [
@@ -62,3 +62,21 @@ def test_local_cleanup_reduces_residual_but_fails_trial_contact_limit(step):
     assert all(row['removed_stock_mm2'] < 1e-8 for row in rows[4:6])
     assert rough['sampled_peak_contact_deg'] < 95.
     assert finished['sampled_peak_contact_deg'] > 130.  # reject at the 95° trial limit
+
+
+@pytest.mark.parametrize('step', [.05, .025, .0125])
+def test_staged_cleanup_limits_contact_without_trading_away_coverage(step):
+    _, (trial, _, rows) = compare_staged_cleanup((1.8, .8, .2), step)
+    assert trial['reachable_residual_mm2'] == pytest.approx(.0946, abs=.0001)
+    assert trial['outside_pocket_sweep_mm2'] < 1e-8
+    assert trial['sampled_peak_contact_deg'] < 95.
+    for index in range(4, len(rows), 5):
+        connectors = rows[index:index+2]
+        assert all(row['removed_stock_mm2'] < 1e-8 for row in connectors)
+        assert sum(row['removed_stock_mm2'] for row in rows[index+2:index+5]) > 0.
+
+
+@pytest.mark.parametrize('fillets', [(), (.8, 1.8), (1.2, 1.2), (3.,), (0.,)])
+def test_staged_cleanup_requires_strictly_decreasing_positive_radii(fillets):
+    with pytest.raises(ValueError, match='decrease strictly'):
+        compare_staged_cleanup(fillets)

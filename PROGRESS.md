@@ -16,4 +16,5 @@
 - Pinned four offline corner/slot inputs in `tools/hsm_corner_fixtures.py`; tests verify the approach disk is already clear and measure the unreachable portion of initial stock separately.
 - Offline replay accepts explicit pre-cleared stock. Reference tests distinguish air from slotting and show the same rounded path leaving 0.0001 mm² reachable residual in the rounded fixture versus 2.228 mm² in the sharp fixture.
 - Offline tangent profile cleanup on the sharp fixture reduces reachable residual from 2.228 to 0.095 mm² with no measured outside sweep, but peaks at 136–137° at 0.025/0.05 mm spacing. Reject it against the illustrative 95° trial limit.
-- Next: try staged corner passes with progressively smaller tangent radii; measure intermediate contact and reject overloads. Completion gates are in `GOAL.md`.
+- Staged local profile trial (1.8, 0.8, 0.2 mm radii) reaches the same 0.095 mm² residual with 89.1–90.0° sampled peak at three spacings and no outside sweep. Adds 44.0 mm of feed including 27.2 mm of clear returns after the reference pass.
+- Next: test tangent blend geometry that reduces the verified return distance without giving back coverage or raising engagement. Completion gates are in `GOAL.md`.

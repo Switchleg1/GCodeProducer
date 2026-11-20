@@ -165,7 +165,11 @@ without a 0.2 mm tangent local cleanup. The latter leaves 0.095 mm² instead
 of 2.228 mm² with no measured outside sweep; both connector strokes remove
 no stock in the model. But the cleanup peaks at 136–137° at 0.025 and 0.05 mm
 sample spacing. It fails the illustrative 95° trial limit despite improving
-coverage. Test lighter intermediate passes rather than accepting the path.
+coverage. Three staged tangent passes (1.8, 0.8, then 0.2 mm radius)
+leave the same 0.095 mm² and peak at 89.1–90.0° across 0.0125–0.05 mm
+sampling, with no measured outside sweep. The passes add 44.0 mm of feed
+including 27.2 mm of cleared returns after the reference cut: useful for
+isolating engagement, not yet an efficient general solution.
 
 ## Gate before another generator attempt
 
