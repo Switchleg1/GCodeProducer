@@ -14,4 +14,5 @@
 - `tools/check_cambam_pocket.py --overlay` writes a numbered SVG showing target-plane strokes, already swept travel and reachable residual. Verified the CamBam sample overlay contains 627 strokes, 116 fully within prior sweeps.
 - Entry uncertainty now flags strokes overlapping earlier above-plane feed projections without crediting ramp coverage. At 0.15 mm, CamBam had 321 flagged samples; peak/P95 outside those strokes were 93.7°/82.5°, versus 360°/82.5° overall.
 - Pinned four offline corner/slot inputs in `tools/hsm_corner_fixtures.py`; tests verify the approach disk is already clear and measure the unreachable portion of initial stock separately.
-- Next: drive analytical corner and slot paths through shared replay with these fixtures, then compare corner cleanup and tangent blends. Completion gates are in `GOAL.md`.
+- Offline replay accepts explicit pre-cleared stock. Reference tests distinguish air from slotting and show the same rounded path leaving 0.0001 mm² reachable residual in the rounded fixture versus 2.228 mm² in the sharp fixture.
+- Next: prototype a local profile cleanup for the sharp remnant in the offline fixtures; compare after checking the swept boundary and contact. Completion gates are in `GOAL.md`.

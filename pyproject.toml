@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gcodeproducer"
-version = "0.1.85"
+version = "0.1.86"
 description = "Slicer / CAM app that produces G-code through a stage pipeline (Qt6 GUI + CLI)"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}

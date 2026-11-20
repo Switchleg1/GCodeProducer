@@ -153,7 +153,12 @@ approach. Tests lock initial and geometrically unreachable areas to 0.001 mm²
 for these inputs; that is a fixture regression tolerance, not permission to
 leave stock, gouge, or exceed engagement. In particular, do not assume a
 slot barely wider than the cutter admits a path at the same engagement as
-the wide slot.
+the wide slot. `replay_strokes` accepts that explicit remaining stock;
+newly swept geometry in the pre-cleared approach is travel, not removal.
+A reference tangent arc leaves 0.0001 mm² reachable residual in the rounded
+fixture but 2.228 mm² in the sharp one. The slot reference separately checks
+that a pre-cleared move registers zero contact and a fresh centerline slot
+matches the analytical contact for the chosen sampling step.
 
 ## Gate before another generator attempt
 

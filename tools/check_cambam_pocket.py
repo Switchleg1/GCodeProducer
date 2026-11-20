@@ -130,6 +130,14 @@ def _feed_moves(text, depth, chord_error):
 
 
 def replay(pocket, radius, depth, text, chord_error, contact_step=None):
+    moves = _feed_moves(text, depth, chord_error)
+    return replay_strokes(pocket, pocket, radius, depth, moves, chord_error, contact_step)
+
+
+def replay_strokes(pocket, initial_stock, radius, depth, moves, chord_error, contact_step=None):
+    """Replay ordered XY strokes against explicit initial stock, not an assumed full pocket."""
+    if not initial_stock.is_empty and not pocket.covers(initial_stock):
+        raise ValueError('initial stock must be inside the diagnostic pocket')
     reachable = pocket.buffer(-radius, quad_segs=BUFFER_SEGMENTS).buffer(radius, quad_segs=BUFFER_SEGMENTS)
     reachable = reachable.intersection(pocket)
     swept = Polygon()
@@ -137,9 +145,9 @@ def replay(pocket, radius, depth, text, chord_error, contact_step=None):
     contacts = []
     unaffected_contacts = []
     affected_samples = 0
-    remaining = pocket
+    remaining = initial_stock
     entry_shadow = Polygon()
-    for number, mode, points, length, at_level in _feed_moves(text, depth, chord_error):
+    for number, mode, points, length, at_level in moves:
         line = LineString(points)
         if not at_level:
             if contact_step is not None:
@@ -150,7 +158,8 @@ def replay(pocket, radius, depth, text, chord_error, contact_step=None):
         stroke = line.buffer(radius, quad_segs=BUFFER_SEGMENTS)
         new = stroke.difference(swept)
         rows.append({'line': number, 'motion': mode, 'length_mm': length,
-                     'new_sweep_mm2': new.area, 'new_pocket_sweep_mm2': new.intersection(pocket).area})
+                     'new_sweep_mm2': new.area, 'new_pocket_sweep_mm2': new.intersection(pocket).area,
+                     'removed_stock_mm2': new.intersection(initial_stock).area})
         if contact_step is not None:
             samples = list(sampled_contact(points, remaining, radius, contact_step, BUFFER_SEGMENTS))
             rows[-1]['sampled_peak_contact_deg'] = max((a for a, _ in samples), default=None)
@@ -167,12 +176,15 @@ def replay(pocket, radius, depth, text, chord_error, contact_step=None):
         swept = swept.union(stroke)
     if not rows:
         raise ValueError('no XY strokes at target depth')
-    residual = reachable.difference(swept)
+    reachable_stock = reachable.intersection(initial_stock)
+    residual = reachable_stock.difference(swept)
     clear = [row for row in rows if row['new_sweep_mm2'] <= CLEAR_AREA_MM2]
+    air = [row for row in rows if row['removed_stock_mm2'] <= CLEAR_AREA_MM2]
     report = {'depth_mm': depth, 'tool_diameter_mm': radius * 2, 'arc_chord_error_mm': chord_error,
-            'nominal_mm2': pocket.area, 'reachable_mm2': reachable.area,
+            'nominal_mm2': pocket.area, 'reachable_mm2': reachable.area, 'initial_reachable_stock_mm2': reachable_stock.area,
             'reachable_residual_mm2': residual.area, 'outside_pocket_sweep_mm2': swept.difference(pocket).area,
             'stroke_count': len(rows), 'feed_distance_mm': sum(r['length_mm'] for r in rows),
+            'air_stroke_count': len(air), 'air_distance_mm': sum(r['length_mm'] for r in air),
             'already_swept_stroke_count': len(clear),
             'already_swept_distance_mm': sum(r['length_mm'] for r in clear),
             'already_swept_straight_count': sum(r['motion'] == 'G1' for r in clear)}
