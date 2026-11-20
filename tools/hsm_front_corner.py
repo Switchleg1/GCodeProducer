@@ -56,6 +56,21 @@ def filleted_corner(start, vertex, end, turn_radius, chord_error):
     return [start, *arc, end]
 
 
+def roll_off(path, turn_radius, chord_error):
+    """Append a tangent quarter turn to the right, away from a stock-left front."""
+    if not all(math.isfinite(v) and v > 0 for v in (turn_radius, chord_error)):
+        raise ValueError('expected positive turn radius and chord error')
+    start, end = path[-2:]
+    length = math.dist(start, end)
+    if not length:
+        raise ValueError('expected a nonzero final leg')
+    ux, uy = ((b-a)/length for a, b in zip(start, end))
+    offset = (uy*turn_radius, -ux*turn_radius)
+    exit = (end[0]+offset[0]+ux*turn_radius, end[1]+offset[1]+uy*turn_radius)
+    arc, _ = arc_points(end, exit, offset, -1, chord_error)
+    return [*path, *arc[1:]]
+
+
 def try_corner_advance(pocket, stock, start, vertex, end, radius, *, turn_radius,
                        chord_error, contact_limit, sample_step):
     """Check both straights and their transition as one progressive cut."""

@@ -2,7 +2,7 @@ import pytest
 from shapely.geometry import box
 
 from tools.hsm_corner_fixtures import corner_slot_fixtures
-from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, try_corner_advance
+from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, roll_off, try_corner_advance
 
 
 @pytest.mark.parametrize('direction', [1., -1.])
@@ -31,6 +31,14 @@ def test_frontier_corners_do_not_join_through_a_pocket_wall():
     pocket = box(0, 0, 24, 18)
     assert list(frontier_corner_poses(pocket, box(4, 5, 24, 18), 1., .25)) == [
         ((3.25, 18.), (3.25, 4.25), (24., 4.25))]
+
+
+def test_roll_off_preserves_straight_cut_and_turns_away_from_stock():
+    straight = [(1., 3.), (6., 3.)]
+    path = roll_off(straight, 1., .001)
+    assert path[:2] == straight
+    assert path[-1] == pytest.approx((7., 2.))
+    assert all(6. < x <= 7. and 2. <= y < 3. for x, y in path[2:])
 
 
 def test_fillet_rejects_a_reversal_or_insufficient_room():

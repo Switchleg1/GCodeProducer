@@ -12,18 +12,20 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions
-from tools.hsm_front_corner import filleted_corner, frontier_corner_poses
+from tools.hsm_front_corner import filleted_corner, frontier_corner_poses, roll_off
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
 from tools.hsm_straight_front import straight_front_candidates
 
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
-               with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2.):
+               with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
         raise ValueError('shallow runoff must be nonnegative')
+    if not math.isfinite(shallow_rolloff) or shallow_rolloff < 0 or (shallow_rolloff and not with_shallow_fronts):
+        raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
     pocket = from_wkt(fixture.read_text(encoding='utf-8'))
     cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
@@ -40,7 +42,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                     yield path
 
     def propose_shallow(live, _pose):
-        return straight_front_candidates(pocket, live, radius, .25, min_edge=2., lead=2., runoff=shallow_runoff)
+        for path in straight_front_candidates(pocket, live, radius, .25, min_edge=2., lead=2., runoff=shallow_runoff):
+            yield roll_off(path, shallow_rolloff, .0025) if shallow_rolloff else path
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -79,11 +82,14 @@ if __name__ == '__main__':
     parser.add_argument('--with-shallow-fronts', action='store_true', help='retry with 0.25 mm straight immersion when the main proposals fail')
     parser.add_argument('--shallow-runoff', type=float, default=2., metavar='MM',
                         help='tangent exit distance for shallow retries')
+    parser.add_argument('--shallow-rolloff', type=float, default=0., metavar='MM',
+                        help='append a checked tangent quarter turn of this radius to shallow cuts')
     args = parser.parse_args()
     try:
         result = check_neck(with_corners=args.with_corners, corner_runoff=args.corner_runoff,
                             with_detours=args.with_detours, with_live_detours=args.with_live_detours,
-                            with_shallow_fronts=args.with_shallow_fronts, shallow_runoff=args.shallow_runoff)
+                            with_shallow_fronts=args.with_shallow_fronts, shallow_runoff=args.shallow_runoff,
+                            shallow_rolloff=args.shallow_rolloff)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

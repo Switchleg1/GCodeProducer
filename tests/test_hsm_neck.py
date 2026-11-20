@@ -72,3 +72,14 @@ def test_shallow_exit_extension_does_not_bypass_origin_clearance():
     assert result['last_stock_distance_mm'] < 2.
     assert result['last_selection_counts'] == {'origin_clearance': 1}
     assert result['peak_contact_deg'] < 60.
+
+
+def test_earlier_shallow_rolloff_reaches_a_checked_origin():
+    result = check_neck(with_corners=True, corner_runoff=.5, with_live_detours=True,
+                        with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1.)
+    assert result['cut_count'] == 10 and result['stop'] == 'stalled'
+    assert result['last_stock_distance_mm'] > 2.4
+    assert result['last_wall_distance_mm'] > 2.
+    assert result['peak_contact_deg'] < 60.
+    assert 'origin_clearance' not in result['last_selection_counts']
+    assert result['last_selection_counts']['link_clearance'] > 0

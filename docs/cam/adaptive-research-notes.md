@@ -257,7 +257,10 @@ at the same sampled peak, then stops because the new endpoint fails origin
 clearance. Increasing `--shallow-runoff` from 2 to 2.5 mm removes another
 0.375 mm² but does not clear the endpoint. At 3, 3.5, and 4.5 mm no shallow
 retry passes selection. The extra straight travel is not an exit strategy;
-no clearance or contact gate was relaxed.
+no clearance or contact gate was relaxed. With `--shallow-runoff 1
+--shallow-rolloff 1`, the shallow retry follows a checked tangent quarter-turn
+away from the frontier. It ends 2.455 mm from stock at unchanged peak sampled
+contact. The next selection still stalls, but not on origin clearance.
 
 ## Gate before another generator attempt
 
