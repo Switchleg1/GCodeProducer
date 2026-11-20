@@ -32,4 +32,5 @@
 - Generating candidates from all sufficiently long exposed edges clears both seeded pads: 16 verified cuts remove all 16 mm², with 42.85° sampled peak and 140.59 mm of checked link plus cut travel. No change to transfer or contact checks.
 - `python tools/check_hsm_neck.py` pins the straight-only two-lobe baseline: one 13 mm link-plus-cut removes 3.00 mm² at 42.85° peak; stalls at (22, 28.5) with 4,149.56 mm² of reachable stock left.
 - Straight-only two-lobe stall diagnostics: six candidates fail tangent link clearance and three fail the sampled contact limit after passing the link gate. The accepted cut and residual are unchanged.
-- Next: compare tangent corner candidates on the same seeded geometry, using first-failure counts to guide the comparison. Completion gates are in `GOAL.md`.
+- `check_hsm_neck.py --with-corners` uses unchanged stock and limits. It accepts two tangent corners and one straight, removes 10.29 mm² versus 3.00 mm², and stalls at the next origin clearance check with 4,142.28 mm² reachable stock remaining.
+- Next: measure clearance at the last accepted corner endpoint and test a checked tangent runout so the next link can start from a verified pose. Completion gates are in `GOAL.md`.

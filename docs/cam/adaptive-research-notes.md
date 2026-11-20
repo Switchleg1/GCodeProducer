@@ -236,7 +236,11 @@ leaving 4,149.56 mm² of geometrically reachable stock. At the stall,
 `last_selection_counts` reports six failed links and three cuts that passed
 the link check but exceeded the sampled contact limit. Counts record the
 first failed gate per candidate passed to the selector; they do not include
-paths filtered out during proposal generation.
+paths filtered out during proposal generation. With `--with-corners`, the
+same benchmark also tries 3 mm tangent blends. It accepts two corners and
+one straight, removing 10.29 mm² at 56.17° peak sampled contact before the
+next origin-clearance check stops the run. Reachable residual is 4,142.28
+mm². This improves coverage but is neither a completed cut nor a timing win.
 
 ## Gate before another generator attempt
 

@@ -12,3 +12,14 @@ def test_straight_only_two_lobe_baseline_preserves_residual_on_stall():
     assert result['peak_contact_deg'] < 60.
     assert result['last_xy_mm'] == (22., 28.5)
     assert result['last_selection_counts'] == {'link_clearance': 6, 'contact_limit': 3}
+
+
+def test_corner_proposals_improve_coverage_but_do_not_hide_a_stall():
+    baseline = check_neck()
+    trial = check_neck(with_corners=True)
+    assert trial['initial_stock_mm2'] == baseline['initial_stock_mm2']
+    assert trial['corner_cut_count'] == 2 and trial['cut_count'] == 3
+    assert trial['removed_mm2'] > baseline['removed_mm2'] + 7.
+    assert trial['reachable_residual_mm2'] == pytest.approx(4142.28, abs=.02)
+    assert trial['peak_contact_deg'] < 60.
+    assert trial['stop'] == 'stalled' and trial['last_selection_counts'] == {'origin_clearance': 1}
