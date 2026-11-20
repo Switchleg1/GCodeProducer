@@ -21,3 +21,6 @@
 - The 53-cut lookahead delay is specific to the pinned fixture: it starts
   immediately before the baseline last advances its east edge (cut 54).
   It is not a production tuning rule.
+- Section-bite probes assume east is neckward on this fixture. The 0.25/0.5 mm
+  setbacks, 0.2 mm endpoint inset and three bow depths are trial dimensions,
+  not clearance guarantees or machining defaults.

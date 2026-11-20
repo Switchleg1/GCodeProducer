@@ -353,6 +353,10 @@ Repeat `--section-x` to compare the terminal seed-connected spans with the
 wall-limited center domain. In the no-preview baseline, the open span is
 Y21.51–23.89 at X25.75 and empty at X26, where the wall-limited span is
 Y14.12–30.17. The immediate blockage is live stock, not the pocket wall.
+`--with-section-bites` adds shallow eastward bows with endpoints inset in
+open spans. Mixing them into shallow retries regresses to a 49-cut stall
+at X23.495 with 4,036.97 mm² reachable and 57.07° peak sampled contact.
+Existing link, contact, exit and departure checks are unchanged.
 
 ## Gate before another generator attempt
 

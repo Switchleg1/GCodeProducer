@@ -1,7 +1,19 @@
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Point, box
 
-from tools.check_hsm_neck import check_neck, clearance_sections
+from tools.check_hsm_neck import check_neck, clearance_sections, section_bites
+
+
+def test_section_bites_start_and_end_inside_clearance_and_bow_east():
+    component = box(1, 2, 5, 7)
+    paths = list(section_bites([box(0, 0, 12, 10)], component, 2.))
+    assert len(paths) == 6
+    for path in paths:
+        assert component.contains(Point(path[0])) and component.contains(Point(path[-1]))
+        assert path[0][0] == pytest.approx(path[-1][0])
+        assert path[0][1] > path[-1][1]
+        assert max(x for x, _ in path) > path[0][0]
+    assert list(section_bites([box(0, 0, 12, 10)], box(1, 2, 5, 3), 2.)) == []
 
 
 def test_terminal_sections_distinguish_open_spans_from_wall_domain():
