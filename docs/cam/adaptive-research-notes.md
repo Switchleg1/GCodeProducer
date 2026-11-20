@@ -107,6 +107,33 @@ the original blank or physical setup.
 3. **Keep geometry and machine motion separate.** The offline comparison accepts ordered XY stroke proposals tagged cut, candidate link, or entry. No imported controller G-code. A backend's clear-link label is only a proposal: independently check the full cutter sweep against protected geometry and the stock left before that move. Compare verified stay-down time against retract/re-entry time. No unchecked fallback at adaptive depth.
 4. **Pin the backend experiment.** Record FreeCAD and wrapper revisions, geometry tolerance, cutter radius, allowance, ring/hole convention, and how stock and boundaries are passed to the backend. Check the installed Clipper generation and bindings against the source examined here; do not assume they are identical. Check reproducible Windows builds, cancellation and license notices before considering a production dependency. Keep the comparison out of the installed app initially.
 
+### Corner handling: circles are optional
+
+A circular slice can be useful for advancing along a branch, but it need
+not remain circular as it approaches a wall or corner. Compare two options
+from **the same partially cleared stock and incoming tool pose**:
+
+1. **Local profile cleanup.** Stop the roughing pass before engagement
+   rises and use a short rounded, boundary-following cut only where stock
+   remains. Enter from verified clearance and taper the cut on and off.
+   Prefer this simple option if it clears the corner within the limit;
+   don't run a full perimeter lap for one small remnant.
+2. **Blend into the corner.** Start moving toward the tool-center offset
+   of the wall before the circular slice runs out of room. Join the pass
+   and the boundary-following section tangentially, using a varying-radius
+   blend or tangent lines/arcs. Reduce local advance to hold engagement,
+   not just to make the preview look smoother. Follow straight walls with
+   straight cuts where appropriate.
+
+Test both on a rounded inside corner with a long approach and on a sharp
+nominal corner. In the sharp case, distinguish stock the cutter cannot
+reach from reachable stock left because the proposed turn needs more room.
+Reject either option if it crosses the protected boundary, has a sharp
+engaged turn, exceeds the engagement limit, or misses reachable stock past
+frozen tolerances. An overloaded profile isn't a cleanup fallback: take
+smaller cuts or report the remaining stock. Compare verified candidates by
+cut time and transfer time, including any extra entry, not by arc count.
+
 ## Gate before another generator attempt
 
 Write and review the verifier/fixture specification first. The benchmark input
