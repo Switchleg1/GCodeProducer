@@ -17,6 +17,7 @@ from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_
                                     shifted_roll_ons, tapered_roll_on)
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
+from tools.hsm_tangent_link import forward_clearance
 from tools.hsm_straight_front import frontier_edges, straight_advance, straight_front_candidates
 
 
@@ -122,6 +123,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     regions = center_regions(pocket, radius)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
+    last_heading = seed[1]
+    if cuts:
+        previous = next(xy for xy in reversed(cuts[-1].cut[:-1]) if xy != last_xy)
+        last_heading = tuple(b-a for a, b in zip(previous, last_xy))
+    departure = forward_clearance(pocket, remaining, radius, last_xy, last_heading, 2*radius)
     point = Point(last_xy)
     frontier = nearby_frontier(pocket, remaining, last_xy, radius, extra_reach=.25)
     return {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
@@ -133,6 +139,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'feed_mm': sum(cut.travel_mm for cut in cuts),
             'peak_contact_deg': max((cut.peak_deg for cut in cuts), default=None),
             'last_xy_mm': last_xy,
+            'last_forward_clearance_mm': departure,
             'nearby_frontier_mm': frontier.length,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),

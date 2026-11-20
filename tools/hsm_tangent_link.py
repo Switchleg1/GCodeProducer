@@ -1,7 +1,7 @@
 """Offline proposals for tangent returns through already cleared planar stock."""
 import math
 
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 
 
 def tangent_chords(start, end, outgoing, incoming, handle, subdivisions=128):
@@ -43,6 +43,34 @@ def cleared_tangent_link(pocket, stock, radius, start, end, outgoing, incoming, 
     if not stock.is_empty and axis.distance(stock) < required:
         return None
     return points
+
+
+def forward_clearance(pocket, stock, radius, xy, heading, max_distance):
+    """Length of a checked straight departure, capped at max_distance."""
+    magnitude = math.hypot(*heading)
+    if (not all(map(math.isfinite, (radius, magnitude, max_distance)))
+            or min(radius, magnitude, max_distance) <= 0):
+        raise ValueError('expected positive radius, heading magnitude and probe distance')
+    walls = pocket.boundary
+
+    def clears(distance):
+        end = tuple(x + d/magnitude*distance for x, d in zip(xy, heading))
+        axis = Point(xy) if end == xy else LineString((xy, end))
+        return (pocket.covers(axis) and axis.distance(walls) >= radius
+                and (stock.is_empty or axis.distance(stock) >= radius))
+
+    if not clears(0.):
+        return 0.
+    if clears(max_distance):
+        return max_distance
+    lo, hi = 0., max_distance
+    while hi-lo > .0001:
+        mid = (lo+hi)/2
+        if clears(mid):
+            lo = mid
+        else:
+            hi = mid
+    return lo
 
 
 def cleared_tangent_detour(pocket, stock, radius, start_pose, via_pose, end_pose, handle, *, margin=0.):

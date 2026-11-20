@@ -52,4 +52,5 @@
 - The final clear pose's connected clearance component has 76.37 mm of nearby stock frontier within cutter radius plus 0.25 mm. Its bounds end at X25 mm: it is still local to the left side. This is geometric proximity, not a checked route or cut.
 - `--with-neck-front` tries cuts from the easternmost 3 mm of the mapped frontier. Both extra proposals fail link clearance; the run remains at 23 cuts and 4,074.87 mm² reachable stock.
 - `--with-three-leg-links` tries two supplied waypoints after simpler links fail. A protected-island test verifies a route unavailable through either waypoint alone. The neck-facing trial still stalls at 23 cuts with 4,074.87 mm² reachable.
-- Next: inspect whether the blocked links can depart along the current heading before sampling more routes. Completion gates are in `GOAL.md`.
+- The final two-lobe pose fits the disk but has less than 0.0001 mm of checked straight departure in its current heading. The travel probe checks the whole swept centerline and does not rule out a curved departure.
+- Next: test changing the preceding cut's roll-off heading to leave a verified departure. Completion gates are in `GOAL.md`.

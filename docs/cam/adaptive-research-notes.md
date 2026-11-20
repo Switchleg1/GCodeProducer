@@ -305,6 +305,9 @@ trial still stalls after 23 cuts, leaving 4,074.87 mm² reachable stock.
 `--with-three-leg-links` checks paths through two supplied waypoint poses
 when direct and one-waypoint links fail. It routes around a protected island
 in a separate fixture, but does not get past the current two-lobe stall.
+`last_forward_clearance_mm` probes the full disk along the final heading.
+The stalled pose fits the disk but has no verified straight departure at
+0.0001 mm resolution. That does not rule out a curved departure.
 
 ## Gate before another generator attempt
 

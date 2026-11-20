@@ -1,12 +1,19 @@
 import pytest
 from shapely.geometry import LineString, Polygon, box
 
-from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link
+from tools.hsm_tangent_link import cleared_tangent_detour, cleared_tangent_link, cleared_three_leg_link, forward_clearance
 
 
 def _link(pocket, stock, margin=0.):
     return cleared_tangent_link(pocket, stock, 1., (2., 3.), (8., 3.),
                                 (1., 0.), (1., 0.), .5, margin=margin)
+
+
+def test_forward_probe_stops_at_first_stock_contact():
+    pocket, stock = box(0, 0, 20, 10), box(8, 3, 11, 7)
+    assert forward_clearance(pocket, stock, 1., (4., 5.), (2., 0.), 10.) == pytest.approx(3., abs=.0001)
+    assert forward_clearance(pocket, stock, 1., (7., 5.), (1., 0.), 4.) == 0.
+    assert forward_clearance(pocket, stock, 1., (7., 5.), (-1., 0.), 4.) == 4.
 
 
 def test_link_preserves_endpoints_and_accepts_a_clear_corridor():
