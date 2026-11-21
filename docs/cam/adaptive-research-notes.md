@@ -528,6 +528,10 @@ at 54.06° sampled peak and extend connected clearance by 0.0658 mm.
 All six advance it, adding 0.475 mm. At 14 cuts, clearance reaches
 X17.017 compared with X16.365 greedy, but removal is lower (7.963 vs
 11.355 mm²) and travel higher (80.76 vs 71.35 mm).
+The reach audit separates endpoint filtering, motion checks and ranking.
+Over six repeats the widest sampled span falls from 2.502 to 2.115 mm.
+On the last two rounds, a checked 0.075 mm advance ranks below the chosen
+0.050 mm cut. Farther mapped straight bodies exceed sampled contact.
 
 ## Gate before another generator attempt
 

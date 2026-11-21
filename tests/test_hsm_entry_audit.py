@@ -182,12 +182,17 @@ def test_anchored_straights_require_one_wide_span_and_clear_ends():
     split = [{'offset_mm': .25, 'x_mm': 4., 'connected_y_mm': [(1., 1.6), (2., 2.6)]}]
     assert not list(section_anchored_straights(split, room))
     wide = [{'offset_mm': .25, 'x_mm': 4., 'connected_y_mm': [(1., 3.)]}]
-    paths = list(section_anchored_straights(wide, room))
-    assert paths
+    audit = []
+    paths = list(section_anchored_straights(wide, room, on_variant=lambda x, mapped: audit.append((x, mapped))))
+    assert paths and len(paths) == sum(mapped for _, mapped in audit)
+    assert min(x for x, _ in audit) == pytest.approx(4.1)
+    assert max(x for x, _ in audit) == pytest.approx(4.4)
     for path in paths:
         assert room.covers(Point(path[0])) and room.covers(Point(path[-1]))
         assert neck_facing_straight(path)
-    assert not list(section_anchored_straights(wide, box(0, 0, 1, 1)))
+    audit.clear()
+    assert not list(section_anchored_straights(wide, box(0, 0, 1, 1), on_variant=lambda x, m: audit.append((x, m))))
+    assert audit and all(not mapped for _, mapped in audit)
 
 
 def test_east_opening_compares_fixed_stations_and_does_not_sum_split_spans():

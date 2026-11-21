@@ -291,7 +291,7 @@ def east_opening_profile(regions, initial, current, *, offsets=(-.5, -.25, 0., .
              'connected_y_mm': section['connected_y_mm']} for offset, section in zip(offsets, sections)]
 
 
-def section_anchored_straights(profile, component):
+def section_anchored_straights(profile, component, *, on_variant=None):
     """Propose eastward straight passes from usable Y spans of the opening."""
     for row in profile:
         if row['offset_mm'] <= 0:
@@ -306,7 +306,10 @@ def section_anchored_straights(profile, component):
                     body = [(x, mid+length/2), (x, mid-length/2)]
                     for turn in (.25, .4, .65):
                         path = roll_off(roll_on(body, turn, .0025), turn, .0025)
-                        if component.covers(Point(path[0])) and component.covers(Point(path[-1])):
+                        mapped = component.covers(Point(path[0])) and component.covers(Point(path[-1]))
+                        if on_variant is not None:
+                            on_variant(x, mapped)
+                        if mapped:
                             yield path
 
 
@@ -326,9 +329,39 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
     component = connected_clearance(pocket, live, seed_xy, radius)
     profile = (moving_anchor_profile if moving else east_opening_profile)(regions, initial, component)
     counts = Counter()
-    follow = choose_front_cut(pocket, live, start, section_anchored_straights(profile, component),
-                              radius, diagnostics=counts, **gates)
+    variant_counts = Counter()
+    farthest = {}
+    best_east = None
+    body_x = None
+
+    def record(stage, x):
+        variant_counts[stage] += 1
+        farthest[stage] = max(x, farthest.get(stage, -math.inf))
+
+    def note_variant(x, mapped):
+        nonlocal body_x
+        body_x = x
+        record('mapped' if mapped else 'endpoint_blocked', x)
+
+    def note_outcome(_path, outcome):
+        record(outcome, body_x)
+
+    def note_eligible(_key, choice):
+        nonlocal best_east
+        after = connected_clearance(pocket, choice.remaining, seed_xy, radius)
+        if not after.is_empty:
+            east = after.bounds[2]
+            best_east = east if best_east is None else max(east, best_east)
+
+    paths = section_anchored_straights(profile, component, on_variant=note_variant if moving else None)
+    follow = choose_front_cut(pocket, live, start, paths, radius, diagnostics=counts,
+                              on_outcome=note_outcome if moving else None,
+                              on_eligible=note_eligible if moving else None, **gates)
     trial = {'gates': dict(counts)}
+    if moving:
+        trial['reach_audit'] = {'max_span_width_mm': max((row['width_mm'] for row in profile), default=0.),
+                                'variant_counts': dict(variant_counts), 'farthest_body_x_by_stage_mm': farthest,
+                                'best_checked_east_shift_mm': None if best_east is None else best_east-component.bounds[2]}
     if follow is not None:
         body = max(zip(follow.cut, follow.cut[1:]), key=lambda p: math.dist(*p))
         after = connected_clearance(pocket, follow.remaining, seed_xy, radius)
