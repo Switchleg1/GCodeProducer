@@ -64,7 +64,7 @@ def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lea
                 yield points
 
 
-def fitted_front_candidates(pocket, stock, radius, *, focus=None):
+def fitted_front_candidates(pocket, stock, radius, *, focus=None, extensions=(1.25, 2.)):
     """Fit straight proposals across short stock edges; replay against unsimplified stock."""
     seen = set()
     for tolerance in (.15, .30):
@@ -73,7 +73,7 @@ def fitted_front_candidates(pocket, stock, radius, *, focus=None):
                 continue
             seen.add(edge)
             for immersion in (.10, .20):
-                for extension in (1.25, 2.):
+                for extension in extensions:
                     cut = straight_advance(pocket, edge, radius, immersion, lead=extension, runoff=extension)
                     if cut is not None:
                         yield cut

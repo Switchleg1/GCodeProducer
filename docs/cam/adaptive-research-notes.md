@@ -491,6 +491,9 @@ coverage still differs, so this does not establish a timing gain.
 At 48 cuts, the search reaches 0.384 mm farther east than the fixed
 focus but actual connected reach is essentially unchanged (X17.404 vs
 X17.403), and stock removal falls from 42.381 to 42.108 mm².
+`--longer-straights` adds fitted bodies from 2.25 to 3.25 mm. Over 24
+cuts, 42 have mapped endpoints versus 1,774 blocked; none is selected.
+The accepted motion and maximum 1.75 mm straight body are unchanged.
 
 ## Gate before another generator attempt
 

@@ -70,8 +70,13 @@ def test_fitted_straights_are_rejected_if_the_modeled_seed_cannot_reach_the_star
     assert report['removed_mm2'] == pytest.approx(.492, abs=.003)
 
 
-def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed():
-    report = check_first_cut(max_cuts=1, fitted_straights=True, turned_straights=True)
+@pytest.mark.parametrize('longer', [False, True])
+def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed(longer):
+    report = check_first_cut(max_cuts=1, fitted_straights=True, turned_straights=True, longer_straights=longer)
+    if longer:
+        assert report['long_variant_counts']['endpoint_blocked'] > 0
+        assert report['cuts_with_chord_at_least_225_mm'] == 0
+    assert report['longest_cut_chord_mm'] == pytest.approx(1.25)  # First cut, not the 24-cut maximum.
     assert report['cut_count'] == 1 and report['cuts_with_chord_at_least_075_mm'] == 1
     assert report['straight_cut_count'] == 0  # Rounded ends, not a single chord.
     assert report['total_removed_mm2'] == pytest.approx(.820, abs=.003)

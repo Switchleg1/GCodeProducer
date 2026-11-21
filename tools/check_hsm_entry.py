@@ -194,8 +194,10 @@ def seed_search_focus(fixed_focus, component, radius, *, follow=False):
     return fixed_focus.union(component.buffer(radius+.35))
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if longer_straights and not turned_straights:
+        raise ValueError('longer straights require turned straights')
     if live_focus and not (fitted_straights or turned_straights):
         raise ValueError('live focus requires fitted or turned straights')
     pocket, _ = neck_fixture()
@@ -208,15 +210,20 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     orbit = math.dist(a, b)
     stock = entry.remaining
     focus = Point(pose[0]).buffer(orbit + radius + 1.5)
+    long_counts = {'endpoint_blocked': 0, 'endpoint_mapped': 0}
 
-    def propose_straight(live, _pose):
+    def note_long_variant(mapped):
+        long_counts['endpoint_mapped' if mapped else 'endpoint_blocked'] += 1
+
+    def propose_straight(live, _pose, *, audit=True):
         yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
         component = connected_clearance(pocket, live, pose[0], radius) if turned_straights or live_focus else None
         search = seed_search_focus(focus, component, radius, follow=live_focus)
         if fitted_straights:
             yield from fitted_front_candidates(pocket, live, radius, focus=search)
         if turned_straights:
-            yield from turned_straight_candidates(pocket, live, radius, component, focus=search)
+            yield from turned_straight_candidates(pocket, live, radius, component, focus=search, longer=longer_straights,
+                                                 on_long_variant=note_long_variant if audit else None)
 
     def propose_bow(live, _pose):
         occupied = None if live is stock else live.buffer(radius, quad_segs=32)
@@ -227,13 +234,15 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
                                           contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
                                           require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow)
+    longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
     clearance = connected_clearance(pocket, remaining, pose[0], radius)
-    report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose)),
+    report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose, audit=False)),
               'entry_removed_mm2': pocket.area-stock.area, 'cut_count': len(accepted),
               'straight_cut_count': sum(len(c.cut) == 2 for c in accepted),
-              'cuts_with_chord_at_least_075_mm': sum(any(math.dist(a, b) >= .75-1e-9 for a, b in zip(c.cut, c.cut[1:]))
-                                                     for c in accepted),
+              'cuts_with_chord_at_least_075_mm': sum(length >= .75-1e-9 for length in longest_chords),
+              'cuts_with_chord_at_least_225_mm': sum(length >= 2.25-1e-9 for length in longest_chords),
+              'longest_cut_chord_mm': max(longest_chords, default=None),
               'straight_removed_mm2': sum(c.removed_mm2 for c in accepted if len(c.cut) == 2),
               'last_gates': diagnostics[-1] if diagnostics else {},
               'total_removed_mm2': stock.area-remaining.area,
@@ -243,6 +252,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
               'connected_east_x_mm': None if clearance.is_empty else clearance.bounds[2],
               'connected_east_gain_mm': None if clearance.is_empty or initial_clearance.is_empty else
               clearance.bounds[2]-initial_clearance.bounds[2]}
+    if longer_straights:
+        report['long_variant_counts'] = long_counts
     if max_cuts is None:
         report['stop'] = ('no_checked_cut' if not accepted else 'first_cut_checked' if not second else
                           'two_cuts_checked' if len(accepted) == 2 else 'second_cut_stalled')
@@ -271,7 +282,10 @@ if __name__ == '__main__':
     parser.add_argument('--fitted-straights', action='store_true', help='also fit straight cuts across short stock edges')
     parser.add_argument('--turned-straights', action='store_true', help='fit straight bodies with clearance-shaped turns')
     parser.add_argument('--live-seed-focus', action='store_true', help='extend fitted search with live seed clearance')
+    parser.add_argument('--longer-straights', action='store_true', help='try longer bodies where the fit and clearance permit')
     args = parser.parse_args()
+    if args.longer_straights and not args.turned_straights:
+        parser.error('longer straights require turned straights')
     if args.live_seed_focus and not (args.fitted_straights or args.turned_straights):
         parser.error('live seed focus requires fitted or turned straights')
     cut_audit = args.first_cut or args.second_cut or args.seed_cut_budget is not None
@@ -283,6 +297,6 @@ if __name__ == '__main__':
         parser.error('select one audit; review output requires a cut audit')
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
-                              live_focus=args.live_seed_focus) if cut_audit else
+                              live_focus=args.live_seed_focus, longer_straights=args.longer_straights) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

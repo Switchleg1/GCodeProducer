@@ -86,3 +86,5 @@
   distance totals include planar links and cuts but exclude the helix.
   The live focus unions the fixed neighborhood with the connected center
   region expanded by cutter radius plus 0.35 mm; this is only a search area.
+  Longer-body probes are capped by the unextended fitted chord length.
+  The 2.25/2.75/3.25 mm lengths are trial dimensions, not tool limits.

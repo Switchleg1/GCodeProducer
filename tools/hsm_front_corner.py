@@ -1,5 +1,6 @@
 """Offline straight-to-corner proposal with a tangent circular fillet."""
 import math
+from itertools import chain
 
 from shapely.geometry import Point
 
@@ -103,16 +104,21 @@ def tapered_roll_on(path, offset, run, chord_error):
     return [*lead, *path]
 
 
-def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None):
+def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None, longer=False, on_long_variant=None):
     """Place short straight bodies between tangent turns into mapped clearance."""
     if clearance.is_empty:
         return
     seen = set()
-    for start, end in fitted_front_candidates(pocket, stock, radius, focus=focus):
+    axes = ((axis, (.75, 1.25, 1.75)) for axis in fitted_front_candidates(pocket, stock, radius, focus=focus))
+    if longer:
+        extended = ((axis, tuple(span for span in (2.25, 2.75, 3.25) if span <= math.dist(*axis)))
+                    for axis in fitted_front_candidates(pocket, stock, radius, focus=focus, extensions=(0.,)))
+        axes = chain(axes, extended)
+    for (start, end), spans in axes:
         length = math.dist(start, end)
         ux, uy = ((b-a)/length for a, b in zip(start, end))
         mx, my = ((a+b)/2 for a, b in zip(start, end))
-        for span in (.75, 1.25, 1.75):
+        for span in spans:
             for advance in (0., .08):
                 x, y = mx-uy*advance, my+ux*advance
                 body = [(x-ux*span/2, y-uy*span/2), (x+ux*span/2, y+uy*span/2)]
@@ -122,7 +128,10 @@ def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None):
                 seen.add(key)
                 for r in (.4, .65):
                     path = roll_off(roll_on(body, r, .0025), r, .0025)
-                    if clearance.covers(Point(path[0])) and clearance.covers(Point(path[-1])):
+                    mapped = clearance.covers(Point(path[0])) and clearance.covers(Point(path[-1]))
+                    if span >= 2.25 and on_long_variant is not None:
+                        on_long_variant(mapped)
+                    if mapped:
                         yield path
 
 
