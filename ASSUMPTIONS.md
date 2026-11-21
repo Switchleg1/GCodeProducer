@@ -88,3 +88,6 @@
   region expanded by cutter radius plus 0.35 mm; this is only a search area.
   Longer-body probes are capped by the unextended fitted chord length.
   The 2.25/2.75/3.25 mm lengths are trial dimensions, not tool limits.
+  Long-versus-short means pair the best ranked long candidate with the
+  selected cut in each round that offers a checked long candidate. They
+  are not a comparison between complete paths at equal coverage.

@@ -21,11 +21,14 @@ def test_lookahead_prefers_checked_successor_and_only_commits_selected_paths():
     greedy, _, reason = run_front(pocket, stock, seed, propose, 1., **settings)
     assert [cut.cut for cut in greedy] == [near] and reason == 'stalled'
     diagnostics = []
+    ranked = []
     choices, remaining, reason = run_front(pocket, stock, seed, propose, 1., lookahead_width=2,
-                                          diagnostics=diagnostics, **settings)
+                                          diagnostics=diagnostics, on_ranked=lambda i, _, c: ranked.append((i, c.cut)),
+                                          **settings)
     assert [cut.cut for cut in choices] == [far, follow] and reason == 'stalled'
     assert stock.area - remaining.area == pytest.approx(2.)
     assert diagnostics == [dict(Counter(eligible=2)), dict(Counter(eligible=1)), {}]
+    assert ranked == [(0, near), (0, far), (1, follow)]  # Excludes speculative successors.
     delayed, _, reason = run_front(pocket, stock, seed, propose, 1., lookahead_width=2,
                                   lookahead_after=1, **settings)
     assert [cut.cut for cut in delayed] == [near] and reason == 'stalled'

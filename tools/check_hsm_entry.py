@@ -195,6 +195,12 @@ def seed_search_focus(fixed_focus, component, radius, *, follow=False):
     return fixed_focus.union(component.buffer(radius+.35))
 
 
+def cut_efficiency(choice):
+    cut_mm = sum(math.dist(a, b) for a, b in zip(choice.cut, choice.cut[1:]))
+    return {'removed_mm2': choice.removed_mm2, 'cut_mm': cut_mm, 'link_mm': choice.travel_mm-cut_mm,
+            'removed_per_feed_mm': choice.removed_mm2/choice.travel_mm}
+
+
 def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False):
     """Check only the planar motion following the modeled helix floor sweep."""
     if longer_straights and not turned_straights:
@@ -214,6 +220,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     long_counts = {'endpoint_blocked': 0, 'endpoint_mapped': 0}
 
     long_outcomes = Counter()
+    best_long = {}
     mapped_long = None
 
     def note_long_variant(path, mapped):
@@ -225,6 +232,10 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     def note_outcome(path, outcome):
         if path is mapped_long:
             long_outcomes[outcome] += 1
+
+    def note_ranked(index, key, choice):
+        if choice.cut is mapped_long and (index not in best_long or key > best_long[index][0]):
+            best_long[index] = key, cut_efficiency(choice)
 
     def propose_straight(live, _pose, *, audit=True):
         yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
@@ -245,7 +256,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
                                           contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
                                           require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow,
-                                          on_outcome=note_outcome if longer_straights else None)
+                                          on_outcome=note_outcome if longer_straights else None,
+                                          on_ranked=note_ranked if longer_straights else None)
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
     clearance = connected_clearance(pocket, remaining, pose[0], radius)
@@ -267,6 +279,9 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     if longer_straights:
         report['long_variant_counts'] = long_counts
         report['long_variant_outcomes'] = dict(long_outcomes)
+        report['long_rank_comparisons'] = [
+            {'cut': i+1, 'best_long': data, 'selected': cut_efficiency(accepted[i])}
+            for i, (_, data) in sorted(best_long.items()) if i < len(accepted)]
     if max_cuts is None:
         report['stop'] = ('no_checked_cut' if not accepted else 'first_cut_checked' if not second else
                           'two_cuts_checked' if len(accepted) == 2 else 'second_cut_stalled')

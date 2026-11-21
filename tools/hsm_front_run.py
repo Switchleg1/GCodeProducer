@@ -8,7 +8,7 @@ from tools.hsm_front_choice import choose_front_cut
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
               link_handle, link_margin=0., diagnostics=None, waypoints=(), propose_waypoints=None,
               propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0., priority_region=None,
-              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None, propose_final_retry=None, scored_retry=None, on_outcome=None):
+              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None, propose_final_retry=None, scored_retry=None, on_outcome=None, on_ranked=None):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
@@ -36,6 +36,12 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
             shortlist.sort(key=lambda item: item[0], reverse=True)
             del shortlist[lookahead_width:]
 
+        def ranked(key, candidate):
+            if preview:
+                keep(key, candidate)
+            if on_ranked is not None:
+                on_ranked(len(choices), key, candidate)
+
         def report_overload(path, segment, angle):
             on_overload(len(choices), path, segment, angle)
 
@@ -49,7 +55,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
                                     require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
                                     min_departure=min_departure, priority_region=priority_region,
                                     priority_score=scorer,
-                                    on_eligible=keep if preview and not speculative else None,
+                                    on_eligible=ranked if (preview or on_ranked is not None) and not speculative else None,
                                     on_outcome=on_outcome if not speculative else None)
 
         def select_round(live, start, counts, speculative=False):

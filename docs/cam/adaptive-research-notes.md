@@ -495,7 +495,10 @@ X17.403), and stock removal falls from 42.381 to 42.108 mm².
 cuts, 42 have mapped endpoints versus 1,774 blocked; none is selected.
 The accepted motion and maximum 1.75 mm straight body are unchanged.
 Of the 42 mapped candidates, exactly 40 pass all motion gates but rank
-below the shorter cuts; two fail sampled contact.
+below the shorter cuts; two fail sampled contact. Across 14 rounds with
+an eligible long cut, the best long candidates average 0.569 mm² removal,
+4.009 mm cut and 3.082 mm link, versus 0.849 mm², 3.070 mm and 1.712 mm
+for the selected short cuts on the same stock and pose.
 
 ## Gate before another generator attempt
 
