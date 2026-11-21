@@ -11,6 +11,9 @@ Unverified moves are rejected. If a pass remains incomplete, the checked
 prefix is retained and clearly labeled debug-only. Later depths and operations
 are not generated. See [usage and limits](toolpaths.md#adaptive-clearing).
 
+This page describes the original direction and comparison cases. The
+replacement now under trial is the [wavefront](wavefront-clearing.md).
+
 ## What to take from the examples
 
 The reference screenshot shows groups of sweeping passes around different

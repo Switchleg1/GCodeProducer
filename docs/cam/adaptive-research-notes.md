@@ -604,63 +604,26 @@ deeper cuts separately from fixed-stepdown comparisons.
 
 ## Wavefront trial
 
-The candidate-picking experiments above were stopped after operator review: 64 checked cuts removed 29.5 of 4,456 mm²
-and read as scattered lines. `python tools/hsm_wavefront.py` uses one rule instead: grow the cleared cutter-centre
-region by a stepover, clip it to the pocket, and cut the new edge. Each island starts with a helix and a continuous
-outward spiral; later arcs roll on from and roll off to the previous front. `--islands` and `--placement` choose how
-many islands and where; `--review-gcode` saves an XY preview with rapids between cuts.
+The candidate-picking experiments above were stopped after operator review:
+64 checked cuts removed 29.5 of 4,456 mm² and read as scattered lines. The
+replacement direction is a wavefront: grow the cleared region by a stepover
+and cut the new edge. How it works, how to run it and its current results are
+in [Wavefront clearing (offline trial)](wavefront-clearing.md). The steps that
+shaped it, each prompted by reviewing a preview:
 
-| Neck fixture | Cut feed | Reachable stock left | Arcs | Peak sampled contact |
-|---|---|---|---|---|
-| One island | 9,999 mm | 54.5 mm² | 290 | 59.98° |
-| Two islands, thirds | 9,787 mm | 86.6 mm² | 234 | 59.98° |
-| Two islands, lobes | 9,599 mm | 107.9 mm² | 182 | 59.99° |
+| Change | Why | Two-lobe fixture afterwards |
+|---|---|---|
+| Wavefront with helical islands and spirals | One rule instead of ranking candidates | Front exhausted from intact stock; 54–108 mm² left |
+| One island per lobe | Starts belong in the areas either side of a neck | 2 islands, 187 arcs |
+| Stay-down links through cleared space | Moves between cuts crossed stock with no lift | 2 lifts instead of one per cut |
+| Each island grows as if alone | Fronts wrapped round the other island's cleared disc | Even fronts through the neck |
+| Ends follow the wall back to clean wall | Cuts rolled off short of the wall, leaving a skin | Wall pass no longer needed |
+| Retries keep the wall ends; near-wall ends are carried onto the wall | Skipped wall ends let the wall side stall and cuts bunch into knots | 1.3 mm² left, but many tiny stepovers |
+| Wide hooks onto the wall | A cutter driven square into the wall is wrapped by the corner it left | Small-stepover arcs 113 → 55 |
+| Shallow arrivals run on along the wall | Beside a spiral, hooks dug into stock (100–184°) | No arc at 0.2 mm or less; 9,912 mm cutting |
 
-All three exhaust the front from intact stock. Coverage is not equal, so the feed figures do not rank the variants.
-The leftover stock has not been located, and rapids, helix descent and rounded coordinates are unchecked.
-
-By default islands follow the shape: the centre region is split into lobes at clearly narrower necks and each lobe
-starts one island at its widest spot; the fronts then meet through the neck. A single lobe takes two islands a third
-in from each end only when it is at least twice as long as wide. On the neck fixture this gives two islands, 9,611 mm
-of cut feed, 105.8 mm² left and 187 arcs.
-
-Cuts are joined by stay-down links through space the cutter has already cleared, checked against live stock. A
-retract is used only where no such route exists: on the neck fixture that is the first cut and the move from the
-first island to the second (226 links, 2 retracts). Links add 4,903 mm of travel in cleared space to 9,981 mm of
-cutting, because each one-way arc is followed by a return along the front.
-
-Each island now grows as if it were alone in the pocket and cuts only where real stock remains, so fronts stay
-concentric where two islands meet instead of wrapping around the neighbour's cleared disc. The last island's fronts
-break through into the space the earlier ones opened. A wall profile pass then follows the pocket wall to remove what
-the rolled-off arc ends left. On the neck fixture: 2 retracts, 10,145 mm of cutting, 4,352 mm of links, 59.91°
-peak sampled contact and 19.9 mm² of reachable stock left at four corners where the profile exceeded the limit.
-
-By default an arc that ends on the wall now follows the wall back over the previous arc's end before turning into the
-pocket, and starts the same way in reverse (`--no-wall-pull-back` disables it). On the neck fixture this leaves
-50.4 mm² instead of 106.5 mm² for the profile pass and 12.1 mm² instead of 19.9 mm² after it, for 78 more arcs and
-1,636 mm more link travel.
-
-The pull-back now runs until it reaches wall that earlier arcs already cleaned, rather than a fixed length, because
-arcs that meet a wall obliquely end several millimetres apart along it. That leaves 21.7 mm² for the profile pass,
-which then cuts 140 mm instead of 386 mm; 10.4 mm² remains at four corners where the contact limit refuses the wall.
-
-Arcs that exceed the limit are retried at smaller stepovers with the wall sweep kept; rolling off before the wall is a
-last resort at the smallest stepover. With that, the neck fixture finishes without a profile pass: 6.4 mm² of reachable
-stock left, 10,114 mm of cutting, 4,143 mm of links, 2 retracts. The profile pass is now opt-in (`--wall-profile`).
-
-Fronts usually end a few hundredths of a millimetre short of the wall. Arc ends within 0.3 mm are now carried onto
-it, so the wall sweep is never skipped; skipping it had let the wall side stall and bunched later arcs into knots. The
-neck fixture then leaves 1.33 mm² without a profile pass, but the start-side approach along the wall now limits the
-stepover: 341 arcs and 12,289 mm of cutting instead of 207 and 10,114 mm. `clear_pocket(trace=[...])` records every
-attempt and where its peak contact falls.
-
-Arc ends are now wide hooks. Driving a round cutter square to the wall wraps it in the corner radius left by the
-previous pass, and running forward along the wall into the fresh band is a head-on cut; both had forced very small
-stepovers. A hook curves round to meet the wall tangentially, heading back toward cleared ground, and successive hooks
-nest one stepover apart. On the neck fixture: 225 arcs, 10,783 mm of cutting, 3,834 mm of links, 2.8 mm² left,
-with 55 arcs still at the smallest stepover in thin crescents between a spiral disc and a nearby wall.
-
-Beside a spiral the next fronts meet the wall almost parallel to it. Those arcs now run on along the wall to clean
-wall rather than hooking, hooks continue the arc's own curvature, and the wall is not followed where cleared ground
-falls away from it. The neck fixture then has no arc at 0.2 mm stepover or less: 187 arcs, 9,912 mm of cutting,
-3,884 mm of links, 2.6 mm² left.
+Two ideas were measured and not adopted. A neck bow — one curve per cut,
+tangent to both walls — held contact constant on a straight, parallel-walled
+strip but loaded up in the tapering neck of the fixture. A wide sweep across the
+east front, from the candidate-picking work, removed more stock but advanced
+the front less than continuing normally.

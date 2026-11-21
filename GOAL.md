@@ -14,10 +14,12 @@ Incomplete paths stay debug-only. Do not qualify output for a physical machine.
    proposals: closed and open pockets, rounded and sharp corners, two lobes,
    an off-center island, and previous-tool stock. Use CamBam as a measured
    reference; compare FreeCAD offline if a reproducible build is available.
-3. Implement an offline replacement that plans connected regions and advances
-   from cleared stock. Compare local rounded profile cleanup and a tangent
-   blend from the same stock and pose. Keep productive straight cuts; links
-   either pass stock/geometry checks or retract through verified clearance.
+3. Offline replacement: the wavefront in `tools/hsm_wavefront.py`
+   ([guide](docs/cam/wavefront-clearing.md)). It must clear the two-lobe
+   fixture and every shape in `examples/hsm-shapes/` with an even peel (few
+   arcs at the smallest stepovers) under the contact limit and without a wall
+   pass. It must join cuts with checked stay-down links and lift only between
+   islands. Then add Z motion: helix entries, lifts and re-entry.
 4. Integrate the tested replacement behind the existing Adaptive selection.
    Verify emitted, quantized paths, stop on unreachable residual or a resource
    limit, and preserve the incomplete-output guard.

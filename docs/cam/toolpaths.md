@@ -34,6 +34,9 @@ tool load and does not apply to leads. Qualify depth
 per pass for the actual cutter and setup; do not carry an adaptive depth over
 to a different strategy without reviewing it. See the [design and benchmark](adaptive-clearing-design.md).
 
+A replacement generator is being developed offline and is not used by the
+application yet; see [Wavefront clearing](wavefront-clearing.md).
+
 ## Wall-parallel contours (default clearing strategy)
 
 The selected closed removal area includes an outer boundary and any retained

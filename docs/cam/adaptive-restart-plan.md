@@ -69,10 +69,14 @@ complete coverage.
    meet a time target. Report slicing time separately from estimated machine
    time and hardware validation.
 
-**Implementation status:** `core/cam/hsm_contact.py` measures the occupied
-cutter-periphery angle at a planar pose from remaining stock, without using
-the old planner’s width estimate. It adds disjoint contact patches and
-excludes zero-width tangencies. This is neither an in-motion engagement
-limit nor a force model. Next, add ordered swept-stock replay, first-depth
-diagnostics, and a FreeCAD comparison harness. Do not alter production
-motion until the verifier can judge both candidate paths.
+**Status:** the application still runs the old generator. Milestones 1 and 2
+have offline tooling: the CamBam replay and contact verifier
+(`tools/check_cambam_pocket.py`, `tools/hsm_contact_replay.py`) and pinned
+fixtures, including `examples/adaptive-neck-pocket.wkt` and the shapes in
+`examples/hsm-shapes/`. FreeCAD was not benchmarked: no reproducible build was
+available. For milestone 3, the replacement under trial is the
+[wavefront](wavefront-clearing.md), which advances from the cleared region
+as planned above. It clears the two-lobe fixture and the open test shapes with
+even peels under the contact limit. Narrow channels and pockets with a boss
+are not yet acceptable, and it has no Z motion, so milestones 4 and 5 have
+not started.

@@ -1,6 +1,15 @@
 # Adaptive clearing loop
 
 - Goal: finish the saved Stormtrooper CAM session with verified adaptive coverage, then improve cutting and slicing time without relaxing engagement or clearance.
+
+## Current state (0.2.2)
+
+- The replacement under trial is the wavefront (`tools/hsm_wavefront.py`, guide `docs/cam/wavefront-clearing.md`). It is not wired into the application; Adaptive in the app still runs the old generator.
+- Two-lobe fixture: 187 arcs, none at 0.2 mm stepover or less, 9,912 mm cutting, 3,884 mm links, 2 lifts, 2.6 mm² reachable stock left, mean/peak contact 39.6°/59.99°. Circle, rectangle, L-shape and cross are even. Slot (176 of 353 arcs at 0.2 mm or less) and square with a boss (162 of 359) are not.
+- Working on: the slot. Then the boss, link travel on the L-shape and cross, link corners and feed, Z motion.
+
+## Log
+
 - 0.1.70 read-only baseline: 200.74 s slicing, 229.0 s Preview for the partial first depth, 255 peels, 9 entries, 342.807 mm² remaining at Z−2; hit the path-point guard. No rapid-contact finding. Partial times are not comparable to a completed job.
 - Cached finish geometry, 20,000 points: 237.66 s slicing, 229.0 s partial Preview, 255 peels, 9 entries, 342.807 mm² remaining at Z−2. Same 20,892 output lines as baseline. The observed run was slower; runs were not isolated, so no performance conclusion about the cache.
 - Check with `python -X utf8 tools/check_adaptive_session.py`. It reads the current single-model CAM session, does not change settings or export, and exits nonzero if the output is debug-only or has a rapid/tab contact finding.

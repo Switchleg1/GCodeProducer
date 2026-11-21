@@ -152,6 +152,7 @@ operations limited by the model surface:
 - [Clearing strategies and cutting direction](toolpaths.md)
 - [Adaptive clearing restart plan](adaptive-restart-plan.md)
 - [Adaptive clearing research and comparison cases](adaptive-clearing-design.md)
+- [Wavefront clearing: offline trial of the replacement, not in the application](wavefront-clearing.md)
 - [Operation-by-operation settings and restrictions](operations.md)
 - [Stock, warnings and verification checklist](stock-and-safety.md)
 - [Pipeline architecture: the planner section and operation generators](architecture.md)
