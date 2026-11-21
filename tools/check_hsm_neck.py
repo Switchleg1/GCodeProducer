@@ -184,12 +184,22 @@ def overload_summary(overloads):
             'chord_bounds_mm': LineString(points).bounds if points else None}
 
 
+def relieve_contour(path, low, high, depth, *, shoulder=.3):
+    """Pull interior points west over a failing Y band with eased shoulders."""
+    result = [path[0]]
+    for x, y in path[1:-1]:
+        distance = max(low-y, y-high, 0.)
+        weight = .5*(1 + math.cos(math.pi*min(1., distance/shoulder)))
+        result.append((x-depth*weight, y))
+    return [*result, path[-1]]
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -201,6 +211,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
     if (section_ray_probe or section_extend_rays) and not section_small_retry:
         raise ValueError('ray trials require small section retries')
+    if section_relief_probe and not section_extend_rays:
+        raise ValueError('local relief probe requires extended small retries')
     if section_ray_probe and section_extend_rays:
         raise ValueError('ray audit requires unchanged small section retries')
     if section_small_retry and (not section_follow or probe_count):
@@ -422,7 +434,29 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         report['final_small_retry'] = {'proposal_count': count, 'entry_shapes': audit}
         if section_extend_rays:
             failures = [row for row in follow_overloads.get(len(diagnostics)-1, ()) if row['family'] == 'extended_ray']
-            report['terminal_extension_overloads'] = overload_summary(failures)
+            summary = overload_summary(failures)
+            report['terminal_extension_overloads'] = summary
+            if section_relief_probe and summary['chord_bounds_mm'] is not None:
+                _, low, _, high = summary['chord_bounds_mm']
+                pose = last_xy, last_heading
+                routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
+                bodies = list(small_section_cuts(sections, remaining, radius, ray_length=1.65))
+                trials = []
+                for depth in (.015, .03, .06):
+                    def candidates():
+                        for body in bodies:
+                            path = relieve_contour(body, low, high, depth)
+                            yield path
+                            if section_turn_exits:
+                                yield roll_off(path, .25, .0025)
+
+                    counts = Counter()
+                    choice = choose_front_cut(pocket, remaining, pose, candidates(), radius, waypoints=routes,
+                                              diagnostics=counts, priority_score=lambda live: -live.area, **gates)
+                    trials.append({'relief_mm': depth, 'gates': dict(counts),
+                                   'best_removed_mm2': None if choice is None else choice.removed_mm2,
+                                   'best_peak_deg': None if choice is None else choice.peak_deg})
+                report['terminal_relief_probe'] = trials
         if section_ray_probe:
             pose = last_xy, last_heading
             routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
@@ -557,6 +591,8 @@ if __name__ == '__main__':
                         help='audit longer rays at the small-retry stall without committing cuts')
     parser.add_argument('--section-extend-rays', action='store_true',
                         help='retry at 1.65 mm only when misses prevent all small candidates')
+    parser.add_argument('--section-relief-probe', action='store_true',
+                        help='test local contour relief over clustered overloads without committing edits to stock')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -579,7 +615,7 @@ if __name__ == '__main__':
                             section_shallow_approach=args.section_shallow_approach,
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
-                            section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays)
+                            section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

@@ -41,3 +41,6 @@
   40% or 50% of the span, leaving the exit unchanged.
   The longer-ray audit uses 1.55, 1.65 and 1.8 mm as bounded fixture probes;
   it commits no cuts and does not relax any motion gate.
+  The local relief probe offsets west within the failing chord Y band and
+  eases back over 0.3 mm shoulders. It assumes west is away from stock for
+  this fixture and still checks every resulting cut and link.

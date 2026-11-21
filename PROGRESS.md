@@ -85,4 +85,5 @@
 - `--section-ray-probe` on the unchanged 85-cut stall: 1.55 mm still misses one row; 1.65 and 1.8 mm both recover 18 eligible candidates, with best removal 0.0632 mm² at 54.09° peak. No cut is committed.
 - `--section-extend-rays` retries at 1.65 mm only if the standard small retry emits nothing and records ray misses. It adds one verified cut to the 85-cut baseline, reaching X27.822 (+0.030 mm) and 4,004.446 mm² reachable. Peak remains 59.97°; all 24 final extension candidates exceed contact.
 - `terminal_extension_overloads` isolates all 24 first-overload chords at the unchanged 86-cut stall: 16 following, eight easing in, all within X27.629–27.862/Y22.785–22.899 mm. These are cutter-center chord bounds, not stock-side contact positions.
-- Next: test local relief over the clustered chords against unchanged terminal stock. Completion gates are in `GOAL.md`.
+- `--section-relief-probe` tests local westward offsets on unchanged 86-cut stock. At 0.015 mm, 10 of 24 pass; best removal 0.0212 mm² at 59.27°. At 0.060 mm all 24 pass but best removal falls to 0.00586 mm². Nothing is committed.
+- Next: measure the seed-connected clearance gained by the passing relieved cuts before deciding whether to schedule them. Completion gates are in `GOAL.md`.

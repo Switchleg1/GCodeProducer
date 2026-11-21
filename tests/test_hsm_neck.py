@@ -2,7 +2,15 @@ import pytest
 from shapely.geometry import Point, Polygon, box
 
 from tools.check_hsm_neck import (bounded_small_section_cuts, check_neck, clearance_sections, section_bite_spans, section_bites,
-                                  section_follow_cuts, small_section_cuts, overload_summary)
+                                  section_follow_cuts, small_section_cuts, overload_summary, relieve_contour)
+
+
+def test_contour_relief_preserves_endpoints_and_tapers_locally():
+    path = [(4., y) for y in (2., 1.5, 1.25, 1., .75, .5, 0.)]
+    result = relieve_contour(path, .75, 1.25, .2, shoulder=.5)
+    assert [y for _, y in result] == [y for _, y in path]
+    assert [x for x, _ in result] == pytest.approx([4., 3.9, 3.8, 3.8, 3.8, 3.9, 4.])
+    assert all(x == 4. for x, _ in path)
 
 
 def test_overload_summary_bounds_whole_chords_and_counts_phases():

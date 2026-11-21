@@ -420,6 +420,10 @@ unchanged contact limit; the neck probe remains disconnected. The
 `terminal_extension_overloads` audit bounds all first-overload chords
 within X27.629–27.862 and Y22.785–22.899 mm: 16 following, eight easing
 in. This locates cutter-center chords, not the contact points in stock.
+`--section-relief-probe` offsets those contours locally without committing
+cuts. A 0.015 mm offset passes 10 of 24 candidates and removes up to
+0.0212 mm² at 59.27° sampled peak; a 0.060 mm offset passes all 24 but
+removes at most 0.00586 mm².
 
 ## Gate before another generator attempt
 
