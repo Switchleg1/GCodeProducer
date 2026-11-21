@@ -164,12 +164,25 @@ def small_section_cuts(sections, stock, radius, *, turn_exits=False, audit=None,
             audit.append({'entry_fraction': fraction, 'profiles': profiles, 'proposal_count': emitted})
 
 
+def bounded_small_section_cuts(sections, stock, radius, *, extend=False, on_extension=None, **kwargs):
+    """Extend only an empty proposal set with recorded misses; leave motion checks to the caller."""
+    audit = [] if extend else None
+    emitted = False
+    for path in small_section_cuts(sections, stock, radius, audit=audit, **kwargs):
+        emitted = True
+        yield path
+    if not emitted and audit and any(p['missed_y_mm'] for row in audit for p in row['profiles']):
+        if on_extension is not None:
+            on_extension()
+        yield from small_section_cuts(sections, stock, radius, ray_length=1.65, **kwargs)
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -179,8 +192,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
-    if section_ray_probe and not section_small_retry:
-        raise ValueError('ray probe requires small section retries')
+    if (section_ray_probe or section_extend_rays) and not section_small_retry:
+        raise ValueError('ray trials require small section retries')
+    if section_ray_probe and section_extend_rays:
+        raise ValueError('ray audit requires unchanged small section retries')
     if section_small_retry and (not section_follow or probe_count):
         raise ValueError('small retries require section following without terminal probes')
     if probe_count and (not section_follow or section_taper_entry):
@@ -304,10 +319,18 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
                                            on_profile=note_profile, taper_entry=section_taper_entry)
 
+    ray_extensions = 0
+
+    def record_extension():
+        nonlocal ray_extensions
+        ray_extensions += 1
+
     def propose_small_contours(live, _pose):
         component = connected_clearance(pocket, live, seed[0], radius)
         sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
-        return small_section_cuts(sections, live, radius, turn_exits=section_turn_exits, on_profile=note_profile)
+        return bounded_small_section_cuts(sections, live, radius, turn_exits=section_turn_exits,
+                                          on_profile=note_profile, extend=section_extend_rays,
+                                          on_extension=record_extension)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -364,6 +387,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
     if section_small_retry:
+        if section_extend_rays:
+            report['small_retry_ray_extensions'] = ray_extensions
         report['small_retry_cuts'] = sum('final_retry_eligible' in row for row in diagnostics)
     if with_section_bites or section_bites_last:
         report['final_section_bite_spans'] = section_bite_spans(regions, clearance, search_west=section_search_west)
@@ -511,6 +536,8 @@ if __name__ == '__main__':
                         help='try smaller contour advances only after standard cuts fail')
     parser.add_argument('--section-ray-probe', action='store_true',
                         help='audit longer rays at the small-retry stall without committing cuts')
+    parser.add_argument('--section-extend-rays', action='store_true',
+                        help='retry at 1.65 mm only when misses prevent all small candidates')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -533,7 +560,7 @@ if __name__ == '__main__':
                             section_shallow_approach=args.section_shallow_approach,
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
-                            section_ray_probe=args.section_ray_probe)
+                            section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

@@ -413,6 +413,10 @@ rays miss stock within the 1.5 mm search distance, so no retry is generated.
 `--section-ray-probe` leaves the 85-cut baseline intact. At 1.55 mm one
 ray still misses; at 1.65 and 1.8 mm the same 18 candidates pass, with
 best removal 0.0632 mm² at 54.09° peak sampled contact.
+`--section-extend-rays` uses 1.65 mm only if ray misses leave the normal
+small retry empty. It adds one verified cut, reaching X27.822 and
+4,004.446 mm² reachable. All 24 final extension candidates exceed the
+unchanged contact limit; the neck probe remains disconnected.
 
 ## Gate before another generator attempt
 

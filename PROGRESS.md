@@ -83,4 +83,5 @@
 - `--section-small-retry` accepts six checked small-advance contours after the 79-cut baseline; the new stall is cut 85 at X27.792 with 4,004.509 mm² reachable. Peak remains 59.97°; no final retry reaches a motion gate.
 - `final_small_retry` confirms the 85-cut stall has an eligible 1.582 mm span at X26.230, but two of 11 contact rays miss at Y22.904 and Y22.785. The longest successful ray is 1.496 mm against a 1.5 mm cap; no retry is generated.
 - `--section-ray-probe` on the unchanged 85-cut stall: 1.55 mm still misses one row; 1.65 and 1.8 mm both recover 18 eligible candidates, with best removal 0.0632 mm² at 54.09° peak. No cut is committed.
-- Next: allow a bounded extension only if small retries emit no candidates due to missed rays, and measure connected progress. Completion gates are in `GOAL.md`.
+- `--section-extend-rays` retries at 1.65 mm only if the standard small retry emits nothing and records ray misses. It adds one verified cut to the 85-cut baseline, reaching X27.822 (+0.030 mm) and 4,004.446 mm² reachable. Peak remains 59.97°; all 24 final extension candidates exceed contact.
+- Next: inspect whether the extension overloads cluster at one stock-facing feature before generating another path variant. Completion gates are in `GOAL.md`.
