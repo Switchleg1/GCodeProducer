@@ -3,6 +3,15 @@ from __future__ import annotations
 from gcodeproducer.core.parameters.param import Param
 
 SCHEMA = [
+    Param("fdm_min_segment_length", "float", 0.2, min=0, max=5, unit="mm", decimals=3, group="FDM paths",
+          label="Minimum line segment length",
+          help="Merge slice contour and print-path segments shorter than this into their neighbours, as long "
+               "as no removed point moves more than the maximum deviation. Cuts G-code size and slicing time "
+               "on finely tessellated models. 0 keeps every segment."),
+    Param("fdm_max_deviation", "float", 0.02, min=0, max=1, unit="mm", decimals=3, group="FDM paths",
+          label="Maximum path deviation",
+          help="How far a simplified contour or print path may move from the sliced model. Points closer "
+               "than this to a straight line are removed regardless of segment length. 0 disables simplification."),
     Param("fdm_travel_simplification", "float", 0.1, min=0, unit="mm", decimals=3, group="FDM travel",
           label="Travel waypoint simplification",
           help="Simplify the waypoints used to avoid open spaces. Paths are checked against the original "

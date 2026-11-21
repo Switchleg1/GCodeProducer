@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMPERIMETERS_PARAMS
-from gcodeproducer.core.fdm.wall_regions import wall_levels
+from gcodeproducer.core.fdm.layer_threads import layer_map
+from gcodeproducer.core.fdm.variable_walls import variable_wall_levels
+from gcodeproducer.core.fdm.wall_regions import slice_region, wall_levels
 from gcodeproducer.core.jobs.path import Path
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
@@ -24,14 +26,29 @@ class FDMPerimeters(SliceStage):
         job.settings["perimeter_line_width"] = lw
         job.settings["perimeters"] = count
 
-        total = 0
+        variable = params["variable_width"]
+        min_width = lw * params["min_bead_width"] / 100.0
+        max_width = lw * max(100.0, params["max_bead_width"]) / 100.0
+        job.settings["min_bead_width"] = min_width
+        job.settings["max_bead_width"] = max_width
+
+        def walls(contours):
+            if variable:
+                return variable_wall_levels(slice_region(contours), lw, count, min_width, max_width)
+            levels, inner = wall_levels(contours, lw, count)
+            return [[(loop, None, True) for loop in level] for level in levels], inner
+
+        total = varied = 0
         n = max(1, len(job.layers))
-        for i, layer in enumerate(job.layers):
-            levels, layer.contours = wall_levels(layer.contours, lw, count)
+        results = layer_map(walls, [layer.contours for layer in job.layers])
+        for i, (layer, (levels, inner)) in enumerate(zip(job.layers, results)):
+            layer.contours = inner
             for k in reversed(range(len(levels))):
                 feature = "outer_perimeter" if k == 0 else "inner_perimeter"
-                for loop in levels[k]:
-                    layer.paths.append(Path(feature, loop, closed=True, width=lw))
+                for points, widths, closed in levels[k]:
+                    layer.paths.append(Path(feature, points, closed=closed, width=lw, widths=widths))
                     total += 1
+                    varied += widths is not None
             ctx.progress((i + 1) / n)
-        return f"{total} wall loops ({count} perimeters, {lw} mm)"
+        extra = f", {varied} variable-width" if variable else ""
+        return f"{total} wall paths ({count} perimeters, {lw} mm{extra})"

@@ -798,7 +798,8 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             new = dlg.result_values()
             changed = new != self.preferences
-            fdm_changed = new.get('fdm_travel_simplification') != self.preferences.get('fdm_travel_simplification')
+            fdm_changed = any(new.get(key) != self.preferences.get(key) for key in
+                              ('fdm_travel_simplification', 'fdm_min_segment_length', 'fdm_max_deviation'))
             self.preferences = new
             self.cam_editor.defaults = new
             try:
@@ -2545,7 +2546,7 @@ class MainWindow(QMainWindow):
     def _show_help(self):
         from gcodeproducer.gui.history.history_constants import SHORTCUTS
         QMessageBox.information(self, "Controls", (
-            "Mouse\nLeft drag: orbit (drag model in Prepare to move it)\n"
+            "Mouse\nLeft drag: orbit    Ctrl+left drag on a model in Prepare: move it\n"
             "Right / middle / Shift+left drag: pan    Wheel: zoom\n"
             "Double-click in Preview: select G-code line\n\nKeyboard shortcuts\n" +
             "\n".join(f"{key}: {description}" for key, description in SHORTCUTS)))

@@ -48,11 +48,46 @@ not remove walls or force sparse infill to become solid.
 | Overlap | 15% | Wall overlap as percentage of infill line width |
 | Minimum length | 0.5 mm | Remove very short segments |
 | Shortest travel order (`connect`) | On | Nearest-first line ordering to reduce travel |
+| Fill small gaps with perimeters (`gap_fill`) | On | Extra variable-width perimeters where the pattern cannot fit; see below |
+| Fill gaps narrower than (`gap_fill_width`) | `auto` | `auto` = 2 × wall line width |
+| Solid small islands (`solid_islands`) | Off | Fill small layer islands solid with concentric perimeters; see below |
+| Islands smaller than (`solid_island_area`) | 25 mm² | Island area threshold for Solid small islands |
+
+### Gap fill
+
+Between the innermost wall and the infill there can be thin gaps too narrow
+for infill lines: between blade walls, inside gear teeth, along narrow webs.
+With **Fill small gaps with perimeters** on, every part of the fill area
+narrower than **Fill gaps narrower than** (`auto` = 2 wall line widths; the
+area minus its opening at half that width) gets an extra `gap_fill`
+perimeter. Its width varies to fill the gap, between the minimum and maximum
+bead widths of Process → Walls; gaps narrower than the maximum get one centre
+bead. The gap is first grown by half the **Overlap** of a line width into the
+walls, so the bead fills the gap plus the same overlap that infill lines use.
+Sparse and solid lines are trimmed out of the gap; bridge areas are left to
+the bridge fill. Anything wider, such as a fan hub, gets normal infill. Gap
+fill prints at **Speed & travel → Gap fill** speed.
+
+### Solid small islands
+
+Thin pillars, pins and posts get little or no sparse infill and can be weak or
+soften from the heat of their own small layers. With **Solid small islands**
+on, every layer island — a separate piece of the slice, its outer outline
+minus its holes — smaller than **Islands smaller than** is filled completely
+inside its walls with concentric variable-width perimeters (tagged
+`solid_infill`), grown by the same overlap into the walls. Sparse and solid
+lines inside such an island are removed. The test is per layer, so a pillar
+that joins a larger part higher up becomes normal infill from that layer on.
 
 The base spacing is line width divided by density as a fraction: 0.45 mm at
 20% gives a 2.25 mm base period before pattern-family handling. Crossing and
 layer-varying families change the visible structure, so do not interpret this
 as a guarantee of an exact measured solid-volume fraction.
+
+Sparse and solid lines are clipped to the fill region inset by the overlap
+setting, not only trimmed at their ends. A line running nearly parallel
+through a narrow channel between walls therefore cannot lie on the walls;
+channels narrower than the inset get no lines (gap fill covers them when on).
 
 `connect` orders separate segments; it does **not** join them with extruding
 bridges. Output still travels between disconnected paths and applies its

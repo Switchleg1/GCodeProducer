@@ -170,3 +170,35 @@ def order_segments(segs: np.ndarray, start=(0.0, 0.0)) -> np.ndarray:
             out[k, 0], out[k, 1] = a[i], b[i]
         cur = out[k, 1]
     return out
+
+
+def clip_to_region(segs: np.ndarray, region, min_length: float = 0.0) -> np.ndarray:
+    """Keep only the parts of fill segments inside ``region`` (shapely), longer than ``min_length``.
+
+    :func:`scan_fill` trims line *ends* by the inset, but a line running nearly
+    parallel through a sliver narrower than twice the inset stays inside the
+    centre-line contours while lying on the walls. Clipping to the inset region
+    itself removes those.
+    """
+    import shapely
+
+    segs = np.asarray(segs, float).reshape(-1, 2, 2)
+    if not len(segs) or region is None:
+        return segs
+    if region.is_empty:
+        return np.zeros((0, 2, 2))
+    shapely.prepare(region)
+    lines = shapely.linestrings(segs)
+    inside = shapely.covers(region, lines)
+    if inside.all():
+        return segs
+    out = [segs[inside]]
+    parts = shapely.get_parts(shapely.intersection(lines[~inside], region))
+    parts = parts[shapely.get_type_id(parts) == 1]                 # LineStrings only
+    parts = parts[shapely.length(parts) > max(min_length, 1e-6)]
+    if len(parts):
+        coords = shapely.get_coordinates(parts)
+        counts = shapely.get_num_coordinates(parts)
+        ends = np.cumsum(counts) - 1
+        out.append(np.stack((coords[ends - counts + 1], coords[ends]), axis=1))
+    return np.concatenate(out)

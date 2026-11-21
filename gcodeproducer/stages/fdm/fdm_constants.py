@@ -11,6 +11,7 @@ _FEATURE_SPEED = {
     "support": "support_speed",
     "support_interface": "support_interface_speed",
     "skirt": "skirt_speed",
+    "gap_fill": "gap_fill_speed",
 }
 
 from gcodeproducer.stages.base.api import Param, AUTO
@@ -29,6 +30,7 @@ FDMEMIT_PARAMS = [
         _speed("support_speed", 50.0, "Support"),
         _speed("support_interface_speed", 35.0, "Support interface"),
         _speed("skirt_speed", 30.0, "Skirt / brim"),
+        _speed("gap_fill_speed", 30.0, "Gap fill", "Extra perimeters that fill gaps too small for infill."),
         _speed("print_speed", 50.0, "Other features", "Anything not listed above."),
         _speed("first_layer_speed", 20.0, "First layer", "Every printing move on the first layer."),
         _speed("travel_speed", 150.0, "Travel"),
@@ -73,6 +75,20 @@ FDMINFILL_PARAMS = [
         Param("min_length", "float", 0.5, unit="mm", min=0, decimals=2, group="Lines"),
         Param("connect", "bool", True, label="Shortest travel order", group="Lines",
               help="Order lines nearest-first to shorten travels."),
+        Param("gap_fill", "bool", True, label="Fill small gaps with perimeters", group="Gap fill",
+              help="Fill thin gaps left between perimeters (too narrow for infill lines) with an extra "
+                   "perimeter whose width varies to fill the gap, plus the overlap above into the walls."),
+        Param("gap_fill_width", "float", AUTO, label="Fill gaps narrower than", unit="mm", min=0.05, max=10,
+              allow_auto=True, hint=0.9, group="Gap fill",
+              help="auto = 2 wall line widths. Wider areas get normal infill."),
+        Param("solid_islands", "bool", False, label="Solid small islands", group="Small islands",
+              help="Fill the inside of every layer island (separate piece of the slice) smaller than the "
+                   "area below completely with concentric perimeters, e.g. to make thin pillars stronger or "
+                   "keep them from overheating."),
+        Param("solid_island_area", "float", 25.0, label="Islands smaller than", unit="mm²", min=0.1,
+              max=10000, decimals=1, group="Small islands",
+              help="Island area (outer outline minus holes, per layer) below which Solid small islands "
+                   "applies."),
     ]
 
 FDMPERIMETERS_PARAMS = [
@@ -80,6 +96,18 @@ FDMPERIMETERS_PARAMS = [
               help="Number of perimeter loops."),
         Param("line_width", "float", AUTO, label="Wall line width", unit="mm", min=0.05, max=3,
               allow_auto=True, hint=0.45, group="Walls", help="auto = nozzle line width."),
+        Param("variable_width", "bool", True, label="Variable-width walls", group="Walls",
+              help="Keep the normal wall loops but vary their flow: where a wall narrows below two line "
+                   "widths the folded loop prints thinner so its sides do not overlap, and tips narrower "
+                   "than one line width get a tapering centre bead (e.g. fan blade tips, lettering)."),
+        Param("min_bead_width", "float", 50.0, label="Minimum bead width", unit="%", min=25, max=100,
+              decimals=0, group="Walls",
+              help="Narrowest variable-width bead, as % of the line width. Thinner tips are left empty. "
+                   "Also used by gap fill."),
+        Param("max_bead_width", "float", 150.0, label="Maximum bead width", unit="%", min=100, max=200,
+              decimals=0, group="Walls",
+              help="Widest centre bead gap fill may use, as % of the line width; wider gaps get a "
+                   "thinned loop."),
     ]
 
 FDMSKIRTBRIM_PARAMS = [

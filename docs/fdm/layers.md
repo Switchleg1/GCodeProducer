@@ -61,6 +61,12 @@ there and import the corrected STL.
 
 ## Effects and inspection
 
+Slice contours are simplified right after slicing with the global **FDM
+paths** settings (minimum line segment length, maximum path deviation; see
+[Settings](../settings.md)). A finely tessellated STL otherwise yields
+thousands of 0.01–0.05 mm segments per layer, which slow every later stage and
+bloat the G-code. The log reports the point count before and after.
+
 Smaller layers generally create more contours, more G-code and longer
 computation. They also change shell thickness in millimetres and the physical
 size of support gaps defined in layer counts. Check:

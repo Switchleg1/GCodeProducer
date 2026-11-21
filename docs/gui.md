@@ -112,11 +112,12 @@ scaling invalidates those blocks and removes them. CAM references use mesh
 indices and are re-evaluated after placement; an operation may become invalid
 if its selected cutting geometry is no longer horizontal.
 
-Dragging the model in ordinary Prepare mode changes XY. Dragging empty space
-orbits. Selecting a CAM operation automatically activates face picking. Switch to
+**Ctrl+left drag** on a model in ordinary Prepare mode changes its XY. A plain
+left drag always orbits, wherever it starts; a plain click on a model still
+selects it. Selecting a CAM operation automatically activates face picking. Switch to
 Select edges to pick rims; a reopened setup selects its first operation so
 picking is immediately usable. During CAM selection, dragging over the model
-orbits instead of moving it; leave selection mode before dragging the part. Model placements outside
+orbits instead of moving it; leave selection mode before Ctrl+dragging the part. Model placements outside
 the work volume are orange and show a warning. The CAM volume extends below
 Z0; the FDM volume extends above it. Stock and extra adhesion paths are not
 made safe merely because the model itself fits.
@@ -306,7 +307,8 @@ cutter clearance or successful workholding.
 | Ctrl+R | Slice / generate paths |
 | Ctrl+S | Save generated G-code (subject to CAM checks) |
 | Ctrl+1 / Ctrl+2 | Prepare / Preview |
-| Left drag | Orbit; ordinary Prepare model drag moves the model |
+| Left drag | Orbit (anywhere, including over a model) |
+| Ctrl+left drag on a model | Move the model in XY (ordinary Prepare mode) |
 | Right / middle drag | Pan |
 | Shift+left drag | Pan, including CAM picking mode |
 | Wheel | Zoom |

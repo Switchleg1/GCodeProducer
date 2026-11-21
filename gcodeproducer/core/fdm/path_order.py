@@ -57,8 +57,12 @@ def ordered_paths(paths, head):
         yield from block
 
 
-def closed_loop(points, target):
-    """Start a closed path at the closest position on its edges, retaining winding."""
+def closed_loop(points, target, values=None):
+    """Start a closed path at the closest position on its edges, retaining winding.
+
+    With per-vertex ``values`` (e.g. bead widths) returns ``(points, values)``,
+    interpolating the value at an inserted start point.
+    """
     nxt = np.roll(points, -1, axis=0)
     edges = nxt - points
     squared = (edges**2).sum(axis=1)
@@ -66,7 +70,17 @@ def closed_loop(points, target):
     closest = points + t[:, None]*edges
     i = int(_ends(closest, target).argmin())
     if t[i] <= 1e-9:
-        return np.roll(points, -i, axis=0)
-    if t[i] >= 1-1e-9:
-        return np.roll(points, -(i+1), axis=0)
-    return np.vstack((closest[i], np.roll(points, -(i+1), axis=0)))
+        shift, start = i, None
+    elif t[i] >= 1-1e-9:
+        shift, start = i + 1, None
+    else:
+        shift, start = i + 1, closest[i]
+    pts = np.roll(points, -shift, axis=0)
+    if start is not None:
+        pts = np.vstack((start, pts))
+    if values is None:
+        return pts
+    vals = np.roll(np.asarray(values, float), -shift)
+    if start is not None:
+        vals = np.concatenate(([values[i] + t[i]*(values[(i+1) % len(values)] - values[i])], vals))
+    return pts, vals

@@ -66,6 +66,9 @@ Workflow: fdm. Optional stage: no.
 |---|---|---|---|---|
 | `perimeters` — Wall loops | int | `2` | minimum 1; maximum 20 | Walls. Number of perimeter loops. |
 | `line_width` — Wall line width | float / mm | `auto` | minimum 0.05; maximum 3; `auto` accepted | Walls. auto = nozzle line width. |
+| `variable_width` — Variable-width walls | bool | `True` | No schema bound | Walls. Keep the normal wall loops but vary their flow: where a wall narrows below two line widths the folded loop prints thinner so its sides do not overlap, and tips narrower than one line width get a tapering centre bead (e.g. fan blade tips, lettering). |
+| `min_bead_width` — Minimum bead width | float / % | `50.0` | minimum 25; maximum 100 | Walls. Narrowest variable-width bead, as % of the line width. Thinner tips are left empty. Also used by gap fill. |
+| `max_bead_width` — Maximum bead width | float / % | `150.0` | minimum 100; maximum 200 | Walls. Widest centre bead gap fill may use, as % of the line width; wider gaps get a thinned loop. |
 
 ## fdm_top_bottom
 
@@ -99,6 +102,10 @@ Workflow: fdm. Optional stage: yes.
 | `overlap` — Overlap | float / % | `15.0` | minimum -100; maximum 100 | Lines. Overlap with the innermost wall (% of infill width). |
 | `min_length` — Min length | float / mm | `0.5` | minimum 0 | Lines.  |
 | `connect` — Shortest travel order | bool | `True` | No schema bound | Lines. Order lines nearest-first to shorten travels. |
+| `gap_fill` — Fill small gaps with perimeters | bool | `True` | No schema bound | Gap fill. Fill thin gaps left between perimeters (too narrow for infill lines) with an extra perimeter whose width varies to fill the gap, plus the overlap above into the walls. |
+| `gap_fill_width` — Fill gaps narrower than | float / mm | `auto` | minimum 0.05; maximum 10; `auto` accepted | Gap fill. auto = 2 wall line widths. Wider areas get normal infill. |
+| `solid_islands` — Solid small islands | bool | `False` | No schema bound | Small islands. Fill the inside of every layer island (separate piece of the slice) smaller than the area below completely with concentric perimeters, e.g. to make thin pillars stronger or keep them from overheating. |
+| `solid_island_area` — Islands smaller than | float / mm² | `25.0` | minimum 0.1; maximum 10000 | Small islands. Island area (outer outline minus holes, per layer) below which Solid small islands applies. |
 
 ## fdm_emit
 
@@ -116,6 +123,7 @@ Workflow: fdm. Optional stage: no.
 | `support_speed` — Support | float / mm/s | `50.0` | minimum 1; maximum 2000 | Speeds.  |
 | `support_interface_speed` — Support interface | float / mm/s | `35.0` | minimum 1; maximum 2000 | Speeds.  |
 | `skirt_speed` — Skirt / brim | float / mm/s | `30.0` | minimum 1; maximum 2000 | Speeds.  |
+| `gap_fill_speed` — Gap fill | float / mm/s | `30.0` | minimum 1; maximum 2000 | Speeds. Extra perimeters that fill gaps too small for infill. |
 | `print_speed` — Other features | float / mm/s | `50.0` | minimum 1; maximum 2000 | Speeds. Anything not listed above. |
 | `first_layer_speed` — First layer | float / mm/s | `20.0` | minimum 1; maximum 2000 | Speeds. Every printing move on the first layer. |
 | `travel_speed` — Travel | float / mm/s | `150.0` | minimum 1; maximum 2000 | Speeds.  |

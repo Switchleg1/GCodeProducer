@@ -13,6 +13,8 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 
 | Setting | Default | Effect |
 |---|---|---|
+| Minimum line segment length (FDM paths) | 0.2 mm | Slice contours and print paths drop vertices that leave segments shorter than this, as long as every removed point stays within the maximum deviation. Finely tessellated STLs otherwise produce many 0.01–0.05 mm moves, which bloat the G-code and slow slicing, travel planning and the firmware. 0 keeps every segment. |
+| Maximum path deviation (FDM paths) | 0.02 mm | How far simplified contours and paths may move from the sliced model; points closer than this to a straight line are removed at any segment length (Douglas–Peucker). Real corners and features larger than this stay. 0 disables simplification. |
 | Travel waypoint simplification (FDM travel) | 0.1 mm | Simplifies waypoint candidates for open-space detours. Legs are checked against the original outline; detailed waypoints are retried if needed. Set to 0 to use detailed waypoints only. |
 | Remove air cutting | On | CAM operations start at the first depth that still holds material (estimated from earlier operations in the same setup), pocket contours lying entirely in removed material are dropped, and operations/passes with nothing left to cut are skipped. 3D Contour moves that would only pass through material already removed by earlier passes or tools are left out (see [3D operations](cam/3d-operations.md)). Everything skipped is logged. |
 | Short retracts within cleared material | On | Between entries, stay at the current depth when the straight move to the next cut or ramp start is clear of current material (including planar paths at the same cutting depth); otherwise retract only to *Short retract clearance* above the current material along the travel, then rapid down to the ramp start, instead of safe Z + feeding down through air. Needs allocated stock (without it, safe Z is used). Fixtures and clamps are not modelled: turn this off if anything stands above the material. |
@@ -31,8 +33,8 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | Messages | all shown | Which pop-ups appear; see below. |
 
 Changing a setting marks an existing CAM result stale; regenerate before
-exporting. Changing FDM travel waypoint simplification marks an existing FDM
-result stale. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
+exporting. Changing FDM travel waypoint simplification or the FDM path
+settings marks an existing FDM result stale. **Restore Defaults** resets the dialog, and OK saves it. A corrupt
 or missing settings file silently falls back to defaults at start-up.
 Settings forms and CLI parameters share scalar/choice conversion: for example,
 saved `"false"` is false, not a truthy nonempty string. Null fields use declared

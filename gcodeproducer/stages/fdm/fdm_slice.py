@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMSLICE_PARAMS
+from gcodeproducer.core.geometry.decimate import decimate_rings
+from gcodeproducer.core.settings.preferences import pref
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -45,6 +47,17 @@ class FDMSlice(SliceStage):
                            "Inspect the affected layers in Preview.")
                 job.warnings.append(warning)
                 ctx.log(f"FDM MESH WARNING: {warning}")
+        min_length = pref(job, "fdm_min_segment_length")
+        deviation = pref(job, "fdm_max_deviation")
+        before = after = 0
+        for layer in layers:
+            before += sum(len(c) for c in layer.contours)
+            layer.contours = decimate_rings(layer.contours, min_length, deviation)
+            layer.outline = list(layer.contours)
+            after += sum(len(c) for c in layer.contours)
+        if before > after:
+            ctx.log(f"  contour simplification: {before} \u2192 {after} points "
+                    f"(min segment {min_length:g} mm, deviation {deviation:g} mm)")
         ctx.progress(1.0)
         job.layers = layers
         empty = sum(1 for layer in layers if not layer.outline)

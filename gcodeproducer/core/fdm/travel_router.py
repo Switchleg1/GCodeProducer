@@ -8,7 +8,8 @@ from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import nearest_points
 
 from .fdm_constants import (TRAVEL_RETRY_VERTEX_LIMIT, TRAVEL_VERTEX_LIMIT,
-                            TRAVEL_VISIBILITY_CACHE_ROWS, TRAVEL_WAYPOINT_INSET)
+                            TRAVEL_VISIBILITY_CACHE_ROWS, TRAVEL_VISIBILITY_CHUNK,
+                            TRAVEL_WAYPOINT_INSET)
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 
@@ -177,32 +178,57 @@ class TravelRouter:
 
     @staticmethod
     def _search(poly, points, limit, visibility):
-        """A* on the visibility graph, with a straight-line lower bound."""
+        """Lazy A* on the visibility graph, with a straight-line lower bound.
+
+        Edges are tested against the island only when they are popped, so a
+        large detour budget does not test every candidate pair of a detailed
+        outline. Each expansion queues its successors as one bound-sorted
+        bucket, so the heap holds one entry per expansion, not per edge.
+        """
         end = points[1]
         coords = np.asarray(points)
         remaining = np.hypot(*(coords - end).T)
-        best = np.full(len(points), np.inf)
-        best[0] = 0.
         parent = [-1] * len(points)
-        queue = [(remaining[0], 0., 0)]
+        settled = np.zeros(len(points), dtype=bool)
+        buckets = []
+        queue = []
+
+        def expand(i, cost):
+            new_cost = cost + np.hypot(*(coords - coords[i]).T)
+            bound = new_cost + remaining
+            ids = np.flatnonzero(~settled & (bound <= limit))
+            if len(ids):
+                ids = ids[np.argsort(bound[ids], kind="stable")]
+                buckets.append((ids, bound[ids].tolist(), new_cost[ids].tolist(), i, [0], {}))
+                heappush(queue, (buckets[-1][1][0], len(buckets) - 1))
+
+        settled[0] = True
+        expand(0, 0.)
         while queue:
-            _, cost, i = heappop(queue)
-            if cost != best[i]:
+            _, b = heappop(queue)
+            ids, bounds, costs, via, cursor, seen = buckets[b]
+            k = cursor[0]
+            cursor[0] = k + 1
+            if k + 1 < len(ids):
+                heappush(queue, (bounds[k+1], b))
+            j = int(ids[k])
+            if settled[j]:
                 continue
-            if i == 1:
+            if k not in seen:
+                # test the next few successors of this bucket in one vectorised call
+                chunk = ids[k:k+TRAVEL_VISIBILITY_CHUNK]
+                for offset, hit in enumerate(_visible_edges(poly, coords, points, via, chunk, visibility)):
+                    seen[k + offset] = bool(hit)
+            if not seen[k]:
+                continue
+            settled[j] = True
+            parent[j] = via
+            if j == 1:
                 waypoints = []
-                j = parent[i]
+                j = parent[j]
                 while j > 0:
                     waypoints.append(points[j])
                     j = parent[j]
                 return waypoints[::-1]
-            new_cost = cost + np.hypot(*(coords - coords[i]).T)
-            bound = new_cost + remaining
-            ids = np.flatnonzero((new_cost < best) & (bound <= limit))
-            if not len(ids):
-                continue
-            visible = _visible_edges(poly, coords, points, i, ids, visibility)
-            for j in ids[visible]:
-                best[j], parent[j] = new_cost[j], i
-                heappush(queue, (bound[j], new_cost[j], j))
+            expand(j, costs[k])
         return None

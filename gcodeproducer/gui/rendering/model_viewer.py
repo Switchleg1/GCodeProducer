@@ -296,7 +296,7 @@ class ModelViewer(QOpenGLWidget):
         elif self.remove_block:
             txt = "Click a support block to remove it  •  Esc = done"
         else:
-            txt = "Drag the model to move it  \u2022  drag elsewhere to orbit, right-drag to pan"
+            txt = "Ctrl+drag the model to move it  \u2022  drag to orbit, right-drag to pan"
         self.info.setText(txt)
         self.info.adjustSize()
         out = self.vertices is not None and not self.inside
@@ -607,6 +607,8 @@ class ModelViewer(QOpenGLWidget):
             return
         if len(self.model_ends):
             self.modelPicked.emit(int(np.searchsorted(self.model_ends, tri, side='right')))
+        if not ev.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            return                                   # plain left drag orbits, even over a model
         self._drag = (float(pt[2]), pt, tuple(self.center_xy))
         self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
@@ -649,6 +651,7 @@ class ModelViewer(QOpenGLWidget):
                 self.update()
         elif not b and self.tris is not None:
             over = self.pick(ev.position().x(), ev.position().y())[1] >= 0
+            over = over and bool(ev.modifiers() & Qt.KeyboardModifier.ControlModifier)
             if over != self._highlight:
                 self._highlight = over
                 if not (self.pick_seam or self.cam_pick_mode or self.place_on_face or self.place_block):

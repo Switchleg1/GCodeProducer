@@ -22,6 +22,7 @@ import math, numpy as np
 from gcodeproducer.core.fdm.fdm_constants import WALL_FEATURES
 from gcodeproducer.core.fdm.path_order import closed_loop, ordered_paths
 from gcodeproducer.core.fdm.travel_router import TravelRouter
+from gcodeproducer.core.geometry.decimate import decimate
 from gcodeproducer.core.settings.preferences import pref
 from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm
 from gcodeproducer.stages.base.api import FDM
@@ -128,6 +129,8 @@ class FDMEmit(SliceStage):
         detours = fallbacks = outside = bridges = 0
         route_or_classify = detour > 0 or (params['retraction_mode'] in ('open', 'separate') and retract_len > 0)
         simplification = pref(job, 'fdm_travel_simplification')
+        min_segment = pref(job, 'fdm_min_segment_length')
+        deviation = pref(job, 'fdm_max_deviation')
         for li, layer in enumerate(job.layers):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
@@ -143,11 +146,20 @@ class FDMEmit(SliceStage):
             paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
                      if job.settings.get("optimize_mixed_infill", True) else layer.paths)
             for path in paths:
-                pts = np.asarray(path.points, float)
+                pts, widths = decimate(np.asarray(path.points, float), path.closed, min_segment, deviation,
+                                       path.widths)
                 if len(pts) < 2:
                     continue
                 width = path.width or job.line_width
                 epm = extrusion_per_mm(width, h, fil, flow)
+                if widths is not None:
+                    # Per-segment flow relative to the nominal bead; feed caps use the widest bead.
+                    widths = np.asarray(widths, float)
+                    scale = np.array([extrusion_per_mm(float(w), h, fil, flow) for w in widths]) / epm
+                    epm *= float(scale.max())
+                    scale /= scale.max()
+                else:
+                    scale = None
                 b.set_feature(path.feature)
                 is_bridge = path.feature == 'bridge'
                 target_pwm = bridge_pwm if is_bridge else normal_pwm
@@ -163,7 +175,7 @@ class FDMEmit(SliceStage):
                     requested = path.speed or params[_FEATURE_SPEED.get(path.feature, "print_speed")]
                 feed = print_feed("first layer" if first else path.feature, requested, epm)
                 self._print_path(b, path, pts, epm, feed, travel_f, params,
-                                 retract_len, retract_spd, zhop, router, detour)
+                                 retract_len, retract_spd, zhop, router, detour, scale)
             if active_pwm != normal_pwm:
                 self._fan(b, normal_pwm)
             if router is not None:
@@ -187,23 +199,35 @@ class FDMEmit(SliceStage):
         return f"{len(job.program.lines)} lines, {moves} moves, {len(job.layers)} layers{extra}"
 
     def _print_path(self, b, path, pts, epm, feed, travel_f, params,
-                    rlen, rspd, zhop, router=None, detour=0.):
+                    rlen, rspd, zhop, router=None, detour=0., scale=None):
+        """Print one path; ``scale`` optionally holds per-vertex flow factors (variable width)."""
         head = np.array([b.x, b.y])
         if path.closed:
             seam = params["seam"]
             if path.feature in WALL_FEATURES and seam != "origin":
                 target = np.array([params["seam_x"], params["seam_y"]]) if seam == "xy" else head
-                pts = closed_loop(pts, target)
+                if scale is None:
+                    pts = closed_loop(pts, target)
+                else:
+                    pts, scale = closed_loop(pts, target, scale)
             elif seam != "origin":
                 # Do not aim skirt or support seams at the perimeter XY target.
                 s = int(np.argmin(((pts - head)**2).sum(axis=1)))
                 pts = np.roll(pts, -s, axis=0)
+                if scale is not None:
+                    scale = np.roll(scale, -s)
             loop = np.vstack([pts, pts[0]])
+            if scale is not None:
+                scale = np.append(scale, scale[0])
         else:
             loop = pts
             # orient so we start from the closer end
             if ((loop[-1] - head)**2).sum() < ((loop[0] - head)**2).sum():
                 loop = loop[::-1]
+                if scale is not None:
+                    scale = scale[::-1]
+        # flow of each segment (k -> k+1)
+        seg_epm = [epm]*(len(loop)-1) if scale is None else (epm*(scale[:-1]+scale[1:])/2).tolist()
 
         start = loop[0]
         route = router.route(head, start, detour) if router is not None else [start]
@@ -234,15 +258,15 @@ class FDMEmit(SliceStage):
                 i = len(lengths) - 1 - reverse_index
                 remaining = coast - (tail[reverse_index-1] if reverse_index else 0.)
                 split = loop[i+1] + (remaining/lengths[i])*(loop[i]-loop[i+1])
-                for q in loop[1:i+1]:
-                    b.extrude_to(float(q[0]), float(q[1]), epm, feed=feed)
+                for k, q in enumerate(loop[1:i+1]):
+                    b.extrude_to(float(q[0]), float(q[1]), seg_epm[k], feed=feed)
                 if math.dist(split, loop[i]) > 1e-9:
-                    b.extrude_to(float(split[0]), float(split[1]), epm, feed=feed)
+                    b.extrude_to(float(split[0]), float(split[1]), seg_epm[i], feed=feed)
                 for q in loop[i+1:]:
                     b.coast_to(float(q[0]), float(q[1]), feed=feed)
                 return
-        for q in loop[1:]:
-            b.extrude_to(float(q[0]), float(q[1]), epm, feed=feed)
+        for k, q in enumerate(loop[1:]):
+            b.extrude_to(float(q[0]), float(q[1]), seg_epm[k], feed=feed)
 
     # ------------------------------------------------------------------ temperatures
     @staticmethod

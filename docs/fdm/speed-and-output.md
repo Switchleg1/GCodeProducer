@@ -20,9 +20,16 @@ All GUI/process speeds below are **mm/s**; emitted G-code F values are **mm/min*
 | Support body | 50 |
 | Support interface | 35 |
 | Skirt / brim | 30 |
+| Gap fill | 30 |
 | Other/unmapped print features | 50 |
 | First layer | 20 |
 | Travel | 150 |
+
+Variable-width walls and gap fill change the extrusion per segment with the
+bead width; the feed cap for volumetric flow uses the widest bead of the path.
+Before writing, every path is simplified with the global **FDM paths**
+settings ([Settings](../settings.md)): segments shorter than the minimum line
+segment length are merged while the path stays within the maximum deviation.
 
 First-layer speed overrides normal feature requests for printing moves on
 layer index zero. It is not necessarily the first model-bearing layer of a

@@ -17,3 +17,4 @@ class Path:
     stay_down_from: Optional[tuple] = None  # expected preceding XY endpoint; stale metadata forces retract
     cut_conditions: list = field(default_factory=list)  # one per emitted XY segment
     link_condition: Optional[CutCondition] = None
+    widths: Optional[np.ndarray] = None  # FDM: per-vertex bead widths (variable-width walls / gap fill)

@@ -19,3 +19,9 @@ PATTERNS = [
 BINARY_BOX_EDGES = ((0,1),(1,3),(3,2),(2,0),(4,5),(5,7),(7,6),(6,4),(0,4),(1,5),(2,6),(3,7))
 
 BINARY_BOX_FACES = ((0,1,3,2),(4,6,7,5),(0,4,5,1),(2,3,7,6),(0,2,6,4),(1,5,7,3))
+
+# Width change (mm) still merged by path decimation on variable-width beads.
+DECIMATE_WIDTH_TOLERANCE = 0.02
+
+# Rounding (decimal places) that identifies shared medial-axis vertices.
+MEDIAL_KEY_DECIMALS = 6
