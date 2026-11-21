@@ -503,6 +503,9 @@ for the selected short cuts on the same stock and pose.
 straight. Its checked 1.50 mm body removes additional stock, but the whole
 pass removes 0.674 mm² over 5.959 mm, versus the greedy second cut's
 0.820 mm² over 4.495 mm. The opt-in review shows the parallel variant.
+`--face-after-neighbor` tries the parallel return after the greedy second
+cut. It removes the same 0.674 mm², but its link grows from 3.205 to
+3.565 mm, so this neighbor does not solve the return-distance penalty.
 
 ## Gate before another generator attempt
 

@@ -94,3 +94,5 @@
   The face probe preserves the stock-left direction and measures body
   removal after subtracting the preceding lead sweep with polygon buffers.
   The reported approximation is not an engagement or force estimate.
+  The neighbor probe inserts the already-checked greedy second cut;
+  it does not claim an optimal neighboring pass or an equal-coverage run.

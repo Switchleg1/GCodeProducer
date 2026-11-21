@@ -86,15 +86,24 @@ def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed(longer):
     assert report['gates']['start_clearance'] > 0
 
 
-def test_parallel_face_probe_removes_stock_on_the_straight_body(tmp_path):
+@pytest.mark.parametrize('neighbor', [False, True])
+def test_parallel_face_probe_removes_stock_on_the_straight_body(tmp_path, neighbor):
     path = tmp_path / 'face.nc'
-    report = check_first_cut(review=path, second=True, fitted_straights=True, turned_straights=True, face_probe=True)
+    report = check_first_cut(review=path, second=True, fitted_straights=True, turned_straights=True,
+                             face_probe=True, face_after_neighbor=neighbor)
     trial = report['parallel_face_probe']
     assert trial['gates'] == {'eligible': 3, 'contact_limit': 1}
     assert trial['body_mm'] > trial['prior_body_mm']
     assert 0. < trial['approximate_body_removal_mm2'] < trial['removed_mm2'] < report['second']['removed_mm2']
     assert trial['link_mm'] + trial['cut_mm'] > report['second']['feed_mm']
-    assert 'parallel-face probe; helix omitted, 2 accepted cuts' in path.read_text('ascii')
+    text = path.read_text('ascii')
+    if neighbor:
+        returning = report['face_after_neighbor']
+        assert returning['removed_mm2'] == pytest.approx(trial['removed_mm2'])
+        assert returning['link_mm'] > trial['link_mm']
+        assert 'neighbor then parallel-face probe; helix omitted, 3 accepted cuts' in text
+    else:
+        assert 'parallel-face probe; helix omitted, 2 accepted cuts' in text
 
 
 def test_live_seed_focus_keeps_old_search_and_reaches_new_clearance():

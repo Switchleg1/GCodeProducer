@@ -202,8 +202,30 @@ def cut_efficiency(choice):
             'removed_per_feed_mm': choice.removed_mm2/choice.travel_mm}
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False):
+def probe_parallel_face(pocket, body, after_cut, seed_xy, radius, gates):
+    """Check a parallel return from an actual prior cut's remaining stock and pose."""
+    live = after_cut.remaining
+    a, b = after_cut.cut[-2:]
+    next_pose = b, tuple(y-x for x, y in zip(a, b))
+    component = connected_clearance(pocket, live, seed_xy, radius)
+    counts = Counter()
+    following = choose_front_cut(pocket, live, next_pose, parallel_face_candidates(body, component), radius,
+                                 diagnostics=counts, **gates)
+    audit = {'gates': dict(counts), 'prior_body_mm': math.dist(*body)}
+    if following is not None:
+        i = max(range(len(following.cut)-1), key=lambda k: math.dist(*following.cut[k:k+2]))
+        body_line = LineString(following.cut[i:i+2])
+        prefix = LineString(following.cut[:i+1]).buffer(radius, quad_segs=32)
+        body_stock = live.difference(prefix).intersection(body_line.buffer(radius, quad_segs=32)).area
+        audit.update(cut_efficiency(following), peak_deg=following.peak_deg,
+                     body_mm=body_line.length, approximate_body_removal_mm2=body_stock)
+    return following, audit
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if face_after_neighbor and not face_probe:
+        raise ValueError('neighbor return requires the face probe')
     if face_probe and (not turned_straights or not second or max_cuts is not None):
         raise ValueError('face probe requires the two-cut turned-straight audit')
     if longer_straights and not turned_straights:
@@ -296,29 +318,22 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
         choice = accepted[0]
         preview = accepted
         if face_probe:
-            live = choice.remaining
             body = max(zip(choice.cut, choice.cut[1:]), key=lambda edge: math.dist(*edge))
-            a, b = choice.cut[-2:]
-            next_pose = b, tuple(y-x for x, y in zip(a, b))
-            component = connected_clearance(pocket, live, pose[0], radius)
-            counts = Counter()
-            following = choose_front_cut(pocket, live, next_pose, parallel_face_candidates(body, component), radius,
-                                         diagnostics=counts, **gates)
+            following, report['parallel_face_probe'] = probe_parallel_face(pocket, body, choice, pose[0], radius, gates)
             preview = [choice] if following is None else [choice, following]
-            audit = {'gates': dict(counts), 'prior_body_mm': math.dist(*body)}
-            if following is not None:
-                i = max(range(len(following.cut)-1), key=lambda k: math.dist(*following.cut[k:k+2]))
-                body_line = LineString(following.cut[i:i+2])
-                prefix = LineString(following.cut[:i+1]).buffer(radius, quad_segs=32)
-                body_stock = live.difference(prefix).intersection(body_line.buffer(radius, quad_segs=32)).area
-                audit.update(cut_efficiency(following), peak_deg=following.peak_deg,
-                             body_mm=body_line.length, approximate_body_removal_mm2=body_stock)
-            report['parallel_face_probe'] = audit
+            if face_after_neighbor:
+                preview = list(accepted)
+                if len(accepted) == 2:
+                    returning, report['face_after_neighbor'] = probe_parallel_face(pocket, body, accepted[1],
+                                                                                   pose[0], radius, gates)
+                    if returning is not None:
+                        preview.append(returning)
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = 'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted'
+            label = ('neighbor then parallel-face probe; helix omitted' if face_after_neighbor else
+                     'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted')
             write_review_gcode(review, preview, pose[0], label)
             write_opening_review(opening, pocket, stock, choice.link, choice.cut)
     return report
@@ -336,7 +351,10 @@ if __name__ == '__main__':
     parser.add_argument('--live-seed-focus', action='store_true', help='extend fitted search with live seed clearance')
     parser.add_argument('--longer-straights', action='store_true', help='try longer bodies where the fit and clearance permit')
     parser.add_argument('--follow-straight-face', action='store_true', help='probe a parallel continuation of the first straight')
+    parser.add_argument('--face-after-neighbor', action='store_true', help='probe the parallel return after the greedy neighbor')
     args = parser.parse_args()
+    if args.face_after_neighbor and not args.follow_straight_face:
+        parser.error('neighbor return requires --follow-straight-face')
     if args.follow_straight_face and (not args.turned_straights or not args.second_cut or args.seed_cut_budget is not None):
         parser.error('face probe requires --second-cut --turned-straights without a cut budget')
     if args.longer_straights and not args.turned_straights:
@@ -352,6 +370,7 @@ if __name__ == '__main__':
         parser.error('select one audit; review output requires a cut audit')
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
-                              live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face) if cut_audit else
+                              live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
+                              face_after_neighbor=args.face_after_neighbor) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))
