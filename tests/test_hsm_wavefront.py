@@ -1,13 +1,13 @@
 import math
 
 import pytest
-from shapely.geometry import LineString, Point, box
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, eased, find_lobes, fronts, spiral_out,
-                                 write_review)
+                                 stay_down_link, write_review)
 
 
 def test_two_islands_sit_a_third_in_from_each_end_of_a_long_pocket():
@@ -78,6 +78,20 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
     assert allowed.covers(LineString(path))
 
 
+def test_stay_down_link_routes_round_stock_and_refuses_what_it_cannot_check():
+    clear = Polygon([(0, 0), (10, 0), (10, 10), (7, 10), (7, 3), (3, 3), (3, 10), (0, 10)])
+    stock = box(4, 4, 6, 12)  # One unit of cutter radius fits between it and each leg.
+    assert stay_down_link(clear, stock, 1., (1., 1.), (9., 1.)) == [(1., 1.), (9., 1.)]
+    route = stay_down_link(clear, stock, 1., (1.5, 9.), (8.5, 9.))
+    assert route[0] == (1.5, 9.) and route[-1] == (8.5, 9.) and len(route) > 2
+    assert clear.buffer(2e-3).covers(LineString(route)) and LineString(route).distance(stock) >= 1. - 5e-3
+    assert LineString(route).length < 25.
+    why = {}
+    assert stay_down_link(clear, box(4, 2.5, 6, 12), 1., (1.5, 9.), (8.5, 9.), why=why) is None
+    assert stay_down_link(unary_union([box(0, 0, 2, 2), box(5, 0, 7, 2)]), stock, 1., (1., 1.), (6., 1.), why=why) is None
+    assert why == {'route_touches_stock': 1, 'separate_cleared_areas': 1}
+
+
 def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     pocket = box(0, 0, 18, 14)
     strokes, residual, report = clear_pocket(pocket, 2., sample_step=.2)
@@ -85,14 +99,20 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     assert report['cleared_fraction'] > .95
     assert report['peak_contact_deg'] <= 60.
     assert all(stroke.peak_deg <= 60. for stroke in strokes)
+    links = [stroke for stroke in strokes if stroke.kind == 'link']
+    assert report['stay_down_links'] == len(links) > 0
+    assert report['retract_rapids'] <= 2 and report['retract_reasons']['first_cut'] == 1
+    for before, link in zip(strokes, strokes[1:]):
+        if link.kind == 'link':
+            assert link.points[0] == before.points[-1]
     assert report['spiral_feed_mm'] > .4*report['cut_feed_mm']
-    allowed = unary_union(center_regions(pocket, 2.)).buffer(1e-6)
+    allowed = unary_union(center_regions(pocket, 2.)).buffer(2e-3)
     assert all(allowed.covers(LineString(stroke.points)) for stroke in strokes)
     assert clearance(allowed, residual, 2.).area > .9*allowed.area
     review = tmp_path / 'wave.nc'
     write_review(review, pocket, strokes, residual, report)
     text = review.read_text('ascii')
     assert text.startswith('(DEBUG ONLY') and 'helix entries omitted' in text
-    assert sum(line.startswith('G0 ') for line in text.splitlines()) == len(strokes) and review.with_suffix('.svg').is_file()
+    assert sum(line.startswith('G0 ') for line in text.splitlines()) == report['retract_rapids'] and review.with_suffix('.svg').is_file()
     with pytest.raises(FileExistsError):
         write_review(review, pocket, strokes, residual, report)

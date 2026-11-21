@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
-from shapely import get_parts, segmentize
+from shapely import get_parts, prepare, segmentize
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polylabel, substring, unary_union
@@ -32,10 +32,11 @@ SWEEP_SEGMENTS = 16
 WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
+LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
 
 
 class Stroke(NamedTuple):
-    kind: str  # 'spiral' or 'front'
+    kind: str  # 'spiral' or 'front' cut, or a stay-down 'link' through cleared area
     points: list
     stepover_mm: float
     peak_deg: float
@@ -254,6 +255,60 @@ def eased(run, closed, clear, allowed, blend):
     return out
 
 
+def stay_down_link(clear, stock, radius, start, end, *, why=None):
+    """Feed route through already cleared space, or None when a retract is needed.
+
+    The route follows the edge of the cleared-centre region and is pulled
+    taut where the cutter can see ahead. It is checked against live stock.
+    """
+    def refuse(reason):
+        if why is not None:
+            why[reason] = why.get(reason, 0) + 1
+
+    if math.dist(start, end) < 1e-9:
+        return [start, end]
+    part = next((g for g in polygons(clear) if g.distance(Point(start)) < LINK_TOLERANCE and g.distance(Point(end)) < LINK_TOLERANCE),
+                None)
+    if part is None:
+        return refuse('separate_cleared_areas')
+    room = part.buffer(LINK_TOLERANCE)
+    prepare(room)
+
+    def visible(a, b):
+        return room.covers(LineString([a, b]))
+
+    if visible(start, end):
+        route = [start, end]
+    else:
+        ring = LineString(part.exterior.coords)
+        a = ring.interpolate(ring.project(Point(start)))
+        b = ring.interpolate(ring.project(Point(end)))
+        if not visible(start, (a.x, a.y)) or not visible((b.x, b.y), end):
+            return refuse('no_way_to_front_edge')
+        da, db = ring.project(a), ring.project(b)
+        lo, hi = sorted((da, db))
+        inner = list(substring(ring, lo, hi).coords)
+        outer = list(substring(ring, hi, ring.length).coords) + list(substring(ring, 0., lo).coords)[1:]
+        if LineString(outer).length < LineString(inner).length:
+            walk = outer if da > db else outer[::-1]
+        else:
+            walk = inner if da <= db else inner[::-1]
+        walk = [start, *walk, end]
+        route, i = [start], 0
+        while i < len(walk)-1:
+            j, reach = i+1, 1
+            while i+reach < len(walk) and visible(walk[i], walk[min(i+2*reach, len(walk)-1)]):
+                j = min(i+2*reach, len(walk)-1)
+                if j == len(walk)-1:
+                    break
+                reach *= 2
+            route.append(walk[j])
+            i = j
+    if not stock.is_empty and LineString(route).distance(stock) < radius - 5*LINK_TOLERANCE:
+        return refuse('route_touches_stock')
+    return route
+
+
 def cut(path, stock, radius, sample_step):
     """Sampled peak contact and updated stock; chunked so each replay stays local."""
     peak, chunk, length = 0., [path[0]], 0.
@@ -279,6 +334,23 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     reachable = allowed.buffer(radius, quad_segs=SWEEP_SEGMENTS)
     stock = pocket
     strokes, island_reports = [], []
+    travel = {'rapids': 0, 'links': 0}
+    refused = {}
+
+    def commit(kind, path, stepover, peak):
+        """Join the cut to the previous one through cleared space, else count a retract and rapid."""
+        if strokes:
+            route = stay_down_link(clearance(allowed, stock, radius), stock, radius, strokes[-1].points[-1], path[0],
+                                  why=refused)
+            if route is None:
+                travel['rapids'] += 1
+            else:
+                travel['links'] += 1
+                strokes.append(Stroke('link', route, 0., 0.))
+        else:
+            travel['rapids'] += 1
+        strokes.append(Stroke(kind, path, stepover, peak))
+
     started = time.time()
 
     def out_of_time():
@@ -305,84 +377,130 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             island.update(stepover_mm=chosen, peak_deg=peak, feed_mm=LineString(path).length,
                           accepted=peak <= limit)
             if peak <= limit:
+                commit('spiral', path, chosen, peak)
                 stock = trial
-                strokes.append(Stroke('spiral', path, chosen, peak))
         island_reports.append(island)
+
+    def here(parts):
+        """Cleared parts, the one holding the cutter first."""
+        parts = [g for g in polygons(parts) if g.area > 1e-6]
+        if not strokes:
+            return parts
+        at = Point(strokes[-1].points[-1])
+        return sorted(parts, key=lambda g: g.distance(at))
+
+    def advance(part, start):
+        """Grow one cleared part by a pass; return (lowest stepover index used, anything tried)."""
+        nonlocal stock
+        used, tried, zone = None, False, None
+        for index in range(start, len(stepovers)):
+            stepover = stepovers[index]
+            grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
+            runs = fronts(part, grown, wall, zone=zone)
+            failed = []
+            while runs:
+                at = strokes[-1].points[-1] if strokes else runs[0][0][0]
+                best = min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0]))
+                run, closed = runs.pop(best)
+                path = eased(run, closed, part, allowed, blend)
+                if len(path) < 2:
+                    continue
+                peak, trial = cut(path, stock, radius, sample_step)
+                if stock.area - trial.area < MIN_GAIN_MM2:
+                    continue
+                tried = True
+                if peak <= limit:
+                    commit('front', path, stepover, peak)
+                    stock = trial
+                    used = index if used is None else used
+                    if zone is None:
+                        break  # Stay with this stretch of front; the others wait their turn.
+                else:
+                    failed.append(LineString(run))
+            if not failed or out_of_time():
+                break
+            zone = unary_union(failed).buffer(max(1., 2*stepover))
+            grown_part = [g for g in here(clearance(allowed, stock, radius)) if g.intersects(part)]
+            if not grown_part:
+                break
+            part = max(grown_part, key=lambda g: g.intersection(part).area)
+        return used, tried
 
     stop, start, passes = 'front_exhausted', 0, 0
     while True:
         if out_of_time():
             stop = 'time_budget'
             break
-        clear = clearance(allowed, stock, radius)
-        committed_at, attempted, zone = None, False, None
-        for index in range(start, len(stepovers)):
-            stepover = stepovers[index]
-            grown = clear.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
-            failed = []
-            for run, closed in fronts(clear, grown, wall, zone=zone):
-                path = eased(run, closed, clear, allowed, blend)
-                if len(path) < 2:
-                    continue
-                peak, trial = cut(path, stock, radius, sample_step)
-                if stock.area - trial.area < MIN_GAIN_MM2:
-                    continue
-                attempted = True
-                if peak <= limit:
-                    stock = trial
-                    strokes.append(Stroke('front', path, stepover, peak))
-                    committed_at = index if committed_at is None else committed_at
-                else:
-                    failed.append(LineString(run))
-            if not failed or out_of_time():
+        used, attempted = None, False
+        # Finish the island under the cutter before retracting to another one.
+        for part in here(clearance(allowed, stock, radius)):
+            for first in dict.fromkeys((start, 0)):
+                used, tried = advance(part, first)
+                attempted = attempted or tried
+                if used is not None:
+                    break
+            if used is not None:
                 break
-            zone = unary_union(failed).buffer(max(1., 2*stepover))
-            clear = clearance(allowed, stock, radius)
-        if committed_at is None:
+        if used is None:
             stop = 'blocked' if attempted else 'front_exhausted'
             break
         passes += 1
-        start = max(0, committed_at-1)
+        start = max(0, used-1)
 
     residual = stock.intersection(reachable)
     total = pocket.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
+    feeds = [s for s in strokes if s.kind != 'link']
     report = {'stop': stop, 'placement': placement,
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
-              'peak_contact_deg': max((s.peak_deg for s in strokes), default=None),
-              'cut_feed_mm': sum(LineString(s.points).length for s in strokes),
+              'peak_contact_deg': max((s.peak_deg for s in feeds), default=None),
+              'cut_feed_mm': sum(LineString(s.points).length for s in feeds),
+              'link_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'link'),
               'spiral_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'spiral'),
-              'rapid_links': max(0, len(strokes)-1),
+              'stay_down_links': travel['links'], 'retract_rapids': travel['rapids'],
+              'retract_reasons': dict(refused, first_cut=1),
               'front_stepover_histogram': {str(v): sum(s.stepover_mm == v for s in cuts) for v in stepovers},
               'seconds': time.time()-started}
     return strokes, residual, report
 
 
 def write_review(path, pocket, strokes, residual, report):
-    """Save XY geometry for a viewer: G1 cuts, G0 rapids. Helix entries are not included."""
+    """Save XY geometry for a viewer. G0 marks a retract and rapid; helix entries are not included."""
     path = Path(path)
     overlay = path.with_suffix('.svg')
+    cuts = sum(stroke.kind != 'link' for stroke in strokes)
     with path.open('x', encoding='ascii', newline='\n') as out:
         out.write('(DEBUG ONLY - XY GEOMETRY REVIEW - DO NOT RUN ON A MACHINE)\n'
-                  f'(Wavefront trial: {report["stop"]}, {len(strokes)} cuts; helix entries omitted)\n'
-                  '(G0 between cuts stands for an unplanned retract and rapid)\n'
+                  f'(Wavefront trial: {report["stop"]}, {cuts} cuts, {report["retract_rapids"]} retracts; '
+                  'helix entries omitted)\n'
+                  '(Each G0 stands for a retract, rapid and re-entry that are not planned here)\n'
                   '(No Z, entry, spindle, tool or feed schedule; rounded XY not replayed)\nG21\nG90\n')
-        for number, stroke in enumerate(strokes, 1):
+        number, joined = 0, False
+        for stroke in strokes:
             points = list(LineString(stroke.points).simplify(.002).coords)
-            out.write(f'(Cut {number}: {stroke.kind}, stepover {stroke.stepover_mm:g} mm, '
-                      f'sampled peak {stroke.peak_deg:.1f} deg)\n'
-                      f'G0 X{points[0][0]:.4f} Y{points[0][1]:.4f}\n')
+            if stroke.kind == 'link':
+                out.write('(Stay-down link through cleared area)\n')
+                joined = True
+            else:
+                number += 1
+                out.write(f'(Cut {number}: {stroke.kind}, stepover {stroke.stepover_mm:g} mm, '
+                          f'sampled peak {stroke.peak_deg:.1f} deg)\n')
+                if not joined:
+                    out.write(f'G0 X{points[0][0]:.4f} Y{points[0][1]:.4f}\n')
+                joined = False
             for x, y in points[1:]:
                 out.write(f'G1 X{x:.4f} Y{y:.4f}\n')
         out.write('M2\n')
     with overlay.open('x', encoding='ascii', newline='\n') as out:
         write_overlay(out, pocket, residual,
-                      [(n, list(LineString(s.points).simplify(.01).coords), False) for n, s in enumerate(strokes, 1)],
-                      legend='Wavefront trial | blue: cuts in order | orange: reachable stock left | rapids not drawn')
+                      [(n, list(LineString(s.points).simplify(.01).coords), s.kind == 'link')
+                       for n, s in enumerate(strokes, 1)],
+                      legend='Wavefront trial | blue: cuts | gray: stay-down links in cleared area | '
+                             'orange: reachable stock left | retracts not drawn')
 
 
 if __name__ == '__main__':

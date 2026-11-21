@@ -623,3 +623,8 @@ By default islands follow the shape: the centre region is split into lobes at cl
 starts one island at its widest spot; the fronts then meet through the neck. A single lobe takes two islands a third
 in from each end only when it is at least twice as long as wide. On the neck fixture this gives two islands, 9,611 mm
 of cut feed, 105.8 mm² left and 187 arcs.
+
+Cuts are joined by stay-down links through space the cutter has already cleared, checked against live stock. A
+retract is used only where no such route exists: on the neck fixture that is the first cut and the move from the
+first island to the second (226 links, 2 retracts). Links add 4,903 mm of travel in cleared space to 9,981 mm of
+cutting, because each one-way arc is followed by a return along the front.

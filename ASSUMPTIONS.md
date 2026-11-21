@@ -139,3 +139,5 @@
   The thirds rule keeps the even spacing unless a spot in the same band is more than 5% wider.
 - Lobe detection shrinks the centre region in 0.25 mm steps; a piece is a lobe while its widest spot is at least twice the
   shrink that separated it. The 2:1 neck ratio and the 2:1 length rule for two islands in one lobe are untuned choices.
+- Stay-down links accept endpoints within 0.001 mm of the cleared-centre region and must keep the path at least the
+  cutter radius minus 0.005 mm from live stock. Links are planar feed moves at cut depth; their feed rate is undecided.
