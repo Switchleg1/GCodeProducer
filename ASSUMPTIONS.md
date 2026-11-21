@@ -102,3 +102,5 @@
   The neck-pair fixture uses +X as the neck direction. The first body's
   stock-left unit normal must have an X component of at least 0.7;
   pair reach is ranked at six decimal places in mm.
+  Repeated pairs take the last verified return body as the new reference
+  and commit neither neighbor nor return if the pair cannot be checked.

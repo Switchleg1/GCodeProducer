@@ -513,7 +513,10 @@ pair. Removal is slightly different (1.491 versus 1.493 mm²).
 `--neck-face-pair` starts on an east-facing body and ranks checked pairs
 by final connected east extent. After three cuts it reaches X16.181 vs
 X16.044 with unrestricted greedy selection, but removes less stock
-(1.656 vs 2.361 mm²). This is directional growth, not neck passage.
+(1.656 vs 2.361 mm²). With `--repeat-face-pairs 2`, seven cuts reach
+X16.476 instead of X16.139 with greedy selection. Removal drops from
+5.203 to 4.505 mm², while travel grows from 34.15 to 41.40 mm. This is
+directional growth, not neck passage or an equal-coverage timing win.
 
 ## Gate before another generator attempt
 

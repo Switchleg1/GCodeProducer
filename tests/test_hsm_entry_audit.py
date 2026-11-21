@@ -108,6 +108,35 @@ def test_parallel_face_probe_removes_stock_on_the_straight_body(tmp_path, neighb
         assert 'parallel-face probe; helix omitted, 2 accepted cuts' in text
 
 
+def test_repeated_face_pairs_use_last_live_pose_and_never_commit_partial_pairs(monkeypatch):
+    from tools import check_hsm_entry as audit_tool
+
+    first = SimpleNamespace(cut=[(1., 3.), (1., 2.)], remaining='first stock')
+    neighbor = SimpleNamespace(cut=[(2., 3.), (2., 2.)], remaining='neighbor stock')
+    final = SimpleNamespace(cut=[(3., 3.), (3., 2.)], remaining='returned stock')
+    seen = []
+
+    def propose(live, pose):
+        seen.append((live, pose))
+        return [neighbor]
+
+    def choose(_pocket, _live, _pose, paths, _radius, *, on_eligible):
+        for cut in paths:
+            on_eligible((), cut)
+
+    def search(_pocket, body, options, *_args, **_kwargs):
+        assert options == [neighbor]
+        return ([neighbor, final], {}) if body == tuple(first.cut) else ([], {})
+
+    monkeypatch.setattr(audit_tool, 'choose_front_cut', choose)
+    monkeypatch.setattr(audit_tool, 'search_face_neighbor', search)
+    monkeypatch.setattr(audit_tool, 'connected_clearance', lambda *_: box(0, 0, 4, 4))
+    accepted, trace, stop = audit_tool.extend_face_pairs(None, (0, 0), 2., {}, propose, [first], 2)
+    assert accepted == [first, neighbor, final]
+    assert seen == [('first stock', ((1., 2.), (0., -1.))), ('returned stock', ((3., 2.), (0., -1.)))]
+    assert stop == 'no_checked_pair' and trace == [{'cut_count': 3, 'east_x_mm': 4.}]
+
+
 def test_neck_facing_straight_preserves_stock_left_direction():
     assert neck_facing_straight([(1., 4.), (1., 3.), (1.1, 2.9)])
     assert not neck_facing_straight([(1., 3.), (1., 4.)])
