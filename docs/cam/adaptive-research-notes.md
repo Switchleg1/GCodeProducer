@@ -506,6 +506,10 @@ pass removes 0.674 mm² over 5.959 mm, versus the greedy second cut's
 `--face-after-neighbor` tries the parallel return after the greedy second
 cut. It removes the same 0.674 mm², but its link grows from 3.205 to
 3.565 mm, so this neighbor does not solve the return-distance penalty.
+`--fit-face-neighbor` checks a return after each of 82 eligible neighbors.
+The best pair by removal per feed mm returns through 1.630 mm of link
+and travels 10.305 mm total versus 10.815 mm for the greedy neighbor
+pair. Removal is slightly different (1.491 versus 1.493 mm²).
 
 ## Gate before another generator attempt
 

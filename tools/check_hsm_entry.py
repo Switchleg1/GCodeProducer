@@ -222,8 +222,35 @@ def probe_parallel_face(pocket, body, after_cut, seed_xy, radius, gates):
     return following, audit
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False):
+def search_face_neighbor(pocket, body, neighbors, seed_xy, radius, gates):
+    """Evaluate each checked neighbor and its checked return as a two-cut pair."""
+    best = None
+    shortest = None
+    count = 0
+    for neighbor in neighbors:
+        returning, audit = probe_parallel_face(pocket, body, neighbor, seed_xy, radius, gates)
+        if returning is None:
+            continue
+        count += 1
+        removed = neighbor.removed_mm2 + returning.removed_mm2
+        travel = neighbor.travel_mm + returning.travel_mm
+        key = (removed/travel, -audit['link_mm'])
+        if best is None or key > best[0]:
+            best = key, neighbor, returning, audit
+        if shortest is None or audit['link_mm'] < shortest:
+            shortest = audit['link_mm']
+    report = {'checked_neighbors': len(neighbors), 'checked_pairs': count, 'shortest_return_link_mm': shortest}
+    if best is None:
+        return [], report
+    key, neighbor, returning, audit = best
+    report.update(neighbor=cut_efficiency(neighbor), returning=audit, pair_removed_per_feed_mm=key[0])
+    return [neighbor, returning], report
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if fit_face_neighbor and not face_after_neighbor:
+        raise ValueError('fitting a neighbor requires the neighbor return probe')
     if face_after_neighbor and not face_probe:
         raise ValueError('neighbor return requires the face probe')
     if face_probe and (not turned_straights or not second or max_cuts is not None):
@@ -246,6 +273,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
 
     long_outcomes = Counter()
     best_long = {}
+    neighbors = []
     mapped_long = None
 
     def note_long_variant(path, mapped):
@@ -259,6 +287,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             long_outcomes[outcome] += 1
 
     def note_ranked(index, key, choice):
+        if fit_face_neighbor and index == 1:
+            neighbors.append(choice)
         if choice.cut is mapped_long and (index not in best_long or key > best_long[index][0]):
             best_long[index] = key, cut_efficiency(choice)
 
@@ -282,7 +312,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
                                           diagnostics=diagnostics, propose_on_stall=propose_bow, **gates,
                                           on_outcome=note_outcome if longer_straights else None,
-                                          on_ranked=note_ranked if longer_straights else None)
+                                          on_ranked=note_ranked if longer_straights or fit_face_neighbor else None)
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
     clearance = connected_clearance(pocket, remaining, pose[0], radius)
@@ -328,11 +358,16 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                                                                    pose[0], radius, gates)
                     if returning is not None:
                         preview.append(returning)
+                    if fit_face_neighbor:
+                        pair, report['fitted_face_neighbor'] = search_face_neighbor(pocket, body, neighbors,
+                                                                                    pose[0], radius, gates)
+                        preview = [choice, *pair]
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = ('neighbor then parallel-face probe; helix omitted' if face_after_neighbor else
+            label = ('fitted neighbor then parallel-face probe; helix omitted' if fit_face_neighbor else
+                     'neighbor then parallel-face probe; helix omitted' if face_after_neighbor else
                      'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted')
             write_review_gcode(review, preview, pose[0], label)
             write_opening_review(opening, pocket, stock, choice.link, choice.cut)
@@ -352,7 +387,10 @@ if __name__ == '__main__':
     parser.add_argument('--longer-straights', action='store_true', help='try longer bodies where the fit and clearance permit')
     parser.add_argument('--follow-straight-face', action='store_true', help='probe a parallel continuation of the first straight')
     parser.add_argument('--face-after-neighbor', action='store_true', help='probe the parallel return after the greedy neighbor')
+    parser.add_argument('--fit-face-neighbor', action='store_true', help='test each eligible neighbor before returning')
     args = parser.parse_args()
+    if args.fit_face_neighbor and not args.face_after_neighbor:
+        parser.error('fitting a neighbor requires --face-after-neighbor')
     if args.face_after_neighbor and not args.follow_straight_face:
         parser.error('neighbor return requires --follow-straight-face')
     if args.follow_straight_face and (not args.turned_straights or not args.second_cut or args.seed_cut_budget is not None):
@@ -371,6 +409,6 @@ if __name__ == '__main__':
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
                               live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
-                              face_after_neighbor=args.face_after_neighbor) if cut_audit else
+                              face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

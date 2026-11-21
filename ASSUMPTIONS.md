@@ -96,3 +96,6 @@
   The reported approximation is not an engagement or force estimate.
   The neighbor probe inserts the already-checked greedy second cut;
   it does not claim an optimal neighboring pass or an equal-coverage run.
+  The fitted comparison exhausts the eligible neighbors for this one pose,
+  then checks the return set for each and ranks the pairs by efficiency.
+  It does not optimize arbitrary paths or hold removal exactly equal.

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from shapely.geometry import Polygon, box
 
@@ -104,6 +106,28 @@ def test_parallel_face_probe_removes_stock_on_the_straight_body(tmp_path, neighb
         assert 'neighbor then parallel-face probe; helix omitted, 3 accepted cuts' in text
     else:
         assert 'parallel-face probe; helix omitted, 2 accepted cuts' in text
+
+
+def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
+    from tools import check_hsm_entry as audit_tool
+
+    def cut(area, travel):
+        return SimpleNamespace(cut=[(0., 0.), (1., 0.)], removed_mm2=area, travel_mm=travel)
+
+    short, efficient, blocked = cut(.5, 3.), cut(1.5, 2.), cut(1., 2.)
+    returning = cut(.5, 2.)
+
+    def probe(_p, _b, neighbor, *_args):
+        if neighbor is blocked:
+            return None, {}
+        return returning, {'link_mm': .5 if neighbor is short else 1.}
+
+    monkeypatch.setattr(audit_tool, 'probe_parallel_face', probe)
+    pair, result = audit_tool.search_face_neighbor(None, None, [short, efficient, blocked], None, 2., {})
+    assert pair == [efficient, returning]
+    assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
+    assert result['shortest_return_link_mm'] == .5
+    assert result['pair_removed_per_feed_mm'] == .5
 
 
 def test_live_seed_focus_keeps_old_search_and_reaches_new_clearance():
