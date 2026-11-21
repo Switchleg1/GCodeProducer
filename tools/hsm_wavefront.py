@@ -845,6 +845,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'spiral_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'spiral'),
               'stay_down_links': travel['links'], 'retract_rapids': travel['rapids'],
               'retract_reasons': dict(refused, first_cut=1),
+              'arcs_at_0.2_mm_or_less': sum(s.stepover_mm <= .2 for s in cuts),
               'front_stepover_histogram': {str(v): sum(s.stepover_mm == v for s in cuts) for v in stepovers},
               'seconds': time.time()-started}
     return strokes, residual, report
@@ -889,6 +890,7 @@ if __name__ == '__main__':
     from tools.check_hsm_neck import neck_fixture
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pocket-wkt', type=Path, help='pocket outline as a WKT polygon; default is the two-lobe fixture')
     parser.add_argument('--review-gcode', type=Path, help='save cuts to a new debug-only .nc file and .svg overlay')
     parser.add_argument('--islands', type=int, help='number of helical islands; default is chosen from the shape')
     parser.add_argument('--placement', choices=('lobes', 'thirds', 'widest'), default='lobes',
@@ -899,7 +901,11 @@ if __name__ == '__main__':
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
     args = parser.parse_args()
-    fixture, _ = neck_fixture()
+    if args.pocket_wkt is not None:
+        from shapely import from_wkt
+        fixture = from_wkt(args.pocket_wkt.read_text(encoding='utf-8'))
+    else:
+        fixture, _ = neck_fixture()
     result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement,
                           wall_pull_back=not args.no_wall_pull_back, wall_profile=args.wall_profile, time_budget=args.time_budget,
                           sample_step=args.sample_step)
