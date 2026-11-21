@@ -385,6 +385,10 @@ all four spans are too narrow for proposals (widest 1.462 mm against a
 opening. It adds seven checked cuts relative to the 72-cut run and
 reaches X27.607 with 4,005.294 mm² residual. At this stall all 11 contact
 rays hit, but all six final contours exceed the sampled contact gate.
+`first_overloads` locates the first failing chord, not the path peak.
+All six fail on chords 2–3 (zero-based), near the end of the initial
+blend. At 0.05 mm advance the first offending sample is 61.47°, with
+or without the optional retreat.
 
 ## Gate before another generator attempt
 

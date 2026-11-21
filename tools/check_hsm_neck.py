@@ -105,7 +105,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -133,9 +133,14 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                 continue
             for advance in (.05, .10, .15):
                 path = [(x + (offset+advance)*blend, y) for y, offset, blend in rows]
+                if on_profile is not None:
+                    on_profile(path, count, advance)
                 yield path
                 if turn_exits:
-                    yield roll_off(path, .25, .0025)
+                    retreat = roll_off(path, .25, .0025)
+                    if on_profile is not None:
+                        on_profile(retreat, count, advance)
+                    yield retreat
 
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
@@ -188,10 +193,25 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     taper_chords = 0
     overload_phases = defaultdict(Counter)
 
-    def report_overload(round_index, path, segment, _angle):
+    follow_profile = None
+    follow_overloads = defaultdict(list)
+
+    def note_profile(path, body_chords, advance):
+        nonlocal follow_profile
+        follow_profile = (path, body_chords, advance)
+
+    def report_overload(round_index, path, segment, angle):
         if path is taper_candidate:
             phase = 'approach' if segment < taper_chords else 'straight' if segment == taper_chords else 'exit'
             overload_phases[round_index][phase] += 1
+        if follow_profile is not None and path is follow_profile[0]:
+            _, body_chords, advance = follow_profile
+            t = (segment + .5)/body_chords
+            phase = ('retreat' if segment >= body_chords else 'ease_in' if t < .25
+                     else 'ease_out' if t > .75 else 'follow')
+            follow_overloads[round_index].append({'phase': phase, 'segment': segment,
+                                                 'chord_xy_mm': path[segment:segment+2],
+                                                 'advance_mm': advance, 'contact_deg': angle})
 
     def propose_shallow(live, pose):
         nonlocal taper_candidate, taper_chords
@@ -247,7 +267,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                  live_stock=live if section_live_depth else None, search_west=section_search_west)
         if section_follow:
             sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
-            yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits)
+            yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
+                                           on_profile=note_profile)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -265,7 +286,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        waypoints=waypoints,
                                        propose_waypoints=propose_waypoints if with_live_detours else None,
                                        propose_on_stall=propose_shallow if with_shallow_fronts else None,
-                                       on_overload=report_overload if with_clearance_tapers else None,
+                                       on_overload=report_overload if with_clearance_tapers or section_follow else None,
                                        require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
                                        min_departure=min_departure, priority_region=neck_target if prioritize_neck else None,
                                        priority_score=clearance_score if prioritize_clearance else None,
@@ -307,7 +328,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         sections = section_bite_spans(regions, clearance, search_west=section_search_west, fit_width=section_fit_width)
         proposal_count = sum(1 for _ in section_follow_cuts(sections, remaining, radius,
                                                           turn_exits=section_turn_exits, audit=audit))
-        report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count}
+        report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count,
+                                          'first_overloads': follow_overloads.get(len(diagnostics)-1, [])}
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:

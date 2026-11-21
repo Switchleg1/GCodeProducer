@@ -16,6 +16,16 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
     assert list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., audit=audit)) == paths
     assert audit[0]['missed_y_mm'] == []
     assert audit[0]['max_hit_distance_mm'] == pytest.approx(.5)
+    profiles = []
+    variants = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., turn_exits=True,
+                                        on_profile=lambda *data: profiles.append(data)))
+    assert len(profiles) == len(variants) == 6
+    assert all(path is variant for (path, _, _), variant in zip(profiles, variants))
+    for i, body in enumerate(paths):
+        (_, chords, advance), (retreat, retreat_body_chords, retreat_advance) = profiles[2*i:2*i+2]
+        assert retreat[:chords+1] == body
+        assert chords == retreat_body_chords == len(body)-1
+        assert advance == retreat_advance == (.05, .10, .15)[i]
     audit.clear()
     assert not list(section_follow_cuts(sections, box(8, 0, 11, 10), 2., audit=audit))
     assert len(audit[0]['missed_y_mm']) == audit[0]['rows']
