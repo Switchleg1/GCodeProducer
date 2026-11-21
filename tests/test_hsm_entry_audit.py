@@ -178,6 +178,7 @@ def test_repeated_shoulders_rebuild_from_latest_retry_and_stop_without_overload(
         eligible_preps.append('prep')
         if tail == 'initial':
             failed_entry_paths.append('failed path')
+        return 'single', {}
 
     def pair(_pocket, _seed, _tail, _radius, _gates, rejected, preps):
         assert preps == ['prep']
@@ -189,6 +190,12 @@ def test_repeated_shoulders_rebuild_from_latest_retry_and_stop_without_overload(
     assert seen == ['initial', 'retry']
     assert cuts == ['initial', 'prep', 'retry'] and stop == 'no_entry_overloads'
     assert [row['cut_count'] for row in trace] == [3, 3]
+    seen.clear()
+    cuts, trace, stop = audit_tool.repeat_shoulder_pairs(None, (), None, (0, 0), 2., {}, ['initial'], 3,
+                                                       single_fallback=True)
+    assert seen == ['initial', 'retry'] and stop == 'cut_budget'
+    assert cuts == ['initial', 'prep', 'retry', 'single']
+    assert [row['kind'] for row in trace] == ['pair', 'single']
 
 
 def test_entry_shoulder_probe_does_not_commit_an_unpaired_preparation(monkeypatch):

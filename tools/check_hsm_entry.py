@@ -476,28 +476,41 @@ def probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps):
     return pair, result
 
 
-def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, prefix, budget):
+def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, prefix, budget, *, single_fallback=False):
     """Rebuild and check each pair from the previous retry's actual end pose."""
     accepted = list(prefix)
     trace = []
-    for _ in range(budget):
+    used = 0
+    while used < budget:
         rejected, preps = [], []
         tail = accepted[-1]
-        probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, moving=True,
-                                failed_entry_paths=rejected, eligible_preps=preps)
-        pair, audit = probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps)
-        if not pair:
+        single, single_audit = probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates,
+                                                     moving=True, failed_entry_paths=rejected, eligible_preps=preps)
+        if not single_fallback or (rejected and budget-used >= 2):
+            pair, audit = probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps)
+        else:
+            pair, audit = [], {'original_entry_failures': len(rejected), 'checked_pairs': 0}
+        if pair:
+            accepted.extend(pair)
+            trace.append(dict(audit, cut_count=len(accepted), kind='pair'))
+            used += len(pair) if single_fallback else 1
+        elif single_fallback and single is not None:
+            accepted.append(single)
+            trace.append(dict(single_audit, cut_count=len(accepted), kind='single'))
+            used += 1
+        else:
             trace.append(dict(audit, cut_count=len(accepted)))
-            return accepted, trace, 'no_checked_pair' if rejected else 'no_entry_overloads'
-        accepted.extend(pair)
-        trace.append(dict(audit, cut_count=len(accepted)))
-    return accepted, trace, 'pair_budget'
+            status = 'no_checked_cut' if single_fallback else 'no_checked_pair' if rejected else 'no_entry_overloads'
+            return accepted, trace, status
+    return accepted, trace, 'cut_budget' if single_fallback else 'pair_budget'
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0):
     """Check only the planar motion following the modeled helix floor sweep."""
-    if repeat_shoulders < 0 or (repeat_shoulders and not shoulder_probe):
+    if min(repeat_shoulders, hybrid_shoulders) < 0 or ((repeat_shoulders or hybrid_shoulders) and not shoulder_probe):
         raise ValueError('repeating shoulders requires the shoulder probe and a nonnegative budget')
+    if repeat_shoulders and hybrid_shoulders:
+        raise ValueError('select pair-only or hybrid shoulder continuation')
     lead_probe = tapered_anchor_probe or clearance_anchor_probe or shoulder_probe
     if lead_probe and repeat_anchored < 1:
         raise ValueError('anchor lead probe requires at least one moving anchor')
@@ -664,9 +677,10 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                     report['shoulder_probe'] = result
                                     if pair:
                                         preview = [*preview[:prefix_count], *pair]
-                                        if repeat_shoulders:
+                                        budget = repeat_shoulders or hybrid_shoulders
+                                        if budget:
                                             preview, shoulder_trace, shoulder_stop = repeat_shoulder_pairs(
-                                                *anchor_context, radius, gates, preview, repeat_shoulders)
+                                                *anchor_context, radius, gates, preview, budget, single_fallback=bool(hybrid_shoulders))
                                             report['repeated_shoulders'] = {'stop': shoulder_stop, 'trace': shoulder_trace,
                                                                              'peak_contact_deg': max(c.peak_deg for c in preview)}
                                 elif lead_probe and trace:
@@ -692,7 +706,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             tapered_selected = report.get('tapered_anchor_probe', {}).get('accepted', False)
             clearance_selected = report.get('clearance_anchor_probe', {}).get('accepted', False)
             shoulder_selected = report.get('shoulder_probe', {}).get('checked_pairs', 0)
-            label = ('entry-shoulder pair probe; helix omitted' if shoulder_selected else
+            label = ('hybrid shoulder continuation; helix omitted' if shoulder_selected and hybrid_shoulders else
+                     'entry-shoulder pair probe; helix omitted' if shoulder_selected else
                      'clearance-fitted anchor probe; helix omitted' if clearance_selected else
                      'tapered moving-anchor probe; helix omitted' if tapered_selected else
                      'moving-anchor straight probe; helix omitted' if repeat_anchored else
@@ -729,7 +744,10 @@ if __name__ == '__main__':
     parser.add_argument('--clearance-anchor-probe', action='store_true', help='fit alternate leads from verified start intervals')
     parser.add_argument('--shoulder-probe', action='store_true', help='clear an entry shoulder and retry the exact farther cut')
     parser.add_argument('--repeat-shoulder-pairs', type=int, default=0, help='check more preparation/retry pairs on each new shoulder')
+    parser.add_argument('--hybrid-shoulder-budget', type=int, default=0, help='continue with checked pairs or singles within this extra cut budget')
     args = parser.parse_args()
+    if args.hybrid_shoulder_budget < 0 or (args.hybrid_shoulder_budget and (not args.shoulder_probe or args.repeat_shoulder_pairs)):
+        parser.error('hybrid budget requires --shoulder-probe and excludes --repeat-shoulder-pairs')
     if args.repeat_shoulder_pairs < 0 or (args.repeat_shoulder_pairs and not args.shoulder_probe):
         parser.error('repeating shoulders requires --shoulder-probe and a nonnegative budget')
     if args.shoulder_probe and (args.repeat_anchored_straights < 1 or args.clearance_anchor_probe or args.tapered_anchor_probe):
@@ -771,6 +789,6 @@ if __name__ == '__main__':
                               anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
                               tapered_anchor_probe=args.tapered_anchor_probe,
                               clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe,
-                              repeat_shoulders=args.repeat_shoulder_pairs) if cut_audit else
+                              repeat_shoulders=args.repeat_shoulder_pairs, hybrid_shoulders=args.hybrid_shoulder_budget) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

@@ -118,3 +118,5 @@
   the original rejected geometry from the new pose and stock. A preparation
   is not substituted on its own if its paired retry fails. The repeated
   pair audit deliberately stops without a pair even if single cuts remain.
+  Hybrid continuation prefers an eligible pair when two budget slots
+  remain, otherwise a checked single. The comparison fixes total cut count.

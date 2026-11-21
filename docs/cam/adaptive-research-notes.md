@@ -547,6 +547,10 @@ pair preview reaches X17.142 versus X17.092 with normal anchors, with
 `--repeat-shoulder-pairs 3` finds one more complete pair and stops at
 cut 17 and X17.292. The next round has ten eligible single cuts but no
 entry overloads, so a pair-only stop is not a clearing stall.
+`--hybrid-shoulder-budget 6` continues with one verified pair and four
+single cuts. At 21 cuts it reaches X17.442 versus X17.542 for single
+anchors and removes 9.678 versus 10.258 mm². This does not justify
+replacing the single-anchor baseline.
 
 ## Gate before another generator attempt
 
