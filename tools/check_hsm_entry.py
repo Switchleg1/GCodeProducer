@@ -18,7 +18,7 @@ from tools.check_hsm_neck import clearance_sections, neck_fixture, widest_span, 
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_choice import choose_front_cut
-from tools.hsm_front_corner import parallel_face_candidates, turned_straight_candidates
+from tools.hsm_front_corner import parallel_face_candidates, roll_off, roll_on, turned_straight_candidates
 from tools.hsm_front_run import run_front
 from tools.hsm_straight_front import fitted_front_candidates, straight_front_candidates
 
@@ -292,8 +292,29 @@ def east_opening_profile(regions, initial, current):
              'connected_y_mm': section['connected_y_mm']} for offset, section in zip(offsets, sections)]
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0):
+def section_anchored_straights(profile, component):
+    """Propose eastward straight passes from usable Y spans of the opening."""
+    for row in profile:
+        if row['offset_mm'] <= 0:
+            continue
+        for low, high in row['connected_y_mm']:
+            mid = (low+high)/2
+            for length in (.75, 1.25, 1.75):
+                if length + .4 > high-low:
+                    continue
+                for advance in (.10, .20, .30, .40):
+                    x = row['x_mm'] + advance
+                    body = [(x, mid+length/2), (x, mid-length/2)]
+                    for turn in (.25, .4, .65):
+                        path = roll_off(roll_on(body, turn, .0025), turn, .0025)
+                        if component.covers(Point(path[0])) and component.covers(Point(path[-1])):
+                            yield path
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if anchored_straight and not repeat_face_pairs:
+        raise ValueError('anchored straight requires the repeated face-pair trial')
     if repeat_face_pairs < 0 or (repeat_face_pairs and not neck_face_pair):
         raise ValueError('repeating face pairs requires a nonnegative budget and a neck-facing pair')
     if neck_face_pair and not fit_face_neighbor:
@@ -423,6 +444,25 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                                                           propose_straight, preview, repeat_face_pairs)
                             report['repeated_face_pairs'] = {'stop': pair_stop, 'trace': trace,
                                                              'peak_contact_deg': max(c.peak_deg for c in preview)}
+                        if anchored_straight:
+                            tail = preview[-1]
+                            a, b = tail.cut[-2:]
+                            start = b, tuple(y-x for x, y in zip(a, b))
+                            live = tail.remaining
+                            component = connected_clearance(pocket, live, pose[0], radius)
+                            profile = east_opening_profile(regions, initial_clearance, component)
+                            counts = Counter()
+                            follow = choose_front_cut(pocket, live, start, section_anchored_straights(profile, component),
+                                                      radius, diagnostics=counts, **gates)
+                            trial = {'gates': dict(counts)}
+                            if follow is not None:
+                                body = max(zip(follow.cut, follow.cut[1:]), key=lambda p: math.dist(*p))
+                                after = connected_clearance(pocket, follow.remaining, pose[0], radius)
+                                trial.update(cut_efficiency(follow), peak_deg=follow.peak_deg,
+                                             body_mm=math.dist(*body), body_x_mm=body[0][0],
+                                             east_shift_mm=None if after.is_empty else after.bounds[2]-component.bounds[2])
+                                preview.append(follow)
+                            report['anchored_straight_probe'] = trial
                         final_stock = preview[-1].remaining
                         final_clear = connected_clearance(pocket, final_stock, pose[0], radius)
                         east = None if final_clear.is_empty else final_clear.bounds[2]
@@ -436,7 +476,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = ('repeated neck-facing pair probe; helix omitted' if repeat_face_pairs else
+            label = ('section-anchored straight probe; helix omitted' if anchored_straight else
+                     'repeated neck-facing pair probe; helix omitted' if repeat_face_pairs else
                      'neck-facing pair probe; helix omitted' if neck_face_pair else
                      'fitted neighbor then parallel-face probe; helix omitted' if fit_face_neighbor else
                      'neighbor then parallel-face probe; helix omitted' if face_after_neighbor else
@@ -462,7 +503,10 @@ if __name__ == '__main__':
     parser.add_argument('--fit-face-neighbor', action='store_true', help='test each eligible neighbor before returning')
     parser.add_argument('--neck-face-pair', action='store_true', help='form an east-facing first face and prioritize pair reach')
     parser.add_argument('--repeat-face-pairs', type=int, default=0, help='probe this many extra live neck-facing pairs')
+    parser.add_argument('--section-anchored-straight', action='store_true', help='check a straight from the measured opening')
     args = parser.parse_args()
+    if args.section_anchored_straight and not args.repeat_face_pairs:
+        parser.error('anchored straight requires --repeat-face-pairs')
     if args.repeat_face_pairs < 0 or (args.repeat_face_pairs and not args.neck_face_pair):
         parser.error('a positive repeat budget requires --neck-face-pair')
     if args.neck_face_pair and not args.fit_face_neighbor:
@@ -488,6 +532,7 @@ if __name__ == '__main__':
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
                               live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
                               face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor,
-                              neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs) if cut_audit else
+                              neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
+                              anchored_straight=args.section_anchored_straight) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

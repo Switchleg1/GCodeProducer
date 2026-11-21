@@ -106,3 +106,5 @@
   and commit neither neighbor nor return if the pair cannot be checked.
   Widths use fixed X stations relative to the shared initial east edge
   and the widest contiguous Y span, not a sum of disconnected spans.
+  Anchored straights reserve 0.2 mm at each end of a contiguous span,
+  shift east, and require mapped endpoints plus the original motion checks.

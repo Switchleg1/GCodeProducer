@@ -520,7 +520,10 @@ directional growth, not neck passage or an equal-coverage timing win.
 `east_opening_profile` measures the widest contiguous cutter-center span
 at fixed X stations. At +0.25 mm relative to the initial east edge, the
 pair run has 1.680 mm open compared with 0.338 mm for greedy; at +0.5 mm
-it has 0.752 mm open versus none. This does not verify a straight cut.
+it has 0.752 mm open versus none. `--section-anchored-straight` uses
+such spans to propose a straight body with tangent turns. After the
+seven-cut prefix, the checked 0.75 mm body and turns remove 0.825 mm²
+at 54.06° sampled peak and extend connected clearance by 0.0658 mm.
 
 ## Gate before another generator attempt
 

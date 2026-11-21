@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 import pytest
-from shapely.geometry import Polygon, box
+from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, neck_facing_straight, seed_search_focus
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, neck_facing_straight, section_anchored_straights, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,19 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_anchored_straights_require_one_wide_span_and_clear_ends():
+    room = box(0, 0, 6, 6)
+    split = [{'offset_mm': .25, 'x_mm': 4., 'connected_y_mm': [(1., 1.6), (2., 2.6)]}]
+    assert not list(section_anchored_straights(split, room))
+    wide = [{'offset_mm': .25, 'x_mm': 4., 'connected_y_mm': [(1., 3.)]}]
+    paths = list(section_anchored_straights(wide, room))
+    assert paths
+    for path in paths:
+        assert room.covers(Point(path[0])) and room.covers(Point(path[-1]))
+        assert neck_facing_straight(path)
+    assert not list(section_anchored_straights(wide, box(0, 0, 1, 1)))
 
 
 def test_east_opening_compares_fixed_stations_and_does_not_sum_split_spans():
