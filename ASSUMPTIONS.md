@@ -75,3 +75,5 @@
   additional travel to stock top and helix qualification remain separate.
   Second-cut probes sample radial first contact from the helix center up to
   1.2 mm beyond its orbit. A hit supplies proposal geometry only.
+  The bounded seed trial tests straight proposals on raw front edges of
+  at least 2 mm. No accepted straight does not rule out a fitted one.

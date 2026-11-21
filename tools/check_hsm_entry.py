@@ -3,7 +3,6 @@ import argparse
 import json
 import math
 import sys
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -17,7 +16,7 @@ from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.check_hsm_neck import neck_fixture, write_opening_review, write_review_gcode
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
-from tools.hsm_front_choice import choose_front_cut
+from tools.hsm_front_run import run_front
 from tools.hsm_straight_front import straight_front_candidates
 
 
@@ -187,7 +186,7 @@ def seed_arc_candidates(centre, orbit, *, contact_zone=None):
             yield path
 
 
-def check_first_cut(*, review=None, second=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None):
     """Check only the planar motion following the modeled helix floor sweep."""
     pocket, _ = neck_fixture()
     radius = 2.
@@ -198,33 +197,34 @@ def check_first_cut(*, review=None, second=False):
     pose = tuple(b), tuple(b-a)
     orbit = math.dist(a, b)
     stock = entry.remaining
-    straight = list(straight_front_candidates(pocket, stock, radius, .5, min_edge=2., lead=2., runoff=2.))
-    counts = Counter()
-    gates = dict(contact_limit=60., sample_step=.025, link_handle=1., require_clear_exit=True, min_departure=.25)
-    choice = choose_front_cut(pocket, stock, pose, seed_arc_candidates(pose[0], orbit), radius,
-                              diagnostics=counts, **gates)
-    report = {'stop': 'first_cut_checked' if choice else 'no_checked_cut', 'straight_proposals': len(straight),
-              'gates': dict(counts), 'entry_removed_mm2': pocket.area-stock.area}
-    if choice is not None:
-        report.update(removed_mm2=choice.removed_mm2, peak_deg=choice.peak_deg, feed_mm=choice.travel_mm)
-        accepted = [choice]
-        if second:
-            a, b = choice.cut[-2:]
-            next_pose = b, tuple(y-x for x, y in zip(a, b))
-            live = choice.remaining
-            contact_zone = live.buffer(radius, quad_segs=32)
-            counts = Counter()
-            following = choose_front_cut(pocket, live, next_pose,
-                                         seed_arc_candidates(pose[0], orbit, contact_zone=contact_zone), radius,
-                                         diagnostics=counts, **gates)
-            report['second'] = {'gates': dict(counts)}
-            if following is not None:
-                report['stop'] = 'two_cuts_checked'
-                report['second'].update(removed_mm2=following.removed_mm2, peak_deg=following.peak_deg,
-                                        feed_mm=following.travel_mm)
-                accepted.append(following)
-            else:
-                report['stop'] = 'second_cut_stalled'
+    def propose_straight(live, _pose):
+        return straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
+
+    def propose_bow(live, _pose):
+        occupied = None if live is stock else live.buffer(radius, quad_segs=32)
+        return seed_arc_candidates(pose[0], orbit, contact_zone=occupied)
+
+    diagnostics = []
+    budget = max_cuts if max_cuts is not None else 2 if second else 1
+    accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
+                                          contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
+                                          require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow)
+    report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose)),
+              'entry_removed_mm2': pocket.area-stock.area, 'cut_count': len(accepted),
+              'straight_cut_count': sum(len(c.cut) == 2 for c in accepted),
+              'last_gates': diagnostics[-1] if diagnostics else {},
+              'total_removed_mm2': stock.area-remaining.area,
+              'connected_area_gain_mm2': connected_clearance(pocket, remaining, pose[0], radius).difference(
+                  connected_clearance(pocket, stock, pose[0], radius)).area}
+    if max_cuts is None:
+        report['stop'] = ('no_checked_cut' if not accepted else 'first_cut_checked' if not second else
+                          'two_cuts_checked' if len(accepted) == 2 else 'second_cut_stalled')
+    for i, cut in enumerate(accepted[:2]):
+        row = report if not i else report.setdefault('second', {})
+        row.update(removed_mm2=cut.removed_mm2, peak_deg=cut.peak_deg, feed_mm=cut.travel_mm, gates=diagnostics[i])
+    if accepted:
+        report['peak_contact_deg'] = max(c.peak_deg for c in accepted)
+        choice = accepted[0]
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
@@ -240,10 +240,13 @@ if __name__ == '__main__':
     parser.add_argument('--first-cut', action='store_true', help='audit the first at-depth cut from the modeled floor sweep')
     parser.add_argument('--review-gcode', type=Path, help='save only checked planar first-cut geometry for review')
     parser.add_argument('--second-cut', action='store_true', help='also check a second cut on the updated stock')
+    parser.add_argument('--seed-cut-budget', type=int, help='repeat checked live-front cuts up to this count')
     args = parser.parse_args()
-    cut_audit = args.first_cut or args.second_cut
+    cut_audit = args.first_cut or args.second_cut or args.seed_cut_budget is not None
+    if args.seed_cut_budget is not None and args.seed_cut_budget < 1:
+        parser.error('seed cut budget must be positive')
     if (cut_audit and args.compare_pitch) or (args.review_gcode and not cut_audit):
         parser.error('select one audit; review output requires a cut audit')
-    result = (check_first_cut(review=args.review_gcode, second=args.second_cut) if cut_audit else
+    result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

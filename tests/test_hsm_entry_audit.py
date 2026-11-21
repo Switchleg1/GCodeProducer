@@ -53,6 +53,15 @@ def test_first_cuts_leave_the_actual_entry_seed(tmp_path, second):
     assert path.with_suffix('.opening.svg').is_file()
 
 
+def test_seed_cut_budget_grows_connected_clearance_on_live_stock():
+    report = check_first_cut(max_cuts=3)
+    assert report['stop'] == 'cut_budget' and report['cut_count'] == 3
+    assert report['straight_cut_count'] == 0
+    assert report['total_removed_mm2'] > report['removed_mm2'] + report['second']['removed_mm2']
+    assert report['connected_area_gain_mm2'] > 0.
+    assert report['peak_contact_deg'] <= 60.
+
+
 def test_pitch_comparison_preserves_floor_and_accounts_for_added_travel():
     baseline, middle, shallow = compare_pitch(bands=8, step=.1)
     assert all(row['contained'] and row['same_floor_and_exit'] for row in (baseline, middle, shallow))

@@ -472,7 +472,10 @@ removes another 0.492 mm² at 53.37° sampled peak, with 4.89 mm total
 link and cut. `--review-gcode` plots that XY motion only; it does not
 include or qualify the helix. `--second-cut` samples the live stock
 boundary after cut one and checks from its actual end pose. It removes
-another 0.468 mm² at 51.67° sampled peak.
+another 0.468 mm² at 51.67° sampled peak. `--seed-cut-budget 24` tries
+straight edges before live bows on every turn. It reaches the budget
+with 24 bows, no straight cuts, 8.246 mm² removed and 3.358 mm² of new
+seed-connected center clearance.
 
 ## Gate before another generator attempt
 
