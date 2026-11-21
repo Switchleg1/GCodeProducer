@@ -56,3 +56,5 @@
   Review exports default to a separate Documents review folder by convention,
   not a production output path. The first file shows the synthetic fixture
   in XY only, not the saved Stormtrooper session or controller-ready output.
+  The full-stock variant assumes no prior operation or predrilled entry.
+  It cannot claim at-depth clearance at the seed until entry is modeled.

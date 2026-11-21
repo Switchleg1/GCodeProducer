@@ -13,6 +13,7 @@ from shapely.geometry import LineString, Point, box
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, connected_clearance, nearby_frontier
 from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
                                     shifted_roll_ons, tapered_roll_on)
@@ -263,7 +264,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -304,6 +305,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
     pocket, stock = neck_fixture()
+    if full_stock:
+        stock = pocket
     seed = ((9., 28.5), (1., 0.))
     radius = 2.
     regions = center_regions(pocket, radius)
@@ -466,7 +469,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        propose_final_retry=propose_small_contours if section_small_retry else None,
                                        scored_retry=propose_widening if section_widen_retry else None,
                                        **gates)
-    if review_gcode is not None:
+    if not cuts and reason == 'stalled' and diagnostics[-1].get('origin_clearance'):
+        reason = 'entry_required'
+    if review_gcode is not None and reason != 'entry_required':
         opening = Path(review_gcode).with_suffix('.opening.svg')
         if opening.exists():
             raise FileExistsError(f'review companion already exists: {opening}')
@@ -487,6 +492,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     report = {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
             'initial_stock_mm2': stock.area, 'removed_mm2': stock.area - remaining.area,
+            'assumed_preclear_mm2': pocket.difference(stock).area,
+            'seed_contact_deg': contact_angle(seed[0], radius, stock),
             'reachable_residual_mm2': remaining.intersection(reachable).area,
             'last_selection_counts': diagnostics[-1] if diagnostics else {},
             'last_taper_contact_failures': dict(overload_phases.get(len(diagnostics)-1, {})),
@@ -721,6 +728,8 @@ if __name__ == '__main__':
     parser.add_argument('--review-gcode', type=Path, help='save accepted XY paths to a new debug-only .nc file')
     parser.add_argument('--section-widen-retry', action='store_true',
                         help='try verified widening only after all other cuts fail')
+    parser.add_argument('--full-stock', action='store_true',
+                        help='start without assumed clearance and report whether an entry is required')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -744,7 +753,8 @@ if __name__ == '__main__':
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
                             section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe,
-                            section_widen_probe=args.section_widen_probe, review_gcode=args.review_gcode, section_widen_retry=args.section_widen_retry)
+                            section_widen_probe=args.section_widen_probe, review_gcode=args.review_gcode, section_widen_retry=args.section_widen_retry,
+                            full_stock=args.full_stock)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

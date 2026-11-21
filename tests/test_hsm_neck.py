@@ -193,6 +193,19 @@ def test_terminal_sections_distinguish_open_spans_from_wall_domain():
     ]
 
 
+def test_full_stock_requires_real_entry_and_does_not_export_xy(tmp_path):
+    path = tmp_path / 'blocked.nc'
+    report = check_neck(full_stock=True, review_gcode=path)
+    assert report['stop'] == 'entry_required'
+    assert report['cut_count'] == 0 and report['removed_mm2'] == 0.
+    assert report['assumed_preclear_mm2'] == 0. and report['seed_contact_deg'] == 360.
+    assert report['last_selection_counts'] == {'origin_clearance': 1}
+    assert not list(tmp_path.iterdir())
+    seeded = check_neck(max_cuts=1)
+    assert seeded['assumed_preclear_mm2'] == pytest.approx(348.)
+    assert seeded['seed_contact_deg'] == 0.
+
+
 def test_review_export_writes_xy_only_and_refuses_overwrite(tmp_path):
     path = tmp_path / 'review.nc'
     result = check_neck(review_gcode=path)

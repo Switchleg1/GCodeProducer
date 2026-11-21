@@ -448,6 +448,9 @@ first cleared link (gray) and first cut (blue). A blank-stock viewer may
 show a slot: first-cut replay at 0.025 mm on the 96-cut review finds 360°
 if seeded clearance is omitted versus 42.00° in the actual fixture.
 The review provides no machining motion to create that clearance.
+`--full-stock` removes the synthetic 348 mm² pre-clear assumption. It
+returns `entry_required` at 360° seed contact, accepts no cuts, and
+suppresses the XY review export instead of implying an entry.
 
 ## Gate before another generator attempt
 
