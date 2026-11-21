@@ -180,6 +180,8 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     assert report['cleared_fraction'] > .95
     assert report['peak_contact_deg'] <= 60.
     assert all(stroke.peak_deg <= 60. for stroke in strokes)
+    assert 0 < report['mean_contact_deg'] <= report['mean_contact_while_cutting_deg'] < report['peak_contact_deg']
+    assert .5 < report['share_of_cut_feed_in_contact'] <= 1.
     links = [stroke for stroke in strokes if stroke.kind == 'link']
     assert report['stay_down_links'] == len(links) > 0
     assert report['retract_rapids'] <= 2 and report['retract_reasons']['first_cut'] == 1

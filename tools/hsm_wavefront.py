@@ -507,10 +507,11 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
     return pieces
 
 
-def cut(path, stock, radius, sample_step, *, where=None):
+def cut(path, stock, radius, sample_step, *, where=None, tally=None):
     """Sampled peak contact and updated stock; chunked so each replay stays local.
 
     where, if given, receives the distance along the path of the peak sample.
+    tally, if given, is [angle x distance, distance, distance in contact] and is added to.
     """
     peak, chunk, length, travelled = 0., [path[0]], 0., 0.
     for i in range(1, len(path)):
@@ -522,6 +523,10 @@ def cut(path, stock, radius, sample_step, *, where=None):
             local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
             for _, angle, step in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
                 travelled += step
+                if tally is not None:
+                    tally[0] += angle*step
+                    tally[1] += step
+                    tally[2] += step if angle > 0 else 0.
                 if angle > peak:
                     peak = angle
                     if where is not None:
@@ -541,6 +546,12 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     stock = pocket
     strokes, island_reports = [], []
     travel = {'rapids': 0, 'links': 0}
+    contact = [0., 0., 0.]  # committed cuts only: angle x distance, distance, distance in contact
+
+    def count(tally):
+        for k in range(3):
+            contact[k] += tally[k]
+
     refused = {}
 
     def commit(kind, path, stepover, peak):
@@ -611,8 +622,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                 break
                         trial, done = stock, []
                         for piece in pieces:
-                            at = []
-                            peak, after = cut(piece, trial, radius, sample_step, where=at)
+                            at, tally = [], [0., 0., 0.]
+                            peak, after = cut(piece, trial, radius, sample_step, where=at, tally=tally)
                             if peak > limit:
                                 done = None
                                 if trace is not None:
@@ -625,7 +636,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                                   'piece_end_xy': piece[-1], 'outcome': 'over_limit'})
                                 break
                             if trial.area - after.area >= MIN_GAIN_MM2:
-                                done.append((piece, peak))
+                                done.append((piece, peak, tally))
                             trial = after
                         if done is not None:
                             break
@@ -639,8 +650,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                       'wall_ended': path is shapes[0] and wall_pull_back and not closed,
                                       'run_start_xy': run[0], 'run_end_xy': run[-1], 'pieces': len(done), 'path_mm': LineString(path).length,
                                       'path_end_xy': path[-1], 'outcome': 'cut' if done else 'air'})
-                    for piece, peak in done:
+                    for piece, peak, tally in done:
                         commit('front', piece, stepover, peak)
+                        count(tally)
                     stock = trial
                     own = sweep(path, own, radius)
                     progressed = True
@@ -679,11 +691,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 break
         if chosen is not None:
             path = spiral_out(centre, reach, chosen, blend=blend)
-            peak, trial = cut(path, stock, radius, sample_step)
+            tally = [0., 0., 0.]
+            peak, trial = cut(path, stock, radius, sample_step, tally=tally)
             island.update(stepover_mm=chosen, peak_deg=peak, feed_mm=LineString(path).length,
                           accepted=peak <= limit)
             if peak <= limit:
                 commit('spiral', path, chosen, peak)
+                count(tally)
                 stock, own = trial, sweep(path, own, radius)
         # Every island but the last leaves shared ground to its neighbour; the last one cleans up.
         passes, arcs, blocked = wave(index, centre, own, shared=index < len(seeds)-1)
@@ -721,7 +735,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                           ends=(True, False))
                             if len(piece) < 2:
                                 continue
-                        peak, trial = cut(piece, stock, radius, sample_step)
+                        tally = [0., 0., 0.]
+                        peak, trial = cut(piece, stock, radius, sample_step, tally=tally)
                         if stock.area - trial.area < MIN_GAIN_MM2:
                             continue
                         if peak > limit:
@@ -737,6 +752,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                             commit('profile', piece, inset, peak)
                             profile['pieces'] += 1
                         stock = trial
+                        count(tally)
                         profile['feed_mm'] += LineString(piece).length
 
     stop = 'time_budget' if out_of_time() else 'blocked' if any_blocked or profile['over_limit'] else 'front_exhausted'
@@ -754,6 +770,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
               'peak_contact_deg': max((s.peak_deg for s in feeds), default=None),
+              'mean_contact_deg': contact[0]/contact[1] if contact[1] else None,
+              'mean_contact_while_cutting_deg': contact[0]/contact[2] if contact[2] else None,
+              'share_of_cut_feed_in_contact': contact[2]/contact[1] if contact[1] else None,
               'cut_feed_mm': sum(LineString(s.points).length for s in feeds),
               'link_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'link'),
               'spiral_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'spiral'),
