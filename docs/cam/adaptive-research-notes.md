@@ -434,8 +434,11 @@ contact. The 2 and 2.5 mm targets fail contact. Nothing is committed.
 `--section-widen-retry` schedules a widening cut only after all other
 families fail and only if its checked post-cut gauge gains at least
 0.01 mm. At the 96-cut budget, four widening cuts enable six other
-cuts, reaching X27.969 with 4,003.792 mm² reachable. This is not a stall
-or evidence of neck passage.
+cuts, reaching X27.969 with 4,003.792 mm² reachable. Raising only `--max-cuts` to 128 confirms
+that cut 96 is also the actual stall: all 24 last small retries and all
+72 widening candidates exceed the unchanged contact limit. The review
+motion is identical; only the status line changes. Neither run reaches
+the neck probe.
 Pass `--review-gcode path/to/new-review.nc` to save accepted links and cuts
 for geometry inspection. The file is debug-only XY, with no Z, tool,
 spindle, or feed schedule. It excludes rejected and uncommitted probes,

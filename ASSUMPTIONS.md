@@ -51,6 +51,8 @@
   a width gain there does not verify passage across the whole neck.
   A scheduled widening retry needs at least 0.01 mm gain at its pre-cut
   gauge; this diagnostic threshold is not a production machining tolerance.
+  The 128-cut comparison changes only the benchmark budget; review-file
+  equality compares rounded plotting coordinates, not controller motion.
   Review exports default to a separate Documents review folder by convention,
   not a production output path. The first file shows the synthetic fixture
   in XY only, not the saved Stormtrooper session or controller-ready output.
