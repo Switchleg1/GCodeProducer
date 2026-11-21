@@ -148,3 +148,4 @@
   with a 0.5 mm corner and a 0.75 mm turn off the wall; untuned.
 - A wall point counts as clean when this island's stock is at least the cutter radius minus 0.02 mm away. The wall
   profile pass is off by default; the neck fixture is the only shape on which leaving it out has been measured.
+- An arc end within 0.3 mm of the wall is treated as reaching it and is carried onto the wall before the sweep back.

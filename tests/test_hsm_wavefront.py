@@ -6,8 +6,8 @@ from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
-from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, cutting_pieces, eased, find_lobes, fronts, spiral_out,
-                                 stay_down_link, wall_ends, write_review)
+from tools.hsm_wavefront import (along_wall, choose_seeds, clear_pocket, clearance, cutting_pieces, eased, find_lobes, fronts, polygons, spiral_out,
+                                 stay_down_link, sweep, wall_ends, write_review)
 
 
 def test_two_islands_sit_a_third_in_from_each_end_of_a_long_pocket():
@@ -98,6 +98,27 @@ def test_wall_ends_follow_the_wall_back_to_clean_wall_plus_an_overlap():
     assert min(x for x, y in far if y > 6 - 1e-9) < 1. and min(x for x, y in far if y < 1e-9) < 1.
     plain = wall_ends([(4.5, 5.), (4.5, 1.)], clear, own, 1., allowed, rings, 3.)
     assert all(0 < y < 6 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
+
+
+@pytest.mark.parametrize('pocket', [box(-2, -2, 62, 22), Polygon([(-2, -2), (62, -22), (62, 42), (-2, 22)])])
+def test_every_peel_sweeps_both_walls_so_the_wall_side_keeps_pace(pocket):
+    # Regression: fronts end a few hundredths short of the wall; treating that as "not on the wall"
+    # dropped the wall sweep on some passes and bunched the following peels into knots.
+    allowed = pocket.buffer(-2., join_style=2)
+    rings = [LineString(allowed.exterior.coords)]
+    own = pocket.difference(box(-2, -40, 6, 60))
+    starts, left = [], []
+    for _ in range(8):
+        part = max(polygons(clearance(allowed, own, 2.)), key=lambda g: g.area)
+        (run, closed), = fronts(part, part.buffer(.5, quad_segs=16).intersection(allowed), allowed.boundary)
+        assert along_wall(rings, run[0], part, own, 2., .75) is not None
+        assert along_wall(rings, run[-1], part, own, 2., .75) is not None
+        own = sweep(wall_ends(run, part, own, 2., allowed, rings, 3.), own, 2.)
+        starts.append(run[0][0])
+        left.append(own.intersection(part.buffer(2.5)).area)
+    steps = [b-a for a, b in zip(starts, starts[1:])]
+    assert all(.3 < step < .6 for step in steps)  # One stepover per pass along the wall, never stalled.
+    assert max(left) < 1. and left[-1] == pytest.approx(left[-2], abs=.05)  # Corner bits do not pile up.
 
 
 def test_cutting_pieces_drop_air_and_keep_a_short_run_in_and_out():

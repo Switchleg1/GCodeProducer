@@ -647,3 +647,9 @@ which then cuts 140 mm instead of 386 mm; 10.4 mm² remains at four corners wher
 Arcs that exceed the limit are retried at smaller stepovers with the wall sweep kept; rolling off before the wall is a
 last resort at the smallest stepover. With that, the neck fixture finishes without a profile pass: 6.4 mm² of reachable
 stock left, 10,114 mm of cutting, 4,143 mm of links, 2 retracts. The profile pass is now opt-in (`--wall-profile`).
+
+Fronts usually end a few hundredths of a millimetre short of the wall. Arc ends within 0.3 mm are now carried onto
+it, so the wall sweep is never skipped; skipping it had let the wall side stall and bunched later arcs into knots. The
+neck fixture then leaves 1.33 mm² without a profile pass, but the start-side approach along the wall now limits the
+stepover: 341 arcs and 12,289 mm of cutting instead of 207 and 10,114 mm. `clear_pocket(trace=[...])` records every
+attempt and where its peak contact falls.

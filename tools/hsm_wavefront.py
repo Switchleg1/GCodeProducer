@@ -34,6 +34,7 @@ WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
 PROFILE_CHUNK = 8.  # mm of wall judged at a time
+NEAR_WALL = .3  # mm; an arc end this close to the wall is carried onto it
 WALL_REACH = 20.  # mm; farthest an arc end follows the wall back looking for clean wall
 LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
 
@@ -322,9 +323,11 @@ def along_wall(rings, xy, part, own, radius, overlap, *, limit=WALL_REACH):
     """
     at = Point(xy)
     ring = min(rings, key=lambda r: r.distance(at), default=None)
-    if ring is None or ring.distance(at) > WALL_TOLERANCE:
+    # A front often ends a few hundredths short of the wall behind a thin skin; that still counts.
+    if ring is None or ring.distance(at) > NEAR_WALL:
         return None
     here, total = ring.project(at), ring.length
+    foot = ring.interpolate(here)
     steps = max(2, math.ceil(limit/.1))
 
     def walk(sign):
@@ -337,7 +340,8 @@ def along_wall(rings, xy, part, own, radius, overlap, *, limit=WALL_REACH):
     keep = len(way)
     if any(clean):
         keep = min(len(way), clean.index(True) + 1 + math.ceil(overlap/(limit/steps)))
-    return [tuple(xy)] + way[:keep]
+    onto = [] if math.dist(xy, (foot.x, foot.y)) < 1e-9 else [(foot.x, foot.y)]
+    return [tuple(xy)] + onto + way[:keep]
 
 
 def fillet(first, second, trim):
@@ -438,9 +442,12 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
     return pieces
 
 
-def cut(path, stock, radius, sample_step):
-    """Sampled peak contact and updated stock; chunked so each replay stays local."""
-    peak, chunk, length = 0., [path[0]], 0.
+def cut(path, stock, radius, sample_step, *, where=None):
+    """Sampled peak contact and updated stock; chunked so each replay stays local.
+
+    where, if given, receives the distance along the path of the peak sample.
+    """
+    peak, chunk, length, travelled = 0., [path[0]], 0., 0.
     for i in range(1, len(path)):
         chunk.append(path[i])
         length += math.dist(path[i-1], path[i])
@@ -448,15 +455,19 @@ def cut(path, stock, radius, sample_step):
             xs, ys = zip(*chunk)
             reach = radius + .01
             local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
-            for _, angle, _ in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
-                peak = max(peak, angle)
+            for _, angle, step in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
+                travelled += step
+                if angle > peak:
+                    peak = angle
+                    if where is not None:
+                        where[:] = [travelled]
             stock = stock.difference(LineString(chunk).buffer(radius, quad_segs=CUT_SEGMENTS))
             chunk, length = [path[i]], 0.
     return peak, stock
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=False, top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=False, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -535,9 +546,18 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                 break
                         trial, done = stock, []
                         for piece in pieces:
-                            peak, after = cut(piece, trial, radius, sample_step)
+                            at = []
+                            peak, after = cut(piece, trial, radius, sample_step, where=at)
                             if peak > limit:
                                 done = None
+                                if trace is not None:
+                                    trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
+                                                  'wall_ended': path is shapes[0] and len(shapes[0]) > 0
+                                                  and wall_pull_back and not closed,
+                                                  'run_start_xy': run[0], 'run_end_xy': run[-1], 'peak_deg': peak,
+                                                  'peak_at_mm': at[0] if at else None,
+                                                  'piece_mm': LineString(piece).length,
+                                                  'piece_end_xy': piece[-1], 'outcome': 'over_limit'})
                                 break
                             if trial.area - after.area >= MIN_GAIN_MM2:
                                 done.append((piece, peak))
@@ -549,6 +569,11 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     if done is None:
                         failed.append(LineString(run))
                         continue
+                    if trace is not None:
+                        trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
+                                      'wall_ended': path is shapes[0] and wall_pull_back and not closed,
+                                      'run_start_xy': run[0], 'run_end_xy': run[-1], 'pieces': len(done), 'path_mm': LineString(path).length,
+                                      'path_end_xy': path[-1], 'outcome': 'cut' if done else 'air'})
                     for piece, peak in done:
                         commit('front', piece, stepover, peak)
                     stock = trial
