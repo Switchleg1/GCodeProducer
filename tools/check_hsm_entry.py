@@ -156,24 +156,38 @@ def compare_pitch(*, bands=16, step=.025):
     return trials
 
 
-def seed_arc_candidates(centre, orbit):
-    """Bow outside the floor orbit over a local clockwise section, then return."""
-    inner = orbit - .3
-    if inner <= 0:
-        return
+def seed_arc_candidates(centre, orbit, *, contact_zone=None):
+    """Bow beyond the nominal orbit or sampled live contact, then ease back."""
+    origin = Point(centre) if contact_zone is not None else None
     for j in range(8):
         start = math.pi*j/4
+        rows = []
+        for i in range(33):
+            t = i/32
+            angle = start-math.pi*t/2
+            ux, uy = math.cos(angle), math.sin(angle)
+            distance = orbit
+            if origin is not None:
+                reach = orbit+1.2
+                ray = LineString([centre, (centre[0]+reach*ux, centre[1]+reach*uy)])
+                hit = ray.intersection(contact_zone)
+                if hit.is_empty:
+                    break
+                distance = origin.distance(hit)
+            if distance <= .3:
+                break
+            rows.append((ux, uy, distance-.3, math.sin(math.pi*t)**2))
+        if len(rows) != 33:
+            continue
         for advance in (.05, .10, .20):
             path = []
-            for i in range(33):
-                t = i/32
-                angle = start-math.pi*t/2
-                r = inner + (.3+advance)*math.sin(math.pi*t)**2
-                path.append((centre[0]+r*math.cos(angle), centre[1]+r*math.sin(angle)))
+            for ux, uy, inner, blend in rows:
+                r = inner + (.3+advance)*blend
+                path.append((centre[0]+r*ux, centre[1]+r*uy))
             yield path
 
 
-def check_first_cut(*, review=None):
+def check_first_cut(*, review=None, second=False):
     """Check only the planar motion following the modeled helix floor sweep."""
     pocket, _ = neck_fixture()
     radius = 2.
@@ -186,18 +200,36 @@ def check_first_cut(*, review=None):
     stock = entry.remaining
     straight = list(straight_front_candidates(pocket, stock, radius, .5, min_edge=2., lead=2., runoff=2.))
     counts = Counter()
-    choice = choose_front_cut(pocket, stock, pose, seed_arc_candidates(pose[0], orbit), radius, contact_limit=60.,
-                              sample_step=.025, link_handle=1., require_clear_exit=True, min_departure=.25,
-                              diagnostics=counts)
+    gates = dict(contact_limit=60., sample_step=.025, link_handle=1., require_clear_exit=True, min_departure=.25)
+    choice = choose_front_cut(pocket, stock, pose, seed_arc_candidates(pose[0], orbit), radius,
+                              diagnostics=counts, **gates)
     report = {'stop': 'first_cut_checked' if choice else 'no_checked_cut', 'straight_proposals': len(straight),
               'gates': dict(counts), 'entry_removed_mm2': pocket.area-stock.area}
     if choice is not None:
         report.update(removed_mm2=choice.removed_mm2, peak_deg=choice.peak_deg, feed_mm=choice.travel_mm)
+        accepted = [choice]
+        if second:
+            a, b = choice.cut[-2:]
+            next_pose = b, tuple(y-x for x, y in zip(a, b))
+            live = choice.remaining
+            contact_zone = live.buffer(radius, quad_segs=32)
+            counts = Counter()
+            following = choose_front_cut(pocket, live, next_pose,
+                                         seed_arc_candidates(pose[0], orbit, contact_zone=contact_zone), radius,
+                                         diagnostics=counts, **gates)
+            report['second'] = {'gates': dict(counts)}
+            if following is not None:
+                report['stop'] = 'two_cuts_checked'
+                report['second'].update(removed_mm2=following.removed_mm2, peak_deg=following.peak_deg,
+                                        feed_mm=following.travel_mm)
+                accepted.append(following)
+            else:
+                report['stop'] = 'second_cut_stalled'
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            write_review_gcode(review, [choice], pose[0], 'first cut after modeled floor sweep; helix omitted')
+            write_review_gcode(review, accepted, pose[0], 'cuts after modeled floor sweep; helix omitted')
             write_opening_review(opening, pocket, stock, choice.link, choice.cut)
     return report
 
@@ -207,9 +239,11 @@ if __name__ == '__main__':
     parser.add_argument('--compare-pitch', action='store_true', help='compare shallower pitches at equal floor coverage')
     parser.add_argument('--first-cut', action='store_true', help='audit the first at-depth cut from the modeled floor sweep')
     parser.add_argument('--review-gcode', type=Path, help='save only checked planar first-cut geometry for review')
+    parser.add_argument('--second-cut', action='store_true', help='also check a second cut on the updated stock')
     args = parser.parse_args()
-    if args.first_cut and args.compare_pitch or args.review_gcode and not args.first_cut:
-        parser.error('select one audit; review output requires --first-cut')
-    result = (check_first_cut(review=args.review_gcode) if args.first_cut else
+    cut_audit = args.first_cut or args.second_cut
+    if (cut_audit and args.compare_pitch) or (args.review_gcode and not cut_audit):
+        parser.error('select one audit; review output requires a cut audit')
+    result = (check_first_cut(review=args.review_gcode, second=args.second_cut) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

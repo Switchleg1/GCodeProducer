@@ -73,3 +73,5 @@
   The first-cut audit uses the 2.5° cap and the helper's exact credited
   floor geometry. Bow angles and advances are planar trial proposals;
   additional travel to stock top and helix qualification remain separate.
+  Second-cut probes sample radial first contact from the helix center up to
+  1.2 mm beyond its orbit. A hit supplies proposal geometry only.

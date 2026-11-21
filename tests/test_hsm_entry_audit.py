@@ -34,15 +34,22 @@ def test_axial_sampling_reports_plunge_and_air_separately():
     assert air['floor']['mean_over_limit_height_mm'] == 0.
 
 
-def test_first_cut_leaves_the_actual_entry_seed(tmp_path):
+@pytest.mark.parametrize('second', [False, True])
+def test_first_cuts_leave_the_actual_entry_seed(tmp_path, second):
     path = tmp_path / 'first.nc'
-    report = check_first_cut(review=path)
-    assert report['stop'] == 'first_cut_checked'
+    report = check_first_cut(review=path, second=second)
+    assert report['stop'] == ('two_cuts_checked' if second else 'first_cut_checked')
     assert report['straight_proposals'] == 0
     assert report['entry_removed_mm2'] == pytest.approx(45.23, abs=.02)
     assert report['removed_mm2'] == pytest.approx(.492, abs=.003)
     assert report['peak_deg'] < 60.
-    assert 'helix omitted' in path.read_text('ascii')
+    text = path.read_text('ascii')
+    assert 'helix omitted' in text
+    assert ('(Cut 2: stock removal)' in text) is second
+    if second:
+        assert report['second']['removed_mm2'] == pytest.approx(.468, abs=.003)
+        assert report['second']['peak_deg'] < 60.
+        assert report['second']['gates']['contact_limit'] > 0
     assert path.with_suffix('.opening.svg').is_file()
 
 

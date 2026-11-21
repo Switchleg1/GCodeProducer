@@ -470,7 +470,9 @@ height above 60° from 0.875 to 0.375 mm in descent and from 0.750 to
 `--first-cut` checks a local bowed cut from the modeled floor sweep. It
 removes another 0.492 mm² at 53.37° sampled peak, with 4.89 mm total
 link and cut. `--review-gcode` plots that XY motion only; it does not
-include or qualify the helix.
+include or qualify the helix. `--second-cut` samples the live stock
+boundary after cut one and checks from its actual end pose. It removes
+another 0.468 mm² at 51.67° sampled peak.
 
 ## Gate before another generator attempt
 

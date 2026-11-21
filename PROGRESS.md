@@ -98,4 +98,5 @@
 - Synchronized axial contact audit: at 16 midpoint bands, estimated height above 60° peaks at 0.875 mm on descent and 0.750 mm on the floor pass (means 0.658 and 0.291 mm). At eight bands peaks are 1.000 and 0.750 mm; means agree.
 - `--compare-pitch` preserves the exact floor path and exit. Actual max angles 5.06°→3.38°→2.03° give peak over-limit descent height 0.875→0.625→0.375 mm; floor 0.750→0.500→0.375 mm. Descent XY grows 22.58→33.87→56.45 mm. No cutting force or timing claim, no export.
 - `--first-cut` uses the modeled 45.226 mm² helix floor sweep, not the synthetic 348 mm². Long straight candidates are absent; a local bow and its link pass the existing checks, removing 0.492 mm² at a 53.37° sampled peak. Saved `neck-after-helix-INCOMPLETE-review.nc` and its opening SVG; helix omitted.
-- Next: generate a second useful cut from the resulting live seed front rather than reusing the original orbit blindly. Completion gates are in `GOAL.md`.
+- `--second-cut` samples contact on the first cut's remaining stock and checks a new bow from its actual end pose. It removes 0.468 mm² at 51.67° peak; one proposal fails contact. Saved `neck-after-helix-two-cuts-INCOMPLETE-review.nc` with its SVG, helix omitted.
+- Next: test whether repeated live-front bows grow the seed enough to generate a productive straight pass. Completion gates are in `GOAL.md`.
