@@ -1,7 +1,23 @@
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_neck import check_neck, clearance_sections, section_bite_spans, section_bites, section_follow_cuts
+from tools.check_hsm_neck import (check_neck, clearance_sections, section_bite_spans, section_bites,
+                                  section_follow_cuts, small_section_cuts)
+
+
+def test_small_section_audit_distinguishes_missing_contact_from_missing_span():
+    sections = [{'x_mm': 4., 'eligible_y_mm': [(2., 6.)]}]
+    stock = box(6.5, 0, 11, 10)
+    audit = []
+    paths = list(small_section_cuts(sections, stock, 2., turn_exits=True, audit=audit))
+    assert paths == list(small_section_cuts(sections, stock, 2., turn_exits=True))
+    assert sum(row['proposal_count'] for row in audit) == len(paths) == 24
+    audit.clear()
+    assert not list(small_section_cuts(sections, box(8, 0, 11, 10), 2., audit=audit))
+    assert all(len(row['profiles'][0]['missed_y_mm']) == row['profiles'][0]['rows'] for row in audit)
+    audit.clear()
+    assert not list(small_section_cuts([], stock, 2., audit=audit))
+    assert all(not row['profiles'] and row['proposal_count'] == 0 for row in audit)
 
 
 def test_section_follow_eases_to_stock_contact_across_middle_rows():

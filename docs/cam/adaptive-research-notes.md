@@ -408,6 +408,8 @@ contact. This brackets observed candidates, not a continuous limit.
 `--section-small-retry` checks smaller advances only after all standard
 families fail. It accepts six additional cuts and stalls at X27.792 with
 4,004.509 mm² reachable, unchanged 59.97° peak, and no passage to the probe.
+`final_small_retry` finds an eligible 1.582 mm span, but two of 11
+rays miss stock within the 1.5 mm search distance, so no retry is generated.
 
 ## Gate before another generator attempt
 

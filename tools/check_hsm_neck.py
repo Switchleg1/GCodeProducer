@@ -149,6 +149,21 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                         yield retreat
 
 
+def small_section_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None):
+    """Generate the small-advance retries, optionally auditing each entry shape."""
+    for fraction in (.25, .4, .5):
+        profiles = [] if audit is not None else None
+        note = None if on_profile is None else lambda path, n, a: on_profile(path, n, a, fraction)
+        emitted = 0
+        for path in section_follow_cuts(sections, stock, radius, turn_exits=turn_exits,
+                                        on_profile=note, audit=profiles, entry_fraction=fraction,
+                                        advances=(.01, .02, .03, .04)):
+            emitted += 1
+            yield path
+        if audit is not None:
+            audit.append({'entry_fraction': fraction, 'profiles': profiles, 'proposal_count': emitted})
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
@@ -212,22 +227,22 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     entry_fraction = .25
     follow_overloads = defaultdict(list)
 
-    def note_profile(path, body_chords, advance):
+    def note_profile(path, body_chords, advance, fraction=None):
         nonlocal follow_profile
-        follow_profile = (path, body_chords, advance)
+        follow_profile = (path, body_chords, advance, entry_fraction if fraction is None else fraction)
 
     def report_overload(round_index, path, segment, angle):
         if path is taper_candidate:
             phase = 'approach' if segment < taper_chords else 'straight' if segment == taper_chords else 'exit'
             overload_phases[round_index][phase] += 1
         if follow_profile is not None and path is follow_profile[0]:
-            _, body_chords, advance = follow_profile
+            _, body_chords, advance, fraction = follow_profile
             t = (segment + .5)/body_chords
-            phase = ('retreat' if segment >= body_chords else 'ease_in' if t < entry_fraction
+            phase = ('retreat' if segment >= body_chords else 'ease_in' if t < fraction
                      else 'ease_out' if t > .75 else 'follow')
             follow_overloads[round_index].append({'phase': phase, 'segment': segment,
                                                  'chord_xy_mm': path[segment:segment+2],
-                                                 'entry_fraction': entry_fraction,
+                                                 'entry_fraction': fraction,
                                                  'advance_mm': advance, 'contact_deg': angle})
 
     def propose_shallow(live, pose):
@@ -288,16 +303,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                            on_profile=note_profile, taper_entry=section_taper_entry)
 
     def propose_small_contours(live, _pose):
-        nonlocal entry_fraction
         component = connected_clearance(pocket, live, seed[0], radius)
         sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
-        try:
-            for entry_fraction in (.25, .4, .5):
-                yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
-                                               on_profile=note_profile, entry_fraction=entry_fraction,
-                                               advances=(.01, .02, .03, .04))
-        finally:
-            entry_fraction = .25
+        return small_section_cuts(sections, live, radius, turn_exits=section_turn_exits, on_profile=note_profile)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -365,6 +373,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                                           taper_entry=section_taper_entry))
         report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count,
                                           'first_overloads': follow_overloads.get(len(diagnostics)-1, [])}
+    if section_small_retry and reason == 'stalled':
+        audit = []
+        count = sum(1 for _ in small_section_cuts(sections, remaining, radius, turn_exits=section_turn_exits, audit=audit))
+        report['final_small_retry'] = {'proposal_count': count, 'entry_shapes': audit}
     if probe_count and reason == 'stalled':
         pose = last_xy, last_heading
         routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints

@@ -81,4 +81,5 @@
 - `--section-nominal-at-stall` tests six zero-extra-advance contours on the unchanged 79-cut stall. No overloads: two fail no removal and four pass with at most 4.07e-8 mm² removed, negligible for coverage. No probe is committed.
 - `--section-bracket-at-stall` tests 0.01–0.05 mm advances independently on unchanged terminal stock. At 0.04 mm two of six pass, with best removal 0.166 mm² at 56.49° peak; at 0.05 mm none passes. No cut is committed.
 - `--section-small-retry` accepts six checked small-advance contours after the 79-cut baseline; the new stall is cut 85 at X27.792 with 4,004.509 mm² reachable. Peak remains 59.97°; no final retry reaches a motion gate.
-- Next: audit the final fitted section and contact rays to distinguish missing span width from missing contact samples before changing geometry. Completion gates are in `GOAL.md`.
+- `final_small_retry` confirms the 85-cut stall has an eligible 1.582 mm span at X26.230, but two of 11 contact rays miss at Y22.904 and Y22.785. The longest successful ray is 1.496 mm against a 1.5 mm cap; no retry is generated.
+- Next: probe modestly longer rays on the unchanged stall before accepting a longer search in the runner. Completion gates are in `GOAL.md`.
