@@ -58,3 +58,7 @@
   in XY only, not the saved Stormtrooper session or controller-ready output.
   The full-stock variant assumes no prior operation or predrilled entry.
   It cannot claim at-depth clearance at the seed until entry is modeled.
+  The entry audit uses a 4 mm flat cutter, Z0 to Z−2, and a 10° angle cap.
+  X≤24 restricts helix placement to the left lobe. The independent floor
+  sweep uses 32 buffer segments per quadrant, finer than the entry helper;
+  it gives no cutting credit for the descending helix.

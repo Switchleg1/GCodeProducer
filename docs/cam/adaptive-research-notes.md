@@ -451,6 +451,11 @@ The review provides no machining motion to create that clearance.
 `--full-stock` removes the synthetic 348 mm² pre-clear assumption. It
 returns `entry_required` at 360° seed contact, accepts no cuts, and
 suppresses the XY review export instead of implying an entry.
+`python tools/check_hsm_entry.py` probes the existing helix on intact
+stock. Its floor sweep removes 45.24 mm² (not the assumed 348 mm²) and
+leaves a clear seed, but a floor-only view shows 360° upon arrival when
+ramp motion is not credited. The audit verifies XY containment and ramp
+angle, not descent engagement, tool suitability, or a runnable entry.
 
 ## Gate before another generator attempt
 
