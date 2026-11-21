@@ -505,7 +505,7 @@ def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, pref
     return accepted, trace, 'cut_budget' if single_fallback else 'pair_budget'
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0, handoff_budget=0, handoff_turned_fallback=False, handoff_east_sweep=False, sweep_follow_budget=0, followup_east_priority=False, followup_alternate=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0, handoff_budget=0, handoff_turned_fallback=False, handoff_east_sweep=False, sweep_follow_budget=0, followup_east_priority=False, followup_alternate=False, handoff_east_priority=False):
     """Check only the planar motion following the modeled helix floor sweep."""
     if handoff_east_sweep and not handoff_turned_fallback:
         raise ValueError('east sweep requires the broader turned fallback')
@@ -744,7 +744,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                              clearance_straight_fallback=handoff_turned_fallback, wide_east_sweep=handoff_east_sweep,
                                              sweep_follow_budget=sweep_follow_budget,
                                              followup_east_priority=followup_east_priority,
-                                             followup_alternate=followup_alternate)
+                                             followup_alternate=followup_alternate,
+                                             prioritize_clearance=handoff_east_priority, trace_clearance=handoff_east_priority)
     return report
 
 
@@ -777,7 +778,10 @@ if __name__ == '__main__':
     parser.add_argument('--broader-sweep-followups', type=int, default=0, help='compare continuation after the wide sweep with no-sweep control')
     parser.add_argument('--followup-east-priority', action='store_true', help='also rank the control continuation by connected east reach')
     parser.add_argument('--followup-alternate', action='store_true', help='alternate east-priority and efficiency follow-up cuts')
+    parser.add_argument('--broader-east-priority', action='store_true', help='rank all handoff cuts by connected east reach first')
     args = parser.parse_args()
+    if args.broader_east_priority and not args.broader_turned_fallback:
+        parser.error('east-priority handoff requires --broader-turned-fallback')
     if args.followup_alternate and not args.followup_east_priority:
         parser.error('alternating follow-up requires --followup-east-priority')
     if args.followup_east_priority and not args.broader_sweep_followups:
@@ -837,6 +841,7 @@ if __name__ == '__main__':
                               handoff_turned_fallback=args.broader_turned_fallback, handoff_east_sweep=args.broader_east_sweep,
                               sweep_follow_budget=args.broader_sweep_followups,
                               followup_east_priority=args.followup_east_priority,
-                              followup_alternate=args.followup_alternate) if cut_audit else
+                              followup_alternate=args.followup_alternate,
+                              handoff_east_priority=args.broader_east_priority) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

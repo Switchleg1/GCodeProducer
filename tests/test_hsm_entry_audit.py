@@ -50,6 +50,14 @@ def test_broader_front_handoff_uses_actual_floor_stock_without_fake_motion(tmp_p
     assert not list(tmp_path.iterdir())
 
 
+def test_east_priority_handoff_reports_reach_trace():
+    report = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True, handoff_east_priority=True)
+    handoff = report['broader_front']
+    trace = handoff['clearance_trace']
+    assert len(trace) == 2 and trace[-1]['east_x_mm'] == pytest.approx(handoff['seed_clearance_east_x_mm'])
+    assert trace[-1]['east_x_mm'] > trace[0]['east_x_mm']
+
+
 def test_sweep_followup_reports_a_same_state_control(tmp_path):
     report = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True,
                              handoff_east_sweep=True, sweep_follow_budget=1, followup_east_priority=True, followup_alternate=True,

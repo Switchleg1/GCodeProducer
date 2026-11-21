@@ -578,7 +578,9 @@ eight cuts, reaching X18.764 versus X18.052, but removes less stock
 (5.977 versus 7.171 mm²) over more feed (46.41 versus 38.63 mm).
 Alternating east-first and efficiency choices reaches X18.434 and removes
 7.372 mm², but uses the longest feed (55.56 mm). Its efficiency cuts never
-move the east edge.
+move the east edge. Applying east-first ranking to the whole 64-cut bare
+helix handoff reaches X19.912 instead of X17.826, while removing roughly
+half the stock (29.538 versus 58.991 mm²) for similar feed.
 
 ## Gate before another generator attempt
 
