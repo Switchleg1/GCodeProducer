@@ -79,3 +79,6 @@
   at least 2 mm. The fitted trial simplifies proposal stock at 0.15 and
   0.30 mm with straight ends extended 1.25 or 2 mm. None of these
   approximations is used by the live-stock checks.
+  Turned-straight probes try 0.75/1.25/1.75 mm bodies with 0.4/0.65 mm
+  turn radii. Endpoint membership in the clearance map is a proposal
+  filter only; full-disk and sampled contact checks still govern.

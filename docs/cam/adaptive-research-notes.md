@@ -478,7 +478,12 @@ with 24 bows, no straight cuts, 8.246 mm² removed and 3.358 mm² of new
 seed-connected center clearance. `--fitted-straights` offers straight
 proposals across several short edges but checks them on original stock.
 All 24 initial starts are blocked; adding proposals does not change the
-24-cut review motion.
+24-cut review motion. `--turned-straights` inserts short straight bodies
+between tangent turns into mapped clearance, retaining the actual motion
+checks. At eight accepted cuts it removes 5.836 mm² instead of 3.644 mm²
+and opens 2.562 mm² instead of 1.489 mm² of connected clearance. Peak
+sampled contact is 58.70° instead of 54.49°; these are not equal-coverage
+runs or timing comparisons.
 
 ## Gate before another generator attempt
 

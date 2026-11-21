@@ -70,6 +70,15 @@ def test_fitted_straights_are_rejected_if_the_modeled_seed_cannot_reach_the_star
     assert report['removed_mm2'] == pytest.approx(.492, abs=.003)
 
 
+def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed():
+    report = check_first_cut(max_cuts=1, fitted_straights=True, turned_straights=True)
+    assert report['cut_count'] == 1 and report['cuts_with_chord_at_least_075_mm'] == 1
+    assert report['straight_cut_count'] == 0  # Rounded ends, not a single chord.
+    assert report['total_removed_mm2'] == pytest.approx(.820, abs=.003)
+    assert report['peak_contact_deg'] < 60.
+    assert report['gates']['start_clearance'] > 0
+
+
 def test_pitch_comparison_preserves_floor_and_accounts_for_added_travel():
     baseline, middle, shallow = compare_pitch(bands=8, step=.1)
     assert all(row['contained'] and row['same_floor_and_exit'] for row in (baseline, middle, shallow))

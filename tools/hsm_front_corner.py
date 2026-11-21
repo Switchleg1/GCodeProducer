@@ -1,9 +1,11 @@
 """Offline straight-to-corner proposal with a tangent circular fillet."""
 import math
 
+from shapely.geometry import Point
+
 from tools.check_cambam_pocket import arc_points
 from tools.hsm_center_regions import cleared_start_intervals
-from tools.hsm_straight_front import frontier_edges, try_front_cut
+from tools.hsm_straight_front import fitted_front_candidates, frontier_edges, try_front_cut
 
 
 def frontier_corner_poses(pocket, stock, radius, immersion, *, lead=0., runoff=0.):
@@ -99,6 +101,29 @@ def tapered_roll_on(path, offset, run, chord_error):
         lateral = (1-t)**2*(1+2*t)*offset
         lead.append((start[0]-ux*back+uy*lateral, start[1]-uy*back-ux*lateral))
     return [*lead, *path]
+
+
+def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None):
+    """Place short straight bodies between tangent turns into mapped clearance."""
+    if clearance.is_empty:
+        return
+    seen = set()
+    for start, end in fitted_front_candidates(pocket, stock, radius, focus=focus):
+        length = math.dist(start, end)
+        ux, uy = ((b-a)/length for a, b in zip(start, end))
+        mx, my = ((a+b)/2 for a, b in zip(start, end))
+        for span in (.75, 1.25, 1.75):
+            for advance in (0., .08):
+                x, y = mx-uy*advance, my+ux*advance
+                body = [(x-ux*span/2, y-uy*span/2), (x+ux*span/2, y+uy*span/2)]
+                key = tuple(round(v, 9) for point in body for v in point)
+                if key in seen:
+                    continue
+                seen.add(key)
+                for r in (.4, .65):
+                    path = roll_off(roll_on(body, r, .0025), r, .0025)
+                    if clearance.covers(Point(path[0])) and clearance.covers(Point(path[-1])):
+                        yield path
 
 
 def clearance_tapers(pocket, stock, path, radius, *, offset, run, chord_error):
