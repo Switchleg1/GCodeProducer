@@ -34,9 +34,13 @@ WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
 PROFILE_CHUNK = 8.  # mm of wall judged at a time
+GLANCE_TURN = 40.  # degrees turned over a hook's length; more means the arc is curling onto an old hook
+GLANCE_REACH = 6.  # mm of wall an arc may run on along before reaching clean wall
+GLANCE_ANGLE = 55.  # degrees; an arc meeting the wall more squarely than this gets a hook
 MIN_HOOK_TRIM = .5  # mm; below this an arc end rolls off to the old front instead
 HOOK_SEARCH = 25.  # mm of arc searched back from the wall for a steady heading
 HOOK_RADIUS_FACTOR = 2.0  # hook radius at the wall, in cutter radii
+WALL_GAP = .8  # mm between cleared ground and the wall beyond which the wall is not followed
 NEAR_WALL = .3  # mm; an arc end this close to the wall is carried onto it
 WALL_REACH = 20.  # mm; farthest an arc end follows the wall back looking for clean wall
 LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
@@ -321,8 +325,10 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
     """Dense points from a wall point back along the wall until it is already clean, plus an overlap.
 
     The wall counts as clean where the cutter, sitting on it, would find no
-    more than a WALL_TOLERANCE skin of this island's stock.
-    Returns None for a point that is not on the wall.
+    more than a WALL_TOLERANCE skin of this island's stock. The walk also
+    stops where the cleared area falls away from the wall: beyond that the
+    stock beside the wall is too thick to take in passing, and following it
+    would be a slot. Returns None for a point that is not on the wall.
     """
     at = Point(xy)
     ring = min(rings, key=lambda r: r.distance(at), default=None)
@@ -340,10 +346,19 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
     ways = (walk(1), walk(-1))
     way = min(ways, key=lambda pts: part.distance(Point(pts[min(4, len(pts)-1)])))
     clean = [True]*len(way) if own.is_empty else (distance(own, points(way)) >= radius - WALL_TOLERANCE).tolist()
-    keep = len(way)
+    keep, spacing = len(way), limit/steps
     if any(clean):
-        spacing = limit/steps
         keep = min(len(way), max(clean.index(True) + 1 + math.ceil(overlap/spacing), math.ceil(at_least/spacing)))
+    gap = distance(part, points(way))
+    deep = (gap > max(WALL_GAP, float(gap[0]) + .2)).tolist()
+    if any(deep):
+        keep = min(keep, deep.index(True))
+    if not any(clean[:keep]):
+        # Nothing clean within reach: the cleared area only comes close to the wall here. Go as far as
+        # its nearest approach; the arc arriving from the other side takes the rest.
+        keep = min(keep, int(gap[:keep].argmin()) + 1 + math.ceil(overlap/spacing))
+    if keep < 2:
+        return None
     onto = [] if math.dist(xy, (foot.x, foot.y)) < 1e-9 else [(foot.x, foot.y)]
     return [tuple(xy)] + onto + way[:keep]
 
@@ -399,31 +414,75 @@ def hook_to_wall(path, rings, part, own, radius, allowed, trim, overlap, turn):
     def turned(one, other):
         return abs((heading(one)-heading(other)+math.pi) % (2*math.pi) - math.pi)
 
-    # Step back past the curl to where the arc holds a steady heading.
+    # Step back past the curl to where the arc turns at a steady rate. A round front turns all the
+    # way along, so it is the change in turning, not the turning, that marks the curl.
     back, limit = trim, min(line.length/2, HOOK_SEARCH)
-    while back + 3. < limit and (turned(back, back+1.5) > math.radians(6) or turned(back, back+3.) > math.radians(10)):
+    while back + 3. < limit and abs(turned(back, back+1.5) - turned(back+1.5, back+3.)) > math.radians(4):
         back += .5
-    at = line.interpolate(line.length - back)
-    before = line.interpolate(line.length - back - min(2., line.length-back))
-    span = math.dist((before.x, before.y), (at.x, at.y))
     ring = min(rings, key=lambda r: r.distance(Point(path[-1])), default=None)
-    if not span or ring is None:
+    span = min(2., (line.length-back)/2)
+    if ring is None or span < .2:
         return None
-    ux, uy = (at.x-before.x)/span, (at.y-before.y)/span
-    ahead = LineString([(at.x, at.y), (at.x + ux*(back+4*trim), at.y + uy*(back+4*trim))]).intersection(ring)
+    # Carry the arc on with the curvature it has there. A straight run-up would leave a round front
+    # on its outside and dig into stock.
+    p0, p1, p2 = (line.interpolate(line.length-back-k*span) for k in (2, 1, 0))
+    a1, a2 = math.atan2(p1.y-p0.y, p1.x-p0.x), math.atan2(p2.y-p1.y, p2.x-p1.x)
+    bend = ((a2-a1+math.pi) % (2*math.pi) - math.pi)/span  # radians per mm, signed
+    angle, x, y, onward = a2 + bend*span/2, p2.x, p2.y, [(p2.x, p2.y)]
+    for _ in range(math.ceil((back + 4*trim)/.2)):
+        angle += bend*.2
+        x, y = x + .2*math.cos(angle), y + .2*math.sin(angle)
+        onward.append((x, y))
+    ahead = LineString(onward).intersection(ring)
     if ahead.is_empty:
         return None
-    corner = min(get_parts(ahead), key=lambda g: g.distance(at))
-    corner = nearest_points(corner, at)[0]
+    run_up = LineString(onward)
+    reach = min(run_up.project(g) for g in get_parts(ahead) if g.geom_type == 'Point') if any(
+        g.geom_type == 'Point' for g in get_parts(ahead)) else None
+    if reach is None or reach < 1e-6:
+        return None
+    corner = run_up.interpolate(reach)
     tail = along_wall(rings, (corner.x, corner.y), part, own, radius, overlap, at_least=trim+overlap)
     if tail is None:
         return None
-    leg = list(substring(line, 0., line.length - back).coords) + [(corner.x, corner.y)]
+    leg = list(substring(line, 0., line.length - back).coords) + list(substring(run_up, 0., reach).coords)[1:]
     hooked = fillet(leg, tail, trim, shares=(1., .85))
     return hooked + turn_away(tail[-2], tail[-1], allowed, turn)
 
 
-def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, turn=.75):
+def glance_onto_wall(path, rings, part, own, radius, allowed, trim, overlap, turn):
+    """Let an arc that meets the wall at a shallow angle run on along it; None if it meets it steeply.
+
+    Where the cleared area nearly touches a wall, the next front arrives
+    almost parallel to the wall and the cleared ground along the wall lies
+    ahead of it. The arc then only has to bend a little to follow the wall
+    until it is clean. A hook is wrong there: its straight run-up leaves a
+    tightly curved front and digs into stock.
+    """
+    tail = along_wall(rings, path[-1], part, own, radius, overlap, at_least=overlap+1.)
+    # Running on is only light while the wall ahead is nearly clean; a long dirty stretch would be a slot.
+    if tail is None or len(tail) < 3 or LineString(tail).length > GLANCE_REACH:
+        return None
+    line = LineString(path)
+
+    def heading(back):
+        a, b = line.interpolate(max(0., line.length-back-1.)), line.interpolate(max(0., line.length-back))
+        return math.atan2(b.y-a.y, b.x-a.x)
+
+    def apart(one, other):
+        return abs((one-other+math.pi) % (2*math.pi) - math.pi)
+
+    # Skip the last millimetre, where the front rounds onto the wall. A front that follows an earlier
+    # hook also comes in shallow, but it has turned sharply to do so; following that curl would land
+    # further back every pass.
+    there = math.atan2(tail[-1][1]-tail[1][1], tail[-1][0]-tail[1][0])
+    near, far = heading(1.), heading(1. + min(trim, line.length/3))
+    if apart(there, near) > math.radians(GLANCE_ANGLE) or apart(near, far) > math.radians(GLANCE_TURN):
+        return None
+    return fillet(path, tail, 1., shares=(1/3, .6)) + turn_away(tail[-2], tail[-1], allowed, turn)
+
+
+def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, turn=.75, note=None):
     """Give an arc hooked ends that keep the wall clean at a steady cut.
 
     The arc curves round to meet the wall tangentially, heading back toward
@@ -442,14 +501,20 @@ def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, tur
     if len(path) < 2:
         return path
     hooked = [False, False]
-    if at_end:
-        new = hook_to_wall(path, rings, part, own, radius, allowed, trim, overlap, turn)
-        if new is not None:
-            path, hooked[1] = new, True
-    if at_start:
-        new = hook_to_wall(path[::-1], rings, part, own, radius, allowed, trim, overlap, turn)
-        if new is not None:
-            path, hooked[0] = new[::-1], True
+    shapes = ['roll', 'roll']
+    for side, wanted in ((1, at_end), (0, at_start)):
+        if not wanted:
+            continue
+        facing = path if side else path[::-1]
+        new, shapes[side] = glance_onto_wall(facing, rings, part, own, radius, allowed, trim, overlap, turn), 'glance'
+        if new is None:
+            new, shapes[side] = hook_to_wall(facing, rings, part, own, radius, allowed, trim, overlap, turn), 'hook'
+        if new is None:
+            shapes[side] = 'roll'
+        else:
+            path, hooked[side] = (new if side else new[::-1]), True
+    if note is not None:
+        note[:] = shapes
     if at_start and not hooked[0] or at_end and not hooked[1]:
         # Too short for a hook: roll on from or off to the old front at that end instead.
         path = eased(path, False, part, allowed, blend, ends=(at_start and not hooked[0], at_end and not hooked[1]))
@@ -605,7 +670,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     # Sweep the wall at the arc ends; only at the smallest stepover fall back to
                     # rolling off before the wall, so a lighter cut gets to try the wall first.
                     if wall_pull_back and not closed:
-                        shapes = [wall_ends(run, part, own, radius, allowed, rings, blend)]
+                        ends = []
+                        shapes = [wall_ends(run, part, own, radius, allowed, rings, blend, note=ends)]
                         if level == len(stepovers)-1:
                             shapes.append(eased(run, closed, part, allowed, blend))
                     else:
@@ -630,6 +696,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                     trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
                                                   'wall_ended': path is shapes[0] and len(shapes[0]) > 0
                                                   and wall_pull_back and not closed,
+                                                  'ends': list(ends) if path is shapes[0] and wall_pull_back and not closed else None,
                                                   'run_start_xy': run[0], 'run_end_xy': run[-1], 'peak_deg': peak,
                                                   'peak_at_mm': at[0] if at else None,
                                                   'piece_mm': LineString(piece).length,

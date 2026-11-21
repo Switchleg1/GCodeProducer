@@ -121,7 +121,41 @@ def test_hooks_nest_pass_after_pass_without_drifting_or_loading_up(pocket):
         lag.append(max(x for x, _ in path) - max(on_wall))
     # Bounded and not climbing; it still swings by about ten degrees from pass to pass.
     assert max(peaks) < 78. and max(peaks[-4:]) <= max(peaks[4:10]) + 6.
-    assert max(lag[4:]) - min(lag[4:]) < 1.5  # Hooks keep their distance behind the front.
+    assert min(lag[4:]) > 1.5  # The wall is met well behind the front, never square on.
+
+
+@pytest.mark.parametrize('gap', [0., .7])
+def test_arcs_round_a_disc_that_touches_or_nearly_touches_a_wall_stay_light(gap):
+    # Regression: beside a spiral the next front meets the wall almost parallel to it. A hook there ran
+    # a straight line off a tightly curved front, and its wall leg hunted up to 20 mm for clean wall
+    # through uncut stock, so contact read 100-184 degrees and every such arc fell to the smallest step.
+    pocket = box(-30, -2, 30, 40)
+    allowed = pocket.buffer(-2., join_style=2)
+    rings = [LineString(allowed.exterior.coords)]
+    own = pocket.difference(Point(0, 10+gap).buffer(12, quad_segs=64))  # cleared centres: a 10 mm disc
+    peaks = []
+    for _ in range(14):
+        part = max(polygons(clearance(allowed, own, 2.)), key=lambda g: g.area)
+        runs = fronts(part, part.buffer(.4, quad_segs=16).intersection(allowed), allowed.boundary)
+        assert len(runs) == 1
+        (run, closed), = runs
+        path = eased(run, closed, part, allowed, 3.) if closed else wall_ends(run, part, own, 2., allowed, rings, 3.)
+        peak, own = cut(path, own, 2., .1)
+        peaks.append(peak)
+    # Only the pass that first breaks through a gap to the wall is heavier; the rest stay under the limit.
+    assert sorted(peaks)[-2] < 58. and max(peaks) < (58. if not gap else 75.)
+
+
+def test_wall_is_not_followed_where_cleared_ground_falls_away_from_it():
+    pocket, allowed = box(-1, -1, 31, 21), box(0, 0, 30, 20)
+    rings = [LineString(allowed.exterior.coords)]
+    clear = Point(15, 6).buffer(5.5, quad_segs=64)          # comes within 0.5 mm of the wall y = 0, never touches
+    own = pocket.difference(clear.buffer(1., quad_segs=64))
+    tail = along_wall(rings, (11., 0.), clear, own, 1., .75)
+    xs = [x for x, _ in tail]
+    assert xs == sorted(xs) and 15. <= xs[-1] < 16.5      # As far as the nearest approach plus the overlap.
+    away = along_wall(rings, (19., 0.), clear, own, 1., .75)
+    assert away[-1][0] < 19. and away[-1][0] > 13.5        # From the far side it comes back the same way.
 
 
 def test_cutting_pieces_drop_air_and_keep_a_short_run_in_and_out():

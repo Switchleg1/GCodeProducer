@@ -659,3 +659,8 @@ previous pass, and running forward along the wall into the fresh band is a head-
 stepovers. A hook curves round to meet the wall tangentially, heading back toward cleared ground, and successive hooks
 nest one stepover apart. On the neck fixture: 225 arcs, 10,783 mm of cutting, 3,834 mm of links, 2.8 mm² left,
 with 55 arcs still at the smallest stepover in thin crescents between a spiral disc and a nearby wall.
+
+Beside a spiral the next fronts meet the wall almost parallel to it. Those arcs now run on along the wall to clean
+wall rather than hooking, hooks continue the arc's own curvature, and the wall is not followed where cleared ground
+falls away from it. The neck fixture then has no arc at 0.2 mm stepover or less: 187 arcs, 9,912 mm of cutting,
+3,884 mm of links, 2.6 mm² left.

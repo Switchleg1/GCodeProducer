@@ -152,3 +152,6 @@
 - Hooks use a quadratic corner whose tightest radius is about twice the cutter radius, capped at a quarter of the arc
   length and dropped below 0.5 mm of trim. The steady heading is searched up to 25 mm back from the wall (under 6° of
   turn in 1.5 mm and 10° in 3 mm). These are trial values measured on straight and oblique strips and the neck fixture.
+- An arc runs on along the wall instead of hooking when it meets it within 55°, has turned no more than 40° over a
+  hook's length, and clean wall (or the cleared area's nearest approach) is within 6 mm. The wall is not followed where
+  cleared ground is more than 0.8 mm from it. All untuned beyond the neck fixture and the strip and disc tests.
