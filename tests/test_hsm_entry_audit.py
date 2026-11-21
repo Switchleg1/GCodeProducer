@@ -166,6 +166,27 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['pair_removed_per_feed_mm'] == .5
 
 
+def test_entry_shoulder_probe_does_not_commit_an_unpaired_preparation(monkeypatch):
+    from tools import check_hsm_entry as audit_tool
+
+    stock = box(0., 0., 5., 5.)
+    live = box(0., 0., 4., 5.)
+    tail = SimpleNamespace(remaining=stock)
+    prep = SimpleNamespace(cut=[(1., 3.), (1., 2.)], remaining=live)
+    rejected = [[(2., 3.), (2., 2.)]]
+
+    def choose(_pocket, residual, pose, candidates, _radius, *, diagnostics, **_kwargs):
+        assert residual is live and pose == ((1., 2.), (0., -1.)) and candidates is rejected
+        diagnostics['contact_limit'] += 1
+        return None
+
+    monkeypatch.setattr(audit_tool, 'choose_front_cut', choose)
+    monkeypatch.setattr(audit_tool, 'connected_clearance', lambda _p, material, *_: material)
+    pair, result = audit_tool.probe_entry_shoulder(None, (1., 1.), tail, 1., {}, rejected, [prep])
+    assert pair == [] and tail.remaining is stock
+    assert result['checked_pairs'] == 0 and result['retry_gates'] == {'contact_limit': 1}
+
+
 def test_clearance_fitted_leads_preserve_suffix_and_require_true_start_clearance():
     path = [(4., 6.), (4.4, 5.6), (4.4, 4.6), (4., 4.2)]
     pocket = box(0., 0., 10., 10.)

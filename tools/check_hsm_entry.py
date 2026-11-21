@@ -330,7 +330,7 @@ def anchored_overload(path, chord, angle):
             'body_x_mm': path[axis][0], 'contact_deg': angle}
 
 
-def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False, failed_entry_paths=None):
+def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False, failed_entry_paths=None, eligible_preps=None):
     a, b = tail.cut[-2:]
     start = b, tuple(y-x for x, y in zip(a, b))
     live = tail.remaining
@@ -357,6 +357,8 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
 
     def note_eligible(_key, choice):
         nonlocal best_east
+        if eligible_preps is not None:
+            eligible_preps.append(choice)
         after = connected_clearance(pocket, choice.remaining, seed_xy, radius)
         if not after.is_empty:
             east = after.bounds[2]
@@ -439,12 +441,47 @@ def probe_tapered_anchor(pocket, seed_xy, tail, radius, gates, rejected, *, from
     return choice, result
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False):
+def probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps):
+    """Check preparation and retry together; return no partial pair."""
+    stock = tail.remaining
+    east = connected_clearance(pocket, stock, seed_xy, radius).bounds[2]
+    counts = Counter()
+    result = {'checked_preparations': len(preps), 'original_entry_failures': len(rejected), 'checked_pairs': 0}
+    best = None
+    for prep in preps:
+        a, b = prep.cut[-2:]
+        pose = b, tuple(y-x for x, y in zip(a, b))
+
+        def score(live):
+            component = connected_clearance(pocket, live, seed_xy, radius)
+            return None if component.is_empty else round(component.bounds[2], 6)
+
+        returning = choose_front_cut(pocket, prep.remaining, pose, rejected, radius,
+                                     diagnostics=counts, priority_score=score, **gates)
+        if returning is None:
+            continue
+        result['checked_pairs'] += 1
+        reach = connected_clearance(pocket, returning.remaining, seed_xy, radius).bounds[2]
+        travel = prep.travel_mm + returning.travel_mm
+        removed = stock.area - returning.remaining.area
+        key = (round(reach, 6), removed/travel)
+        if best is None or key > best[0]:
+            best = key, [prep, returning], dict(east_shift_mm=reach-east, feed_mm=travel, removed_mm2=removed,
+                                               peak_deg=max(prep.peak_deg, returning.peak_deg))
+    result['retry_gates'] = dict(counts)
+    if best is None:
+        return [], result
+    _, pair, metrics = best
+    result.update(metrics)
+    return pair, result
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False):
     """Check only the planar motion following the modeled helix floor sweep."""
-    lead_probe = tapered_anchor_probe or clearance_anchor_probe
+    lead_probe = tapered_anchor_probe or clearance_anchor_probe or shoulder_probe
     if lead_probe and repeat_anchored < 1:
         raise ValueError('anchor lead probe requires at least one moving anchor')
-    if tapered_anchor_probe and clearance_anchor_probe:
+    if sum((tapered_anchor_probe, clearance_anchor_probe, shoulder_probe)) > 1:
         raise ValueError('select only one anchor lead probe')
     if repeat_anchored < 0 or (repeat_anchored and not anchored_straight):
         raise ValueError('moving anchors require an anchored straight prefix and nonnegative budget')
@@ -592,15 +629,22 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                     for _ in range(repeat_anchored):
                                         prefix_count = len(preview)
                                         rejected = [] if lead_probe else None
+                                        preps = [] if shoulder_probe else None
                                         follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates,
-                                                                               moving=True, failed_entry_paths=rejected)
+                                                                               moving=True, failed_entry_paths=rejected, eligible_preps=preps)
                                         trace.append(trial)
                                         if follow is None:
                                             status = 'no_checked_anchor_cut'
                                             break
                                         preview.append(follow)
                                 report['moving_anchor_probe'] = {'stop': status, 'trace': trace}
-                                if lead_probe and trace:
+                                if shoulder_probe and trace:
+                                    pair, result = probe_entry_shoulder(pocket, pose[0], preview[prefix_count-1],
+                                                                        radius, gates, rejected, preps)
+                                    report['shoulder_probe'] = result
+                                    if pair:
+                                        preview = [*preview[:prefix_count], *pair]
+                                elif lead_probe and trace:
                                     tapered, result = probe_tapered_anchor(pocket, pose[0], preview[prefix_count-1],
                                                                          radius, gates, rejected, from_clearance=clearance_anchor_probe)
                                     key = 'clearance_anchor_probe' if clearance_anchor_probe else 'tapered_anchor_probe'
@@ -622,7 +666,9 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                 raise FileExistsError(f'review companion already exists: {opening}')
             tapered_selected = report.get('tapered_anchor_probe', {}).get('accepted', False)
             clearance_selected = report.get('clearance_anchor_probe', {}).get('accepted', False)
-            label = ('clearance-fitted anchor probe; helix omitted' if clearance_selected else
+            shoulder_selected = report.get('shoulder_probe', {}).get('checked_pairs', 0)
+            label = ('entry-shoulder pair probe; helix omitted' if shoulder_selected else
+                     'clearance-fitted anchor probe; helix omitted' if clearance_selected else
                      'tapered moving-anchor probe; helix omitted' if tapered_selected else
                      'moving-anchor straight probe; helix omitted' if repeat_anchored else
                      'section-anchored straight probe; helix omitted' if anchored_straight else
@@ -656,7 +702,10 @@ if __name__ == '__main__':
     parser.add_argument('--repeat-anchored-straights', type=int, default=0, help='check additional straights from live anchor stations')
     parser.add_argument('--tapered-anchor-probe', action='store_true', help='retry only the last round entry failures on identical stock')
     parser.add_argument('--clearance-anchor-probe', action='store_true', help='fit alternate leads from verified start intervals')
+    parser.add_argument('--shoulder-probe', action='store_true', help='clear an entry shoulder and retry the exact farther cut')
     args = parser.parse_args()
+    if args.shoulder_probe and (args.repeat_anchored_straights < 1 or args.clearance_anchor_probe or args.tapered_anchor_probe):
+        parser.error('shoulder probe requires moving anchors and excludes other lead probes')
     if args.clearance_anchor_probe and (args.repeat_anchored_straights < 1 or args.tapered_anchor_probe):
         parser.error('clearance probe requires moving anchors and excludes the tapered probe')
     if args.tapered_anchor_probe and args.repeat_anchored_straights < 1:
@@ -693,6 +742,6 @@ if __name__ == '__main__':
                               neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
                               anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
                               tapered_anchor_probe=args.tapered_anchor_probe,
-                              clearance_anchor_probe=args.clearance_anchor_probe) if cut_audit else
+                              clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

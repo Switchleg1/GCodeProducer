@@ -114,3 +114,6 @@
   of 1, 1.5 and 2 times the rejected turn's axial run on identical stock.
   Clearance-fitted leads sample interior positions on verified horizontal
   intervals 0.125–1.5 mm west of the body, at four trial run lengths.
+  The shoulder probe uses eligible anchor cuts as preparations and checks
+  the original rejected geometry from the new pose and stock. A preparation
+  is not substituted on its own if its paired retry fails.

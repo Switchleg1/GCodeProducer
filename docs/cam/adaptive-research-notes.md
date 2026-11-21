@@ -540,6 +540,10 @@ clearance, two fail link clearance and two still overload on entry.
 `--clearance-anchor-probe` uses verified horizontal start intervals.
 All 48 starts pass, six links fail, and the 42 linked variants still
 first exceed contact on entry. The accepted path is unchanged.
+`--shoulder-probe` instead checks the exact rejected paths after verified
+stock removal. Eight of 12 preparations unlock a retry. At 15 cuts the
+pair preview reaches X17.142 versus X17.092 with normal anchors, with
+8.348 versus 8.193 mm² removed. Clearance and contact gates are unchanged.
 
 ## Gate before another generator attempt
 
