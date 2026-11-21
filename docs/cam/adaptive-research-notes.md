@@ -499,6 +499,10 @@ below the shorter cuts; two fail sampled contact. Across 14 rounds with
 an eligible long cut, the best long candidates average 0.569 mm² removal,
 4.009 mm cut and 3.082 mm link, versus 0.849 mm², 3.070 mm and 1.712 mm
 for the selected short cuts on the same stock and pose.
+`--follow-straight-face` tests a parallel pass on the face left by the first
+straight. Its checked 1.50 mm body removes additional stock, but the whole
+pass removes 0.674 mm² over 5.959 mm, versus the greedy second cut's
+0.820 mm² over 4.495 mm. The opt-in review shows the parallel variant.
 
 ## Gate before another generator attempt
 

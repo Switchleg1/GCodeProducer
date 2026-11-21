@@ -91,3 +91,6 @@
   Long-versus-short means pair the best ranked long candidate with the
   selected cut in each round that offers a checked long candidate. They
   are not a comparison between complete paths at equal coverage.
+  The face probe preserves the stock-left direction and measures body
+  removal after subtracting the preceding lead sweep with polygon buffers.
+  The reported approximation is not an engagement or force estimate.

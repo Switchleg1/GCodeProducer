@@ -17,7 +17,8 @@ from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.check_hsm_neck import neck_fixture, write_opening_review, write_review_gcode
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
-from tools.hsm_front_corner import turned_straight_candidates
+from tools.hsm_front_choice import choose_front_cut
+from tools.hsm_front_corner import parallel_face_candidates, turned_straight_candidates
 from tools.hsm_front_run import run_front
 from tools.hsm_straight_front import fitted_front_candidates, straight_front_candidates
 
@@ -201,8 +202,10 @@ def cut_efficiency(choice):
             'removed_per_feed_mm': choice.removed_mm2/choice.travel_mm}
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if face_probe and (not turned_straights or not second or max_cuts is not None):
+        raise ValueError('face probe requires the two-cut turned-straight audit')
     if longer_straights and not turned_straights:
         raise ValueError('longer straights require turned straights')
     if live_focus and not (fitted_straights or turned_straights):
@@ -253,9 +256,9 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
 
     diagnostics = []
     budget = max_cuts if max_cuts is not None else 2 if second else 1
+    gates = dict(contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25, require_clear_exit=True)
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
-                                          contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
-                                          require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow,
+                                          diagnostics=diagnostics, propose_on_stall=propose_bow, **gates,
                                           on_outcome=note_outcome if longer_straights else None,
                                           on_ranked=note_ranked if longer_straights else None)
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
@@ -291,11 +294,32 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     if accepted:
         report['peak_contact_deg'] = max(c.peak_deg for c in accepted)
         choice = accepted[0]
+        preview = accepted
+        if face_probe:
+            live = choice.remaining
+            body = max(zip(choice.cut, choice.cut[1:]), key=lambda edge: math.dist(*edge))
+            a, b = choice.cut[-2:]
+            next_pose = b, tuple(y-x for x, y in zip(a, b))
+            component = connected_clearance(pocket, live, pose[0], radius)
+            counts = Counter()
+            following = choose_front_cut(pocket, live, next_pose, parallel_face_candidates(body, component), radius,
+                                         diagnostics=counts, **gates)
+            preview = [choice] if following is None else [choice, following]
+            audit = {'gates': dict(counts), 'prior_body_mm': math.dist(*body)}
+            if following is not None:
+                i = max(range(len(following.cut)-1), key=lambda k: math.dist(*following.cut[k:k+2]))
+                body_line = LineString(following.cut[i:i+2])
+                prefix = LineString(following.cut[:i+1]).buffer(radius, quad_segs=32)
+                body_stock = live.difference(prefix).intersection(body_line.buffer(radius, quad_segs=32)).area
+                audit.update(cut_efficiency(following), peak_deg=following.peak_deg,
+                             body_mm=body_line.length, approximate_body_removal_mm2=body_stock)
+            report['parallel_face_probe'] = audit
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            write_review_gcode(review, accepted, pose[0], 'cuts after modeled floor sweep; helix omitted')
+            label = 'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted'
+            write_review_gcode(review, preview, pose[0], label)
             write_opening_review(opening, pocket, stock, choice.link, choice.cut)
     return report
 
@@ -311,7 +335,10 @@ if __name__ == '__main__':
     parser.add_argument('--turned-straights', action='store_true', help='fit straight bodies with clearance-shaped turns')
     parser.add_argument('--live-seed-focus', action='store_true', help='extend fitted search with live seed clearance')
     parser.add_argument('--longer-straights', action='store_true', help='try longer bodies where the fit and clearance permit')
+    parser.add_argument('--follow-straight-face', action='store_true', help='probe a parallel continuation of the first straight')
     args = parser.parse_args()
+    if args.follow_straight_face and (not args.turned_straights or not args.second_cut or args.seed_cut_budget is not None):
+        parser.error('face probe requires --second-cut --turned-straights without a cut budget')
     if args.longer_straights and not args.turned_straights:
         parser.error('longer straights require turned straights')
     if args.live_seed_focus and not (args.fitted_straights or args.turned_straights):
@@ -325,6 +352,6 @@ if __name__ == '__main__':
         parser.error('select one audit; review output requires a cut audit')
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
-                              live_focus=args.live_seed_focus, longer_straights=args.longer_straights) if cut_audit else
+                              live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

@@ -135,6 +135,23 @@ def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None, 
                         yield path
 
 
+def parallel_face_candidates(body, clearance):
+    """Follow a previous straight body on its stock-left side, with tangent turns."""
+    a, b = body
+    length = math.dist(a, b)
+    if length < .75-1e-9 or clearance.is_empty:
+        return
+    ux, uy = ((end-start)/length for start, end in zip(a, b))
+    for advance in (.10, .20, .30):
+        for extension in (0., .125, .25):
+            straight = [(a[0]-uy*advance-ux*extension, a[1]+ux*advance-uy*extension),
+                        (b[0]-uy*advance+ux*extension, b[1]+ux*advance+uy*extension)]
+            for turn in (.4, .65):
+                path = roll_off(roll_on(straight, turn, .0025), turn, .0025)
+                if clearance.covers(Point(path[0])) and clearance.covers(Point(path[-1])):
+                    yield path
+
+
 def clearance_tapers(pocket, stock, path, radius, *, offset, run, chord_error):
     """Sample tapered joins whose starts lie in verified live clearance."""
     start, end = path[:2]
