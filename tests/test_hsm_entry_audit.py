@@ -52,11 +52,14 @@ def test_broader_front_handoff_uses_actual_floor_stock_without_fake_motion(tmp_p
 
 def test_sweep_followup_reports_a_same_state_control(tmp_path):
     report = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True,
-                             handoff_east_sweep=True, sweep_follow_budget=1, review=tmp_path / 'sweep.nc')
+                             handoff_east_sweep=True, sweep_follow_budget=1, followup_east_priority=True,
+                             review=tmp_path / 'sweep.nc')
     sweep = report['broader_front']['wide_east_sweep']
     assert sweep['control_followup']['cut_count'] == sweep['sweep_followup']['cut_count'] == 1
     assert sweep['preview_cut_count'] == 3
-    for key in ('control_followup', 'sweep_followup'):
+    east = sweep['east_priority_followup']
+    assert east['cut_count'] == 1 and east['east_x_mm'] >= sweep['control_followup']['east_x_mm']
+    for key in ('control_followup', 'sweep_followup', 'east_priority_followup'):
         trace = sweep[key]['trace']
         assert len(trace) == 1 and trace[0]['east_x_mm'] >= sweep[key]['start_east_x_mm']
     assert '(Cut 3: stock removal)' in (tmp_path / 'sweep.nc').read_text('ascii')

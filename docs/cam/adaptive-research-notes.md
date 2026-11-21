@@ -572,6 +572,10 @@ X17.902, removing 8.271 mm² over 54.46 mm, so it is not adopted.
 Per-cut traces show the control's entire advance comes from one cut;
 none of the eight cuts after the sweep moves the connected east edge.
 The efficiency ranking favors interior cuts once the front is reached.
+`--followup-east-priority` ranks verified candidates by connected east
+reach first. From the same 64-cut state it advances the edge in six of
+eight cuts, reaching X18.764 versus X18.052, but removes less stock
+(5.977 versus 7.171 mm²) over more feed (46.41 versus 38.63 mm).
 
 ## Gate before another generator attempt
 
