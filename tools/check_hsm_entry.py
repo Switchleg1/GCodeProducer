@@ -17,7 +17,7 @@ from tools.check_hsm_neck import neck_fixture, write_opening_review, write_revie
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_run import run_front
-from tools.hsm_straight_front import straight_front_candidates
+from tools.hsm_straight_front import fitted_front_candidates, straight_front_candidates
 
 
 def audit_entry(pocket, stock, points, radius, depth):
@@ -186,7 +186,7 @@ def seed_arc_candidates(centre, orbit, *, contact_zone=None):
             yield path
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False):
     """Check only the planar motion following the modeled helix floor sweep."""
     pocket, _ = neck_fixture()
     radius = 2.
@@ -197,8 +197,12 @@ def check_first_cut(*, review=None, second=False, max_cuts=None):
     pose = tuple(b), tuple(b-a)
     orbit = math.dist(a, b)
     stock = entry.remaining
+    focus = Point(pose[0]).buffer(orbit + radius + 1.5)
+
     def propose_straight(live, _pose):
-        return straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
+        yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
+        if fitted_straights:
+            yield from fitted_front_candidates(pocket, live, radius, focus=focus)
 
     def propose_bow(live, _pose):
         occupied = None if live is stock else live.buffer(radius, quad_segs=32)
@@ -212,6 +216,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None):
     report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose)),
               'entry_removed_mm2': pocket.area-stock.area, 'cut_count': len(accepted),
               'straight_cut_count': sum(len(c.cut) == 2 for c in accepted),
+              'straight_removed_mm2': sum(c.removed_mm2 for c in accepted if len(c.cut) == 2),
               'last_gates': diagnostics[-1] if diagnostics else {},
               'total_removed_mm2': stock.area-remaining.area,
               'connected_area_gain_mm2': connected_clearance(pocket, remaining, pose[0], radius).difference(
@@ -241,12 +246,16 @@ if __name__ == '__main__':
     parser.add_argument('--review-gcode', type=Path, help='save only checked planar first-cut geometry for review')
     parser.add_argument('--second-cut', action='store_true', help='also check a second cut on the updated stock')
     parser.add_argument('--seed-cut-budget', type=int, help='repeat checked live-front cuts up to this count')
+    parser.add_argument('--fitted-straights', action='store_true', help='also fit straight cuts across short stock edges')
     args = parser.parse_args()
     cut_audit = args.first_cut or args.second_cut or args.seed_cut_budget is not None
+    if args.fitted_straights and not cut_audit:
+        parser.error('fitted straights require a cut audit')
     if args.seed_cut_budget is not None and args.seed_cut_budget < 1:
         parser.error('seed cut budget must be positive')
     if (cut_audit and args.compare_pitch) or (args.review_gcode and not cut_audit):
         parser.error('select one audit; review output requires a cut audit')
-    result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget) if cut_audit else
+    result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
+                              fitted_straights=args.fitted_straights) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

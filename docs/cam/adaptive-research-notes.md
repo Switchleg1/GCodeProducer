@@ -475,7 +475,10 @@ boundary after cut one and checks from its actual end pose. It removes
 another 0.468 mm² at 51.67° sampled peak. `--seed-cut-budget 24` tries
 straight edges before live bows on every turn. It reaches the budget
 with 24 bows, no straight cuts, 8.246 mm² removed and 3.358 mm² of new
-seed-connected center clearance.
+seed-connected center clearance. `--fitted-straights` offers straight
+proposals across several short edges but checks them on original stock.
+All 24 initial starts are blocked; adding proposals does not change the
+24-cut review motion.
 
 ## Gate before another generator attempt
 

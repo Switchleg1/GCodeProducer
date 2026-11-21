@@ -64,6 +64,21 @@ def straight_front_candidates(pocket, stock, radius, immersion, *, min_edge, lea
                 yield points
 
 
+def fitted_front_candidates(pocket, stock, radius, *, focus=None):
+    """Fit straight proposals across short stock edges; replay against unsimplified stock."""
+    seen = set()
+    for tolerance in (.15, .30):
+        for edge in frontier_edges(pocket, stock.simplify(tolerance), focus=focus):
+            if edge in seen or math.dist(*edge) < 2.:
+                continue
+            seen.add(edge)
+            for immersion in (.10, .20):
+                for extension in (1.25, 2.):
+                    cut = straight_advance(pocket, edge, radius, immersion, lead=extension, runoff=extension)
+                    if cut is not None:
+                        yield cut
+
+
 def eased_front_bite(edge, radius, immersion, clearance, chord_error, *, ramp_fraction=.5):
     """Ease in and out of a stock-left edge, optionally holding full immersion between ramps."""
     if (not all(map(math.isfinite, (radius, immersion, clearance, chord_error)))
