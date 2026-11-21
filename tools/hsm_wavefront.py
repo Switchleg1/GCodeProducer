@@ -313,10 +313,11 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     return route
 
 
-def along_wall(rings, xy, part, overlap, *, limit=WALL_REACH):
+def along_wall(rings, xy, part, own, radius, overlap, *, limit=WALL_REACH):
     """Dense points from a wall point back along the wall until it is already clean, plus an overlap.
 
-    The wall counts as clean where the cutter centre can already sit on it.
+    The wall counts as clean where the cutter, sitting on it, would find no
+    more than a WALL_TOLERANCE skin of this island's stock.
     Returns None for a point that is not on the wall.
     """
     at = Point(xy)
@@ -332,7 +333,7 @@ def along_wall(rings, xy, part, overlap, *, limit=WALL_REACH):
 
     ways = (walk(1), walk(-1))
     way = min(ways, key=lambda pts: part.distance(Point(pts[min(4, len(pts)-1)])))
-    clean = (distance(part, points(way)) < LINK_TOLERANCE).tolist()
+    clean = [True]*len(way) if own.is_empty else (distance(own, points(way)) >= radius - WALL_TOLERANCE).tolist()
     keep = len(way)
     if any(clean):
         keep = min(len(way), clean.index(True) + 1 + math.ceil(overlap/(limit/steps)))
@@ -365,14 +366,15 @@ def turn_away(before, end, allowed, radius):
     return []
 
 
-def wall_ends(run, part, allowed, rings, blend, *, overlap=.75, corner=.5, turn=.75):
+def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, corner=.5, turn=.75):
     """Carry an arc to the wall, follow the wall back toward cleared ground, then turn into the pocket.
 
     The same shape in reverse starts the arc. An end that is not on the wall
     rolls on from or off to the old front instead.
     """
     # Reach back to wall the earlier peels already cleaned, so every stretch is passed along at least once.
-    lead, tail = along_wall(rings, run[0], part, overlap), along_wall(rings, run[-1], part, overlap)
+    lead = along_wall(rings, run[0], part, own, radius, overlap)
+    tail = along_wall(rings, run[-1], part, own, radius, overlap)
     path = eased(run, False, part, allowed, blend, ends=(lead is None, tail is None))
     if len(path) < 2:
         return path
@@ -454,7 +456,7 @@ def cut(path, stock, radius, sample_step):
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=None, placement='lobes', wall_pull_back=True, top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=False, top=0., depth=-2., lead_angle=2.5, time_budget=None):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -513,26 +515,37 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 while runs and not halt:
                     at = strokes[-1].points[-1] if strokes else centre
                     run, closed = runs.pop(min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0])))
-                    if wall_pull_back and not closed and zone is None:
-                        path = wall_ends(run, part, allowed, rings, blend)
+                    # Sweep the wall at the arc ends; only at the smallest stepover fall back to
+                    # rolling off before the wall, so a lighter cut gets to try the wall first.
+                    if wall_pull_back and not closed:
+                        shapes = [wall_ends(run, part, own, radius, allowed, rings, blend)]
+                        if level == len(stepovers)-1:
+                            shapes.append(eased(run, closed, part, allowed, blend))
                     else:
-                        path = eased(run, closed, part, allowed, blend)
-                    if len(path) < 2:
-                        continue
-                    pieces = cutting_pieces(path, stock, radius)
-                    if shared and pieces:
-                        points = [q for piece in pieces for q in piece]
-                        if sum(owner(q) == index for q in points) < len(points)/2:
-                            continue  # A neighbour finishes this stretch; do not advance through it.
-                    trial, done = stock, []
-                    for piece in pieces:
-                        peak, after = cut(piece, trial, radius, sample_step)
-                        if peak > limit:
-                            done = None
+                        shapes = [eased(run, closed, part, allowed, blend)]
+                    done, skip = None, False
+                    for path in shapes:
+                        if len(path) < 2:
+                            continue
+                        pieces = cutting_pieces(path, stock, radius)
+                        if shared and pieces:
+                            points = [q for piece in pieces for q in piece]
+                            if sum(owner(q) == index for q in points) < len(points)/2:
+                                skip = True  # A neighbour finishes this stretch; do not advance through it.
+                                break
+                        trial, done = stock, []
+                        for piece in pieces:
+                            peak, after = cut(piece, trial, radius, sample_step)
+                            if peak > limit:
+                                done = None
+                                break
+                            if trial.area - after.area >= MIN_GAIN_MM2:
+                                done.append((piece, peak))
+                            trial = after
+                        if done is not None:
                             break
-                        if trial.area - after.area >= MIN_GAIN_MM2:
-                            done.append((piece, peak))
-                        trial = after
+                    if skip:
+                        continue
                     if done is None:
                         failed.append(LineString(run))
                         continue
@@ -589,10 +602,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         any_blocked = any_blocked or blocked
         island_reports.append(island)
 
-    # Wall profile: follow the pocket wall where fronts rolled off before reaching it.
+    # Optional wall profile: follow the pocket wall to take whatever the arc ends left on it.
     profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.,
                'reachable_stock_before_mm2': stock.intersection(reachable).area}
-    for inset in (.3, 0.):
+    for inset in ((.3, 0.) if wall_profile else ()):
         for part in polygons(allowed.buffer(-inset) if inset else allowed):
             if part.area < 1e-6:
                 continue
@@ -646,7 +659,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
-              'wall_profile': profile,
+              'wall_profile': profile if wall_profile else None,
+              'reachable_stock_before_profile_mm2': profile['reachable_stock_before_mm2'],
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
               'peak_contact_deg': max((s.peak_deg for s in feeds), default=None),
@@ -705,12 +719,13 @@ if __name__ == '__main__':
                         help='one island per lobe, spread along the long axis, or the widest remaining spots')
     parser.add_argument('--no-wall-pull-back', action='store_true',
                         help='roll arcs off before the wall instead of following it back')
+    parser.add_argument('--wall-profile', action='store_true', help='finish with a pass along the pocket wall')
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
     args = parser.parse_args()
     fixture, _ = neck_fixture()
     result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement,
-                          wall_pull_back=not args.no_wall_pull_back, time_budget=args.time_budget,
+                          wall_pull_back=not args.no_wall_pull_back, wall_profile=args.wall_profile, time_budget=args.time_budget,
                           sample_step=args.sample_step)
     if args.review_gcode is not None:
         write_review(args.review_gcode, fixture, *result)

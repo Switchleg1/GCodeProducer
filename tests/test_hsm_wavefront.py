@@ -79,11 +79,12 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
 
 
 def test_wall_ends_follow_the_wall_back_to_clean_wall_plus_an_overlap():
-    allowed = box(0, 0, 10, 6)
+    pocket, allowed = box(-1, -1, 11, 7), box(0, 0, 10, 6)  # 1 mm cutter radius
     clear = box(0, 0, 4, 6)
+    own = pocket.difference(box(-1, -1, 5, 7))
     rings = [LineString(allowed.exterior.coords)]
     (run, closed), = fronts(clear, clear.buffer(.5).intersection(allowed), allowed.boundary)
-    path = wall_ends(run, clear, allowed, rings, 3.)
+    path = wall_ends(run, clear, own, 1., allowed, rings, 3.)
     assert allowed.covers(LineString(path)) and max(x for x, _ in path) == pytest.approx(4.5)
     assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
     top = [x for x, y in path if y > 6 - 1e-9]
@@ -91,11 +92,11 @@ def test_wall_ends_follow_the_wall_back_to_clean_wall_plus_an_overlap():
     # The wall is clean from x = 4 back, so the sweep stops 0.75 mm past it.
     assert min(top) == pytest.approx(3.25, abs=.15) and min(bottom) == pytest.approx(3.25, abs=.15)
     assert path[0][1] < 6. and path[-1][1] > 0.  # Both tips turn off the wall into the pocket.
-    # Wall skin left by earlier peels: only x <= 1 is clean, so the sweep reaches all the way back to it.
-    lagging = unary_union([box(0, 0, 1, 6), box(0, 1, 4, 5)])
-    far = wall_ends([(4.5, 6.), (4.5, 0.)], lagging, allowed, rings, 3.)
+    # A skin left on both walls back to x = 2: the sweep reaches all the way to clean wall.
+    skinned = pocket.difference(unary_union([box(-1, -1, 2, 7), box(-1, 0, 5, 6)]))
+    far = wall_ends(run, clear, skinned, 1., allowed, rings, 3.)
     assert min(x for x, y in far if y > 6 - 1e-9) < 1. and min(x for x, y in far if y < 1e-9) < 1.
-    plain = wall_ends([(4.5, 5.), (4.5, 1.)], clear, allowed, rings, 3.)
+    plain = wall_ends([(4.5, 5.), (4.5, 1.)], clear, own, 1., allowed, rings, 3.)
     assert all(0 < y < 6 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
 
 
@@ -126,8 +127,7 @@ def test_each_island_keeps_its_own_fronts_and_the_last_breaks_through():
     assert kinds[0] == 'spiral' and kinds.count('spiral') == 2
     second_spiral = kinds.index('spiral', 1)
     assert 'front' in kinds[1:second_spiral]  # The first island works its own ground before the lift.
-    if 'profile' in kinds:
-        assert kinds.index('profile') > max(i for i, kind in enumerate(kinds) if kind == 'front')
+    assert 'profile' not in kinds and report['wall_profile'] is None
     centre_x = [island['centre_xy_mm'][0] for island in report['islands']]
     for stroke in strokes[:[s.kind for s in strokes].index('spiral', 1)]:
         if stroke.kind == 'front':

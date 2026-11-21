@@ -643,3 +643,7 @@ pocket, and starts the same way in reverse (`--no-wall-pull-back` disables it). 
 The pull-back now runs until it reaches wall that earlier arcs already cleaned, rather than a fixed length, because
 arcs that meet a wall obliquely end several millimetres apart along it. That leaves 21.7 mm² for the profile pass,
 which then cuts 140 mm instead of 386 mm; 10.4 mm² remains at four corners where the contact limit refuses the wall.
+
+Arcs that exceed the limit are retried at smaller stepovers with the wall sweep kept; rolling off before the wall is a
+last resort at the smallest stepover. With that, the neck fixture finishes without a profile pass: 6.4 mm² of reachable
+stock left, 10,114 mm of cutting, 4,143 mm of links, 2 retracts. The profile pass is now opt-in (`--wall-profile`).

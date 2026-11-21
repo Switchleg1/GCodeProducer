@@ -146,3 +146,5 @@
   takes whatever remains. The wall profile uses a 0.3 mm inset pass, then the wall, in 8 mm stretches with 1.5 mm run-ins.
 - Wall pull-back follows the wall to the first point the cutter centre can already occupy, plus 0.75 mm, capped at 20 mm,
   with a 0.5 mm corner and a 0.75 mm turn off the wall; untuned.
+- A wall point counts as clean when this island's stock is at least the cutter radius minus 0.02 mm away. The wall
+  profile pass is off by default; the neck fixture is the only shape on which leaving it out has been measured.
