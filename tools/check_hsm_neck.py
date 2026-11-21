@@ -154,7 +154,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -164,6 +164,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
+    if section_small_retry and (not section_follow or probe_count):
+        raise ValueError('small retries require section following without terminal probes')
     if probe_count and (not section_follow or section_taper_entry):
         raise ValueError('terminal approach probes require untapered section following')
     if probe_count > 1:
@@ -285,6 +287,18 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
                                            on_profile=note_profile, taper_entry=section_taper_entry)
 
+    def propose_small_contours(live, _pose):
+        nonlocal entry_fraction
+        component = connected_clearance(pocket, live, seed[0], radius)
+        sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
+        try:
+            for entry_fraction in (.25, .4, .5):
+                yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
+                                               on_profile=note_profile, entry_fraction=entry_fraction,
+                                               advances=(.01, .02, .03, .04))
+        finally:
+            entry_fraction = .25
+
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
     def propose_waypoints(live, pose):
@@ -308,6 +322,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        priority_score=clearance_score if prioritize_clearance else None,
                                        lookahead_width=lookahead_width, lookahead_after=lookahead_after,
                                        propose_last_resort=propose_section_bites if section_bites_last else None,
+                                       propose_final_retry=propose_small_contours if section_small_retry else None,
                                        **gates)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
@@ -338,6 +353,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if section_small_retry:
+        report['small_retry_cuts'] = sum('final_retry_eligible' in row for row in diagnostics)
     if with_section_bites or section_bites_last:
         report['final_section_bite_spans'] = section_bite_spans(regions, clearance, search_west=section_search_west)
     if section_follow:
@@ -462,6 +479,8 @@ if __name__ == '__main__':
                         help='audit the nominal contact contour without extra advance at the baseline stall')
     parser.add_argument('--section-bracket-at-stall', action='store_true',
                         help='test intermediate advances independently on unchanged terminal stock')
+    parser.add_argument('--section-small-retry', action='store_true',
+                        help='try smaller contour advances only after standard cuts fail')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -483,7 +502,7 @@ if __name__ == '__main__':
                             section_taper_at_stall=args.section_taper_at_stall,
                             section_shallow_approach=args.section_shallow_approach,
                             section_nominal_at_stall=args.section_nominal_at_stall,
-                            section_bracket_at_stall=args.section_bracket_at_stall)
+                            section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

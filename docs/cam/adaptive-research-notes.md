@@ -405,6 +405,9 @@ passing probe removes only 4.07e-8 mm², negligible for coverage.
 without committing them. At 0.04 mm two of six pass all checks; the best
 removes 0.166 mm² at 56.49° peak sampled contact. At 0.05 mm all six fail
 contact. This brackets observed candidates, not a continuous limit.
+`--section-small-retry` checks smaller advances only after all standard
+families fail. It accepts six additional cuts and stalls at X27.792 with
+4,004.509 mm² reachable, unchanged 59.97° peak, and no passage to the probe.
 
 ## Gate before another generator attempt
 

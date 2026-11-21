@@ -48,7 +48,8 @@ def test_all_exposed_edges_clear_both_seeded_pads():
     assert max(c.peak_deg for c in choices) < 45.
 
 
-def test_last_resort_waits_for_both_existing_candidate_families():
+@pytest.mark.parametrize('use_final_retry', [False, True])
+def test_late_retries_wait_for_existing_candidate_families(use_final_retry):
     calls = []
 
     def primary(_stock, pose):
@@ -61,15 +62,21 @@ def test_last_resort_waits_for_both_existing_candidate_families():
 
     def last(_stock, _pose):
         calls.append('last')
+        return [] if use_final_retry else [[(13., 4.25), (19., 4.25)]]
+
+    def final(_stock, _pose):
+        calls.append('final')
         return [[(13., 4.25), (19., 4.25)]]
 
     diagnostics = []
     cuts, _, reason = run_front(POCKET, STOCK, SEED, primary, 1., max_cuts=2,
                                  contact_limit=60., sample_step=.05, link_handle=.5,
-                                 propose_on_stall=shallow, propose_last_resort=last, diagnostics=diagnostics)
-    assert calls == ['primary', 'primary', 'shallow', 'last']
+                                 propose_on_stall=shallow, propose_last_resort=last,
+                                 propose_final_retry=final, diagnostics=diagnostics)
+    assert calls == ['primary', 'primary', 'shallow', 'last'] + (['final'] if use_final_retry else [])
     assert [cut.cut[-1] for cut in cuts] == [(10., 4.25), (19., 4.25)]
-    assert diagnostics == [{'eligible': 1}, {'last_resort_eligible': 1}]
+    gate = 'final_retry_eligible' if use_final_retry else 'last_resort_eligible'
+    assert diagnostics == [{'eligible': 1}, {gate: 1}]
     assert reason == 'cut_budget'
 
 

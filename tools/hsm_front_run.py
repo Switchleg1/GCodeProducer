@@ -8,7 +8,7 @@ from tools.hsm_front_choice import choose_front_cut
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
               link_handle, link_margin=0., diagnostics=None, waypoints=(), propose_waypoints=None,
               propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0., priority_region=None,
-              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None):
+              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None, propose_final_retry=None):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
@@ -54,10 +54,13 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
             choice = select(propose, live, start, counts, speculative)
             if choice is None and propose_on_stall is not None and not counts['origin_clearance']:
                 choice = select(propose_on_stall, live, start, counts, speculative)
-            if choice is None and propose_last_resort is not None and not counts['origin_clearance']:
-                last_counts = Counter()
-                choice = select(propose_last_resort, live, start, last_counts, speculative)
-                counts.update({f'last_resort_{gate}': n for gate, n in last_counts.items()})
+            for prefix, factory in (('last_resort', propose_last_resort), ('final_retry', propose_final_retry)):
+                if choice is not None or counts['origin_clearance']:
+                    break
+                if factory is not None:
+                    retry_counts = Counter()
+                    choice = select(factory, live, start, retry_counts, speculative)
+                    counts.update({f'{prefix}_{gate}': n for gate, n in retry_counts.items()})
             return choice
 
         choice = select_round(stock, pose, counts)
