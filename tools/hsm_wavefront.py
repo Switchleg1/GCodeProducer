@@ -37,9 +37,14 @@ PROFILE_CHUNK = 8.  # mm of wall judged at a time
 GLANCE_TURN = 40.  # degrees turned over a hook's length; more means the arc is curling onto an old hook
 GLANCE_REACH = 6.  # mm of wall an arc may run on along before reaching clean wall
 GLANCE_ANGLE = 55.  # degrees; an arc meeting the wall more squarely than this gets a hook
+BOW_WIDTH_FACTOR = 2.6  # a channel narrower than this many full hook trims is crossed in one bow
+BOW_PARALLEL = 8.  # degrees; walls further from parallel than this get separate hooks
+HOOK_SHARE = .45  # share of the channel width each end of a bow may round
 MIN_HOOK_TRIM = .5  # mm; below this an arc end rolls off to the old front instead
 HOOK_SEARCH = 25.  # mm of arc searched back from the wall for a steady heading
 HOOK_RADIUS_FACTOR = 2.0  # hook radius at the wall, in cutter radii
+WALL_CORNER = 40.  # degrees of wall turning within CORNER_WINDOW that end a wall
+CORNER_WINDOW = 2.  # mm
 WALL_GAP = .8  # mm between cleared ground and the wall beyond which the wall is not followed
 NEAR_WALL = .3  # mm; an arc end this close to the wall is carried onto it
 WALL_REACH = 20.  # mm; farthest an arc end follows the wall back looking for clean wall
@@ -349,6 +354,13 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
     keep, spacing = len(way), limit/steps
     if any(clean):
         keep = min(len(way), max(clean.index(True) + 1 + math.ceil(overlap/spacing), math.ceil(at_least/spacing)))
+    # Stay on this wall: a corner leads onto a different wall, often into another arm full of stock.
+    headings = [math.atan2(b[1]-a[1], b[0]-a[0]) for a, b in zip(way, way[1:])]
+    window = max(1, round(CORNER_WINDOW/spacing))
+    for k in range(window, len(headings)):
+        if abs((headings[k]-headings[k-window]+math.pi) % (2*math.pi) - math.pi) > math.radians(WALL_CORNER):
+            keep = min(keep, k)
+            break
     gap = distance(part, points(way))
     deep = (gap > max(WALL_GAP, float(gap[0]) + .2)).tolist()
     if any(deep):
@@ -482,7 +494,63 @@ def glance_onto_wall(path, rings, part, own, radius, allowed, trim, overlap, tur
     return fillet(path, tail, 1., shares=(1/3, .6)) + turn_away(tail[-2], tail[-1], allowed, turn)
 
 
-def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, turn=.75, note=None):
+def bow_across(path, rings, part, own, radius, allowed, full, overlap, turn):
+    """In a narrow channel with near-parallel walls, cross it as one bow; None anywhere else.
+
+    The cut comes in along one wall, curves out across the channel through
+    the middle of the front at right angles to the walls, curves onto the
+    other wall tangentially and runs back along it toward cleared ground.
+    Every pass then has the same shape one stepover further on. Two separate
+    hooks on so short an arc are tight corners that dig in.
+    """
+    line = LineString(path)
+    if line.length < 1.:
+        return None
+    half = min(1., line.length/8)
+    mid = line.interpolate(line.length/2)
+    a, b = line.interpolate(line.length/2-half), line.interpolate(line.length/2+half)
+    span = math.dist((a.x, a.y), (b.x, b.y))
+    if not span:
+        return None
+    hx, hy = (b.x-a.x)/span, (b.y-a.y)/span
+    reach = line.length + 2*full
+
+    def hit(sign):
+        ray = LineString([(mid.x, mid.y), (mid.x + sign*hx*reach, mid.y + sign*hy*reach)])
+        best = None
+        for ring in rings:
+            for piece in get_parts(ray.intersection(ring)):
+                if piece.is_empty:
+                    continue
+                q = nearest_points(piece, mid)[0]
+                if q.distance(mid) > 1e-6 and (best is None or q.distance(mid) < best[0]):
+                    best = q.distance(mid), (q.x, q.y), ring
+        return best
+
+    def wall_heading(ring, xy):
+        at, total = ring.project(Point(xy)), ring.length
+        p, q = ring.interpolate((at-.5) % total), ring.interpolate((at+.5) % total)
+        return math.atan2(q.y-p.y, q.x-p.x)
+
+    ahead, behind = hit(1), hit(-1)
+    if ahead is None or behind is None:
+        return None
+    width = ahead[0] + behind[0]
+    skew = wall_heading(ahead[2], ahead[1]) - wall_heading(behind[2], behind[1])
+    if width > BOW_WIDTH_FACTOR*full or abs((skew + math.pi/2) % math.pi - math.pi/2) > math.radians(BOW_PARALLEL):
+        return None
+    trim = min(full, HOOK_SHARE*width)
+    tail = along_wall(rings, ahead[1], part, own, radius, overlap, at_least=trim+overlap)
+    lead = along_wall(rings, behind[1], part, own, radius, overlap, at_least=trim+overlap)
+    if tail is None or lead is None:
+        return None
+    body = fillet([behind[1], (mid.x, mid.y), ahead[1]], tail, trim, shares=(.5, .85))
+    body = fillet(lead[::-1], body, trim, shares=(.85, .5))
+    return (turn_away(lead[-2], lead[-1], allowed, turn)[::-1] + body
+            + turn_away(tail[-2], tail[-1], allowed, turn))
+
+
+def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, turn=.75, note=None, alternatives=None, bows=True):
     """Give an arc hooked ends that keep the wall clean at a steady cut.
 
     The arc curves round to meet the wall tangentially, heading back toward
@@ -502,6 +570,17 @@ def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, tur
         return path
     hooked = [False, False]
     shapes = ['roll', 'roll']
+    if bows and at_start and at_end:
+        bow = bow_across(path, rings, part, own, radius, allowed, trim, overlap, turn)
+        if bow is not None:
+            if note is not None:
+                note[:] = ['bow', 'bow']
+            if alternatives is not None:
+                # Separate hooks stay a fallback where the bow is too heavy, as at the mouth of an arm
+                # where the front is still curved from the spiral.
+                alternatives.append(wall_ends(run, part, own, radius, allowed, rings, blend,
+                                              overlap=overlap, turn=turn, bows=False))
+            return eased(bow, False, part, allowed, 1., ends=(True, True))
     for side, wanted in ((1, at_end), (0, at_start)):
         if not wanted:
             continue
@@ -670,8 +749,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     # Sweep the wall at the arc ends; only at the smallest stepover fall back to
                     # rolling off before the wall, so a lighter cut gets to try the wall first.
                     if wall_pull_back and not closed:
-                        ends = []
-                        shapes = [wall_ends(run, part, own, radius, allowed, rings, blend, note=ends)]
+                        ends, others = [], []
+                        shapes = [wall_ends(run, part, own, radius, allowed, rings, blend, note=ends, alternatives=others),
+                                  *others]
                         if level == len(stepovers)-1:
                             shapes.append(eased(run, closed, part, allowed, blend))
                     else:

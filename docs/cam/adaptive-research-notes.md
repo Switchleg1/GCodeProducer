@@ -621,9 +621,11 @@ shaped it, each prompted by reviewing a preview:
 | Retries keep the wall ends; near-wall ends are carried onto the wall | Skipped wall ends let the wall side stall and cuts bunch into knots | 1.3 mm² left, but many tiny stepovers |
 | Wide hooks onto the wall | A cutter driven square into the wall is wrapped by the corner it left | Small-stepover arcs 113 → 55 |
 | Shallow arrivals run on along the wall | Beside a spiral, hooks dug into stock (100–184°) | No arc at 0.2 mm or less; 9,912 mm cutting |
+| One bow across narrow parallel channels | In the 80×12 slot, two hooks on each short arc dug in (110°+) | Slot: arcs at 0.2 mm or less 176 → 11, cutting 3,672 → 2,771 mm |
 
-Two ideas were measured and not adopted. A neck bow — one curve per cut,
-tangent to both walls — held contact constant on a straight, parallel-walled
-strip but loaded up in the tapering neck of the fixture. A wide sweep across the
+Two ideas were measured and not adopted as first tried. A neck bow — one
+curve per cut, tangent to both walls — held contact constant on a straight,
+parallel-walled strip but loaded up in the tapering neck of the fixture; it is
+now used only where the walls are within 8° of parallel, which is where it helps. A wide sweep across the
 east front, from the candidate-picking work, removed more stock but advanced
 the front less than continuing normally.

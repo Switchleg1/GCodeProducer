@@ -37,7 +37,16 @@ the cut.
    reach the same ground, the island whose spiral edge is nearer takes it. The
    last island cuts through into space the earlier ones opened.
 6. **Ends at the wall.** A front that reaches the wall does not stop square
-   against it. Depending on the angle at which it arrives, it does one of three things:
+   against it. Depending on where it is and the angle at which it arrives, it
+   does one of four things:
+   - **Crosses as one bow** in a narrow channel whose walls are within 8° of
+     parallel and up to about 15 mm apart (for a 4 mm cutter): the cut comes
+     in along one wall, curves out across the channel at right angles to the
+     walls, curves onto the other wall tangentially and runs back along it.
+     Every pass is the last one moved on by a stepover. Two separate hooks
+     would be tight corners on so short an arc. Where the bow is too heavy,
+     as at the mouth of an arm while the front is still curved from the
+     spiral, separate hooks are tried instead.
    - **Runs on along the wall** if it arrives at a shallow angle, as beside a
      spiral.
    - **Hooks round** onto the wall if it arrives steeply: it continues its own
@@ -49,9 +58,10 @@ the cut.
    Either way, the end follows the wall back until it reaches wall that earlier
    cuts already cleaned, plus 0.75 mm of overlap. Every stretch of wall is
    therefore passed along at least once and no wall pass is needed afterwards.
-   The wall is not followed where the cleared area falls away from it; there
-   the stock beside the wall is too thick to take in passing. The start of each
-   cut mirrors its end.
+   The wall is not followed where the cleared area falls away from it, nor
+   round a corner onto another wall (more than 40° of turn within 2 mm),
+   which often leads into an arm still full of stock. The start of each cut
+   mirrors its end.
 7. **Stepover.** Each cut is replayed against the live stock and its contact
    angle is sampled every 0.1 mm. A cut over the contact limit (60° by default)
    is refused and retried at the next smaller stepover, near the failure only:
@@ -110,27 +120,32 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run.
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.2.
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts |
 |---|---|---|---|---|---|---|
 | Two-lobe neck fixture | 187 | 0 | 2.6 mm² | 9,912 mm | 3,884 mm | 2 |
 | Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 3,268 mm | 0 | 1 |
 | Rectangle 60×30 | 85 | 1 | 11.8 mm² | 4,124 mm | 1,709 mm | 2 |
-| L-shape | 158 | 22 | 7.8 mm² | 4,179 mm | 3,534 mm | 1 |
-| Cross | 200 | 20 | 10.5 mm² | 3,723 mm | 2,872 mm | 1 |
-| Slot 80×12 | 353 | 176 | 10.8 mm² | 3,672 mm | 2,843 mm | 2 |
-| Square with a 16 mm boss | 359 | 162 | 7.3 mm² | 7,527 mm | 11,524 mm | 1 |
+| L-shape | 143 | 10 | 8.3 mm² | 3,989 mm | 3,195 mm | 1 |
+| Cross | 177 | 7 | 15.5 mm² | 3,671 mm | 2,667 mm | 1 |
+| Slot 80×12 | 187 | 11 | 9.5 mm² | 2,771 mm | 1,497 mm | 2 |
+| Square with a 16 mm boss | 351 | 162 | 7.5 mm² | 7,433 mm | 10,908 mm | 1 |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
-contact is 39.6° and almost every front uses a 0.4–0.65 mm stepover. Open
-shapes hold an even peel. The narrow slot and the pocket with a boss do not,
-and the L-shape and cross spend nearly as long linking as cutting.
+contact is 39.6° and almost every front uses a 0.4–0.65 mm stepover. In the
+slot the bows settle at a 0.4 mm stepover with a steady 56° peak. All shapes
+except the pocket with a boss now hold an even peel; the L-shape and cross
+still spend most of their cutting distance again on links.
 
 ## Known gaps
 
-- **Narrow parallel channels** (the slot) and **pockets with a boss**: uneven
-  peel, many small stepovers.
+- **Pockets with a boss**: uneven peel and more link travel than cutting; the
+  single start sits in a corner and the fronts wrap both ways round the boss.
+- **Channels**: the first few bows after a spiral, the end of a channel, and
+  the join between two islands still drop to small stepovers.
+- **Hooks on wide straight walls** swing between about 47° and 66° from pass to
+  pass instead of holding steady; the contact check refuses the heavy passes.
 - **Link travel** is long on the L-shape and cross. Link corners are not
   rounded and links have no feed rate yet.
 - **Leftover stock** of a few square millimetres on most shapes is not yet

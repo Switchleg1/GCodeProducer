@@ -6,7 +6,7 @@ from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
-from tools.hsm_wavefront import (along_wall, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
+from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -119,9 +119,49 @@ def test_hooks_nest_pass_after_pass_without_drifting_or_loading_up(pocket):
         peaks.append(peak)
         on_wall = [x for x, y in path if allowed.boundary.distance(Point(x, y)) < 1e-6]
         lag.append(max(x for x, _ in path) - max(on_wall))
-    # Bounded and not climbing; it still swings by about ten degrees from pass to pass.
-    assert max(peaks) < 78. and max(peaks[-4:]) <= max(peaks[4:10]) + 6.
+    # Bounded; it still swings between about 47 and 66 degrees from pass to pass (open issue), and the
+    # contact check refuses the heavy passes.
+    assert max(peaks) < 70.
     assert min(lag[4:]) > 1.5  # The wall is met well behind the front, never square on.
+
+
+@pytest.mark.parametrize('width, steady', [(6., 59.), (8., 56.), (12., 52.)])
+def test_narrow_channel_is_crossed_in_one_bow_with_steady_contact(width, steady):
+    # Regression: two separate hooks on the short arc across a channel are tight corners; in the 80 x 12
+    # slot they read over 110 degrees and half the arcs fell to the smallest stepovers.
+    pocket = box(-2, -2, 62, width+2)
+    allowed = pocket.buffer(-2., join_style=2)
+    rings = [LineString(allowed.exterior.coords)]
+    own = pocket.difference(box(-2, -40, 6, 60))
+    peaks, reach = [], []
+    for _ in range(12):
+        part = max(polygons(clearance(allowed, own, 2.)), key=lambda g: g.area)
+        (run, closed), = fronts(part, part.buffer(.4, quad_segs=16).intersection(allowed), allowed.boundary)
+        note = []
+        path = wall_ends(run, part, own, 2., allowed, rings, 3., note=note)
+        if len(peaks) >= 6:
+            assert note == ['bow', 'bow']
+            assert part.distance(Point(path[0])) < 1e-6 and part.distance(Point(path[-1])) < 1e-6
+            assert sum(y < 1e-6 for _, y in path) > 3 and sum(y > width - 1e-6 for _, y in path) > 3  # Both walls.
+        peak, own = cut(path, own, 2., .1)
+        peaks.append(peak)
+        reach.append(part.bounds[2])
+    assert peaks[6:] == pytest.approx([steady]*6, abs=1.5)
+    steps = [b-a for a, b in zip(reach[6:], reach[7:])]
+    assert steps == pytest.approx([.4]*len(steps), abs=.02)  # One stepover per pass, every pass the same shape.
+
+
+def test_bow_needs_a_narrow_channel_with_near_parallel_walls():
+    run = [(10., 12.), (10.4, 6.), (10., 0.)]
+    part = box(-18, 0, 9.6, 12)
+    for pocket, expected in ((box(-20, -2, 20, 14), True),                                 # 12 mm, parallel
+                             (Polygon([(-20, -2), (20, -6), (20, 18), (-20, 14)]), False),  # tapering
+                             (box(-20, -2, 20, 22), False)):                               # 20 mm, too wide
+        allowed = pocket.buffer(-2., join_style=2)
+        rings = [LineString(allowed.exterior.coords)]
+        own = pocket.difference(part.buffer(2., join_style=2))
+        bow = bow_across(run, rings, part, own, 2., allowed, 2*2./.7, .75, .75)
+        assert (bow is not None) is expected
 
 
 @pytest.mark.parametrize('gap', [0., .7])

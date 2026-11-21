@@ -155,3 +155,6 @@
 - An arc runs on along the wall instead of hooking when it meets it within 55°, has turned no more than 40° over a
   hook's length, and clean wall (or the cleared area's nearest approach) is within 6 mm. The wall is not followed where
   cleared ground is more than 0.8 mm from it. All untuned beyond the neck fixture and the strip and disc tests.
+- A channel is crossed in one bow when it is at most 2.6 full hook trims wide and its walls are within 8° of parallel;
+  each end of the bow rounds 45% of the channel width. The wall is not followed past 40° of turning within 2 mm.
+  Both untuned beyond the seven test shapes.

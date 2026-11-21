@@ -5,8 +5,8 @@
 ## Current state (0.2.2)
 
 - The replacement under trial is the wavefront (`tools/hsm_wavefront.py`, guide `docs/cam/wavefront-clearing.md`). It is not wired into the application; Adaptive in the app still runs the old generator.
-- Two-lobe fixture: 187 arcs, none at 0.2 mm stepover or less, 9,912 mm cutting, 3,884 mm links, 2 lifts, 2.6 mm² reachable stock left, mean/peak contact 39.6°/59.99°. Circle, rectangle, L-shape and cross are even. Slot (176 of 353 arcs at 0.2 mm or less) and square with a boss (162 of 359) are not.
-- Working on: the slot. Then the boss, link travel on the L-shape and cross, link corners and feed, Z motion.
+- Arcs at 0.2 mm stepover or less / front arcs: two-lobe fixture 0/187, circle 0/0, rectangle 1/85, L-shape 10/143, cross 7/177, slot 11/187, square with a boss 162/351. Results table in the guide.
+- Next: the pocket with a boss; then link travel on the L-shape and cross, the first bows after a spiral, channel ends and island joins, the hook swing on wide walls, link corners and feed, Z motion.
 
 ## Log
 
@@ -174,3 +174,4 @@
   - square with a 16 mm boss: 359 / 162 / 7.3 / 7,527 / 11,524 (`blocked`; one start in a corner, fronts wrap the boss)
   Peak 60.0° or under on all. Open shapes hold an even peel; a narrow parallel channel and a pocket with a boss do not. Previews `shape-*-INCOMPLETE-review.{nc,svg}`.
 - Next: the narrow parallel channel (retry the bow there, where it measured best), then pockets with a boss (starts and hand-over around the boss), sharp inside corners, link travel on the L and cross, link corners and link feed. Re-test three islands with each island finishing its own lobe.
+- Slot fixed with a bow across narrow channels: in a channel up to 2.6 full hook trims wide (about 15 mm for a 4 mm cutter) whose walls are within 8° of parallel, the cut comes in along one wall, crosses at right angles through the front's middle, curves onto the other wall tangentially and runs back along it; separate hooks remain a fallback tried on the same pass. On parallel strips 6/8/12 mm wide, contact is constant pass to pass (59°/56°/52° at 0.4 mm) and every pass advances exactly one stepover. `along_wall` also stops at a wall corner (40° within 2 mm), so wall ends no longer run round into a neighbouring arm. Slot: arcs at 0.2 mm or less 176 → 11, cutting 3,672 → 2,771 mm, links 2,843 → 1,497 mm, 17–32 s instead of 80 s. Cross 20 → 7, L-shape 22 → 10; other shapes and the two-lobe fixture unchanged; boss unchanged. A bow moved back from a still-curved front was tried and made no difference, so it was removed. The 20 mm strip regression test now only bounds the hook contact (it swings 47–66° pass to pass); that swing predates this change. Previews `shape-*-v2-INCOMPLETE-review.{nc,svg}` and `wavefront-v2-INCOMPLETE-review.{nc,svg}`.
