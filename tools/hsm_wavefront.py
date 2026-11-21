@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
-from shapely import get_parts, prepare, segmentize
+from shapely import distance, get_parts, points, prepare, segmentize
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polylabel, substring, unary_union
@@ -29,14 +29,16 @@ from tools.hsm_replay_overlay import write_overlay
 
 STEPOVERS = (1., .8, .65, .5, .4, .3, .2, .12)
 SWEEP_SEGMENTS = 16
+CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true disc
 WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
+PROFILE_CHUNK = 8.  # mm of wall judged at a time
 LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
 
 
 class Stroke(NamedTuple):
-    kind: str  # 'spiral' or 'front' cut, or a stay-down 'link' through cleared area
+    kind: str  # 'spiral', 'front' or wall 'profile' cut, or a stay-down 'link' through cleared area
     points: list
     stepover_mm: float
     peak_deg: float
@@ -229,7 +231,7 @@ def fronts(clear, grown, wall, *, zone=None):
     return long or [(run, closed) for run, closed in runs if LineString(run).length >= .3]
 
 
-def eased(run, closed, clear, allowed, blend):
+def eased(run, closed, clear, allowed, blend, *, ends=(True, True)):
     """Roll on from the old front and roll off back to it; closed rings overlap their start."""
     line = LineString(run)
     reach = min(blend, line.length/3)
@@ -242,7 +244,8 @@ def eased(run, closed, clear, allowed, blend):
     for i, q in enumerate(dense):
         if i:
             travelled += math.dist(dense[i-1], q)
-        t = min(travelled, total-travelled)/reach if reach else 1.
+        near = min(travelled if ends[0] else math.inf, total-travelled if ends[1] else math.inf)
+        t = near/reach if reach else 1.
         if t < 1.:
             w = max(0., t*t*(3-2*t))
             n = nearest_points(clear, Point(q))[0]
@@ -309,6 +312,56 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     return route
 
 
+def sweep(path, stock, radius):
+    """Remove the cutter's swept area without measuring contact."""
+    return stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS))
+
+
+def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
+    """Keep the stretches of a dense path that touch stock, with a short run in and out through air."""
+    if stock.is_empty or len(path) < 2:
+        return []
+    touching = (distance(stock, points([tuple(q) for q in path])) < radius - 1e-6).tolist()
+    if not any(touching):
+        return []
+    if closed and not all(touching):
+        # Start in the middle of the longest stretch of air so no piece straddles the seam.
+        n, best, i = len(path)-1, (0, 0), 0
+        while i < n:
+            if touching[i]:
+                i += 1
+                continue
+            j = i
+            while j-i < n and not touching[(j+1) % n]:
+                j += 1
+            best = max(best, (j-i+1, i))
+            i = j+1
+        first = (best[1] + best[0]//2) % n
+        path, touching = path[first:] + path[1:first+1], touching[first:] + touching[1:first+1]
+    along = [0.]
+    for a, b in zip(path, path[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    spans, i = [], 0
+    while i < len(path):
+        if touching[i]:
+            j = i
+            while j+1 < len(path) and touching[j+1]:
+                j += 1
+            lo, hi = along[i]-run_out, along[j]+run_out
+            if spans and lo <= spans[-1][1]:
+                spans[-1][1] = hi
+            else:
+                spans.append([lo, hi])
+            i = j
+        i += 1
+    pieces = []
+    for lo, hi in spans:
+        piece = [q for q, d in zip(path, along) if lo <= d <= hi]
+        if len(piece) > 1 and LineString(piece).length >= .3:
+            pieces.append(piece)
+    return pieces
+
+
 def cut(path, stock, radius, sample_step):
     """Sampled peak contact and updated stock; chunked so each replay stays local."""
     peak, chunk, length = 0., [path[0]], 0.
@@ -321,7 +374,7 @@ def cut(path, stock, radius, sample_step):
             local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
             for _, angle, _ in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
                 peak = max(peak, angle)
-            stock = stock.difference(LineString(chunk).buffer(radius, quad_segs=SWEEP_SEGMENTS))
+            stock = stock.difference(LineString(chunk).buffer(radius, quad_segs=CUT_SEGMENTS))
             chunk, length = [path[i]], 0.
     return peak, stock
 
@@ -356,15 +409,87 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     def out_of_time():
         return time_budget is not None and time.time()-started > time_budget
 
-    for centre, room in choose_seeds(allowed, islands, min_radius=radius, placement=placement):
-        entry = seed_entry(Point(centre).buffer(room), stock, radius=radius, top=top, depth=depth,
-                           lead_angle=lead_angle)
-        if entry is None:
+    seeds = choose_seeds(allowed, islands, min_radius=radius, placement=placement)
+
+    def owner(xy):
+        """Island whose spiral disc is nearest; decides who finishes shared ground."""
+        return min(range(len(seeds)), key=lambda k: math.dist(xy, seeds[k][0]) - seeds[k][1])
+
+    def wave(index, centre, own, shared):
+        """Grow one island as if it were alone, cutting only where real stock remains.
+
+        own is the stock this island would see by itself; it keeps the fronts
+        concentric when they reach space another island has opened. A shared
+        island leaves arcs that mostly belong to a neighbour for that neighbour.
+        """
+        nonlocal stock
+        start, passes, arcs, blocked = 0, 0, 0, False
+        while not out_of_time():
+            parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
+            if not parts:
+                break
+            part = min(parts, key=lambda g: g.distance(Point(centre)))
+            progressed, used, zone, blocked = False, None, None, False
+            for level in range(start, len(stepovers)):
+                stepover = stepovers[level]
+                grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
+                runs = fronts(part, grown, wall, zone=zone)
+                failed, halt = [], False
+                while runs and not halt:
+                    at = strokes[-1].points[-1] if strokes else centre
+                    run, closed = runs.pop(min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0])))
+                    path = eased(run, closed, part, allowed, blend)
+                    if len(path) < 2:
+                        continue
+                    pieces = cutting_pieces(path, stock, radius)
+                    if shared and pieces:
+                        points = [q for piece in pieces for q in piece]
+                        if sum(owner(q) == index for q in points) < len(points)/2:
+                            continue  # A neighbour finishes this stretch; do not advance through it.
+                    trial, done = stock, []
+                    for piece in pieces:
+                        peak, after = cut(piece, trial, radius, sample_step)
+                        if peak > limit:
+                            done = None
+                            break
+                        if trial.area - after.area >= MIN_GAIN_MM2:
+                            done.append((piece, peak))
+                        trial = after
+                    if done is None:
+                        failed.append(LineString(run))
+                        continue
+                    for piece, peak in done:
+                        commit('front', piece, stepover, peak)
+                    stock = trial
+                    own = sweep(path, own, radius)
+                    progressed = True
+                    if done:
+                        arcs += len(done)
+                        used = level if used is None else used
+                        halt = zone is None  # Stay with this stretch of front; the others wait their turn.
+                blocked = bool(failed)
+                if not failed or out_of_time():
+                    break
+                zone = unary_union(failed).buffer(max(1., 2*stepover))
+                parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
+                part = min(parts, key=lambda g: g.distance(Point(centre)))
+            if not progressed:
+                break
+            passes += used is not None
+            start = max(0, (start if used is None else used)-1)
+        return passes, arcs, blocked
+
+    front_passes, any_blocked = 0, False
+    for index, (centre, room) in enumerate(seeds):
+        region = Point(centre).buffer(room)
+        entry = seed_entry(region, stock, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
+        alone = seed_entry(region, pocket, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
+        if entry is None or alone is None:
             continue
         centre = tuple(entry.points[-1, :2])
-        stock = entry.remaining
-        reach = centre_room = Point(centre).distance(wall) - 1e-3
-        island = {'centre_xy_mm': centre, 'radius_mm': centre_room, 'entry_removed_mm2': None}
+        stock, own = entry.remaining, alone.remaining
+        reach = Point(centre).distance(wall) - 1e-3
+        island = {'centre_xy_mm': centre, 'radius_mm': reach}
         chosen = None
         for stepover in stepovers:
             probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
@@ -378,75 +503,62 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                           accepted=peak <= limit)
             if peak <= limit:
                 commit('spiral', path, chosen, peak)
-                stock = trial
+                stock, own = trial, sweep(path, own, radius)
+        # Every island but the last leaves shared ground to its neighbour; the last one cleans up.
+        passes, arcs, blocked = wave(index, centre, own, shared=index < len(seeds)-1)
+        island.update(front_passes=passes, front_arcs=arcs)
+        front_passes += passes
+        any_blocked = any_blocked or blocked
         island_reports.append(island)
 
-    def here(parts):
-        """Cleared parts, the one holding the cutter first."""
-        parts = [g for g in polygons(parts) if g.area > 1e-6]
-        if not strokes:
-            return parts
-        at = Point(strokes[-1].points[-1])
-        return sorted(parts, key=lambda g: g.distance(at))
+    # Wall profile: follow the pocket wall where fronts rolled off before reaching it.
+    profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.}
+    for inset in (.3, 0.):
+        for part in polygons(allowed.buffer(-inset) if inset else allowed):
+            if part.area < 1e-6:
+                continue
+            part = orient(part, sign=-1.)
+            for ring in (part.exterior, *part.interiors):
+                dense = list(segmentize(LineString(ring.coords), .1).coords)
+                for whole in cutting_pieces(dense, stock, radius, run_out=1.5, closed=True):
+                    # Judge the wall in short stretches so one tight spot does not refuse the rest.
+                    chunks, chunk, length = [], [whole[0]], 0.
+                    for q in whole[1:]:
+                        length += math.dist(chunk[-1], q)
+                        chunk.append(q)
+                        if length >= PROFILE_CHUNK:
+                            chunks.append(chunk)
+                            chunk, length = [q], 0.
+                    if len(chunk) > 1:
+                        chunks.append(chunk)
+                    restart = False
+                    for piece in chunks:
+                        if restart:
+                            # The stretch before was refused, so roll on from cleared space again.
+                            piece = eased(piece, False, clearance(allowed, stock, radius), allowed, 1.5,
+                                          ends=(True, False))
+                            if len(piece) < 2:
+                                continue
+                        peak, trial = cut(piece, stock, radius, sample_step)
+                        if stock.area - trial.area < MIN_GAIN_MM2:
+                            continue
+                        if peak > limit:
+                            profile['over_limit'] += 1
+                            profile['refused_mm'] += LineString(piece).length
+                            restart = True
+                            continue
+                        restart = False
+                        last = strokes[-1] if strokes else None
+                        if last is not None and last.kind == 'profile' and last.points[-1] == piece[0]                                 and last.stepover_mm == inset:
+                            strokes[-1] = Stroke('profile', last.points + piece[1:], inset, max(last.peak_deg, peak))
+                        else:
+                            commit('profile', piece, inset, peak)
+                            profile['pieces'] += 1
+                        stock = trial
+                        profile['feed_mm'] += LineString(piece).length
 
-    def advance(part, start):
-        """Grow one cleared part by a pass; return (lowest stepover index used, anything tried)."""
-        nonlocal stock
-        used, tried, zone = None, False, None
-        for index in range(start, len(stepovers)):
-            stepover = stepovers[index]
-            grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
-            runs = fronts(part, grown, wall, zone=zone)
-            failed = []
-            while runs:
-                at = strokes[-1].points[-1] if strokes else runs[0][0][0]
-                best = min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0]))
-                run, closed = runs.pop(best)
-                path = eased(run, closed, part, allowed, blend)
-                if len(path) < 2:
-                    continue
-                peak, trial = cut(path, stock, radius, sample_step)
-                if stock.area - trial.area < MIN_GAIN_MM2:
-                    continue
-                tried = True
-                if peak <= limit:
-                    commit('front', path, stepover, peak)
-                    stock = trial
-                    used = index if used is None else used
-                    if zone is None:
-                        break  # Stay with this stretch of front; the others wait their turn.
-                else:
-                    failed.append(LineString(run))
-            if not failed or out_of_time():
-                break
-            zone = unary_union(failed).buffer(max(1., 2*stepover))
-            grown_part = [g for g in here(clearance(allowed, stock, radius)) if g.intersects(part)]
-            if not grown_part:
-                break
-            part = max(grown_part, key=lambda g: g.intersection(part).area)
-        return used, tried
-
-    stop, start, passes = 'front_exhausted', 0, 0
-    while True:
-        if out_of_time():
-            stop = 'time_budget'
-            break
-        used, attempted = None, False
-        # Finish the island under the cutter before retracting to another one.
-        for part in here(clearance(allowed, stock, radius)):
-            for first in dict.fromkeys((start, 0)):
-                used, tried = advance(part, first)
-                attempted = attempted or tried
-                if used is not None:
-                    break
-            if used is not None:
-                break
-        if used is None:
-            stop = 'blocked' if attempted else 'front_exhausted'
-            break
-        passes += 1
-        start = max(0, used-1)
-
+    stop = 'time_budget' if out_of_time() else 'blocked' if any_blocked or profile['over_limit'] else 'front_exhausted'
+    passes = front_passes
     residual = stock.intersection(reachable)
     total = pocket.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
@@ -455,6 +567,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
+              'wall_profile': profile,
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
               'peak_contact_deg': max((s.peak_deg for s in feeds), default=None),

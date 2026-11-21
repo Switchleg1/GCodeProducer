@@ -6,7 +6,7 @@ from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
-from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, eased, find_lobes, fronts, spiral_out,
+from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, cutting_pieces, eased, find_lobes, fronts, spiral_out,
                                  stay_down_link, write_review)
 
 
@@ -76,6 +76,42 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
     assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
     assert max(x for x, _ in path) == pytest.approx(4.5)
     assert allowed.covers(LineString(path))
+
+
+def test_cutting_pieces_drop_air_and_keep_a_short_run_in_and_out():
+    path = [(x/10, 0.) for x in range(0, 201)]
+    stock = box(5, .5, 9, 3).union(box(14, .5, 16, 3))
+    first, second = cutting_pieces(path, stock, 1.)
+    assert first[0][0] == pytest.approx(3.2, abs=.11) and first[-1][0] == pytest.approx(10.8, abs=.11)
+    assert second[0][0] == pytest.approx(12.2, abs=.11) and second[-1][0] == pytest.approx(17.8, abs=.11)
+    joined, = cutting_pieces(path, stock, 1., run_out=2.)
+    assert joined[0][0] < 3.5 and joined[-1][0] > 17.5
+    assert cutting_pieces(path, box(5, 1.5, 9, 3), 1.) == []
+    ring = [(0., 0.), (4., 0.), (4., 4.), (0., 4.), (0., 0.)]
+    dense = [(x/10, 0.) for x in range(40)] + [(4., y/10) for y in range(40)] +             [(4-x/10, 4.) for x in range(40)] + [(0., 4-y/10) for y in range(41)]
+    wrapped, = cutting_pieces(dense, Point(0., 0.).buffer(1.5), 1., closed=True, run_out=.5)
+    assert len(ring) == 5 and LineString(wrapped).length == pytest.approx(6., abs=.3)  # One piece across the seam.
+
+
+def test_each_island_keeps_its_own_fronts_and_the_last_breaks_through():
+    pocket = unary_union([box(0, 0, 14, 12), box(13, 3, 23, 9), box(22, 0, 36, 12)])
+    strokes, residual, report = clear_pocket(pocket, 2., sample_step=.3)
+    first, last = report['islands']
+    assert first['front_arcs'] > 0 and last['front_arcs'] > 0
+    assert report['retract_rapids'] == 2
+    assert report['retract_reasons'] == {'separate_cleared_areas': 1, 'first_cut': 1}
+    assert report['peak_contact_deg'] <= 60. and report['cleared_fraction'] > .93
+    kinds = [stroke.kind for stroke in strokes if stroke.kind != 'link']
+    assert kinds[0] == 'spiral' and kinds.count('spiral') == 2
+    second_spiral = kinds.index('spiral', 1)
+    assert 'front' in kinds[1:second_spiral]  # The first island works its own ground before the lift.
+    if 'profile' in kinds:
+        assert kinds.index('profile') > max(i for i, kind in enumerate(kinds) if kind == 'front')
+    centre_x = [island['centre_xy_mm'][0] for island in report['islands']]
+    for stroke in strokes[:[s.kind for s in strokes].index('spiral', 1)]:
+        if stroke.kind == 'front':
+            xs = [x for x, _ in stroke.points]
+            assert abs(sum(xs)/len(xs) - centre_x[0]) < abs(sum(xs)/len(xs) - centre_x[1])
 
 
 def test_stay_down_link_routes_round_stock_and_refuses_what_it_cannot_check():

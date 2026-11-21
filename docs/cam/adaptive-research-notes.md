@@ -628,3 +628,9 @@ Cuts are joined by stay-down links through space the cutter has already cleared,
 retract is used only where no such route exists: on the neck fixture that is the first cut and the move from the
 first island to the second (226 links, 2 retracts). Links add 4,903 mm of travel in cleared space to 9,981 mm of
 cutting, because each one-way arc is followed by a return along the front.
+
+Each island now grows as if it were alone in the pocket and cuts only where real stock remains, so fronts stay
+concentric where two islands meet instead of wrapping around the neighbour's cleared disc. The last island's fronts
+break through into the space the earlier ones opened. A wall profile pass then follows the pocket wall to remove what
+the rolled-off arc ends left. On the neck fixture: 2 retracts, 10,145 mm of cutting, 4,352 mm of links, 59.91°
+peak sampled contact and 19.9 mm² of reachable stock left at four corners where the profile exceeded the limit.

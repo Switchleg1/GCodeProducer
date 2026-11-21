@@ -141,3 +141,6 @@
   shrink that separated it. The 2:1 neck ratio and the 2:1 length rule for two islands in one lobe are untuned choices.
 - Stay-down links accept endpoints within 0.001 mm of the cleared-centre region and must keep the path at least the
   cutter radius minus 0.005 mm from live stock. Links are planar feed moves at cut depth; their feed rate is undecided.
+- Each island's fronts are generated against the stock that island alone would have left, then trimmed to real stock with
+  a 1 mm run in and out through air. Shared ground goes to the island whose spiral disc edge is nearest; the last island
+  takes whatever remains. The wall profile uses a 0.3 mm inset pass, then the wall, in 8 mm stretches with 1.5 mm run-ins.
