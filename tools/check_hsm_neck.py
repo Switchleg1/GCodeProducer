@@ -106,7 +106,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False, taper_only=False, entry_fraction=.25, advances=(.05, .10, .15)):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False, taper_only=False, entry_fraction=.25, advances=(.05, .10, .15), ray_length=1.5):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -119,7 +119,7 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
             for i in range(count+1):
                 t = i/count
                 y = high + (low-high)*t
-                hit = LineString([(x, y), (x+1.5, y)]).intersection(occupied)
+                hit = LineString([(x, y), (x+ray_length, y)]).intersection(occupied)
                 if hit.is_empty:
                     if audit is None:
                         break
@@ -149,7 +149,7 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                         yield retreat
 
 
-def small_section_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None):
+def small_section_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, ray_length=1.5):
     """Generate the small-advance retries, optionally auditing each entry shape."""
     for fraction in (.25, .4, .5):
         profiles = [] if audit is not None else None
@@ -157,7 +157,7 @@ def small_section_cuts(sections, stock, radius, *, turn_exits=False, audit=None,
         emitted = 0
         for path in section_follow_cuts(sections, stock, radius, turn_exits=turn_exits,
                                         on_profile=note, audit=profiles, entry_fraction=fraction,
-                                        advances=(.01, .02, .03, .04)):
+                                        advances=(.01, .02, .03, .04), ray_length=ray_length):
             emitted += 1
             yield path
         if audit is not None:
@@ -169,7 +169,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -179,6 +179,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
+    if section_ray_probe and not section_small_retry:
+        raise ValueError('ray probe requires small section retries')
     if section_small_retry and (not section_follow or probe_count):
         raise ValueError('small retries require section following without terminal probes')
     if probe_count and (not section_follow or section_taper_entry):
@@ -377,6 +379,20 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         audit = []
         count = sum(1 for _ in small_section_cuts(sections, remaining, radius, turn_exits=section_turn_exits, audit=audit))
         report['final_small_retry'] = {'proposal_count': count, 'entry_shapes': audit}
+        if section_ray_probe:
+            pose = last_xy, last_heading
+            routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
+            trials = []
+            for length in (1.55, 1.65, 1.8):
+                audit, counts = [], Counter()
+                candidates = small_section_cuts(sections, remaining, radius, turn_exits=section_turn_exits,
+                                                audit=audit, ray_length=length)
+                choice = choose_front_cut(pocket, remaining, pose, candidates, radius, waypoints=routes,
+                                          diagnostics=counts, priority_score=lambda live: -live.area, **gates)
+                trials.append({'ray_length_mm': length, 'entry_shapes': audit, 'gates': dict(counts),
+                               'best_removed_mm2': None if choice is None else choice.removed_mm2,
+                               'best_peak_deg': None if choice is None else choice.peak_deg})
+            report['terminal_ray_probe'] = trials
     if probe_count and reason == 'stalled':
         pose = last_xy, last_heading
         routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
@@ -493,6 +509,8 @@ if __name__ == '__main__':
                         help='test intermediate advances independently on unchanged terminal stock')
     parser.add_argument('--section-small-retry', action='store_true',
                         help='try smaller contour advances only after standard cuts fail')
+    parser.add_argument('--section-ray-probe', action='store_true',
+                        help='audit longer rays at the small-retry stall without committing cuts')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -514,7 +532,8 @@ if __name__ == '__main__':
                             section_taper_at_stall=args.section_taper_at_stall,
                             section_shallow_approach=args.section_shallow_approach,
                             section_nominal_at_stall=args.section_nominal_at_stall,
-                            section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry)
+                            section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
+                            section_ray_probe=args.section_ray_probe)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

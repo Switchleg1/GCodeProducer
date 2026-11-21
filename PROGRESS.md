@@ -82,4 +82,5 @@
 - `--section-bracket-at-stall` tests 0.01–0.05 mm advances independently on unchanged terminal stock. At 0.04 mm two of six pass, with best removal 0.166 mm² at 56.49° peak; at 0.05 mm none passes. No cut is committed.
 - `--section-small-retry` accepts six checked small-advance contours after the 79-cut baseline; the new stall is cut 85 at X27.792 with 4,004.509 mm² reachable. Peak remains 59.97°; no final retry reaches a motion gate.
 - `final_small_retry` confirms the 85-cut stall has an eligible 1.582 mm span at X26.230, but two of 11 contact rays miss at Y22.904 and Y22.785. The longest successful ray is 1.496 mm against a 1.5 mm cap; no retry is generated.
-- Next: probe modestly longer rays on the unchanged stall before accepting a longer search in the runner. Completion gates are in `GOAL.md`.
+- `--section-ray-probe` on the unchanged 85-cut stall: 1.55 mm still misses one row; 1.65 and 1.8 mm both recover 18 eligible candidates, with best removal 0.0632 mm² at 54.09° peak. No cut is committed.
+- Next: allow a bounded extension only if small retries emit no candidates due to missed rays, and measure connected progress. Completion gates are in `GOAL.md`.

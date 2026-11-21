@@ -39,3 +39,5 @@
   reaching full advance halfway through; they do not model cutting forces.
   The terminal approach probe instead stretches the entire entry blend to
   40% or 50% of the span, leaving the exit unchanged.
+  The longer-ray audit uses 1.55, 1.65 and 1.8 mm as bounded fixture probes;
+  it commits no cuts and does not relax any motion gate.

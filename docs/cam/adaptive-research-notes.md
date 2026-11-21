@@ -410,6 +410,9 @@ families fail. It accepts six additional cuts and stalls at X27.792 with
 4,004.509 mm² reachable, unchanged 59.97° peak, and no passage to the probe.
 `final_small_retry` finds an eligible 1.582 mm span, but two of 11
 rays miss stock within the 1.5 mm search distance, so no retry is generated.
+`--section-ray-probe` leaves the 85-cut baseline intact. At 1.55 mm one
+ray still misses; at 1.65 and 1.8 mm the same 18 candidates pass, with
+best removal 0.0632 mm² at 54.09° peak sampled contact.
 
 ## Gate before another generator attempt
 

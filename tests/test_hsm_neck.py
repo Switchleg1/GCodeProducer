@@ -18,6 +18,11 @@ def test_small_section_audit_distinguishes_missing_contact_from_missing_span():
     audit.clear()
     assert not list(small_section_cuts([], stock, 2., audit=audit))
     assert all(not row['profiles'] and row['proposal_count'] == 0 for row in audit)
+    farther = box(7.6, 0, 11, 10)
+    assert not list(small_section_cuts(sections, farther, 2.))
+    extended = list(small_section_cuts(sections, farther, 2., ray_length=1.65))
+    assert len(extended) == 12
+    assert extended == list(small_section_cuts(sections, farther, 2., ray_length=1.8))
 
 
 def test_section_follow_eases_to_stock_contact_across_middle_rows():
