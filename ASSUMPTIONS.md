@@ -37,3 +37,5 @@
   Its first eligible sampled span need not be the closest continuous one.
   Entry-taper variants apply extra advance only after the first quarter,
   reaching full advance halfway through; they do not model cutting forces.
+  The terminal approach probe instead stretches the entire entry blend to
+  40% or 50% of the span, leaving the exit unchanged.

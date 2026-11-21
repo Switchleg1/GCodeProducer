@@ -10,6 +10,12 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
     assert len(paths) == 3
     tapered = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., taper_entry=True))
     assert tapered[:3] == paths and len(tapered) == 6
+    for fraction in (.4, .5):
+        shallow = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., entry_fraction=fraction))
+        for flat, ramped in zip(paths, shallow, strict=True):
+            assert ramped[0] == flat[0]
+            assert ramped[(len(flat)-1)//4][0] < flat[(len(flat)-1)//4][0]
+            assert ramped[len(flat)//2:] == flat[len(flat)//2:]
     assert list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., taper_only=True)) == tapered[3:]
     for flat, ramped in zip(paths, tapered[3:]):
         quarter = (len(flat)-1)//4

@@ -395,7 +395,9 @@ When mixed with the originals this regresses to 75 cuts, X27.536 and
 4,005.612 mm² residual, with all 12 terminal contours exceeding contact.
 `--section-taper-at-stall` tests only the tapered variants on unchanged
 79-cut baseline stock and pose. All six exceed contact on chords 3–4;
-none is committed.
+none is committed. `--section-shallow-approach` extends the initial blend
+from 25% to 40% or 50% of the span. All 12 probes exceed contact during
+entry, with first failing samples of 69.23–93.69°; none is committed.
 
 ## Gate before another generator attempt
 

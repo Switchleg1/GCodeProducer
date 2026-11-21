@@ -106,7 +106,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False, taper_only=False):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False, taper_only=False, entry_fraction=.25):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -125,7 +125,7 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                         break
                     missed.append(y)
                     continue
-                blend = math.sin(math.pi/2*min(1., 4*t, 4*(1-t)))**2
+                blend = math.sin(math.pi/2*min(1., t/entry_fraction, 4*(1-t)))**2
                 rows.append((y, hit.bounds[0]-x, blend))
             if audit is not None:
                 audit.append({'x_mm': x, 'inset_y_mm': (low, high), 'rows': count+1,
@@ -154,7 +154,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -163,8 +163,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
-    if section_taper_at_stall and (not section_follow or section_taper_entry):
-        raise ValueError('terminal taper probe requires untapered section following')
+    if (section_taper_at_stall or section_shallow_approach) and (not section_follow or section_taper_entry):
+        raise ValueError('terminal approach probes require untapered section following')
+    if section_taper_at_stall and section_shallow_approach:
+        raise ValueError('select only one terminal approach probe')
     if section_taper_entry and not section_follow:
         raise ValueError('section entry taper requires section following')
     if section_fit_width and not (section_follow and section_search_west):
@@ -204,6 +206,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     overload_phases = defaultdict(Counter)
 
     follow_profile = None
+    entry_fraction = .25
     follow_overloads = defaultdict(list)
 
     def note_profile(path, body_chords, advance):
@@ -217,10 +220,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         if follow_profile is not None and path is follow_profile[0]:
             _, body_chords, advance = follow_profile
             t = (segment + .5)/body_chords
-            phase = ('retreat' if segment >= body_chords else 'ease_in' if t < .25
+            phase = ('retreat' if segment >= body_chords else 'ease_in' if t < entry_fraction
                      else 'ease_out' if t > .75 else 'follow')
             follow_overloads[round_index].append({'phase': phase, 'segment': segment,
                                                  'chord_xy_mm': path[segment:segment+2],
+                                                 'entry_fraction': entry_fraction,
                                                  'advance_mm': advance, 'contact_deg': angle})
 
     def propose_shallow(live, pose):
@@ -343,16 +347,21 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                                           taper_entry=section_taper_entry))
         report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count,
                                           'first_overloads': follow_overloads.get(len(diagnostics)-1, [])}
-    if section_taper_at_stall and reason == 'stalled':
+    if (section_taper_at_stall or section_shallow_approach) and reason == 'stalled':
         pose = last_xy, last_heading
         routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
-        probes = section_follow_cuts(sections, remaining, radius, turn_exits=section_turn_exits,
-                                     taper_only=True, on_profile=note_profile)
+        def terminal_probes():
+            nonlocal entry_fraction
+            for entry_fraction in ((.4, .5) if section_shallow_approach else (.25,)):
+                yield from section_follow_cuts(sections, remaining, radius, turn_exits=section_turn_exits,
+                                               taper_only=section_taper_at_stall, on_profile=note_profile,
+                                               entry_fraction=entry_fraction)
         counts = Counter()
-        choice = choose_front_cut(pocket, remaining, pose, probes, radius, waypoints=routes, diagnostics=counts,
+        choice = choose_front_cut(pocket, remaining, pose, terminal_probes(), radius, waypoints=routes, diagnostics=counts,
                                   on_overload=lambda path, chord, angle: report_overload(len(diagnostics), path, chord, angle),
                                   **gates)
-        report['terminal_taper_probe'] = {'gates': dict(counts), 'first_overloads': follow_overloads[len(diagnostics)],
+        key = 'terminal_approach_probe' if section_shallow_approach else 'terminal_taper_probe'
+        report[key] = {'gates': dict(counts), 'first_overloads': follow_overloads[len(diagnostics)],
                                           'best_removed_mm2': None if choice is None else choice.removed_mm2}
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
@@ -432,6 +441,8 @@ if __name__ == '__main__':
                         help='also try delaying contour advance until after the entry blend')
     parser.add_argument('--section-taper-at-stall', action='store_true',
                         help='audit entry tapers on final baseline stock without committing them')
+    parser.add_argument('--section-shallow-approach', action='store_true',
+                        help='audit longer entry blends on final baseline stock without committing them')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -450,7 +461,8 @@ if __name__ == '__main__':
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
                             section_live_depth=args.section_live_depth, section_search_west=args.section_search_west,
                             section_follow=args.section_follow, section_fit_width=args.section_fit_width, section_taper_entry=args.section_taper_entry,
-                            section_taper_at_stall=args.section_taper_at_stall)
+                            section_taper_at_stall=args.section_taper_at_stall,
+                            section_shallow_approach=args.section_shallow_approach)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

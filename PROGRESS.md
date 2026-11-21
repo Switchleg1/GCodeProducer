@@ -77,4 +77,5 @@
 - The terminal contour audit records the first overload chord and sampled angle. All six overload on zero-based chords 2–3, at or just after the initial ease-in blend. At 0.05 mm advance the first sample over the 60° limit is 61.47°; adding the retreat does not change it.
 - `--section-taper-entry` delays extra penetration and ramps it over the second quarter of the contour. Mixed into the candidate set, it regresses to a 75-cut stall at X27.536 with 4,005.612 mm² residual (baseline 79, X27.607, 4,005.294). All 12 terminal contours still exceed contact.
 - `--section-taper-at-stall` probes tapers without committing them on the 79-cut baseline. All six fail sampled contact on chords 3–4, with first offending samples of 61.05–77.22°. Baseline holds at X27.607 and 4,005.294 mm² reachable.
-- Next: test changing the angle of approach into the front, not just penetration timing. Completion gates are in `GOAL.md`.
+- `--section-shallow-approach` probes longer approach blends on the exact 79-cut stall. All 12 fail in the entry blend at 69.23–93.69° first sampled overload; none is committed.
+- Next: evaluate first contact on the unadvanced contour itself to separate overload from the extra-penetration probes. Completion gates are in `GOAL.md`.
