@@ -70,3 +70,6 @@
   certified peak or flute, chip, or machine load.
   Pitch comparisons use 10°, 5°, and 2.5° caps, not requested exact pitch;
   helix lap rounding gives lower actual angles. XY distance is not time.
+  The first-cut audit uses the 2.5° cap and the helper's exact credited
+  floor geometry. Bow angles and advances are planar trial proposals;
+  additional travel to stock top and helix qualification remain separate.

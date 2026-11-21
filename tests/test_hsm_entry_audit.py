@@ -1,7 +1,7 @@
 import pytest
 from shapely.geometry import Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, compare_pitch, entry_plane_contact
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -32,6 +32,18 @@ def test_axial_sampling_reports_plunge_and_air_separately():
     air = axial_contact(Polygon(), path, 1., bands=4)
     assert air['descent']['peak_over_limit_height_mm'] == 0.
     assert air['floor']['mean_over_limit_height_mm'] == 0.
+
+
+def test_first_cut_leaves_the_actual_entry_seed(tmp_path):
+    path = tmp_path / 'first.nc'
+    report = check_first_cut(review=path)
+    assert report['stop'] == 'first_cut_checked'
+    assert report['straight_proposals'] == 0
+    assert report['entry_removed_mm2'] == pytest.approx(45.23, abs=.02)
+    assert report['removed_mm2'] == pytest.approx(.492, abs=.003)
+    assert report['peak_deg'] < 60.
+    assert 'helix omitted' in path.read_text('ascii')
+    assert path.with_suffix('.opening.svg').is_file()
 
 
 def test_pitch_comparison_preserves_floor_and_accounts_for_added_travel():

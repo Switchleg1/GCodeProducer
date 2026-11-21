@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -13,9 +14,11 @@ if __package__ in (None, ''):
 
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.hsm_contact import contact_angle
-from tools.check_hsm_neck import neck_fixture
+from tools.check_hsm_neck import neck_fixture, write_opening_review, write_review_gcode
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
+from tools.hsm_front_choice import choose_front_cut
+from tools.hsm_straight_front import straight_front_candidates
 
 
 def audit_entry(pocket, stock, points, radius, depth):
@@ -153,8 +156,60 @@ def compare_pitch(*, bands=16, step=.025):
     return trials
 
 
+def seed_arc_candidates(centre, orbit):
+    """Bow outside the floor orbit over a local clockwise section, then return."""
+    inner = orbit - .3
+    if inner <= 0:
+        return
+    for j in range(8):
+        start = math.pi*j/4
+        for advance in (.05, .10, .20):
+            path = []
+            for i in range(33):
+                t = i/32
+                angle = start-math.pi*t/2
+                r = inner + (.3+advance)*math.sin(math.pi*t)**2
+                path.append((centre[0]+r*math.cos(angle), centre[1]+r*math.sin(angle)))
+            yield path
+
+
+def check_first_cut(*, review=None):
+    """Check only the planar motion following the modeled helix floor sweep."""
+    pocket, _ = neck_fixture()
+    radius = 2.
+    entry = seed_entry(neck_entry_region(pocket, radius), pocket, radius=radius, top=0., depth=-2., lead_angle=2.5)
+    if entry is None:
+        return {'stop': 'no_entry_candidate'}
+    a, b = entry.points[-2:, :2]
+    pose = tuple(b), tuple(b-a)
+    orbit = math.dist(a, b)
+    stock = entry.remaining
+    straight = list(straight_front_candidates(pocket, stock, radius, .5, min_edge=2., lead=2., runoff=2.))
+    counts = Counter()
+    choice = choose_front_cut(pocket, stock, pose, seed_arc_candidates(pose[0], orbit), radius, contact_limit=60.,
+                              sample_step=.025, link_handle=1., require_clear_exit=True, min_departure=.25,
+                              diagnostics=counts)
+    report = {'stop': 'first_cut_checked' if choice else 'no_checked_cut', 'straight_proposals': len(straight),
+              'gates': dict(counts), 'entry_removed_mm2': pocket.area-stock.area}
+    if choice is not None:
+        report.update(removed_mm2=choice.removed_mm2, peak_deg=choice.peak_deg, feed_mm=choice.travel_mm)
+        if review is not None:
+            opening = review.with_suffix('.opening.svg')
+            if opening.exists():
+                raise FileExistsError(f'review companion already exists: {opening}')
+            write_review_gcode(review, [choice], pose[0], 'first cut after modeled floor sweep; helix omitted')
+            write_opening_review(opening, pocket, stock, choice.link, choice.cut)
+    return report
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--compare-pitch', action='store_true', help='compare shallower pitches at equal floor coverage')
+    parser.add_argument('--first-cut', action='store_true', help='audit the first at-depth cut from the modeled floor sweep')
+    parser.add_argument('--review-gcode', type=Path, help='save only checked planar first-cut geometry for review')
     args = parser.parse_args()
-    print(json.dumps(compare_pitch() if args.compare_pitch else check_entry(), indent=2))
+    if args.first_cut and args.compare_pitch or args.review_gcode and not args.first_cut:
+        parser.error('select one audit; review output requires --first-cut')
+    result = (check_first_cut(review=args.review_gcode) if args.first_cut else
+              compare_pitch() if args.compare_pitch else check_entry())
+    print(json.dumps(result, indent=2))

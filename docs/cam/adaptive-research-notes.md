@@ -467,6 +467,10 @@ and 0.750 mm. This tracks geometric contact, not cutting force.
 actual maximum pitch angle from 5.06° to 2.03° drops estimated peak
 height above 60° from 0.875 to 0.375 mm in descent and from 0.750 to
 0.375 mm on the floor. Descent XY grows from 22.58 to 56.45 mm.
+`--first-cut` checks a local bowed cut from the modeled floor sweep. It
+removes another 0.492 mm² at 53.37° sampled peak, with 4.89 mm total
+link and cut. `--review-gcode` plots that XY motion only; it does not
+include or qualify the helix.
 
 ## Gate before another generator attempt
 
