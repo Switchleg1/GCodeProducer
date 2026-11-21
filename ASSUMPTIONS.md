@@ -27,4 +27,6 @@
   radii are likewise fixture probes and must pass the same post-cut checks.
   Live-depth probes use the first intersection of a 0.75 mm midpoint ray
   with buffered stock, plus 0.05/0.10/0.15 mm. This estimates first contact
-  at one point, not immersion or peak contact along the whole bow.
+  at one point, not immersion or peak contact along the whole bow. The
+  optional west search stops at the first eligible 0.75 or 1 mm inset;
+  it does not establish that farther insets lack useful cuts.

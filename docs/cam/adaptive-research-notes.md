@@ -371,7 +371,10 @@ Peak sampled contact rises to 59.25° under the unchanged 60° gate.
 `final_section_bite_spans` distinguishes an empty proposal family from
 rejected motion. Its terminal insets are only 0.756 and 1.492 mm wide,
 below the 1.5 mm proposal gate. At X25.75 the open span is 2.679 mm,
-which does not by itself verify a cut or a link.
+which does not by itself verify a cut or a link. With `--section-search-west`,
+two extra checked cuts remove only 0.0035 mm² and do not advance the eastern
+edge at 0.001 mm reporting precision. The run stalls at cut 64; 12 final
+section candidates exceed the sampled contact gate and six remove nothing.
 
 ## Gate before another generator attempt
 

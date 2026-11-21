@@ -54,21 +54,30 @@ def clearance_sections(regions, component, xs):
     return report
 
 
-def section_bite_spans(regions, component):
+def section_bite_spans(regions, component, *, search_west=False):
     """Report the exact sections and width gate used by the bow generator."""
     if component.is_empty:
         return []
     east = component.bounds[2]
-    sections = clearance_sections(regions, component, [east-.25, east-.5])
-    for section in sections:
-        section['eligible_y_mm'] = [(lo, hi) for lo, hi in section['connected_y_mm'] if hi-lo >= 1.5]
+    def audit(offsets):
+        sections = clearance_sections(regions, component, [east-d for d in offsets])
+        for section in sections:
+            section['eligible_y_mm'] = [(lo, hi) for lo, hi in section['connected_y_mm'] if hi-lo >= 1.5]
+        return sections
+
+    sections = audit((.25, .5))
+    if search_west and not any(section['eligible_y_mm'] for section in sections):
+        for offset in (.75, 1.):
+            sections.extend(audit((offset,)))
+            if sections[-1]['eligible_y_mm']:
+                break
     return sections
 
 
-def section_bites(regions, component, radius, *, turn_exits=False, live_stock=None):
+def section_bites(regions, component, radius, *, turn_exits=False, live_stock=None, search_west=False):
     """Propose shallow eastward bows between clear poses on inset sections."""
     contact_zone = None if live_stock is None else live_stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
-    for section in section_bite_spans(regions, component):
+    for section in section_bite_spans(regions, component, search_west=search_west):
         x = section['x_mm']
         for low, high in section['eligible_y_mm']:
             face_x = x + radius + .25
@@ -94,7 +103,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -103,8 +112,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
-    if (section_turn_exits or section_live_depth) and not section_bites_last:
-        raise ValueError('section exit and depth trials require last-resort section bites')
+    if (section_turn_exits or section_live_depth or section_search_west) and not section_bites_last:
+        raise ValueError('section exit, depth and search trials require last-resort section bites')
     if (with_section_bites or section_bites_last) and not with_shallow_fronts:
         raise ValueError('section bites require shallow fronts')
     if with_shifted_joins and not shallow_rollon:
@@ -193,7 +202,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     def propose_section_bites(live, _pose):
         component = connected_clearance(pocket, live, seed[0], radius)
         return section_bites(regions, component, radius, turn_exits=section_turn_exits,
-                             live_stock=live if section_live_depth else None)
+                             live_stock=live if section_live_depth else None, search_west=section_search_west)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -247,7 +256,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
     if with_section_bites or section_bites_last:
-        report['final_section_bite_spans'] = section_bite_spans(regions, clearance)
+        report['final_section_bite_spans'] = section_bite_spans(regions, clearance, search_west=section_search_west)
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:
@@ -316,6 +325,8 @@ if __name__ == '__main__':
                         help='also try quarter-turn retreats on last-resort section bites')
     parser.add_argument('--section-live-depth', action='store_true',
                         help='also try depths just past midpoint contact with live stock')
+    parser.add_argument('--section-search-west', action='store_true',
+                        help='try farther insets only if both default sections are too narrow')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -332,7 +343,7 @@ if __name__ == '__main__':
                             with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
-                            section_live_depth=args.section_live_depth)
+                            section_live_depth=args.section_live_depth, section_search_west=args.section_search_west)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

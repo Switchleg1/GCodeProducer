@@ -1,5 +1,5 @@
 import pytest
-from shapely.geometry import Point, box
+from shapely.geometry import Point, Polygon, box
 
 from tools.check_hsm_neck import check_neck, clearance_sections, section_bite_spans, section_bites
 
@@ -31,6 +31,18 @@ def test_section_bites_start_and_end_inside_clearance_and_bow_east():
             assert retreat[:len(path)] == path
             dx, dy = (b-a for a, b in zip(retreat[-2], retreat[-1]))
             assert dx < 0 and abs(dy) < abs(dx)
+
+
+def test_west_search_stops_at_first_eligible_section_and_leaves_wide_default_alone():
+    domain = [box(0, 0, 12, 10)]
+    tapered = Polygon([(1, 0), (4.4, 0), (5, .8), (4.4, 1.6), (1, 1.6)])
+    audit = section_bite_spans(domain, tapered, search_west=True)
+    assert [row['x_mm'] for row in audit] == [4.75, 4.5, 4.25]
+    assert [bool(row['eligible_y_mm']) for row in audit] == [False, False, True]
+    assert len(list(section_bites(domain, tapered, 2., search_west=True))) == 3
+    wide = box(1, 0, 5, 2)
+    assert section_bite_spans(domain, wide, search_west=True) == section_bite_spans(domain, wide)
+    assert len(section_bite_spans(domain, box(1, 0, 5, 1), search_west=True)) == 4
 
 
 def test_live_section_depths_follow_stock_contact_onset():
