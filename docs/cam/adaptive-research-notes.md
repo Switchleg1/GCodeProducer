@@ -618,3 +618,8 @@ many islands and where; `--review-gcode` saves an XY preview with rapids between
 
 All three exhaust the front from intact stock. Coverage is not equal, so the feed figures do not rank the variants.
 The leftover stock has not been located, and rapids, helix descent and rounded coordinates are unchecked.
+
+By default islands follow the shape: the centre region is split into lobes at clearly narrower necks and each lobe
+starts one island at its widest spot; the fronts then meet through the neck. A single lobe takes two islands a third
+in from each end only when it is at least twice as long as wide. On the neck fixture this gives two islands, 9,611 mm
+of cut feed, 105.8 mm² left and 187 arcs.

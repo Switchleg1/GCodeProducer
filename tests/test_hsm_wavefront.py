@@ -6,7 +6,8 @@ from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
-from tools.hsm_wavefront import choose_seeds, clear_pocket, clearance, eased, fronts, spiral_out, write_review
+from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, eased, find_lobes, fronts, spiral_out,
+                                 write_review)
 
 
 def test_two_islands_sit_a_third_in_from_each_end_of_a_long_pocket():
@@ -27,6 +28,27 @@ def test_widest_placement_puts_one_island_in_each_lobe():
     assert big[1] > small[1] > 2.
     with pytest.raises(ValueError, match='placement'):
         choose_seeds(allowed, 2, min_radius=2., placement='random')
+
+
+def test_default_placement_starts_one_island_in_each_lobe_joined_by_a_neck():
+    pocket, _ = neck_fixture()
+    allowed = unary_union(center_regions(pocket, 2.))
+    big, small = find_lobes(allowed, min_radius=2.)
+    assert big[0][0] > 80 and small[0][0] < 24 and big[1] > small[1]
+    assert small[2][2] < big[0][0] and big[2][0] > small[0][0]  # Each box stops short of the other start.
+    assert choose_seeds(allowed, min_radius=2.) == [big[:2], small[:2]]
+    assert choose_seeds(allowed, 1, min_radius=2.) == [big[:2]]
+
+
+def test_single_lobe_takes_two_islands_only_when_elongated():
+    long = unary_union(center_regions(box(0, 0, 60, 20), 2.))
+    squarer = unary_union(center_regions(box(0, 0, 30, 24), 2.))
+    assert len(find_lobes(long, min_radius=2.)) == len(find_lobes(squarer, min_radius=2.)) == 1
+    assert [round(xy[0], 1) for xy, _ in choose_seeds(long, min_radius=2.)] == [20.7, 39.3]
+    (centre, room), = choose_seeds(squarer, min_radius=2.)
+    assert room == pytest.approx(10.) and centre[1] == pytest.approx(12., abs=.1)
+    with pytest.raises(ValueError, match='island count'):
+        choose_seeds(long, min_radius=2., placement='thirds')
 
 
 def test_spiral_grows_by_one_stepover_per_turn_and_rolls_off_inward():

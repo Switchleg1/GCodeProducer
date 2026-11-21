@@ -31,6 +31,7 @@ STEPOVERS = (1., .8, .65, .5, .4, .3, .2, .12)
 SWEEP_SEGMENTS = 16
 WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
+ELONGATED_ASPECT = 2.
 
 
 class Stroke(NamedTuple):
@@ -40,17 +41,57 @@ class Stroke(NamedTuple):
     peak_deg: float
 
 
-def choose_seeds(allowed, count, *, min_radius, placement='thirds'):
+def find_lobes(allowed, *, min_radius, step=.25, neck_ratio=2.):
+    """Split a cutter-centre region at its necks: [(widest xy, distance to wall, bounds)].
+
+    The region is shrunk in steps. A piece counts as a lobe while its widest
+    spot is at least neck_ratio times the shrink that separated it, so a
+    passage must be clearly narrower than the areas it joins.
+    """
+    def widest(part):
+        centre = polylabel(part, tolerance=.05)
+        return centre, centre.distance(allowed.boundary)
+
+    whole = [(c, room, part.bounds) for part in polygons(allowed) if part.area > 1e-6
+             for c, room in [widest(part)] if room >= min_radius]
+    best, shrink = whole, step
+    limit = max((room for _, room, _ in whole), default=0.)/neck_ratio
+    while shrink <= limit:
+        lobes = []
+        for core in polygons(allowed.buffer(-shrink)):
+            if core.area < 1e-6:
+                continue
+            centre, room = widest(core)
+            if room >= max(min_radius, neck_ratio*shrink):
+                lobes.append((centre, room, core.buffer(shrink).intersection(allowed).bounds))
+        if len(lobes) > len(best):
+            best = lobes
+        shrink += step
+    return [((c.x, c.y), room, bounds) for c, room, bounds in sorted(best, key=lambda lobe: -lobe[1])]
+
+
+def choose_seeds(allowed, count=None, *, min_radius, placement='lobes'):
     """Place island centres: (xy, distance to wall).
 
     One island sits at the widest spot. Several are spread along the long
     axis, one third of the way in from each end for two, each snapped to the
     widest spot of its own band.
     """
-    if count < 1:
+    if count is not None and count < 1:
         raise ValueError('expected at least one island')
-    if placement not in ('thirds', 'widest'):
+    if placement not in ('lobes', 'thirds', 'widest'):
         raise ValueError('unknown island placement')
+    if placement == 'lobes':
+        lobes = find_lobes(allowed, min_radius=min_radius)
+        if len(lobes) != 1:
+            return [(xy, room) for xy, room, _ in (lobes if count is None else lobes[:count])]
+        # One lobe: a long shape takes two islands, a squarer one a single island.
+        corners = list(allowed.minimum_rotated_rectangle.exterior.coords)[:4]
+        sides = sorted((math.dist(corners[0], corners[1]), math.dist(corners[1], corners[2])))
+        count = count or (2 if sides[1] >= ELONGATED_ASPECT*sides[0] else 1)
+        placement = 'thirds'
+    if count is None:
+        raise ValueError('this placement needs an island count')
     if placement == 'widest' and count > 1:
         seeds, remaining = [], allowed
         for _ in range(count):
@@ -231,7 +272,7 @@ def cut(path, stock, radius, sample_step):
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=1, placement='thirds', top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', top=0., depth=-2., lead_angle=2.5, time_budget=None):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -306,7 +347,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     residual = stock.intersection(reachable)
     total = pocket.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
-    report = {'stop': stop, 'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
+    report = {'stop': stop, 'placement': placement,
+              'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
+                        for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
+              'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
               'peak_contact_deg': max((s.peak_deg for s in strokes), default=None),
@@ -346,9 +390,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--review-gcode', type=Path, help='save cuts to a new debug-only .nc file and .svg overlay')
-    parser.add_argument('--islands', type=int, default=1, help='number of helical islands along the long axis')
-    parser.add_argument('--placement', choices=('thirds', 'widest'), default='thirds',
-                        help='spread islands along the long axis or use the widest remaining spots')
+    parser.add_argument('--islands', type=int, help='number of helical islands; default is chosen from the shape')
+    parser.add_argument('--placement', choices=('lobes', 'thirds', 'widest'), default='lobes',
+                        help='one island per lobe, spread along the long axis, or the widest remaining spots')
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
     args = parser.parse_args()

@@ -137,3 +137,5 @@
   roll-off blends, clockwise travel with stock on the left. Spiral stepover is chosen on the first few turns and the full
   spiral is then checked once. Cut feed distance stands in for time; it ignores acceleration, rapids and helix descent.
   The thirds rule keeps the even spacing unless a spot in the same band is more than 5% wider.
+- Lobe detection shrinks the centre region in 0.25 mm steps; a piece is a lobe while its widest spot is at least twice the
+  shrink that separated it. The 2:1 neck ratio and the 2:1 length rule for two islands in one lobe are untuned choices.
