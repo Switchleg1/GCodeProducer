@@ -50,6 +50,15 @@ def test_broader_front_handoff_uses_actual_floor_stock_without_fake_motion(tmp_p
     assert not list(tmp_path.iterdir())
 
 
+def test_sweep_followup_reports_a_same_state_control(tmp_path):
+    report = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True,
+                             handoff_east_sweep=True, sweep_follow_budget=1, review=tmp_path / 'sweep.nc')
+    sweep = report['broader_front']['wide_east_sweep']
+    assert sweep['control_followup']['cut_count'] == sweep['sweep_followup']['cut_count'] == 1
+    assert sweep['preview_cut_count'] == 3
+    assert '(Cut 3: stock removal)' in (tmp_path / 'sweep.nc').read_text('ascii')
+
+
 def test_broader_front_fallback_cuts_from_bare_helix_and_exports_only_continuation(tmp_path):
     review = tmp_path / 'handoff.nc'
     result = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True, review=review)

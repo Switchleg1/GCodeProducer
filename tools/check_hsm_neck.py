@@ -286,7 +286,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None, clearance_straight_fallback=False, wide_east_sweep=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None, clearance_straight_fallback=False, wide_east_sweep=False, sweep_follow_budget=0):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -326,6 +326,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('neck-front proposals require shallow fronts and roll-off')
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
+    if sweep_follow_budget < 0 or (sweep_follow_budget and not wide_east_sweep):
+        raise ValueError('sweep follow-up requires a wide sweep and nonnegative budget')
     if wide_east_sweep and not clearance_straight_fallback:
         raise ValueError('wide east sweep requires a clearance-straight handoff')
     if clearance_straight_fallback and (initial_state is None or section_small_retry):
@@ -524,12 +526,34 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         pose = last_xy, last_heading
         routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
         sweep, sweep_report = probe_wide_east_sweep(pocket, regions, remaining, clearance, seed[0], pose, radius, gates, routes)
+        followups = []
+        if sweep_follow_budget:
+            run_options = dict(waypoints=waypoints, propose_waypoints=propose_waypoints if with_live_detours else None,
+                               propose_on_stall=propose_shallow if with_shallow_fronts else None,
+                               propose_final_retry=propose_clearance_straights, **gates)
+
+            def continuation(live, pose):
+                cuts_after, stock_after, stop = run_front(pocket, live, pose, propose, radius,
+                                                          max_cuts=sweep_follow_budget, **run_options)
+                clear_after = connected_clearance(pocket, stock_after, seed[0], radius)
+                return cuts_after, {'stop': stop, 'cut_count': len(cuts_after),
+                                    'removed_mm2': live.area-stock_after.area,
+                                    'feed_mm': sum(c.travel_mm for c in cuts_after),
+                                    'peak_deg': max((c.peak_deg for c in cuts_after), default=None),
+                                    'east_x_mm': None if clear_after.is_empty else clear_after.bounds[2]}
+
+            _, sweep_report['control_followup'] = continuation(remaining, pose)
+            if sweep is not None:
+                tail = sweep.cut[-1]
+                before = next(xy for xy in reversed(sweep.cut[:-1]) if xy != tail)
+                followups, sweep_report['sweep_followup'] = continuation(
+                    sweep.remaining, (tail, tuple(b-a for a, b in zip(before, tail))))
     if review_gcode is not None and reason != 'entry_required' and (initial_state is None or cuts or sweep):
         opening = Path(review_gcode).with_suffix('.opening.svg')
         if opening.exists():
             raise FileExistsError(f'review companion already exists: {opening}')
         label = reason if initial_state is None else f'{reason}; modeled helix and seed cuts omitted'
-        preview = [*cuts, sweep] if sweep is not None else cuts
+        preview = [*cuts, sweep, *followups] if sweep is not None else cuts
         if sweep is not None:
             label = f'east sweep after {label}'
         write_review_gcode(review_gcode, preview, seed[0], label)
@@ -559,7 +583,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
     if wide_east_sweep and reason != 'entry_required':
-        sweep_report['preview_cut_count'] = len(cuts) + (sweep is not None)
+        sweep_report['preview_cut_count'] = len(cuts) + (sweep is not None) + len(followups)
         report['wide_east_sweep'] = sweep_report
     if clearance_straight_fallback:
         other_cuts = [i for i, row in enumerate(diagnostics[:len(cuts)], 1) if not row.get('final_retry_eligible')]

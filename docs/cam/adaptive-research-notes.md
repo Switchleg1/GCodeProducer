@@ -565,7 +565,10 @@ removing 58.991 mm² and extending connected clearance to X17.826 at
 `--broader-east-sweep` checks one wider contour after the 64-cut prefix.
 The selected cut spans 4.012 mm in Y and removes 0.307 mm² at 49.75°
 peak. It adds 0.171 mm² of connected clearance and 0.075 mm of eastward
-reach. The review appends only the checked sweep.
+reach. The review appends only the checked sweep. With an eight-cut
+continuation from the same 64-cut state, the no-sweep control reaches
+X18.052, removing 7.171 mm² over 38.63 mm. Sweep plus eight reaches
+X17.902, removing 8.271 mm² over 54.46 mm, so it is not adopted.
 
 ## Gate before another generator attempt
 
