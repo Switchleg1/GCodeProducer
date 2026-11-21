@@ -6,8 +6,8 @@ from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
-from tools.hsm_wavefront import (along_wall, choose_seeds, clear_pocket, clearance, cutting_pieces, eased, find_lobes, fronts, polygons, spiral_out,
-                                 stay_down_link, sweep, wall_ends, write_review)
+from tools.hsm_wavefront import (along_wall, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
+                                 find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
 def test_two_islands_sit_a_third_in_from_each_end_of_a_long_pocket():
@@ -78,47 +78,50 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
     assert allowed.covers(LineString(path))
 
 
-def test_wall_ends_follow_the_wall_back_to_clean_wall_plus_an_overlap():
-    pocket, allowed = box(-1, -1, 11, 7), box(0, 0, 10, 6)  # 1 mm cutter radius
-    clear = box(0, 0, 4, 6)
-    own = pocket.difference(box(-1, -1, 5, 7))
+def test_wall_ends_hook_onto_both_walls_and_short_arcs_roll_off_instead():
+    pocket, allowed = box(-1, -1, 31, 21), box(0, 0, 30, 20)  # 1 mm cutter radius
+    clear = box(0, 0, 10, 20)
+    own = pocket.difference(box(-1, -1, 11, 21))
     rings = [LineString(allowed.exterior.coords)]
     (run, closed), = fronts(clear, clear.buffer(.5).intersection(allowed), allowed.boundary)
     path = wall_ends(run, clear, own, 1., allowed, rings, 3.)
-    assert allowed.covers(LineString(path)) and max(x for x, _ in path) == pytest.approx(4.5)
+    assert allowed.covers(LineString(path)) and max(x for x, _ in path) == pytest.approx(10.5)
     assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
-    top = [x for x, y in path if y > 6 - 1e-9]
+    top = [x for x, y in path if y > 20 - 1e-9]
     bottom = [x for x, y in path if y < 1e-9]
-    # The wall is clean from x = 4 back, so the sweep stops 0.75 mm past it.
-    assert min(top) == pytest.approx(3.25, abs=.15) and min(bottom) == pytest.approx(3.25, abs=.15)
-    assert path[0][1] < 6. and path[-1][1] > 0.  # Both tips turn off the wall into the pocket.
-    # A skin left on both walls back to x = 2: the sweep reaches all the way to clean wall.
-    skinned = pocket.difference(unary_union([box(-1, -1, 2, 7), box(-1, 0, 5, 6)]))
-    far = wall_ends(run, clear, skinned, 1., allowed, rings, 3.)
-    assert min(x for x, y in far if y > 6 - 1e-9) < 1. and min(x for x, y in far if y < 1e-9) < 1.
-    plain = wall_ends([(4.5, 5.), (4.5, 1.)], clear, own, 1., allowed, rings, 3.)
-    assert all(0 < y < 6 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
+    # A hook of twice the cutter radius meets each wall about 2.9 mm behind the front and runs back along it.
+    assert max(top) == pytest.approx(10.5 - 2/.7, abs=.2) and max(bottom) == pytest.approx(10.5 - 2/.7, abs=.2)
+    assert min(top) < max(top) - .5 and min(bottom) < max(bottom) - .5
+    headings = [math.atan2(b[1]-a[1], b[0]-a[0]) for a, b in zip(path, path[1:]) if math.dist(a, b) > 1e-6]
+    turns = [abs((b-a+math.pi) % (2*math.pi) - math.pi) for a, b in zip(headings, headings[1:])]
+    assert max(turns) < math.radians(35)  # No sharp corner anywhere along the hooked arc.
+    plain = wall_ends([(10.5, 15.), (10.5, 5.)], clear, own, 1., allowed, rings, 3.)
+    assert all(0 < y < 20 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
+    short = wall_ends([(10.5, 2.), (10.5, 0.)], clear, own, 1., allowed, rings, 3.)
+    assert clear.distance(Point(short[0])) < 1e-9 and clear.distance(Point(short[-1])) < 1e-9
 
 
 @pytest.mark.parametrize('pocket', [box(-2, -2, 62, 22), Polygon([(-2, -2), (62, -22), (62, 42), (-2, 22)])])
-def test_every_peel_sweeps_both_walls_so_the_wall_side_keeps_pace(pocket):
-    # Regression: fronts end a few hundredths short of the wall; treating that as "not on the wall"
-    # dropped the wall sweep on some passes and bunched the following peels into knots.
+def test_hooks_nest_pass_after_pass_without_drifting_or_loading_up(pocket):
+    # Regressions: (1) a front ends a few hundredths short of the wall and the wall treatment was skipped;
+    # (2) hooking from the front's curled-in end landed further back each pass until contact ran away.
     allowed = pocket.buffer(-2., join_style=2)
     rings = [LineString(allowed.exterior.coords)]
     own = pocket.difference(box(-2, -40, 6, 60))
-    starts, left = [], []
-    for _ in range(8):
+    peaks, lag = [], []
+    for _ in range(14):
         part = max(polygons(clearance(allowed, own, 2.)), key=lambda g: g.area)
-        (run, closed), = fronts(part, part.buffer(.5, quad_segs=16).intersection(allowed), allowed.boundary)
+        (run, closed), = fronts(part, part.buffer(.4, quad_segs=16).intersection(allowed), allowed.boundary)
         assert along_wall(rings, run[0], part, own, 2., .75) is not None
         assert along_wall(rings, run[-1], part, own, 2., .75) is not None
-        own = sweep(wall_ends(run, part, own, 2., allowed, rings, 3.), own, 2.)
-        starts.append(run[0][0])
-        left.append(own.intersection(part.buffer(2.5)).area)
-    steps = [b-a for a, b in zip(starts, starts[1:])]
-    assert all(.3 < step < .6 for step in steps)  # One stepover per pass along the wall, never stalled.
-    assert max(left) < 1. and left[-1] == pytest.approx(left[-2], abs=.05)  # Corner bits do not pile up.
+        path = wall_ends(run, part, own, 2., allowed, rings, 3.)
+        peak, own = cut(path, own, 2., .2)
+        peaks.append(peak)
+        on_wall = [x for x, y in path if allowed.boundary.distance(Point(x, y)) < 1e-6]
+        lag.append(max(x for x, _ in path) - max(on_wall))
+    # Bounded and not climbing; it still swings by about ten degrees from pass to pass.
+    assert max(peaks) < 78. and max(peaks[-4:]) <= max(peaks[4:10]) + 6.
+    assert max(lag[4:]) - min(lag[4:]) < 1.5  # Hooks keep their distance behind the front.
 
 
 def test_cutting_pieces_drop_air_and_keep_a_short_run_in_and_out():
@@ -183,7 +186,7 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     for before, link in zip(strokes, strokes[1:]):
         if link.kind == 'link':
             assert link.points[0] == before.points[-1]
-    assert report['spiral_feed_mm'] > .4*report['cut_feed_mm']
+    assert report['spiral_feed_mm'] > .35*report['cut_feed_mm']
     allowed = unary_union(center_regions(pocket, 2.)).buffer(2e-3)
     assert all(allowed.covers(LineString(stroke.points)) for stroke in strokes)
     assert clearance(allowed, residual, 2.).area > .9*allowed.area

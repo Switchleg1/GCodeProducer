@@ -653,3 +653,9 @@ it, so the wall sweep is never skipped; skipping it had let the wall side stall 
 neck fixture then leaves 1.33 mm² without a profile pass, but the start-side approach along the wall now limits the
 stepover: 341 arcs and 12,289 mm of cutting instead of 207 and 10,114 mm. `clear_pocket(trace=[...])` records every
 attempt and where its peak contact falls.
+
+Arc ends are now wide hooks. Driving a round cutter square to the wall wraps it in the corner radius left by the
+previous pass, and running forward along the wall into the fresh band is a head-on cut; both had forced very small
+stepovers. A hook curves round to meet the wall tangentially, heading back toward cleared ground, and successive hooks
+nest one stepover apart. On the neck fixture: 225 arcs, 10,783 mm of cutting, 3,834 mm of links, 2.8 mm² left,
+with 55 arcs still at the smallest stepover in thin crescents between a spiral disc and a nearby wall.

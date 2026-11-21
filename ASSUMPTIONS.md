@@ -149,3 +149,6 @@
 - A wall point counts as clean when this island's stock is at least the cutter radius minus 0.02 mm away. The wall
   profile pass is off by default; the neck fixture is the only shape on which leaving it out has been measured.
 - An arc end within 0.3 mm of the wall is treated as reaching it and is carried onto the wall before the sweep back.
+- Hooks use a quadratic corner whose tightest radius is about twice the cutter radius, capped at a quarter of the arc
+  length and dropped below 0.5 mm of trim. The steady heading is searched up to 25 mm back from the wall (under 6° of
+  turn in 1.5 mm and 10° in 3 mm). These are trial values measured on straight and oblique strips and the neck fixture.
