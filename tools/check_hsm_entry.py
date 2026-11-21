@@ -476,8 +476,28 @@ def probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps):
     return pair, result
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False):
+def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, prefix, budget):
+    """Rebuild and check each pair from the previous retry's actual end pose."""
+    accepted = list(prefix)
+    trace = []
+    for _ in range(budget):
+        rejected, preps = [], []
+        tail = accepted[-1]
+        probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, moving=True,
+                                failed_entry_paths=rejected, eligible_preps=preps)
+        pair, audit = probe_entry_shoulder(pocket, seed_xy, tail, radius, gates, rejected, preps)
+        if not pair:
+            trace.append(dict(audit, cut_count=len(accepted)))
+            return accepted, trace, 'no_checked_pair' if rejected else 'no_entry_overloads'
+        accepted.extend(pair)
+        trace.append(dict(audit, cut_count=len(accepted)))
+    return accepted, trace, 'pair_budget'
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if repeat_shoulders < 0 or (repeat_shoulders and not shoulder_probe):
+        raise ValueError('repeating shoulders requires the shoulder probe and a nonnegative budget')
     lead_probe = tapered_anchor_probe or clearance_anchor_probe or shoulder_probe
     if lead_probe and repeat_anchored < 1:
         raise ValueError('anchor lead probe requires at least one moving anchor')
@@ -644,6 +664,11 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                     report['shoulder_probe'] = result
                                     if pair:
                                         preview = [*preview[:prefix_count], *pair]
+                                        if repeat_shoulders:
+                                            preview, shoulder_trace, shoulder_stop = repeat_shoulder_pairs(
+                                                *anchor_context, radius, gates, preview, repeat_shoulders)
+                                            report['repeated_shoulders'] = {'stop': shoulder_stop, 'trace': shoulder_trace,
+                                                                             'peak_contact_deg': max(c.peak_deg for c in preview)}
                                 elif lead_probe and trace:
                                     tapered, result = probe_tapered_anchor(pocket, pose[0], preview[prefix_count-1],
                                                                          radius, gates, rejected, from_clearance=clearance_anchor_probe)
@@ -703,7 +728,10 @@ if __name__ == '__main__':
     parser.add_argument('--tapered-anchor-probe', action='store_true', help='retry only the last round entry failures on identical stock')
     parser.add_argument('--clearance-anchor-probe', action='store_true', help='fit alternate leads from verified start intervals')
     parser.add_argument('--shoulder-probe', action='store_true', help='clear an entry shoulder and retry the exact farther cut')
+    parser.add_argument('--repeat-shoulder-pairs', type=int, default=0, help='check more preparation/retry pairs on each new shoulder')
     args = parser.parse_args()
+    if args.repeat_shoulder_pairs < 0 or (args.repeat_shoulder_pairs and not args.shoulder_probe):
+        parser.error('repeating shoulders requires --shoulder-probe and a nonnegative budget')
     if args.shoulder_probe and (args.repeat_anchored_straights < 1 or args.clearance_anchor_probe or args.tapered_anchor_probe):
         parser.error('shoulder probe requires moving anchors and excludes other lead probes')
     if args.clearance_anchor_probe and (args.repeat_anchored_straights < 1 or args.tapered_anchor_probe):
@@ -742,6 +770,7 @@ if __name__ == '__main__':
                               neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
                               anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
                               tapered_anchor_probe=args.tapered_anchor_probe,
-                              clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe) if cut_audit else
+                              clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe,
+                              repeat_shoulders=args.repeat_shoulder_pairs) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

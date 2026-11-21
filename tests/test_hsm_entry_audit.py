@@ -166,6 +166,31 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['pair_removed_per_feed_mm'] == .5
 
 
+def test_repeated_shoulders_rebuild_from_latest_retry_and_stop_without_overload(monkeypatch):
+    from tools import check_hsm_entry as audit_tool
+
+    seen = []
+
+    def anchors(_pocket, _regions, _initial, _seed, tail, _radius, _gates, *, moving,
+                failed_entry_paths, eligible_preps):
+        assert moving
+        seen.append(tail)
+        eligible_preps.append('prep')
+        if tail == 'initial':
+            failed_entry_paths.append('failed path')
+
+    def pair(_pocket, _seed, _tail, _radius, _gates, rejected, preps):
+        assert preps == ['prep']
+        return (['prep', 'retry'], {}) if rejected else ([], {})
+
+    monkeypatch.setattr(audit_tool, 'probe_anchored_straight', anchors)
+    monkeypatch.setattr(audit_tool, 'probe_entry_shoulder', pair)
+    cuts, trace, stop = audit_tool.repeat_shoulder_pairs(None, (), None, (0, 0), 2., {}, ['initial'], 3)
+    assert seen == ['initial', 'retry']
+    assert cuts == ['initial', 'prep', 'retry'] and stop == 'no_entry_overloads'
+    assert [row['cut_count'] for row in trace] == [3, 3]
+
+
 def test_entry_shoulder_probe_does_not_commit_an_unpaired_preparation(monkeypatch):
     from tools import check_hsm_entry as audit_tool
 

@@ -544,6 +544,9 @@ first exceed contact on entry. The accepted path is unchanged.
 stock removal. Eight of 12 preparations unlock a retry. At 15 cuts the
 pair preview reaches X17.142 versus X17.092 with normal anchors, with
 8.348 versus 8.193 mm² removed. Clearance and contact gates are unchanged.
+`--repeat-shoulder-pairs 3` finds one more complete pair and stops at
+cut 17 and X17.292. The next round has ten eligible single cuts but no
+entry overloads, so a pair-only stop is not a clearing stall.
 
 ## Gate before another generator attempt
 
