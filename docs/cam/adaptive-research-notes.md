@@ -423,7 +423,10 @@ in. This locates cutter-center chords, not the contact points in stock.
 `--section-relief-probe` offsets those contours locally without committing
 cuts. A 0.015 mm offset passes 10 of 24 candidates and removes up to
 0.0212 mm² at 59.27° sampled peak; a 0.060 mm offset passes all 24 but
-removes at most 0.00586 mm².
+removes at most 0.00586 mm². The clearance audit covers every passing
+candidate: 0.015 mm relief expands the east edge by at most 0.004824 mm
+and adds up to 0.002011 mm² connected area. The deeper offsets add no
+eastward extent. No cut is committed.
 
 ## Gate before another generator attempt
 

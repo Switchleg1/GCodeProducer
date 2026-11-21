@@ -1,8 +1,15 @@
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_neck import (bounded_small_section_cuts, check_neck, clearance_sections, section_bite_spans, section_bites,
+from tools.check_hsm_neck import (bounded_small_section_cuts, check_neck, clearance_delta, clearance_sections, section_bite_spans, section_bites,
                                   section_follow_cuts, small_section_cuts, overload_summary, relieve_contour)
+
+
+def test_clearance_delta_separates_area_gain_from_eastward_progress():
+    before = box(0, 0, 2, 1)
+    assert clearance_delta(before, box(0, 0, 2, 2)) == {'new_connected_mm2': 2., 'east_shift_mm': 0.}
+    assert clearance_delta(before, box(0, 0, 3, 1)) == {'new_connected_mm2': 1., 'east_shift_mm': 1.}
+    assert clearance_delta(before, Polygon()) == {'new_connected_mm2': 0., 'east_shift_mm': None}
 
 
 def test_contour_relief_preserves_endpoints_and_tapers_locally():

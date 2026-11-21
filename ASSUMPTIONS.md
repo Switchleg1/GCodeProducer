@@ -44,3 +44,5 @@
   The local relief probe offsets west within the failing chord Y band and
   eases back over 0.3 mm shoulders. It assumes west is away from stock for
   this fixture and still checks every resulting cut and link.
+  The relief audit counts shifts of at least 0.001 mm as visible in the
+  report; that threshold is not a usefulness or quantization guarantee.

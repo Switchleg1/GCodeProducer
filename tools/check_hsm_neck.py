@@ -194,6 +194,12 @@ def relieve_contour(path, low, high, depth, *, shoulder=.3):
     return [*result, path[-1]]
 
 
+def clearance_delta(before, after):
+    """Measure newly connected area and signed east-edge shift."""
+    return {'new_connected_mm2': after.difference(before).area,
+            'east_shift_mm': None if before.is_empty or after.is_empty else after.bounds[2]-before.bounds[2]}
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
@@ -451,11 +457,23 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                 yield roll_off(path, .25, .0025)
 
                     counts = Counter()
+                    measurements = []
+
+                    def measure_clearance(_key, choice):
+                        component = connected_clearance(pocket, choice.remaining, seed[0], radius)
+                        measurements.append(dict(removed_mm2=choice.removed_mm2, peak_deg=choice.peak_deg,
+                                                 **clearance_delta(clearance, component)))
+
                     choice = choose_front_cut(pocket, remaining, pose, candidates(), radius, waypoints=routes,
-                                              diagnostics=counts, priority_score=lambda live: -live.area, **gates)
+                                              diagnostics=counts, priority_score=lambda live: -live.area,
+                                              on_eligible=measure_clearance, **gates)
+                    shifts = [row for row in measurements if row['east_shift_mm'] is not None]
                     trials.append({'relief_mm': depth, 'gates': dict(counts),
                                    'best_removed_mm2': None if choice is None else choice.removed_mm2,
-                                   'best_peak_deg': None if choice is None else choice.peak_deg})
+                                   'best_peak_deg': None if choice is None else choice.peak_deg,
+                                   'most_eastward': max(shifts, key=lambda row: row['east_shift_mm'], default=None),
+                                   'max_new_connected_mm2': max((row['new_connected_mm2'] for row in measurements), default=None),
+                                   'east_advances_at_least_001_mm': sum(row['east_shift_mm'] >= .001 for row in shifts)})
                 report['terminal_relief_probe'] = trials
         if section_ray_probe:
             pose = last_xy, last_heading
