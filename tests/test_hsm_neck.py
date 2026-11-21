@@ -13,6 +13,9 @@ def test_wider_sections_use_nearest_sample_for_each_target():
     assert [widest_span(r) for r in rows] == [2., 2.5, 3.]
     assert widest_span({'connected_y_mm': [(1., 2.), (3., 4.5)]}) == 1.5
     assert not wider_sections([box(0, 0, 8, 6)], box(0, 0, 4, 1))
+    wider = wider_sections([box(0, 0, 8, 6)], component, widths=(3.5, 4., 4.5))
+    assert [row['target_width_mm'] for row in wider] == [3.5, 4.]
+    assert [row['x_mm'] for row in wider] == [4.25, 4.]
 
 
 def test_clearance_delta_separates_area_gain_from_eastward_progress():

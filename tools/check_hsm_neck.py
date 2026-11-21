@@ -202,14 +202,14 @@ def clearance_delta(before, after):
             'east_shift_mm': None if before.is_empty or after.is_empty else after.bounds[2]-before.bounds[2]}
 
 
-def wider_sections(regions, component):
+def wider_sections(regions, component, *, widths=(2., 2.5, 3.)):
     """Find the closest sampled section per target span width."""
     if component.is_empty:
         return []
     east = component.bounds[2]
     rows = clearance_sections(regions, component, [east-i/16 for i in range(4, 49)])
     result = []
-    for target in (2., 2.5, 3.):
+    for target in widths:
         for row in rows:
             eligible = [(lo, hi) for lo, hi in row['connected_y_mm'] if hi-lo >= target]
             if eligible:
@@ -220,6 +220,28 @@ def wider_sections(regions, component):
 
 def widest_span(section):
     return max((hi-lo for lo, hi in section['connected_y_mm']), default=0.)
+
+
+def probe_wide_east_sweep(pocket, regions, stock, component, seed_xy, pose, radius, gates, routes):
+    """Check a stock-following sweep across a wider section of the east front."""
+    sections = wider_sections(regions, component, widths=(2.5, 3., 3.5, 4.))
+    audit, counts = [], Counter()
+    paths = section_follow_cuts(sections, stock, radius, turn_exits=True, audit=audit,
+                                ray_length=2.75, advances=(.03, .05, .08))
+
+    def score(live):
+        clear = connected_clearance(pocket, live, seed_xy, radius)
+        return None if clear.is_empty else round(clear.bounds[2], 6)
+
+    choice = choose_front_cut(pocket, stock, pose, paths, radius, waypoints=routes, diagnostics=counts,
+                              priority_score=score, **gates)
+    report = {'sections': sections, 'profiles': audit, 'gates': dict(counts)}
+    if choice is not None:
+        after = connected_clearance(pocket, choice.remaining, seed_xy, radius)
+        ys = [y for _, y in choice.cut]
+        report.update(removed_mm2=choice.removed_mm2, feed_mm=choice.travel_mm, peak_deg=choice.peak_deg,
+                      cut_y_span_mm=max(ys)-min(ys), **clearance_delta(component, after))
+    return choice, report
 
 
 def neck_fixture():
@@ -264,7 +286,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None, clearance_straight_fallback=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None, clearance_straight_fallback=False, wide_east_sweep=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -304,6 +326,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('neck-front proposals require shallow fronts and roll-off')
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
+    if wide_east_sweep and not clearance_straight_fallback:
+        raise ValueError('wide east sweep requires a clearance-straight handoff')
     if clearance_straight_fallback and (initial_state is None or section_small_retry):
         raise ValueError('clearance straight fallback is for handoff without small section retries')
     pocket, stock = neck_fixture()
@@ -485,14 +509,6 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        **gates)
     if not cuts and reason == 'stalled' and diagnostics[-1].get('origin_clearance'):
         reason = 'entry_required'
-    if review_gcode is not None and reason != 'entry_required' and (initial_state is None or cuts):
-        opening = Path(review_gcode).with_suffix('.opening.svg')
-        if opening.exists():
-            raise FileExistsError(f'review companion already exists: {opening}')
-        label = reason if initial_state is None else f'{reason}; modeled helix and seed cuts omitted'
-        write_review_gcode(review_gcode, cuts, seed[0], label)
-        link, cut = (cuts[0].link, cuts[0].cut) if cuts else ((), ())
-        write_opening_review(opening, pocket, stock, link, cut)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     last_heading = seed[1]
@@ -503,6 +519,22 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     point = Point(last_xy)
     initial_clearance = connected_clearance(pocket, stock, seed[0], radius)
     clearance = connected_clearance(pocket, remaining, seed[0], radius)
+    sweep = None
+    if wide_east_sweep and reason != 'entry_required':
+        pose = last_xy, last_heading
+        routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
+        sweep, sweep_report = probe_wide_east_sweep(pocket, regions, remaining, clearance, seed[0], pose, radius, gates, routes)
+    if review_gcode is not None and reason != 'entry_required' and (initial_state is None or cuts or sweep):
+        opening = Path(review_gcode).with_suffix('.opening.svg')
+        if opening.exists():
+            raise FileExistsError(f'review companion already exists: {opening}')
+        label = reason if initial_state is None else f'{reason}; modeled helix and seed cuts omitted'
+        preview = [*cuts, sweep] if sweep is not None else cuts
+        if sweep is not None:
+            label = f'east sweep after {label}'
+        write_review_gcode(review_gcode, preview, seed[0], label)
+        link, cut = (preview[0].link, preview[0].cut) if preview else ((), ())
+        write_opening_review(opening, pocket, stock, link, cut)
     frontier = nearby_frontier(pocket, remaining, last_xy, radius, extra_reach=.25)
     report = {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
@@ -526,6 +558,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if wide_east_sweep and reason != 'entry_required':
+        sweep_report['preview_cut_count'] = len(cuts) + (sweep is not None)
+        report['wide_east_sweep'] = sweep_report
     if clearance_straight_fallback:
         other_cuts = [i for i, row in enumerate(diagnostics[:len(cuts)], 1) if not row.get('final_retry_eligible')]
         report['clearance_straight_cuts'] = len(cuts)-len(other_cuts)

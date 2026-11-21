@@ -127,3 +127,6 @@
   connected component. The map filters proposals; actual checks still apply.
   The 64-cut run changes only the bare-handoff budget; accepted-cut family
   indices describe this offline selection, not elapsed or machining time.
+  The wider sweep uses 2.5–4 mm anchor widths, 2.75 mm contact rays and
+  0.03/0.05/0.08 mm advance probes. It prioritizes checked eastward reach;
+  the width reported for the full stroke includes its retreat.

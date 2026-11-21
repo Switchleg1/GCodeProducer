@@ -562,6 +562,10 @@ the 24-cut seed adds 7.916 mm² at 59.67°. No other family takes over in
 these short trials. A bare-helix 64-cut run still uses only the fallback,
 removing 58.991 mm² and extending connected clearance to X17.826 at
 59.87° peak. It stops on budget with no removal east of X24.
+`--broader-east-sweep` checks one wider contour after the 64-cut prefix.
+The selected cut spans 4.012 mm in Y and removes 0.307 mm² at 49.75°
+peak. It adds 0.171 mm² of connected clearance and 0.075 mm of eastward
+reach. The review appends only the checked sweep.
 
 ## Gate before another generator attempt
 

@@ -505,8 +505,10 @@ def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, pref
     return accepted, trace, 'cut_budget' if single_fallback else 'pair_budget'
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0, handoff_budget=0, handoff_turned_fallback=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0, handoff_budget=0, handoff_turned_fallback=False, handoff_east_sweep=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if handoff_east_sweep and not handoff_turned_fallback:
+        raise ValueError('east sweep requires the broader turned fallback')
     if handoff_turned_fallback and not handoff_budget:
         raise ValueError('turned fallback requires a handoff budget')
     if handoff_budget < 0 or (handoff_budget and (max_cuts is None or face_probe)):
@@ -739,7 +741,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                              shallow_rollon=1., with_shifted_joins=True, with_clearance_tapers=True,
                                              with_early_exits=True, require_clear_exit=True, with_neck_front=True,
                                              with_front_bites=True, min_departure=.25, review_gcode=review,
-                                             clearance_straight_fallback=handoff_turned_fallback)
+                                             clearance_straight_fallback=handoff_turned_fallback, wide_east_sweep=handoff_east_sweep)
     return report
 
 
@@ -768,7 +770,10 @@ if __name__ == '__main__':
     parser.add_argument('--hybrid-shoulder-budget', type=int, default=0, help='continue with checked pairs or singles within this extra cut budget')
     parser.add_argument('--broader-front-budget', type=int, default=0, help='pass live stock and pose to the broader front trial')
     parser.add_argument('--broader-turned-fallback', action='store_true', help='try checked clearance-shaped straights at handoff stalls')
+    parser.add_argument('--broader-east-sweep', action='store_true', help='probe one checked wider sweep after the handoff run')
     args = parser.parse_args()
+    if args.broader_east_sweep and not args.broader_turned_fallback:
+        parser.error('east sweep requires --broader-turned-fallback')
     if args.broader_turned_fallback and not args.broader_front_budget:
         parser.error('turned fallback requires --broader-front-budget')
     if args.broader_front_budget < 0 or (args.broader_front_budget and args.seed_cut_budget is None):
@@ -817,6 +822,6 @@ if __name__ == '__main__':
                               tapered_anchor_probe=args.tapered_anchor_probe,
                               clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe,
                               repeat_shoulders=args.repeat_shoulder_pairs, hybrid_shoulders=args.hybrid_shoulder_budget, handoff_budget=args.broader_front_budget,
-                              handoff_turned_fallback=args.broader_turned_fallback) if cut_audit else
+                              handoff_turned_fallback=args.broader_turned_fallback, handoff_east_sweep=args.broader_east_sweep) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))
