@@ -398,6 +398,9 @@ When mixed with the originals this regresses to 75 cuts, X27.536 and
 none is committed. `--section-shallow-approach` extends the initial blend
 from 25% to 40% or 50% of the span. All 12 probes exceed contact during
 entry, with first failing samples of 69.23–93.69°; none is committed.
+`--section-nominal-at-stall` sets extra advance to zero for all three
+entry lengths. None of the six probes overloads, but even the best
+passing probe removes only 4.07e-8 mm², negligible for coverage.
 
 ## Gate before another generator attempt
 

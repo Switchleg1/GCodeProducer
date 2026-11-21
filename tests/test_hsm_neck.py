@@ -8,6 +8,9 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
     sections = [{'x_mm': 4., 'eligible_y_mm': [(2., 6.)]}]
     paths = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2.))
     assert len(paths) == 3
+    nominal, = section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., advances=(0.,))
+    assert max(x for x, _ in nominal) == pytest.approx(4.5)
+    assert nominal[0] == paths[0][0] and nominal[-1] == paths[0][-1]
     tapered = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., taper_entry=True))
     assert tapered[:3] == paths and len(tapered) == 6
     for fraction in (.4, .5):
