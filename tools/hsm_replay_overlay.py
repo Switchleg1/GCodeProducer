@@ -1,8 +1,10 @@
 """SVG diagnostic plot for an ordered planar replay."""
+from html import escape
+
 from gcodeproducer.core.geometry.polygon_parts import polygons
 
 
-def write_overlay(out, pocket, residual, strokes):
+def write_overlay(out, pocket, residual, strokes, *, legend=None):
     """Plot (source line, XY points, already swept) strokes in work coordinates."""
     strokes = list(strokes)
     x0, y0, x1, y1 = pocket.bounds
@@ -17,8 +19,9 @@ def write_overlay(out, pocket, residual, strokes):
 
     print(f'<svg xmlns="http://www.w3.org/2000/svg" width="1100" '
           f'viewBox="{x0-4*unit} {-y1-8*unit} {x1-x0+8*unit} {y1-y0+12*unit}">', file=out)
-    print(f'<text x="{x0}" y="{-y1-4*unit}" font-size="{1.8*unit}">'
-          'Blue: new sweep | Gray: prior sweep | Orange: reachable residual | Labels: G-code line</text>', file=out)
+    if legend is None:
+        legend = 'Blue: new sweep | Gray: prior sweep | Orange: reachable residual | Labels: G-code line'
+    print(f'<text x="{x0}" y="{-y1-4*unit}" font-size="{1.8*unit}">{escape(legend)}</text>', file=out)
     for shape, role, color in ((pocket, 'pocket', '#f2f4f6'), (residual, 'residual', '#fa801a')):
         for part in polygons(shape):
             path = ' '.join('M ' + ' '.join(map(xy, ring.coords)) + ' Z'

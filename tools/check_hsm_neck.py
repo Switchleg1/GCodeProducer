@@ -19,6 +19,7 @@ from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_
 from tools.hsm_front_choice import choose_front_cut
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
+from tools.hsm_replay_overlay import write_overlay
 from tools.hsm_tangent_link import forward_clearance
 from tools.hsm_straight_front import eased_front_bite, frontier_edges, straight_advance, straight_front_candidates
 
@@ -220,6 +221,21 @@ def widest_span(section):
     return max((hi-lo for lo, hi in section['connected_y_mm']), default=0.)
 
 
+def neck_fixture():
+    fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
+    pocket = from_wkt(fixture.read_text(encoding='utf-8'))
+    cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
+    return pocket, pocket.difference(cleared)
+
+
+def write_opening_review(path, pocket, stock, link, cut):
+    """Show the modeled initial material that an XY-only viewer cannot infer."""
+    with Path(path).open('x', encoding='ascii', newline='\n') as stream:
+        write_overlay(stream, pocket, stock, [(i, points, clear) for i, (points, clear) in
+                      enumerate(((link, True), (cut, False)), 1) if len(points) > 1],
+                      legend='Opening: orange stock | light pre-cleared | 1 gray link | 2 blue cut')
+
+
 def write_review_gcode(path, cuts, seed_xy, reason):
     """Save accepted XY motion for a viewer, not a machine or quantized replay."""
     with Path(path).open('x', encoding='ascii', newline='\n') as stream:
@@ -228,6 +244,7 @@ def write_review_gcode(path, cuts, seed_xy, reason):
 
         stream.write('(DEBUG ONLY - XY GEOMETRY REVIEW - DO NOT RUN ON A MACHINE)\n'
                      f'(Synthetic two-lobe fixture: {reason}, {len(cuts)} accepted cuts)\n'
+                     '(Starts in assumed pre-cleared stock; see companion opening SVG)\n'
                      '(No Z, entry, spindle, tool or feed schedule; rounded XY not replayed)\n'
                      'G21\nG90\n')
         move('G0', seed_xy)
@@ -286,10 +303,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('neck-front proposals require shallow fronts and roll-off')
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
-    fixture = Path(__file__).resolve().parents[1] / 'examples' / 'adaptive-neck-pocket.wkt'
-    pocket = from_wkt(fixture.read_text(encoding='utf-8'))
-    cleared = union_all([box(5, 16, 22, 30), box(5, 12, 14, 34), box(20, 24, 25, 34)])
-    stock = pocket.difference(cleared)
+    pocket, stock = neck_fixture()
     seed = ((9., 28.5), (1., 0.))
     radius = 2.
     regions = center_regions(pocket, radius)
@@ -453,7 +467,12 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        scored_retry=propose_widening if section_widen_retry else None,
                                        **gates)
     if review_gcode is not None:
+        opening = Path(review_gcode).with_suffix('.opening.svg')
+        if opening.exists():
+            raise FileExistsError(f'review companion already exists: {opening}')
         write_review_gcode(review_gcode, cuts, seed[0], reason)
+        link, cut = (cuts[0].link, cuts[0].cut) if cuts else ((), ())
+        write_opening_review(opening, pocket, stock, link, cut)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     last_heading = seed[1]

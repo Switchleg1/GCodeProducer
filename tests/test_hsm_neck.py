@@ -198,6 +198,9 @@ def test_review_export_writes_xy_only_and_refuses_overwrite(tmp_path):
     result = check_neck(review_gcode=path)
     text = path.read_text('ascii')
     assert text.startswith('(DEBUG ONLY')
+    assert 'assumed pre-cleared' in text
+    opening = path.with_suffix('.opening.svg').read_text('ascii')
+    assert all(token in opening for token in ('orange stock', 'pre-cleared', 'data-role="prior"', 'data-role="new"'))
     assert '(Cut 1: cleared link)' in text and '(Cut 1: stock removal)' in text
     moves = [line.split() for line in text.splitlines() if line.startswith(('G0 ', 'G1 '))]
     assert moves[0] == ['G0', 'X9.000000', 'Y28.500000']

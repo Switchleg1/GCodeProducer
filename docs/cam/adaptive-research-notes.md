@@ -442,7 +442,12 @@ the neck probe.
 Pass `--review-gcode path/to/new-review.nc` to save accepted links and cuts
 for geometry inspection. The file is debug-only XY, with no Z, tool,
 spindle, or feed schedule. It excludes rejected and uncommitted probes,
-refuses overwrites, and has not been replayed after coordinate rounding.
+refuses overwrites, and does not certify rounded coordinates. The companion
+`.opening.svg` shows initial stock (orange), assumed pre-clear (light),
+first cleared link (gray) and first cut (blue). A blank-stock viewer may
+show a slot: first-cut replay at 0.025 mm on the 96-cut review finds 360°
+if seeded clearance is omitted versus 42.00° in the actual fixture.
+The review provides no machining motion to create that clearance.
 
 ## Gate before another generator attempt
 
