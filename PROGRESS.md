@@ -129,4 +129,5 @@
 - Same-state continuation after cut 64: control adds 8 cuts to X18.052, 7.171 mm², 38.63 mm. Wide sweep plus 8 reaches X17.902, 8.271 mm², 54.46 mm. Do not adopt the wide sweep. Saved 73-cut `neck-handoff-wide-east-follow-8-INCOMPLETE-review.nc`.
 - Per-cut trace: the control gains all its reach in one cut (#4 reaches X18.05, +0.226 mm); the other seven do not move the east edge. After the sweep (already X17.902) none of the eight follow-ups moves the edge; their cuts end west of X17.4. Ranking by removal/feed keeps choosing interior work.
 - `--followup-east-priority` ranks the same eight-cut control continuation by connected east reach before efficiency. Edge advances in six of eight cuts and reaches X18.764 vs X18.052, removing 5.977 vs 7.171 mm² over 46.41 vs 38.63 mm; peak 58.01°. Gates unchanged.
-- Next: alternate east-priority and efficiency selection so the front advances without abandoning interior clearing. Completion gates are in `GOAL.md`.
+- `--followup-alternate` alternates east-first and efficiency ranking over the same eight cuts. It reaches X18.434 and removes the most stock (7.372 mm²), but has the longest feed (55.56 mm); peak 58.74°. East-first remains best for reach (X18.764).
+- Next: lengthen the east-first comparison to check whether it eventually crosses the neck or stalls. Completion gates are in `GOAL.md`.
