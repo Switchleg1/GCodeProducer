@@ -531,7 +531,9 @@ X17.017 compared with X16.365 greedy, but removal is lower (7.963 vs
 The reach audit separates endpoint filtering, motion checks and ranking.
 Over six repeats the widest sampled span falls from 2.502 to 2.115 mm.
 On the last two rounds, a checked 0.075 mm advance ranks below the chosen
-0.050 mm cut. Farther mapped straight bodies exceed sampled contact.
+0.050 mm cut. Farther mapped candidates exceed sampled contact; all 24
+first overloads occur on entry turns, before the straight body. The
+final round first fails at 61.05–62.59°, not a measurement of path peaks.
 
 ## Gate before another generator attempt
 

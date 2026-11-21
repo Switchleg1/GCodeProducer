@@ -322,6 +322,14 @@ def moving_anchor_profile(regions, initial, current):
     return east_opening_profile(regions, initial, current, offsets=offsets)
 
 
+def anchored_overload(path, chord, angle):
+    """Label a first failing chord on a turned straight; not the location on the flute."""
+    axis = max(range(len(path)-1), key=lambda i: math.dist(*path[i:i+2]))
+    phase = 'entry' if chord < axis else 'straight' if chord == axis else 'exit'
+    return {'phase': phase, 'chord_xy_mm': path[chord:chord+2],
+            'body_x_mm': path[axis][0], 'contact_deg': angle}
+
+
 def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False):
     a, b = tail.cut[-2:]
     start = b, tuple(y-x for x, y in zip(a, b))
@@ -330,6 +338,7 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
     profile = (moving_anchor_profile if moving else east_opening_profile)(regions, initial, component)
     counts = Counter()
     variant_counts = Counter()
+    overloads = []
     farthest = {}
     best_east = None
     body_x = None
@@ -353,14 +362,19 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
             east = after.bounds[2]
             best_east = east if best_east is None else max(east, best_east)
 
+    def note_overload(path, chord, angle):
+        overloads.append(anchored_overload(path, chord, angle))
+
     paths = section_anchored_straights(profile, component, on_variant=note_variant if moving else None)
     follow = choose_front_cut(pocket, live, start, paths, radius, diagnostics=counts,
                               on_outcome=note_outcome if moving else None,
+                              on_overload=note_overload if moving else None,
                               on_eligible=note_eligible if moving else None, **gates)
     trial = {'gates': dict(counts)}
     if moving:
         trial['reach_audit'] = {'max_span_width_mm': max((row['width_mm'] for row in profile), default=0.),
                                 'variant_counts': dict(variant_counts), 'farthest_body_x_by_stage_mm': farthest,
+                                'first_overloads': overloads,
                                 'best_checked_east_shift_mm': None if best_east is None else best_east-component.bounds[2]}
     if follow is not None:
         body = max(zip(follow.cut, follow.cut[1:]), key=lambda p: math.dist(*p))

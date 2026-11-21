@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus
+from tools.check_hsm_entry import anchored_overload, audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,14 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_anchored_overload_distinguishes_the_turns_from_the_straight():
+    path = [(1., 4.), (1.2, 3.8), (1.2, 2.8), (1., 2.6)]
+    assert [anchored_overload(path, i, 61.)['phase'] for i in range(3)] == ['entry', 'straight', 'exit']
+    assert anchored_overload(path, 0, 61.) == {
+        'phase': 'entry', 'chord_xy_mm': path[:2], 'body_x_mm': 1.2, 'contact_deg': 61.,
+    }
 
 
 def test_moving_anchor_stations_track_live_edge_but_keep_original_offsets():
