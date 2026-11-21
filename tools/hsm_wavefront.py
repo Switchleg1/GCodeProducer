@@ -312,6 +312,70 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     return route
 
 
+def along_wall(rings, xy, part, length):
+    """Dense points from a wall point along the wall toward cleared ground, or None off the wall."""
+    at = Point(xy)
+    ring = min(rings, key=lambda r: r.distance(at), default=None)
+    if ring is None or ring.distance(at) > WALL_TOLERANCE:
+        return None
+    here, total = ring.project(at), ring.length
+    steps = max(2, math.ceil(length/.1))
+
+    def walk(sign):
+        pts = [ring.interpolate((here + sign*length*k/steps) % total) for k in range(steps+1)]
+        return [tuple(xy)] + [(q.x, q.y) for q in pts[1:]]
+
+    return min((walk(1), walk(-1)), key=lambda pts: part.distance(Point(pts[len(pts)//2])))
+
+
+def fillet(first, second, trim):
+    """Join two legs that meet at first[-1] == second[0] with a curve tangent to both."""
+    a, b = LineString(first), LineString(second)
+    trim = min(trim, a.length/3, b.length/2)
+    if trim <= 0:
+        return list(first) + list(second)[1:]
+    start, end, corner = a.interpolate(a.length-trim), b.interpolate(trim), first[-1]
+    curve = [((1-t)**2*start.x + 2*(1-t)*t*corner[0] + t*t*end.x,
+              (1-t)**2*start.y + 2*(1-t)*t*corner[1] + t*t*end.y) for t in (k/8 for k in range(1, 8))]
+    return list(substring(a, 0., a.length-trim).coords) + curve + list(substring(b, trim, b.length).coords)
+
+
+def turn_away(before, end, allowed, radius):
+    """Quarter turn off the wall into the pocket, leaving end along the travel direction."""
+    length = math.dist(before, end)
+    if not length:
+        return []
+    tx, ty = (end[0]-before[0])/length, (end[1]-before[1])/length
+    for nx, ny in ((-ty, tx), (ty, -tx)):
+        if allowed.buffer(-.05).covers(Point(end[0]+nx*radius/2, end[1]+ny*radius/2)):
+            return [(end[0] + radius*(math.sin(a)*tx + (1-math.cos(a))*nx),
+                     end[1] + radius*(math.sin(a)*ty + (1-math.cos(a))*ny))
+                    for a in (math.pi/2*k/8 for k in range(1, 9))]
+    return []
+
+
+def wall_ends(run, part, allowed, rings, blend, stepover, *, overlap=.75, corner=.5, turn=.75):
+    """Carry an arc to the wall, follow the wall back toward cleared ground, then turn into the pocket.
+
+    The same shape in reverse starts the arc. An end that is not on the wall
+    rolls on from or off to the old front instead.
+    """
+    # Reach back past the previous peel's end so every stretch of wall is passed along at least once.
+    pull_back = stepover + corner + overlap
+    lead, tail = along_wall(rings, run[0], part, pull_back), along_wall(rings, run[-1], part, pull_back)
+    path = eased(run, False, part, allowed, blend, ends=(lead is None, tail is None))
+    if len(path) < 2:
+        return path
+    if tail is not None:
+        path = fillet(path, tail, corner)
+        path += turn_away(tail[-2], tail[-1], allowed, turn)
+    if lead is not None:
+        path = fillet(lead[::-1], path, corner)
+        path = turn_away(lead[-2], lead[-1], allowed, turn)[::-1] + path
+    # Snap the two tips into ground this island has already cleared.
+    return eased(path, False, part, allowed, 1., ends=(lead is not None, tail is not None))
+
+
 def sweep(path, stock, radius):
     """Remove the cutter's swept area without measuring contact."""
     return stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS))
@@ -380,10 +444,11 @@ def cut(path, stock, radius, sample_step):
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=None, placement='lobes', top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', wall_pull_back=True, top=0., depth=-2., lead_angle=2.5, time_budget=None):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
+    rings = [LineString(r.coords) for g in polygons(allowed) for r in (g.exterior, *g.interiors)]
     reachable = allowed.buffer(radius, quad_segs=SWEEP_SEGMENTS)
     stock = pocket
     strokes, island_reports = [], []
@@ -438,7 +503,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 while runs and not halt:
                     at = strokes[-1].points[-1] if strokes else centre
                     run, closed = runs.pop(min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0])))
-                    path = eased(run, closed, part, allowed, blend)
+                    if wall_pull_back and not closed and zone is None:
+                        path = wall_ends(run, part, allowed, rings, blend, stepover)
+                    else:
+                        path = eased(run, closed, part, allowed, blend)
                     if len(path) < 2:
                         continue
                     pieces = cutting_pieces(path, stock, radius)
@@ -512,7 +580,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         island_reports.append(island)
 
     # Wall profile: follow the pocket wall where fronts rolled off before reaching it.
-    profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.}
+    profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.,
+               'reachable_stock_before_mm2': stock.intersection(reachable).area}
     for inset in (.3, 0.):
         for part in polygons(allowed.buffer(-inset) if inset else allowed):
             if part.area < 1e-6:
@@ -563,7 +632,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     total = pocket.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
     feeds = [s for s in strokes if s.kind != 'link']
-    report = {'stop': stop, 'placement': placement,
+    report = {'stop': stop, 'placement': placement, 'wall_pull_back': wall_pull_back,
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
@@ -624,11 +693,14 @@ if __name__ == '__main__':
     parser.add_argument('--islands', type=int, help='number of helical islands; default is chosen from the shape')
     parser.add_argument('--placement', choices=('lobes', 'thirds', 'widest'), default='lobes',
                         help='one island per lobe, spread along the long axis, or the widest remaining spots')
+    parser.add_argument('--no-wall-pull-back', action='store_true',
+                        help='roll arcs off before the wall instead of following it back')
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
     args = parser.parse_args()
     fixture, _ = neck_fixture()
-    result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement, time_budget=args.time_budget,
+    result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement,
+                          wall_pull_back=not args.no_wall_pull_back, time_budget=args.time_budget,
                           sample_step=args.sample_step)
     if args.review_gcode is not None:
         write_review(args.review_gcode, fixture, *result)

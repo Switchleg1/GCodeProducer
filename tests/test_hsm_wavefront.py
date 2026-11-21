@@ -7,7 +7,7 @@ from shapely.ops import unary_union
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_wavefront import (choose_seeds, clear_pocket, clearance, cutting_pieces, eased, find_lobes, fronts, spiral_out,
-                                 stay_down_link, write_review)
+                                 stay_down_link, wall_ends, write_review)
 
 
 def test_two_islands_sit_a_third_in_from_each_end_of_a_long_pocket():
@@ -76,6 +76,24 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
     assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
     assert max(x for x, _ in path) == pytest.approx(4.5)
     assert allowed.covers(LineString(path))
+
+
+def test_wall_ends_follow_the_wall_back_over_the_previous_peel():
+    allowed = box(0, 0, 10, 6)
+    clear = box(0, 0, 4, 6)
+    rings = [LineString(allowed.exterior.coords)]
+    (run, closed), = fronts(clear, clear.buffer(.5).intersection(allowed), allowed.boundary)
+    path = wall_ends(run, clear, allowed, rings, 3., .5)
+    assert allowed.covers(LineString(path)) and max(x for x, _ in path) == pytest.approx(4.5)
+    assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
+    top = [x for x, y in path if y > 6 - 1e-9]
+    bottom = [x for x, y in path if y < 1e-9]
+    # Stepover 0.5 + corner 0.5 + overlap 0.75: the wall is followed back past the old front at x = 4.
+    assert min(top) < 3. and min(bottom) < 3. and max(top) < 4.5 and max(bottom) < 4.5
+    assert path[0][1] < 6. and path[-1][1] > 0.  # Both tips turn off the wall into the pocket.
+    inner = [(x, 5.) for x in (4.5, 4.5)] + [(4.5, 1.)]
+    plain = wall_ends(inner, clear, allowed, rings, 3., .5)
+    assert all(0 < y < 6 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
 
 
 def test_cutting_pieces_drop_air_and_keep_a_short_run_in_and_out():

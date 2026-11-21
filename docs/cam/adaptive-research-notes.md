@@ -634,3 +634,8 @@ concentric where two islands meet instead of wrapping around the neighbour's cle
 break through into the space the earlier ones opened. A wall profile pass then follows the pocket wall to remove what
 the rolled-off arc ends left. On the neck fixture: 2 retracts, 10,145 mm of cutting, 4,352 mm of links, 59.91°
 peak sampled contact and 19.9 mm² of reachable stock left at four corners where the profile exceeded the limit.
+
+By default an arc that ends on the wall now follows the wall back over the previous arc's end before turning into the
+pocket, and starts the same way in reverse (`--no-wall-pull-back` disables it). On the neck fixture this leaves
+50.4 mm² instead of 106.5 mm² for the profile pass and 12.1 mm² instead of 19.9 mm² after it, for 78 more arcs and
+1,636 mm more link travel.
