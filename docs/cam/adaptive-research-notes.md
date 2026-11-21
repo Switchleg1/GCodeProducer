@@ -639,3 +639,7 @@ By default an arc that ends on the wall now follows the wall back over the previ
 pocket, and starts the same way in reverse (`--no-wall-pull-back` disables it). On the neck fixture this leaves
 50.4 mm² instead of 106.5 mm² for the profile pass and 12.1 mm² instead of 19.9 mm² after it, for 78 more arcs and
 1,636 mm more link travel.
+
+The pull-back now runs until it reaches wall that earlier arcs already cleaned, rather than a fixed length, because
+arcs that meet a wall obliquely end several millimetres apart along it. That leaves 21.7 mm² for the profile pass,
+which then cuts 140 mm instead of 386 mm; 10.4 mm² remains at four corners where the contact limit refuses the wall.

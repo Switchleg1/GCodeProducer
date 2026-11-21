@@ -34,6 +34,7 @@ WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
 PROFILE_CHUNK = 8.  # mm of wall judged at a time
+WALL_REACH = 20.  # mm; farthest an arc end follows the wall back looking for clean wall
 LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
 
 
@@ -312,20 +313,30 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     return route
 
 
-def along_wall(rings, xy, part, length):
-    """Dense points from a wall point along the wall toward cleared ground, or None off the wall."""
+def along_wall(rings, xy, part, overlap, *, limit=WALL_REACH):
+    """Dense points from a wall point back along the wall until it is already clean, plus an overlap.
+
+    The wall counts as clean where the cutter centre can already sit on it.
+    Returns None for a point that is not on the wall.
+    """
     at = Point(xy)
     ring = min(rings, key=lambda r: r.distance(at), default=None)
     if ring is None or ring.distance(at) > WALL_TOLERANCE:
         return None
     here, total = ring.project(at), ring.length
-    steps = max(2, math.ceil(length/.1))
+    steps = max(2, math.ceil(limit/.1))
 
     def walk(sign):
-        pts = [ring.interpolate((here + sign*length*k/steps) % total) for k in range(steps+1)]
-        return [tuple(xy)] + [(q.x, q.y) for q in pts[1:]]
+        pts = [ring.interpolate((here + sign*limit*k/steps) % total) for k in range(1, steps+1)]
+        return [(q.x, q.y) for q in pts]
 
-    return min((walk(1), walk(-1)), key=lambda pts: part.distance(Point(pts[len(pts)//2])))
+    ways = (walk(1), walk(-1))
+    way = min(ways, key=lambda pts: part.distance(Point(pts[min(4, len(pts)-1)])))
+    clean = (distance(part, points(way)) < LINK_TOLERANCE).tolist()
+    keep = len(way)
+    if any(clean):
+        keep = min(len(way), clean.index(True) + 1 + math.ceil(overlap/(limit/steps)))
+    return [tuple(xy)] + way[:keep]
 
 
 def fillet(first, second, trim):
@@ -354,15 +365,14 @@ def turn_away(before, end, allowed, radius):
     return []
 
 
-def wall_ends(run, part, allowed, rings, blend, stepover, *, overlap=.75, corner=.5, turn=.75):
+def wall_ends(run, part, allowed, rings, blend, *, overlap=.75, corner=.5, turn=.75):
     """Carry an arc to the wall, follow the wall back toward cleared ground, then turn into the pocket.
 
     The same shape in reverse starts the arc. An end that is not on the wall
     rolls on from or off to the old front instead.
     """
-    # Reach back past the previous peel's end so every stretch of wall is passed along at least once.
-    pull_back = stepover + corner + overlap
-    lead, tail = along_wall(rings, run[0], part, pull_back), along_wall(rings, run[-1], part, pull_back)
+    # Reach back to wall the earlier peels already cleaned, so every stretch is passed along at least once.
+    lead, tail = along_wall(rings, run[0], part, overlap), along_wall(rings, run[-1], part, overlap)
     path = eased(run, False, part, allowed, blend, ends=(lead is None, tail is None))
     if len(path) < 2:
         return path
@@ -504,7 +514,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     at = strokes[-1].points[-1] if strokes else centre
                     run, closed = runs.pop(min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0])))
                     if wall_pull_back and not closed and zone is None:
-                        path = wall_ends(run, part, allowed, rings, blend, stepover)
+                        path = wall_ends(run, part, allowed, rings, blend)
                     else:
                         path = eased(run, closed, part, allowed, blend)
                     if len(path) < 2:

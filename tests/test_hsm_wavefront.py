@@ -78,21 +78,24 @@ def test_front_runs_skip_the_wall_and_start_and_end_on_the_old_front():
     assert allowed.covers(LineString(path))
 
 
-def test_wall_ends_follow_the_wall_back_over_the_previous_peel():
+def test_wall_ends_follow_the_wall_back_to_clean_wall_plus_an_overlap():
     allowed = box(0, 0, 10, 6)
     clear = box(0, 0, 4, 6)
     rings = [LineString(allowed.exterior.coords)]
     (run, closed), = fronts(clear, clear.buffer(.5).intersection(allowed), allowed.boundary)
-    path = wall_ends(run, clear, allowed, rings, 3., .5)
+    path = wall_ends(run, clear, allowed, rings, 3.)
     assert allowed.covers(LineString(path)) and max(x for x, _ in path) == pytest.approx(4.5)
     assert clear.distance(Point(path[0])) < 1e-9 and clear.distance(Point(path[-1])) < 1e-9
     top = [x for x, y in path if y > 6 - 1e-9]
     bottom = [x for x, y in path if y < 1e-9]
-    # Stepover 0.5 + corner 0.5 + overlap 0.75: the wall is followed back past the old front at x = 4.
-    assert min(top) < 3. and min(bottom) < 3. and max(top) < 4.5 and max(bottom) < 4.5
+    # The wall is clean from x = 4 back, so the sweep stops 0.75 mm past it.
+    assert min(top) == pytest.approx(3.25, abs=.15) and min(bottom) == pytest.approx(3.25, abs=.15)
     assert path[0][1] < 6. and path[-1][1] > 0.  # Both tips turn off the wall into the pocket.
-    inner = [(x, 5.) for x in (4.5, 4.5)] + [(4.5, 1.)]
-    plain = wall_ends(inner, clear, allowed, rings, 3., .5)
+    # Wall skin left by earlier peels: only x <= 1 is clean, so the sweep reaches all the way back to it.
+    lagging = unary_union([box(0, 0, 1, 6), box(0, 1, 4, 5)])
+    far = wall_ends([(4.5, 6.), (4.5, 0.)], lagging, allowed, rings, 3.)
+    assert min(x for x, y in far if y > 6 - 1e-9) < 1. and min(x for x, y in far if y < 1e-9) < 1.
+    plain = wall_ends([(4.5, 5.), (4.5, 1.)], clear, allowed, rings, 3.)
     assert all(0 < y < 6 for _, y in plain)  # Ends away from the wall roll off to the old front instead.
 
 

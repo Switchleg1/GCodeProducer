@@ -144,4 +144,5 @@
 - Each island's fronts are generated against the stock that island alone would have left, then trimmed to real stock with
   a 1 mm run in and out through air. Shared ground goes to the island whose spiral disc edge is nearest; the last island
   takes whatever remains. The wall profile uses a 0.3 mm inset pass, then the wall, in 8 mm stretches with 1.5 mm run-ins.
-- Wall pull-back length is stepover + 0.5 mm corner + 0.75 mm overlap, with a 0.75 mm turn off the wall; untuned.
+- Wall pull-back follows the wall to the first point the cutter centre can already occupy, plus 0.75 mm, capped at 20 mm,
+  with a 0.5 mm corner and a 0.75 mm turn off the wall; untuned.
