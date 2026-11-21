@@ -96,4 +96,5 @@
 - `tools/check_hsm_entry.py` audits the existing helix on intact stock. It stays inside the pocket with a 2 mm radial check, reaches Z−2 at ≤5.063°, and its floor sweep credits 45.24 mm² versus the assumed 348 mm². Post-floor seed is clear; target-plane contact at first arrival is 360° without ramp credit. No export.
 - Four clipped Z-slice replays each begin at 360° on full stock. During the floor pass the Z−0.5/−1 slices stay below 60°, but Z−1.5 exceeds it over 3.76 mm of XY and Z−2 over 9.41 mm. The entry remains unqualified.
 - Synchronized axial contact audit: at 16 midpoint bands, estimated height above 60° peaks at 0.875 mm on descent and 0.750 mm on the floor pass (means 0.658 and 0.291 mm). At eight bands peaks are 1.000 and 0.750 mm; means agree.
-- Next: compare a shallower pitch with the same full stock, endpoint and floor sweep, tracking high-contact height and added travel. Completion gates are in `GOAL.md`.
+- `--compare-pitch` preserves the exact floor path and exit. Actual max angles 5.06°→3.38°→2.03° give peak over-limit descent height 0.875→0.625→0.375 mm; floor 0.750→0.500→0.375 mm. Descent XY grows 22.58→33.87→56.45 mm. No cutting force or timing claim, no export.
+- Next: test whether a checked first cut can depart the actual helix seed instead of the synthetic pre-clear. Completion gates are in `GOAL.md`.

@@ -463,6 +463,10 @@ separate planar diagnostics. Synchronized midpoint sampling at 16
 axial bands estimates peak thickness above 60° of 0.875 mm on descent
 and 0.750 mm on the floor pass. At eight bands the estimates are 1.000
 and 0.750 mm. This tracks geometric contact, not cutting force.
+`--compare-pitch` preserves the exact floor sweep and exit. Reducing
+actual maximum pitch angle from 5.06° to 2.03° drops estimated peak
+height above 60° from 0.875 to 0.375 mm in descent and from 0.750 to
+0.375 mm on the floor. Descent XY grows from 22.58 to 56.45 mm.
 
 ## Gate before another generator attempt
 

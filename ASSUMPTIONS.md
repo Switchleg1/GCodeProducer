@@ -68,3 +68,5 @@
   The synchronized axial audit represents a flat cylinder with uniform full
   stock across Z. Eight and 16 midpoint bands estimate thickness, not a
   certified peak or flute, chip, or machine load.
+  Pitch comparisons use 10°, 5°, and 2.5° caps, not requested exact pitch;
+  helix lap rounding gives lower actual angles. XY distance is not time.

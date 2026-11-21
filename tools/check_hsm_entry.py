@@ -1,4 +1,5 @@
 """Audit the existing helical entry on intact synthetic neck stock (no export)."""
+import argparse
 import json
 import math
 import sys
@@ -108,12 +109,15 @@ def axial_contact(stock, points, radius, *, bands, step=.025, limit=60.):
     return {'bands': bands, 'band_height_mm': band_height, **phases}
 
 
+def neck_entry_region(pocket, radius):
+    regions = center_regions(pocket, radius)
+    return next(part for part in regions if part.covers(Point(9., 28.5))).intersection(box(0, 0, 24, 60))
+
+
 def check_entry():
     pocket, seeded = neck_fixture()
     radius, top, depth = 2., 0., -2.
-    regions = center_regions(pocket, radius)
-    left = next(part for part in regions if part.covers(Point(9., 28.5))).intersection(box(0, 0, 24, 60))
-    entry = seed_entry(left, pocket, radius=radius, top=top, depth=depth, lead_angle=10.)
+    entry = seed_entry(neck_entry_region(pocket, radius), pocket, radius=radius, top=top, depth=depth, lead_angle=10.)
     if entry is None:
         return {'stop': 'no_entry_candidate'}
     report = audit_entry(pocket, pocket, entry.points, radius, depth)
@@ -126,5 +130,31 @@ def check_entry():
     return report
 
 
+def compare_pitch(*, bands=16, step=.025):
+    """Compare pitch on intact stock, flagging any change to the final sweep."""
+    pocket, _ = neck_fixture()
+    radius, top, depth = 2., 0., -2.
+    region = neck_entry_region(pocket, radius)
+    trials = []
+    baseline = None
+    for angle in (10., 5., 2.5):
+        entry = seed_entry(region, pocket, radius=radius, top=top, depth=depth, lead_angle=angle)
+        if entry is None:
+            trials.append({'angle_cap_deg': angle, 'stop': 'no_entry_candidate'})
+            continue
+        audit = audit_entry(pocket, pocket, entry.points, radius, depth)
+        floor = entry.points[entry.points[:, 2] == depth]
+        if angle == 10.:
+            baseline = floor
+        trials.append({'angle_cap_deg': angle, 'actual_max_angle_deg': audit['max_ramp_deg'],
+                       'same_floor_and_exit': baseline is not None and np.array_equal(floor, baseline),
+                       'contained': audit['contained'], 'floor_removed_mm2': audit['floor_removed_mm2'],
+                       'contact': axial_contact(pocket, entry.points, radius, bands=bands, step=step)})
+    return trials
+
+
 if __name__ == '__main__':
-    print(json.dumps(check_entry(), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--compare-pitch', action='store_true', help='compare shallower pitches at equal floor coverage')
+    args = parser.parse_args()
+    print(json.dumps(compare_pitch() if args.compare_pitch else check_entry(), indent=2))

@@ -1,7 +1,7 @@
 import pytest
 from shapely.geometry import Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, entry_plane_contact
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, compare_pitch, entry_plane_contact
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -32,6 +32,15 @@ def test_axial_sampling_reports_plunge_and_air_separately():
     air = axial_contact(Polygon(), path, 1., bands=4)
     assert air['descent']['peak_over_limit_height_mm'] == 0.
     assert air['floor']['mean_over_limit_height_mm'] == 0.
+
+
+def test_pitch_comparison_preserves_floor_and_accounts_for_added_travel():
+    baseline, middle, shallow = compare_pitch(bands=8, step=.1)
+    assert all(row['contained'] and row['same_floor_and_exit'] for row in (baseline, middle, shallow))
+    assert shallow['floor_removed_mm2'] == baseline['floor_removed_mm2']
+    assert shallow['actual_max_angle_deg'] < middle['actual_max_angle_deg'] < baseline['actual_max_angle_deg']
+    assert shallow['contact']['descent']['xy_mm'] == pytest.approx(2.5*baseline['contact']['descent']['xy_mm'])
+    assert shallow['contact']['descent']['peak_over_limit_height_mm'] < baseline['contact']['descent']['peak_over_limit_height_mm']
 
 
 def test_entry_slice_clips_first_crossing_and_excludes_above_slice_travel():
