@@ -416,7 +416,10 @@ best removal 0.0632 mm² at 54.09° peak sampled contact.
 `--section-extend-rays` uses 1.65 mm only if ray misses leave the normal
 small retry empty. It adds one verified cut, reaching X27.822 and
 4,004.446 mm² reachable. All 24 final extension candidates exceed the
-unchanged contact limit; the neck probe remains disconnected.
+unchanged contact limit; the neck probe remains disconnected. The
+`terminal_extension_overloads` audit bounds all first-overload chords
+within X27.629–27.862 and Y22.785–22.899 mm: 16 following, eight easing
+in. This locates cutter-center chords, not the contact points in stock.
 
 ## Gate before another generator attempt
 

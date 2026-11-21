@@ -2,7 +2,16 @@ import pytest
 from shapely.geometry import Point, Polygon, box
 
 from tools.check_hsm_neck import (bounded_small_section_cuts, check_neck, clearance_sections, section_bite_spans, section_bites,
-                                  section_follow_cuts, small_section_cuts)
+                                  section_follow_cuts, small_section_cuts, overload_summary)
+
+
+def test_overload_summary_bounds_whole_chords_and_counts_phases():
+    rows = [{'phase': 'follow', 'chord_xy_mm': [(3, 4), (1, 2)]},
+            {'phase': 'ease_in', 'chord_xy_mm': [(5, 1), (2, 6)]},
+            {'phase': 'follow', 'chord_xy_mm': [(2, 3), (3, 3)]}]
+    assert overload_summary(rows) == {'count': 3, 'phases': {'follow': 2, 'ease_in': 1},
+                                      'chord_bounds_mm': (1., 1., 5., 6.)}
+    assert overload_summary([]) == {'count': 0, 'phases': {}, 'chord_bounds_mm': None}
 
 
 def test_small_section_audit_distinguishes_missing_contact_from_missing_span():

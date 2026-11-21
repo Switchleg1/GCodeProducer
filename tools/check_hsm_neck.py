@@ -177,6 +177,13 @@ def bounded_small_section_cuts(sections, stock, radius, *, extend=False, on_exte
         yield from small_section_cuts(sections, stock, radius, ray_length=1.65, **kwargs)
 
 
+def overload_summary(overloads):
+    """Bound first-overload chords, not inferred sample or stock-contact locations."""
+    points = [xy for row in overloads for xy in row['chord_xy_mm']]
+    return {'count': len(overloads), 'phases': dict(Counter(row['phase'] for row in overloads)),
+            'chord_bounds_mm': LineString(points).bounds if points else None}
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
@@ -244,20 +251,20 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     entry_fraction = .25
     follow_overloads = defaultdict(list)
 
-    def note_profile(path, body_chords, advance, fraction=None):
+    def note_profile(path, body_chords, advance, fraction=None, family='standard'):
         nonlocal follow_profile
-        follow_profile = (path, body_chords, advance, entry_fraction if fraction is None else fraction)
+        follow_profile = (path, body_chords, advance, entry_fraction if fraction is None else fraction, family)
 
     def report_overload(round_index, path, segment, angle):
         if path is taper_candidate:
             phase = 'approach' if segment < taper_chords else 'straight' if segment == taper_chords else 'exit'
             overload_phases[round_index][phase] += 1
         if follow_profile is not None and path is follow_profile[0]:
-            _, body_chords, advance, fraction = follow_profile
+            _, body_chords, advance, fraction, family = follow_profile
             t = (segment + .5)/body_chords
             phase = ('retreat' if segment >= body_chords else 'ease_in' if t < fraction
                      else 'ease_out' if t > .75 else 'follow')
-            follow_overloads[round_index].append({'phase': phase, 'segment': segment,
+            follow_overloads[round_index].append({'family': family, 'phase': phase, 'segment': segment,
                                                  'chord_xy_mm': path[segment:segment+2],
                                                  'entry_fraction': fraction,
                                                  'advance_mm': advance, 'contact_deg': angle})
@@ -328,9 +335,18 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     def propose_small_contours(live, _pose):
         component = connected_clearance(pocket, live, seed[0], radius)
         sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
+        family = 'small'
+
+        def extend_profile():
+            nonlocal family
+            family = 'extended_ray'
+            record_extension()
+
+        def note(path, chords, advance, fraction):
+            note_profile(path, chords, advance, fraction, family)
+
         return bounded_small_section_cuts(sections, live, radius, turn_exits=section_turn_exits,
-                                          on_profile=note_profile, extend=section_extend_rays,
-                                          on_extension=record_extension)
+                                          on_profile=note, extend=section_extend_rays, on_extension=extend_profile)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -404,6 +420,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         audit = []
         count = sum(1 for _ in small_section_cuts(sections, remaining, radius, turn_exits=section_turn_exits, audit=audit))
         report['final_small_retry'] = {'proposal_count': count, 'entry_shapes': audit}
+        if section_extend_rays:
+            failures = [row for row in follow_overloads.get(len(diagnostics)-1, ()) if row['family'] == 'extended_ray']
+            report['terminal_extension_overloads'] = overload_summary(failures)
         if section_ray_probe:
             pose = last_xy, last_heading
             routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
