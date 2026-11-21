@@ -62,3 +62,6 @@
   X≤24 restricts helix placement to the left lobe. The independent floor
   sweep uses 32 buffer segments per quadrant, finer than the entry helper;
   it gives no cutting credit for the descending helix.
+  The entry slice replay credits only motion at or below each plane, samples
+  at 0.025 mm XY, and uses 60° as a diagnostic cutoff, not an entry limit
+  certified for the tool. Separate slice peaks need not occur together.

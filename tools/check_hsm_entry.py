@@ -14,6 +14,7 @@ from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions, connected_clearance
+from tools.hsm_contact_replay import indexed_contact
 
 
 def audit_entry(pocket, stock, points, radius, depth):
@@ -40,6 +41,31 @@ def audit_entry(pocket, stock, points, radius, depth):
             'floor_start_contact_without_ramp_credit_deg': contact_angle(tuple(floor.coords[0]), radius, stock)}
 
 
+def entry_plane_contact(stock, points, radius, depth, plane, *, step=.025, limit=60.):
+    """Replay only the XY sweep after descending through a fixed Z slice."""
+    points = np.asarray(points, dtype=float)
+    if not depth <= plane <= points[0, 2] or np.any(np.diff(points[:, 2]) > 0):
+        raise ValueError('expected a slice in the descending entry range')
+    hits = np.flatnonzero(points[:, 2] <= plane)
+    if not len(hits):
+        raise ValueError('entry does not reach the slice')
+    start = int(hits[0])
+    active = points[start:]
+    if active[0, 2] < plane:
+        a, b = points[start-1:start+1]
+        crossing = a + (b-a)*((plane-a[2])/(b[2]-a[2]))
+        active = np.vstack((crossing, active))
+    arrival = contact_angle(tuple(active[0, :2]), radius, stock)
+    phases = {name: {'xy_mm': 0., 'over_limit_xy_mm': 0., 'peak_deg': None} for name in ('descent', 'floor')}
+    for chord, angle, distance in indexed_contact(active[:, :2], stock, radius, step, 32):
+        segment = phases['descent' if active[chord, 2] > depth else 'floor']
+        segment['xy_mm'] += distance
+        if angle > limit:
+            segment['over_limit_xy_mm'] += distance
+        segment['peak_deg'] = max(angle, segment['peak_deg'] or 0.)
+    return {'plane_z_mm': plane, 'arrival_xy_mm': active[0, :2].tolist(), 'arrival_contact_deg': arrival, **phases}
+
+
 def check_entry():
     pocket, seeded = neck_fixture()
     radius, top, depth = 2., 0., -2.
@@ -49,6 +75,8 @@ def check_entry():
     if entry is None:
         return {'stop': 'no_entry_candidate'}
     report = audit_entry(pocket, pocket, entry.points, radius, depth)
+    report['slice_contacts'] = [entry_plane_contact(pocket, entry.points, radius, depth, z)
+                                for z in (-.5, -1., -1.5, -2.)]
     report['synthetic_preclear_mm2'] = pocket.area - seeded.area
     report['entry_end_xy_mm'] = entry.points[-1, :2].tolist()
     report['floor_accounting_delta_mm2'] = report['floor_removed_mm2'] - (pocket.area-entry.remaining.area)

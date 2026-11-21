@@ -455,7 +455,11 @@ suppresses the XY review export instead of implying an entry.
 stock. Its floor sweep removes 45.24 mm² (not the assumed 348 mm²) and
 leaves a clear seed, but a floor-only view shows 360° upon arrival when
 ramp motion is not credited. The audit verifies XY containment and ramp
-angle, not descent engagement, tool suitability, or a runnable entry.
+angle, not tool suitability or a runnable entry. Slice replay clips at
+Z−0.5, −1, −1.5 and −2 before crediting any sweep. All four enter at
+360°. During the floor pass, contact exceeds 60° over 3.76 mm of XY at
+Z−1.5 and 9.41 mm at Z−2, but not at the two higher slices. These are
+separate planar diagnostics, not a simultaneous axial load estimate.
 
 ## Gate before another generator attempt
 
