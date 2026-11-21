@@ -537,6 +537,9 @@ final round first fails at 61.05–62.59°, not a measurement of path peaks.
 `--tapered-anchor-probe` keeps the exact straight and exit and changes
 only the lead on those four failures. Of 12 variants, eight fail start
 clearance, two fail link clearance and two still overload on entry.
+`--clearance-anchor-probe` uses verified horizontal start intervals.
+All 48 starts pass, six links fail, and the 42 linked variants still
+first exceed contact on entry. The accepted path is unchanged.
 
 ## Gate before another generator attempt
 

@@ -118,4 +118,5 @@
 - Moving-anchor reach audit: widest span falls 2.502→2.115 mm and eligible variants 32→12. The last round's best checked gain is 0.075 mm vs 0.05 mm selected; the farthest mapped line is another 0.100 mm east but fails contact. Motion unchanged.
 - The moving-anchor contact audit traces all 24 first overloads to entry turns; none first fails on the straight or exit. In the final round first failing samples are 61.05–62.59°. The 14 accepted cuts are unchanged.
 - `--tapered-anchor-probe` replaces only the lead on the four last-round entry failures. Of 12 variants, eight fail start clearance, two fail link clearance and two still exceed entry contact. No replacement cut; review motion matches the 14-cut baseline.
-- Next: choose lead starts from the live clearance beside the body rather than stretching the approach farther north. Completion gates are in `GOAL.md`.
+- `--clearance-anchor-probe` fits starts using verified horizontal intervals. All 48 variants clear their starts, six fail the link and all 42 linked variants overload on entry. No accepted change; review is byte-identical to the 14-cut baseline.
+- Next: test clearing the overloaded entry shoulder with a separate checked cut before retrying the farther straight. Completion gates are in `GOAL.md`.

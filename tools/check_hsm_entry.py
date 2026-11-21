@@ -15,7 +15,7 @@ if __package__ in (None, ''):
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.check_hsm_neck import clearance_sections, neck_fixture, widest_span, write_opening_review, write_review_gcode
-from tools.hsm_center_regions import center_regions, connected_clearance
+from tools.hsm_center_regions import center_regions, cleared_start_intervals, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_choice import choose_front_cut
 from tools.hsm_front_corner import parallel_face_candidates, roll_off, roll_on, tapered_roll_on, turned_straight_candidates
@@ -403,12 +403,30 @@ def tapered_anchor_candidates(rejected):
             yield tapered_roll_on(suffix, lateral, run*factor, .0025)
 
 
-def probe_tapered_anchor(pocket, seed_xy, tail, radius, gates, rejected):
+def clearance_anchor_candidates(pocket, stock, radius, rejected):
+    """Fit a taper from verified west-side starts without changing the body/exit."""
+    for path in rejected:
+        i = max(range(len(path)-1), key=lambda k: math.dist(*path[k:k+2]))
+        x, y = path[i]
+        baseline_run = path[0][1]-y
+        if not i or baseline_run <= 0:
+            continue
+        for factor in (.6, 1., 1.5, 2.):
+            run = baseline_run*factor
+            a, b = (x-.125, y+run), (x-1.5, y+run)
+            for low, high in cleared_start_intervals(pocket, stock, a, b, radius):
+                for fraction in (.2, .5, .8):
+                    offset = .125+low+fraction*(high-low)
+                    yield tapered_roll_on(path[i:], offset, run, .0025)
+
+
+def probe_tapered_anchor(pocket, seed_xy, tail, radius, gates, rejected, *, from_clearance=False):
     live = tail.remaining
     a, b = tail.cut[-2:]
     start = b, tuple(y-x for x, y in zip(a, b))
     counts, overloads = Counter(), []
-    paths = list(tapered_anchor_candidates(rejected))
+    paths = (clearance_anchor_candidates(pocket, live, radius, rejected) if from_clearance
+             else tapered_anchor_candidates(rejected))
     choice = choose_front_cut(pocket, live, start, paths, radius, diagnostics=counts,
                               on_overload=lambda p, i, ang: overloads.append(anchored_overload(p, i, ang)), **gates)
     result = {'original_entry_failures': len(rejected), 'gates': dict(counts), 'first_overloads': overloads,
@@ -421,10 +439,13 @@ def probe_tapered_anchor(pocket, seed_xy, tail, radius, gates, rejected):
     return choice, result
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False):
     """Check only the planar motion following the modeled helix floor sweep."""
-    if tapered_anchor_probe and repeat_anchored < 1:
-        raise ValueError('tapered anchor probe requires at least one moving anchor')
+    lead_probe = tapered_anchor_probe or clearance_anchor_probe
+    if lead_probe and repeat_anchored < 1:
+        raise ValueError('anchor lead probe requires at least one moving anchor')
+    if tapered_anchor_probe and clearance_anchor_probe:
+        raise ValueError('select only one anchor lead probe')
     if repeat_anchored < 0 or (repeat_anchored and not anchored_straight):
         raise ValueError('moving anchors require an anchored straight prefix and nonnegative budget')
     if anchored_straight and not repeat_face_pairs:
@@ -570,7 +591,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                 if follow is not None:
                                     for _ in range(repeat_anchored):
                                         prefix_count = len(preview)
-                                        rejected = [] if tapered_anchor_probe else None
+                                        rejected = [] if lead_probe else None
                                         follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates,
                                                                                moving=True, failed_entry_paths=rejected)
                                         trace.append(trial)
@@ -579,10 +600,11 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                             break
                                         preview.append(follow)
                                 report['moving_anchor_probe'] = {'stop': status, 'trace': trace}
-                                if tapered_anchor_probe and trace:
+                                if lead_probe and trace:
                                     tapered, result = probe_tapered_anchor(pocket, pose[0], preview[prefix_count-1],
-                                                                         radius, gates, rejected)
-                                    report['tapered_anchor_probe'] = result
+                                                                         radius, gates, rejected, from_clearance=clearance_anchor_probe)
+                                    key = 'clearance_anchor_probe' if clearance_anchor_probe else 'tapered_anchor_probe'
+                                    report[key] = result
                                     if tapered is not None:
                                         preview = [*preview[:prefix_count], tapered]
                         final_stock = preview[-1].remaining
@@ -599,7 +621,9 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
             tapered_selected = report.get('tapered_anchor_probe', {}).get('accepted', False)
-            label = ('tapered moving-anchor probe; helix omitted' if tapered_selected else
+            clearance_selected = report.get('clearance_anchor_probe', {}).get('accepted', False)
+            label = ('clearance-fitted anchor probe; helix omitted' if clearance_selected else
+                     'tapered moving-anchor probe; helix omitted' if tapered_selected else
                      'moving-anchor straight probe; helix omitted' if repeat_anchored else
                      'section-anchored straight probe; helix omitted' if anchored_straight else
                      'repeated neck-facing pair probe; helix omitted' if repeat_face_pairs else
@@ -631,7 +655,10 @@ if __name__ == '__main__':
     parser.add_argument('--section-anchored-straight', action='store_true', help='check a straight from the measured opening')
     parser.add_argument('--repeat-anchored-straights', type=int, default=0, help='check additional straights from live anchor stations')
     parser.add_argument('--tapered-anchor-probe', action='store_true', help='retry only the last round entry failures on identical stock')
+    parser.add_argument('--clearance-anchor-probe', action='store_true', help='fit alternate leads from verified start intervals')
     args = parser.parse_args()
+    if args.clearance_anchor_probe and (args.repeat_anchored_straights < 1 or args.tapered_anchor_probe):
+        parser.error('clearance probe requires moving anchors and excludes the tapered probe')
     if args.tapered_anchor_probe and args.repeat_anchored_straights < 1:
         parser.error('tapered anchor probe requires --repeat-anchored-straights')
     if args.repeat_anchored_straights < 0 or (args.repeat_anchored_straights and not args.section_anchored_straight):
@@ -665,6 +692,7 @@ if __name__ == '__main__':
                               face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor,
                               neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
                               anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
-                              tapered_anchor_probe=args.tapered_anchor_probe) if cut_audit else
+                              tapered_anchor_probe=args.tapered_anchor_probe,
+                              clearance_anchor_probe=args.clearance_anchor_probe) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

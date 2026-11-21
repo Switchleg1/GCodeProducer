@@ -112,3 +112,5 @@
   or west of the original seed edge are excluded as in the fixed probe.
   The tapered probe keeps the original lateral offset and tests lead runs
   of 1, 1.5 and 2 times the rejected turn's axial run on identical stock.
+  Clearance-fitted leads sample interior positions on verified horizontal
+  intervals 0.125–1.5 mm west of the body, at four trial run lengths.

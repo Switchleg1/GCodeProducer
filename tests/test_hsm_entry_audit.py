@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_entry import anchored_overload, audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus, tapered_anchor_candidates
+from tools.check_hsm_entry import anchored_overload, audit_entry, axial_contact, check_entry, check_first_cut, clearance_anchor_candidates, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus, tapered_anchor_candidates
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,16 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_clearance_fitted_leads_preserve_suffix_and_require_true_start_clearance():
+    path = [(4., 6.), (4.4, 5.6), (4.4, 4.6), (4., 4.2)]
+    pocket = box(0., 0., 10., 10.)
+    stock = box(4.5, 0., 10., 10.)
+    paths = list(clearance_anchor_candidates(pocket, stock, 1., [path]))
+    assert paths
+    assert all(candidate[-3:] == path[1:] and Point(candidate[0]).distance(stock) >= 1. for candidate in paths)
+    assert not list(clearance_anchor_candidates(pocket, pocket, 1., [path]))
 
 
 def test_tapered_anchor_variants_only_change_the_approach():
