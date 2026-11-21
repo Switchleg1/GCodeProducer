@@ -1,7 +1,18 @@
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_neck import check_neck, clearance_sections, section_bite_spans, section_bites
+from tools.check_hsm_neck import check_neck, clearance_sections, section_bite_spans, section_bites, section_follow_cuts
+
+
+def test_section_follow_eases_to_stock_contact_across_middle_rows():
+    sections = [{'x_mm': 4., 'eligible_y_mm': [(2., 6.)]}]
+    paths = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2.))
+    assert len(paths) == 3
+    for path, expected in zip(paths, (4.55, 4.60, 4.65)):
+        assert path[0] == pytest.approx((4., 5.8))
+        assert path[-1] == pytest.approx((4., 2.2))
+        assert all(x == pytest.approx(expected) for x, y in path if 3.2 < y < 4.8)
+    assert not list(section_follow_cuts(sections, box(8, 0, 11, 10), 2.))
 
 
 def test_bite_span_audit_explains_empty_candidate_family():

@@ -98,12 +98,38 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False):
+    """Follow first stock contact across an open span, easing both ends west."""
+    occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
+    for section in sections:
+        x = section['x_mm']
+        for low, high in section['eligible_y_mm']:
+            low, high = low+.2, high-.2
+            count = max(8, math.ceil((high-low)/.125))
+            rows = []
+            for i in range(count+1):
+                t = i/count
+                y = high + (low-high)*t
+                hit = LineString([(x, y), (x+1.5, y)]).intersection(occupied)
+                if hit.is_empty:
+                    break
+                blend = math.sin(math.pi/2*min(1., 4*t, 4*(1-t)))**2
+                rows.append((y, hit.bounds[0]-x, blend))
+            if len(rows) != count+1:
+                continue
+            for advance in (.05, .10, .15):
+                path = [(x + (offset+advance)*blend, y) for y, offset, blend in rows]
+                yield path
+                if turn_exits:
+                    yield roll_off(path, .25, .0025)
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -112,8 +138,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
-    if (section_turn_exits or section_live_depth or section_search_west) and not section_bites_last:
-        raise ValueError('section exit, depth and search trials require last-resort section bites')
+    if (section_turn_exits or section_live_depth or section_search_west or section_follow) and not section_bites_last:
+        raise ValueError('section variants require last-resort section bites')
     if (with_section_bites or section_bites_last) and not with_shallow_fronts:
         raise ValueError('section bites require shallow fronts')
     if with_shifted_joins and not shallow_rollon:
@@ -201,8 +227,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
 
     def propose_section_bites(live, _pose):
         component = connected_clearance(pocket, live, seed[0], radius)
-        return section_bites(regions, component, radius, turn_exits=section_turn_exits,
-                             live_stock=live if section_live_depth else None, search_west=section_search_west)
+        yield from section_bites(regions, component, radius, turn_exits=section_turn_exits,
+                                 live_stock=live if section_live_depth else None, search_west=section_search_west)
+        if section_follow:
+            sections = section_bite_spans(regions, component, search_west=section_search_west)
+            yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -327,6 +356,8 @@ if __name__ == '__main__':
                         help='also try depths just past midpoint contact with live stock')
     parser.add_argument('--section-search-west', action='store_true',
                         help='try farther insets only if both default sections are too narrow')
+    parser.add_argument('--section-follow', action='store_true',
+                        help='also try cuts following stock contact across the open span')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -343,7 +374,8 @@ if __name__ == '__main__':
                             with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
-                            section_live_depth=args.section_live_depth, section_search_west=args.section_search_west)
+                            section_live_depth=args.section_live_depth, section_search_west=args.section_search_west,
+                            section_follow=args.section_follow)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

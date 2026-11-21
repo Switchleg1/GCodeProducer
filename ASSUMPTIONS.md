@@ -30,3 +30,6 @@
   at one point, not immersion or peak contact along the whole bow. The
   optional west search stops at the first eligible 0.75 or 1 mm inset;
   it does not establish that farther insets lack useful cuts.
+- Section following estimates contact on eastward 1.5 mm rays spaced at most
+  0.125 mm apart. It supplies a chord-chain candidate, not a continuous
+  curvature or contact bound. The original motion checks still apply.

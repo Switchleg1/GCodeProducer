@@ -375,6 +375,9 @@ which does not by itself verify a cut or a link. With `--section-search-west`,
 two extra checked cuts remove only 0.0035 mm² and do not advance the eastern
 edge at 0.001 mm reporting precision. The run stalls at cut 64; 12 final
 section candidates exceed the sampled contact gate and six remove nothing.
+`--section-follow` samples first contact across each eligible span and eases
+in and out. The 72-cut run stalls at X27.269 with 4,006.640 mm² reachable
+and 57.91° peak sampled contact. The neck probe remains disconnected.
 
 ## Gate before another generator attempt
 
