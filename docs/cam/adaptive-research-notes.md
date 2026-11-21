@@ -534,6 +534,9 @@ On the last two rounds, a checked 0.075 mm advance ranks below the chosen
 0.050 mm cut. Farther mapped candidates exceed sampled contact; all 24
 first overloads occur on entry turns, before the straight body. The
 final round first fails at 61.05–62.59°, not a measurement of path peaks.
+`--tapered-anchor-probe` keeps the exact straight and exit and changes
+only the lead on those four failures. Of 12 variants, eight fail start
+clearance, two fail link clearance and two still overload on entry.
 
 ## Gate before another generator attempt
 

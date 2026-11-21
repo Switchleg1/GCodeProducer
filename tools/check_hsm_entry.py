@@ -18,7 +18,7 @@ from tools.check_hsm_neck import clearance_sections, neck_fixture, widest_span, 
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_choice import choose_front_cut
-from tools.hsm_front_corner import parallel_face_candidates, roll_off, roll_on, turned_straight_candidates
+from tools.hsm_front_corner import parallel_face_candidates, roll_off, roll_on, tapered_roll_on, turned_straight_candidates
 from tools.hsm_front_run import run_front
 from tools.hsm_straight_front import fitted_front_candidates, straight_front_candidates
 
@@ -330,7 +330,7 @@ def anchored_overload(path, chord, angle):
             'body_x_mm': path[axis][0], 'contact_deg': angle}
 
 
-def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False):
+def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False, failed_entry_paths=None):
     a, b = tail.cut[-2:]
     start = b, tuple(y-x for x, y in zip(a, b))
     live = tail.remaining
@@ -363,7 +363,10 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
             best_east = east if best_east is None else max(east, best_east)
 
     def note_overload(path, chord, angle):
-        overloads.append(anchored_overload(path, chord, angle))
+        row = anchored_overload(path, chord, angle)
+        overloads.append(row)
+        if failed_entry_paths is not None and row['phase'] == 'entry':
+            failed_entry_paths.append(path)
 
     paths = section_anchored_straights(profile, component, on_variant=note_variant if moving else None)
     follow = choose_front_cut(pocket, live, start, paths, radius, diagnostics=counts,
@@ -385,8 +388,43 @@ def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gat
     return follow, trial
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0):
+def tapered_anchor_candidates(rejected):
+    """Change the approach only; keep the exact rejected body's chords and exit."""
+    for path in rejected:
+        i = max(range(len(path)-1), key=lambda k: math.dist(*path[k:k+2]))
+        if not i:
+            continue
+        suffix = path[i:]
+        lateral = suffix[0][0] - path[0][0]
+        run = path[0][1] - suffix[0][1]
+        if lateral <= 0 or run <= 0:
+            continue
+        for factor in (1., 1.5, 2.):
+            yield tapered_roll_on(suffix, lateral, run*factor, .0025)
+
+
+def probe_tapered_anchor(pocket, seed_xy, tail, radius, gates, rejected):
+    live = tail.remaining
+    a, b = tail.cut[-2:]
+    start = b, tuple(y-x for x, y in zip(a, b))
+    counts, overloads = Counter(), []
+    paths = list(tapered_anchor_candidates(rejected))
+    choice = choose_front_cut(pocket, live, start, paths, radius, diagnostics=counts,
+                              on_overload=lambda p, i, ang: overloads.append(anchored_overload(p, i, ang)), **gates)
+    result = {'original_entry_failures': len(rejected), 'gates': dict(counts), 'first_overloads': overloads,
+              'accepted': choice is not None}
+    if choice is not None:
+        before = connected_clearance(pocket, live, seed_xy, radius)
+        after = connected_clearance(pocket, choice.remaining, seed_xy, radius)
+        result.update(cut_efficiency(choice), peak_deg=choice.peak_deg,
+                      east_shift_mm=None if before.is_empty or after.is_empty else after.bounds[2]-before.bounds[2])
+    return choice, result
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if tapered_anchor_probe and repeat_anchored < 1:
+        raise ValueError('tapered anchor probe requires at least one moving anchor')
     if repeat_anchored < 0 or (repeat_anchored and not anchored_straight):
         raise ValueError('moving anchors require an anchored straight prefix and nonnegative budget')
     if anchored_straight and not repeat_face_pairs:
@@ -531,13 +569,22 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                 status = 'no_fixed_anchor_cut' if follow is None else 'anchor_budget'
                                 if follow is not None:
                                     for _ in range(repeat_anchored):
-                                        follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates, moving=True)
+                                        prefix_count = len(preview)
+                                        rejected = [] if tapered_anchor_probe else None
+                                        follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates,
+                                                                               moving=True, failed_entry_paths=rejected)
                                         trace.append(trial)
                                         if follow is None:
                                             status = 'no_checked_anchor_cut'
                                             break
                                         preview.append(follow)
                                 report['moving_anchor_probe'] = {'stop': status, 'trace': trace}
+                                if tapered_anchor_probe and trace:
+                                    tapered, result = probe_tapered_anchor(pocket, pose[0], preview[prefix_count-1],
+                                                                         radius, gates, rejected)
+                                    report['tapered_anchor_probe'] = result
+                                    if tapered is not None:
+                                        preview = [*preview[:prefix_count], tapered]
                         final_stock = preview[-1].remaining
                         final_clear = connected_clearance(pocket, final_stock, pose[0], radius)
                         east = None if final_clear.is_empty else final_clear.bounds[2]
@@ -551,7 +598,9 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = ('moving-anchor straight probe; helix omitted' if repeat_anchored else
+            tapered_selected = report.get('tapered_anchor_probe', {}).get('accepted', False)
+            label = ('tapered moving-anchor probe; helix omitted' if tapered_selected else
+                     'moving-anchor straight probe; helix omitted' if repeat_anchored else
                      'section-anchored straight probe; helix omitted' if anchored_straight else
                      'repeated neck-facing pair probe; helix omitted' if repeat_face_pairs else
                      'neck-facing pair probe; helix omitted' if neck_face_pair else
@@ -581,7 +630,10 @@ if __name__ == '__main__':
     parser.add_argument('--repeat-face-pairs', type=int, default=0, help='probe this many extra live neck-facing pairs')
     parser.add_argument('--section-anchored-straight', action='store_true', help='check a straight from the measured opening')
     parser.add_argument('--repeat-anchored-straights', type=int, default=0, help='check additional straights from live anchor stations')
+    parser.add_argument('--tapered-anchor-probe', action='store_true', help='retry only the last round entry failures on identical stock')
     args = parser.parse_args()
+    if args.tapered_anchor_probe and args.repeat_anchored_straights < 1:
+        parser.error('tapered anchor probe requires --repeat-anchored-straights')
     if args.repeat_anchored_straights < 0 or (args.repeat_anchored_straights and not args.section_anchored_straight):
         parser.error('moving anchors require --section-anchored-straight and a nonnegative budget')
     if args.section_anchored_straight and not args.repeat_face_pairs:
@@ -612,6 +664,7 @@ if __name__ == '__main__':
                               live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
                               face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor,
                               neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
-                              anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights) if cut_audit else
+                              anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
+                              tapered_anchor_probe=args.tapered_anchor_probe) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

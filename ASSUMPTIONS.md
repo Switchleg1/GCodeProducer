@@ -110,3 +110,5 @@
   shift east, and require mapped endpoints plus the original motion checks.
   Moving anchors probe 0.125–0.625 mm behind the live edge; stations at
   or west of the original seed edge are excluded as in the fixed probe.
+  The tapered probe keeps the original lateral offset and tests lead runs
+  of 1, 1.5 and 2 times the rejected turn's axial run on identical stock.

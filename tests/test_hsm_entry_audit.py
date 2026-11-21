@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_entry import anchored_overload, audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus
+from tools.check_hsm_entry import anchored_overload, audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus, tapered_anchor_candidates
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,14 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_tapered_anchor_variants_only_change_the_approach():
+    path = [(1., 4.), (1.2, 3.8), (1.2, 2.8), (1., 2.6)]
+    variants = list(tapered_anchor_candidates([path]))
+    assert len(variants) == 3 and all(variant[-3:] == path[1:] for variant in variants)
+    assert [variant[0][1] for variant in variants] == pytest.approx([4., 4.1, 4.2])
+    assert all(variant[0][0] == pytest.approx(path[0][0]) for variant in variants)
 
 
 def test_anchored_overload_distinguishes_the_turns_from_the_straight():
