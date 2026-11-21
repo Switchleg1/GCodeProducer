@@ -46,3 +46,6 @@
   this fixture and still checks every resulting cut and link.
   The relief audit counts shifts of at least 0.001 mm as visible in the
   report; that threshold is not a usefulness or quantization guarantee.
+  Widening probes scan 0.25–3 mm setbacks in 1/16 mm steps, with 2.75 mm
+  contact rays. The gauge is fixed 0.75 mm behind the pre-cut east edge;
+  a width gain there does not verify passage across the whole neck.

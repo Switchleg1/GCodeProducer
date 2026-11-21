@@ -200,12 +200,32 @@ def clearance_delta(before, after):
             'east_shift_mm': None if before.is_empty or after.is_empty else after.bounds[2]-before.bounds[2]}
 
 
+def wider_sections(regions, component):
+    """Find the closest sampled section per target span width."""
+    if component.is_empty:
+        return []
+    east = component.bounds[2]
+    rows = clearance_sections(regions, component, [east-i/16 for i in range(4, 49)])
+    result = []
+    for target in (2., 2.5, 3.):
+        for row in rows:
+            eligible = [(lo, hi) for lo, hi in row['connected_y_mm'] if hi-lo >= target]
+            if eligible:
+                result.append(dict(row, target_width_mm=target, eligible_y_mm=eligible))
+                break
+    return result
+
+
+def widest_span(section):
+    return max((hi-lo for lo, hi in section['connected_y_mm']), default=0.)
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -217,8 +237,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
     if (section_ray_probe or section_extend_rays) and not section_small_retry:
         raise ValueError('ray trials require small section retries')
-    if section_relief_probe and not section_extend_rays:
-        raise ValueError('local relief probe requires extended small retries')
+    if (section_relief_probe or section_widen_probe) and not section_extend_rays:
+        raise ValueError('terminal geometry probes require extended small retries')
     if section_ray_probe and section_extend_rays:
         raise ValueError('ray audit requires unchanged small section retries')
     if section_small_retry and (not section_follow or probe_count):
@@ -489,6 +509,27 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                'best_removed_mm2': None if choice is None else choice.removed_mm2,
                                'best_peak_deg': None if choice is None else choice.peak_deg})
             report['terminal_ray_probe'] = trials
+    if section_widen_probe and reason == 'stalled' and not clearance.is_empty:
+        pose = last_xy, last_heading
+        routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
+        gauge_x = clearance.bounds[2] - .75
+        width = widest_span(clearance_sections(regions, clearance, (gauge_x,))[0])
+        trials = []
+        for row in wider_sections(regions, clearance):
+            counts, accepted = Counter(), []
+
+            def measure(_key, choice):
+                component = connected_clearance(pocket, choice.remaining, seed[0], radius)
+                gauge = clearance_sections(regions, component, (gauge_x,))[0]
+                accepted.append(dict(width_gain_mm=widest_span(gauge)-width, removed_mm2=choice.removed_mm2,
+                                     peak_deg=choice.peak_deg, **clearance_delta(clearance, component)))
+
+            paths = small_section_cuts([row], remaining, radius, turn_exits=section_turn_exits, ray_length=2.75)
+            choose_front_cut(pocket, remaining, pose, paths, radius, waypoints=routes, diagnostics=counts,
+                             on_eligible=measure, **gates)
+            trials.append({'anchor_x_mm': row['x_mm'], 'target_width_mm': row['target_width_mm'], 'gates': dict(counts),
+                           'best_widening': max(accepted, key=lambda item: item['width_gain_mm'], default=None)})
+        report['terminal_widen_probe'] = {'gauge_x_mm': gauge_x, 'baseline_width_mm': width, 'trials': trials}
     if probe_count and reason == 'stalled':
         pose = last_xy, last_heading
         routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
@@ -611,6 +652,8 @@ if __name__ == '__main__':
                         help='retry at 1.65 mm only when misses prevent all small candidates')
     parser.add_argument('--section-relief-probe', action='store_true',
                         help='test local contour relief over clustered overloads without committing edits to stock')
+    parser.add_argument('--section-widen-probe', action='store_true',
+                        help='compare wider anchor spans for terminal approach growth without committing cuts')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -633,7 +676,8 @@ if __name__ == '__main__':
                             section_shallow_approach=args.section_shallow_approach,
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
-                            section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe)
+                            section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe,
+                            section_widen_probe=args.section_widen_probe)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

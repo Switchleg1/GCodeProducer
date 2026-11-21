@@ -2,7 +2,17 @@ import pytest
 from shapely.geometry import Point, Polygon, box
 
 from tools.check_hsm_neck import (bounded_small_section_cuts, check_neck, clearance_delta, clearance_sections, section_bite_spans, section_bites,
-                                  section_follow_cuts, small_section_cuts, overload_summary, relieve_contour)
+                                  section_follow_cuts, small_section_cuts, overload_summary, relieve_contour, wider_sections, widest_span)
+
+
+def test_wider_sections_use_nearest_sample_for_each_target():
+    component = Polygon([(0, 0), (4, 0), (6, 2), (4, 4), (0, 4)])
+    rows = wider_sections([box(0, 0, 8, 6)], component)
+    assert [r['target_width_mm'] for r in rows] == [2., 2.5, 3.]
+    assert [r['x_mm'] for r in rows] == [5., 4.75, 4.5]
+    assert [widest_span(r) for r in rows] == [2., 2.5, 3.]
+    assert widest_span({'connected_y_mm': [(1., 2.), (3., 4.5)]}) == 1.5
+    assert not wider_sections([box(0, 0, 8, 6)], box(0, 0, 4, 1))
 
 
 def test_clearance_delta_separates_area_gain_from_eastward_progress():

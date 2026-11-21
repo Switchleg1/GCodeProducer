@@ -427,6 +427,10 @@ removes at most 0.00586 mm². The clearance audit covers every passing
 candidate: 0.015 mm relief expands the east edge by at most 0.004824 mm
 and adds up to 0.002011 mm² connected area. The deeper offsets add no
 eastward extent. No cut is committed.
+`--section-widen-probe` tries wider anchor sections against unchanged stock.
+The 3 mm target provides a cut widening the fixed approach gauge by
+0.0377 mm and adding 0.0661 mm² of connected area at 50.30° peak sampled
+contact. The 2 and 2.5 mm targets fail contact. Nothing is committed.
 
 ## Gate before another generator attempt
 
