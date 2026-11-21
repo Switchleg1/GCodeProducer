@@ -75,6 +75,8 @@ def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed():
     assert report['cut_count'] == 1 and report['cuts_with_chord_at_least_075_mm'] == 1
     assert report['straight_cut_count'] == 0  # Rounded ends, not a single chord.
     assert report['total_removed_mm2'] == pytest.approx(.820, abs=.003)
+    assert report['total_feed_mm'] == pytest.approx(report['feed_mm'])
+    assert report['connected_east_x_mm'] == pytest.approx(15.86694 + report['connected_east_gain_mm'], abs=.00001)
     assert report['peak_contact_deg'] < 60.
     assert report['gates']['start_clearance'] > 0
 

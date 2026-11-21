@@ -483,7 +483,10 @@ between tangent turns into mapped clearance, retaining the actual motion
 checks. At eight accepted cuts it removes 5.836 mm² instead of 3.644 mm²
 and opens 2.562 mm² instead of 1.489 mm² of connected clearance. Peak
 sampled contact is 58.70° instead of 54.49°; these are not equal-coverage
-runs or timing comparisons.
+runs or timing comparisons. At 24 accepted cuts, turned straights
+remove 19.911 mm² versus 8.246 mm² and reach X16.762 versus X16.267.
+Link-plus-cut feed distance is 118.61 versus 124.37 mm, excluding entry;
+coverage still differs, so this does not establish a timing gain.
 
 ## Gate before another generator attempt
 

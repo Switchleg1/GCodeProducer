@@ -217,6 +217,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
                                           contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
                                           require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow)
+    initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
+    clearance = connected_clearance(pocket, remaining, pose[0], radius)
     report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose)),
               'entry_removed_mm2': pocket.area-stock.area, 'cut_count': len(accepted),
               'straight_cut_count': sum(len(c.cut) == 2 for c in accepted),
@@ -225,8 +227,11 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
               'straight_removed_mm2': sum(c.removed_mm2 for c in accepted if len(c.cut) == 2),
               'last_gates': diagnostics[-1] if diagnostics else {},
               'total_removed_mm2': stock.area-remaining.area,
-              'connected_area_gain_mm2': connected_clearance(pocket, remaining, pose[0], radius).difference(
-                  connected_clearance(pocket, stock, pose[0], radius)).area}
+              'total_feed_mm': sum(c.travel_mm for c in accepted),
+              'connected_area_gain_mm2': clearance.difference(initial_clearance).area,
+              'connected_east_x_mm': None if clearance.is_empty else clearance.bounds[2],
+              'connected_east_gain_mm': None if clearance.is_empty or initial_clearance.is_empty else
+              clearance.bounds[2]-initial_clearance.bounds[2]}
     if max_cuts is None:
         report['stop'] = ('no_checked_cut' if not accepted else 'first_cut_checked' if not second else
                           'two_cuts_checked' if len(accepted) == 2 else 'second_cut_stalled')

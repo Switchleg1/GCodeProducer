@@ -82,3 +82,5 @@
   Turned-straight probes try 0.75/1.25/1.75 mm bodies with 0.4/0.65 mm
   turn radii. Endpoint membership in the clearance map is a proposal
   filter only; full-disk and sampled contact checks still govern.
+  The 24-cut comparison holds the accepted-cut budget fixed, not coverage;
+  distance totals include planar links and cuts but exclude the helix.
