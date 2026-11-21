@@ -1,0 +1,360 @@
+"""Offline wavefront clearing: helical islands, outward spirals, then rounded offset fronts.
+
+Every pass is the cleared cutter-centre region grown by one stepover and
+clipped to the pocket. Cuts start and end on the previous front, so they
+roll into and out of the material. Moves between cuts are rapids and are
+not planned here. Planar geometry only; nothing is qualified for a machine.
+"""
+import argparse
+import json
+import math
+import sys
+import time
+from pathlib import Path
+from typing import NamedTuple
+
+from shapely import get_parts, segmentize
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely.geometry.polygon import orient
+from shapely.ops import nearest_points, polylabel, substring, unary_union
+
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from gcodeproducer.core.cam.adaptive_entry import seed_entry
+from gcodeproducer.core.geometry.polygon_parts import polygons
+from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions
+from tools.hsm_contact_replay import indexed_contact
+from tools.hsm_replay_overlay import write_overlay
+
+STEPOVERS = (1., .8, .65, .5, .4, .3, .2, .12)
+SWEEP_SEGMENTS = 16
+WALL_TOLERANCE = .02
+MIN_GAIN_MM2 = 1e-4
+
+
+class Stroke(NamedTuple):
+    kind: str  # 'spiral' or 'front'
+    points: list
+    stepover_mm: float
+    peak_deg: float
+
+
+def choose_seeds(allowed, count, *, min_radius, placement='thirds'):
+    """Place island centres: (xy, distance to wall).
+
+    One island sits at the widest spot. Several are spread along the long
+    axis, one third of the way in from each end for two, each snapped to the
+    widest spot of its own band.
+    """
+    if count < 1:
+        raise ValueError('expected at least one island')
+    if placement not in ('thirds', 'widest'):
+        raise ValueError('unknown island placement')
+    if placement == 'widest' and count > 1:
+        seeds, remaining = [], allowed
+        for _ in range(count):
+            spots = [(c.distance(allowed.boundary), c) for c in
+                     (polylabel(part, tolerance=.05) for part in polygons(remaining) if part.area > 1e-6)]
+            spots = [(min(room, c.distance(remaining.boundary)), room, c) for room, c in spots]
+            if not spots:
+                break
+            free, room, c = max(spots, key=lambda spot: spot[0])
+            if free < min_radius:
+                break
+            seeds.append(((c.x, c.y), room))
+            remaining = remaining.difference(c.buffer(room))
+        return seeds
+    if count == 1:
+        bands = [allowed]
+    else:
+        corners = list(allowed.minimum_rotated_rectangle.exterior.coords)[:4]
+        a, b, c = corners[0], corners[1], corners[2]
+        if math.dist(a, b) < math.dist(b, c):
+            a, b, c = b, c, corners[3]
+        length, width = math.dist(a, b), math.dist(b, c)
+        ux, uy = (b[0]-a[0])/length, (b[1]-a[1])/length
+        vx, vy = (c[0]-b[0])/width, (c[1]-b[1])/width
+        half = length/(2*(count+1))
+        bands, targets = [], []
+        for i in range(count):
+            mid = length*(i+1)/(count+1)
+            lo, hi = mid-half, mid+half
+            slab = [(a[0]+ux*lo, a[1]+uy*lo), (a[0]+ux*hi, a[1]+uy*hi),
+                    (a[0]+ux*hi+vx*width, a[1]+uy*hi+vy*width), (a[0]+ux*lo+vx*width, a[1]+uy*lo+vy*width)]
+            bands.append(allowed.intersection(Polygon(slab)))
+            targets.append(Point(a[0]+ux*mid+vx*width/2, a[1]+uy*mid+vy*width/2))
+    seeds = []
+    for index, band in enumerate(bands):
+        best = None
+        for part in polygons(band):
+            if part.area < 1e-6:
+                continue
+            centre = polylabel(part, tolerance=.05)
+            room = centre.distance(allowed.boundary)
+            if best is None or room > best[1]:
+                best = (centre.x, centre.y), room
+        if best is not None and count > 1 and allowed.covers(targets[index]):
+            # Keep the even spacing unless a clearly wider spot exists in the band.
+            room = targets[index].distance(allowed.boundary)
+            if room >= .95*best[1]:
+                best = (targets[index].x, targets[index].y), room
+        if best is not None and best[1] >= min_radius:
+            seeds.append(best)
+    return seeds
+
+
+def spiral_out(centre, max_radius, stepover, *, chord_error=.0025, blend=3.):
+    """Stock-left (clockwise) spiral from the centre, one full circle, then a roll-off inward."""
+    if max_radius <= 0 or stepover <= 0:
+        raise ValueError('expected a positive spiral radius and stepover')
+    points, theta = [], 0.
+
+    def add(radius):
+        points.append((centre[0] + radius*math.cos(-theta), centre[1] + radius*math.sin(-theta)))
+
+    def advance(radius):
+        return min(.5, 2*math.acos(max(-1., 1 - chord_error/max(radius, 2*chord_error))))
+
+    radius = 0.
+    while radius < max_radius:
+        add(radius)
+        theta += advance(radius)
+        radius = stepover*theta/(2*math.pi)
+    full = theta + 2*math.pi
+    while theta < full:
+        add(max_radius)
+        theta += advance(max_radius)
+    retreat = min(stepover, max_radius/2)
+    sweep = blend/max_radius
+    end = theta + sweep
+    while theta < end:
+        t = 1 - (end-theta)/sweep
+        add(max_radius - retreat*t*t*(3-2*t))
+        theta += advance(max_radius)
+    return points
+
+
+def clearance(allowed, stock, radius):
+    """Cutter-centre positions whose whole disk is clear of live stock."""
+    if stock.is_empty:
+        return allowed
+    return allowed.difference(stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS))
+
+
+def fronts(clear, grown, wall, *, zone=None):
+    """Stock-left runs of the grown boundary that are not pocket wall: (points, closed)."""
+    runs = []
+    for part in polygons(grown):
+        if part.area < 1e-6 or not part.intersects(clear):
+            continue
+        part = orient(part, sign=-1.)
+        for ring in (part.exterior, *part.interiors):
+            pts = list(ring.coords)[:-1]
+            n = len(pts)
+            free = [wall.distance(Point((pts[i][0]+pts[(i+1) % n][0])/2,
+                                        (pts[i][1]+pts[(i+1) % n][1])/2)) > WALL_TOLERANCE for i in range(n)]
+            if all(free):
+                runs.append((pts + [pts[0]], True))
+                continue
+            if not any(free):
+                continue
+            start = next(i for i in range(n) if free[i] and not free[i-1])
+            run = []
+            for k in range(n):
+                i = (start+k) % n
+                if free[i]:
+                    run = run or [pts[i]]
+                    run.append(pts[(i+1) % n])
+                elif run:
+                    runs.append((run, False))
+                    run = []
+            if run:
+                runs.append((run, False))
+    if zone is not None:
+        clipped = []
+        for run, _ in runs:
+            line = LineString(run)
+            for piece in get_parts(line.intersection(zone)):
+                if piece.geom_type != 'LineString' or piece.is_empty:
+                    continue
+                pts = list(piece.coords)
+                if line.project(Point(pts[0])) > line.project(Point(pts[-1])):
+                    pts.reverse()
+                clipped.append((pts, False))
+        runs = clipped
+    long = [(run, closed) for run, closed in runs if LineString(run).length >= 1.]
+    return long or [(run, closed) for run, closed in runs if LineString(run).length >= .3]
+
+
+def eased(run, closed, clear, allowed, blend):
+    """Roll on from the old front and roll off back to it; closed rings overlap their start."""
+    line = LineString(run)
+    reach = min(blend, line.length/3)
+    pts = list(run)
+    if closed:
+        pts += list(substring(line, 0., min(2*reach, line.length)).coords)[1:]
+    dense = list(segmentize(LineString(pts), .1).coords)
+    total = LineString(dense).length
+    out, travelled = [], 0.
+    for i, q in enumerate(dense):
+        if i:
+            travelled += math.dist(dense[i-1], q)
+        t = min(travelled, total-travelled)/reach if reach else 1.
+        if t < 1.:
+            w = max(0., t*t*(3-2*t))
+            n = nearest_points(clear, Point(q))[0]
+            q = (n.x + (q[0]-n.x)*w, n.y + (q[1]-n.y)*w)
+        if not allowed.covers(Point(q)):
+            n = nearest_points(allowed, Point(q))[0]
+            q = (n.x, n.y)
+        if not out or q != out[-1]:
+            out.append(q)
+    return out
+
+
+def cut(path, stock, radius, sample_step):
+    """Sampled peak contact and updated stock; chunked so each replay stays local."""
+    peak, chunk, length = 0., [path[0]], 0.
+    for i in range(1, len(path)):
+        chunk.append(path[i])
+        length += math.dist(path[i-1], path[i])
+        if length >= 6. or i == len(path)-1:
+            xs, ys = zip(*chunk)
+            reach = radius + .01
+            local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
+            for _, angle, _ in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
+                peak = max(peak, angle)
+            stock = stock.difference(LineString(chunk).buffer(radius, quad_segs=SWEEP_SEGMENTS))
+            chunk, length = [path[i]], 0.
+    return peak, stock
+
+
+def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
+                 islands=1, placement='thirds', top=0., depth=-2., lead_angle=2.5, time_budget=None):
+    """Return (strokes, residual, report) for one target plane, starting from intact stock."""
+    allowed = unary_union(center_regions(pocket, radius))
+    wall = allowed.boundary
+    reachable = allowed.buffer(radius, quad_segs=SWEEP_SEGMENTS)
+    stock = pocket
+    strokes, island_reports = [], []
+    started = time.time()
+
+    def out_of_time():
+        return time_budget is not None and time.time()-started > time_budget
+
+    for centre, room in choose_seeds(allowed, islands, min_radius=radius, placement=placement):
+        entry = seed_entry(Point(centre).buffer(room), stock, radius=radius, top=top, depth=depth,
+                           lead_angle=lead_angle)
+        if entry is None:
+            continue
+        centre = tuple(entry.points[-1, :2])
+        stock = entry.remaining
+        reach = centre_room = Point(centre).distance(wall) - 1e-3
+        island = {'centre_xy_mm': centre, 'radius_mm': centre_room, 'entry_removed_mm2': None}
+        chosen = None
+        for stepover in stepovers:
+            probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
+            if cut(probe, stock, radius, sample_step)[0] <= limit:
+                chosen = stepover
+                break
+        if chosen is not None:
+            path = spiral_out(centre, reach, chosen, blend=blend)
+            peak, trial = cut(path, stock, radius, sample_step)
+            island.update(stepover_mm=chosen, peak_deg=peak, feed_mm=LineString(path).length,
+                          accepted=peak <= limit)
+            if peak <= limit:
+                stock = trial
+                strokes.append(Stroke('spiral', path, chosen, peak))
+        island_reports.append(island)
+
+    stop, start, passes = 'front_exhausted', 0, 0
+    while True:
+        if out_of_time():
+            stop = 'time_budget'
+            break
+        clear = clearance(allowed, stock, radius)
+        committed_at, attempted, zone = None, False, None
+        for index in range(start, len(stepovers)):
+            stepover = stepovers[index]
+            grown = clear.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
+            failed = []
+            for run, closed in fronts(clear, grown, wall, zone=zone):
+                path = eased(run, closed, clear, allowed, blend)
+                if len(path) < 2:
+                    continue
+                peak, trial = cut(path, stock, radius, sample_step)
+                if stock.area - trial.area < MIN_GAIN_MM2:
+                    continue
+                attempted = True
+                if peak <= limit:
+                    stock = trial
+                    strokes.append(Stroke('front', path, stepover, peak))
+                    committed_at = index if committed_at is None else committed_at
+                else:
+                    failed.append(LineString(run))
+            if not failed or out_of_time():
+                break
+            zone = unary_union(failed).buffer(max(1., 2*stepover))
+            clear = clearance(allowed, stock, radius)
+        if committed_at is None:
+            stop = 'blocked' if attempted else 'front_exhausted'
+            break
+        passes += 1
+        start = max(0, committed_at-1)
+
+    residual = stock.intersection(reachable)
+    total = pocket.intersection(reachable).area
+    cuts = [s for s in strokes if s.kind == 'front']
+    report = {'stop': stop, 'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
+              'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
+              'cleared_fraction': 1 - residual.area/total if total else None,
+              'peak_contact_deg': max((s.peak_deg for s in strokes), default=None),
+              'cut_feed_mm': sum(LineString(s.points).length for s in strokes),
+              'spiral_feed_mm': sum(LineString(s.points).length for s in strokes if s.kind == 'spiral'),
+              'rapid_links': max(0, len(strokes)-1),
+              'front_stepover_histogram': {str(v): sum(s.stepover_mm == v for s in cuts) for v in stepovers},
+              'seconds': time.time()-started}
+    return strokes, residual, report
+
+
+def write_review(path, pocket, strokes, residual, report):
+    """Save XY geometry for a viewer: G1 cuts, G0 rapids. Helix entries are not included."""
+    path = Path(path)
+    overlay = path.with_suffix('.svg')
+    with path.open('x', encoding='ascii', newline='\n') as out:
+        out.write('(DEBUG ONLY - XY GEOMETRY REVIEW - DO NOT RUN ON A MACHINE)\n'
+                  f'(Wavefront trial: {report["stop"]}, {len(strokes)} cuts; helix entries omitted)\n'
+                  '(G0 between cuts stands for an unplanned retract and rapid)\n'
+                  '(No Z, entry, spindle, tool or feed schedule; rounded XY not replayed)\nG21\nG90\n')
+        for number, stroke in enumerate(strokes, 1):
+            points = list(LineString(stroke.points).simplify(.002).coords)
+            out.write(f'(Cut {number}: {stroke.kind}, stepover {stroke.stepover_mm:g} mm, '
+                      f'sampled peak {stroke.peak_deg:.1f} deg)\n'
+                      f'G0 X{points[0][0]:.4f} Y{points[0][1]:.4f}\n')
+            for x, y in points[1:]:
+                out.write(f'G1 X{x:.4f} Y{y:.4f}\n')
+        out.write('M2\n')
+    with overlay.open('x', encoding='ascii', newline='\n') as out:
+        write_overlay(out, pocket, residual,
+                      [(n, list(LineString(s.points).simplify(.01).coords), False) for n, s in enumerate(strokes, 1)],
+                      legend='Wavefront trial | blue: cuts in order | orange: reachable stock left | rapids not drawn')
+
+
+if __name__ == '__main__':
+    from tools.check_hsm_neck import neck_fixture
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--review-gcode', type=Path, help='save cuts to a new debug-only .nc file and .svg overlay')
+    parser.add_argument('--islands', type=int, default=1, help='number of helical islands along the long axis')
+    parser.add_argument('--placement', choices=('thirds', 'widest'), default='thirds',
+                        help='spread islands along the long axis or use the widest remaining spots')
+    parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
+    parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
+    args = parser.parse_args()
+    fixture, _ = neck_fixture()
+    result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement, time_budget=args.time_budget,
+                          sample_step=args.sample_step)
+    if args.review_gcode is not None:
+        write_review(args.review_gcode, fixture, *result)
+    print(json.dumps(result[2], indent=2))

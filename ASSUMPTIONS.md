@@ -133,3 +133,7 @@
   The sweep comparison uses eight continuation cuts after the same 64;
   the sweep run therefore has one more cut than the control. Distances are
   planar feed geometry, not machine time.
+- Wavefront trial: 4 mm cutter, 60° sampled contact limit, stepovers tried from 1.0 down to 0.12 mm, 3 mm roll-on and
+  roll-off blends, clockwise travel with stock on the left. Spiral stepover is chosen on the first few turns and the full
+  spiral is then checked once. Cut feed distance stands in for time; it ignores acceleration, rapids and helix descent.
+  The thirds rule keeps the even spacing unless a spot in the same band is more than 5% wider.

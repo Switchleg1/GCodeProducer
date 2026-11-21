@@ -601,3 +601,20 @@ An incomplete path or one with unsafe transfers cannot win on time. Only
 after offline coverage and engagement checks pass should we attempt a
 production generator. Compare complete jobs at equal coverage; test qualified
 deeper cuts separately from fixed-stepdown comparisons.
+
+## Wavefront trial
+
+The candidate-picking experiments above were stopped after operator review: 64 checked cuts removed 29.5 of 4,456 mm²
+and read as scattered lines. `python tools/hsm_wavefront.py` uses one rule instead: grow the cleared cutter-centre
+region by a stepover, clip it to the pocket, and cut the new edge. Each island starts with a helix and a continuous
+outward spiral; later arcs roll on from and roll off to the previous front. `--islands` and `--placement` choose how
+many islands and where; `--review-gcode` saves an XY preview with rapids between cuts.
+
+| Neck fixture | Cut feed | Reachable stock left | Arcs | Peak sampled contact |
+|---|---|---|---|---|
+| One island | 9,999 mm | 54.5 mm² | 290 | 59.98° |
+| Two islands, thirds | 9,787 mm | 86.6 mm² | 234 | 59.98° |
+| Two islands, lobes | 9,599 mm | 107.9 mm² | 182 | 59.99° |
+
+All three exhaust the front from intact stock. Coverage is not equal, so the feed figures do not rank the variants.
+The leftover stock has not been located, and rapids, helix descent and rounded coordinates are unchecked.
