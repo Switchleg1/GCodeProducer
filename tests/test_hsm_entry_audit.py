@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact, neck_facing_straight, seed_search_focus
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, neck_facing_straight, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,18 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_east_opening_compares_fixed_stations_and_does_not_sum_split_spans():
+    initial = box(0., 0., 4., 4.)
+    current = initial.union(box(3., 0., 4.4, 1.)).union(box(3., 2., 4.4, 3.5))
+    profile = east_opening_profile([box(0., 0., 8., 8.)], initial, current)
+    quarter = next(row for row in profile if row['offset_mm'] == .25)
+    assert quarter['x_mm'] == 4.25
+    assert quarter['connected_y_mm'] == [(0., 1.), (2., 3.5)]
+    assert quarter['width_mm'] == 1.5
+    assert profile[-1]['width_mm'] == 0.
+    assert east_opening_profile([], Polygon(), current) == []
 
 
 def test_live_seed_focus_keeps_old_search_and_reaches_new_clearance():

@@ -104,3 +104,5 @@
   pair reach is ranked at six decimal places in mm.
   Repeated pairs take the last verified return body as the new reference
   and commit neither neighbor nor return if the pair cannot be checked.
+  Widths use fixed X stations relative to the shared initial east edge
+  and the widest contiguous Y span, not a sum of disconnected spans.

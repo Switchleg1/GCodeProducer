@@ -517,6 +517,10 @@ X16.044 with unrestricted greedy selection, but removes less stock
 X16.476 instead of X16.139 with greedy selection. Removal drops from
 5.203 to 4.505 mm², while travel grows from 34.15 to 41.40 mm. This is
 directional growth, not neck passage or an equal-coverage timing win.
+`east_opening_profile` measures the widest contiguous cutter-center span
+at fixed X stations. At +0.25 mm relative to the initial east edge, the
+pair run has 1.680 mm open compared with 0.338 mm for greedy; at +0.5 mm
+it has 0.752 mm open versus none. This does not verify a straight cut.
 
 ## Gate before another generator attempt
 

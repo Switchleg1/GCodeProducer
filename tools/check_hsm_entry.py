@@ -14,7 +14,7 @@ if __package__ in (None, ''):
 
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.hsm_contact import contact_angle
-from tools.check_hsm_neck import neck_fixture, write_opening_review, write_review_gcode
+from tools.check_hsm_neck import clearance_sections, neck_fixture, widest_span, write_opening_review, write_review_gcode
 from tools.hsm_center_regions import center_regions, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_choice import choose_front_cut
@@ -281,6 +281,17 @@ def neck_facing_straight(path):
     return length >= .75-1e-9 and a[1]-b[1] >= .7*length
 
 
+def east_opening_profile(regions, initial, current):
+    """Measure contiguous center-clearance spans at fixed stations relative to the seed edge."""
+    if initial.is_empty:
+        return []
+    east = initial.bounds[2]
+    offsets = (-.5, -.25, 0., .125, .25, .375, .5)
+    sections = clearance_sections(regions, current, [east+d for d in offsets])
+    return [{'offset_mm': offset, 'x_mm': section['x_mm'], 'width_mm': widest_span(section),
+             'connected_y_mm': section['connected_y_mm']} for offset, section in zip(offsets, sections)]
+
+
 def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0):
     """Check only the planar motion following the modeled helix floor sweep."""
     if repeat_face_pairs < 0 or (repeat_face_pairs and not neck_face_pair):
@@ -357,6 +368,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                                           on_outcome=note_outcome if longer_straights else None,
                                           on_ranked=note_ranked if longer_straights or fit_face_neighbor else None)
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
+    regions = center_regions(pocket, radius)
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
     clearance = connected_clearance(pocket, remaining, pose[0], radius)
     report = {'stop': stop, 'straight_proposals': sum(1 for _ in propose_straight(stock, pose, audit=False)),
@@ -373,7 +385,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
               'search_east_x_mm': seed_search_focus(focus, clearance, radius, follow=live_focus).bounds[2],
               'connected_east_x_mm': None if clearance.is_empty else clearance.bounds[2],
               'connected_east_gain_mm': None if clearance.is_empty or initial_clearance.is_empty else
-              clearance.bounds[2]-initial_clearance.bounds[2]}
+              clearance.bounds[2]-initial_clearance.bounds[2],
+              'east_opening_profile': east_opening_profile(regions, initial_clearance, clearance)}
     if longer_straights:
         report['long_variant_counts'] = long_counts
         report['long_variant_outcomes'] = dict(long_outcomes)
@@ -415,6 +428,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                         east = None if final_clear.is_empty else final_clear.bounds[2]
                         report['fitted_face_neighbor'].update(
                             connected_east_x_mm=east,
+                            east_opening_profile=east_opening_profile(regions, initial_clearance, final_clear),
                             connected_east_gain_mm=None if east is None else east-initial_clearance.bounds[2],
                             preview_cut_count=len(preview), preview_removed_mm2=stock.area-final_stock.area,
                             preview_feed_mm=sum(c.travel_mm for c in preview))
