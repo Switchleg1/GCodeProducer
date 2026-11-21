@@ -36,6 +36,20 @@ def test_axial_sampling_reports_plunge_and_air_separately():
     assert air['floor']['mean_over_limit_height_mm'] == 0.
 
 
+def test_broader_front_handoff_uses_actual_floor_stock_without_fake_motion(tmp_path):
+    review = tmp_path / 'handoff.nc'
+    report = check_first_cut(max_cuts=0, handoff_budget=1, review=review)
+    handoff = report['broader_front']
+    assert report['stop'] == 'seed_only' and handoff['received_initial_state']
+    assert handoff['initial_stock_mm2'] == pytest.approx(4501.-report['entry_removed_mm2'])
+    assert handoff['assumed_preclear_mm2'] == 0.
+    assert handoff['modeled_handoff_removed_mm2'] == pytest.approx(report['entry_removed_mm2'])
+    assert handoff['start_xy_mm'] == pytest.approx((14.0697, 20.9474), abs=.0001)
+    assert handoff['seed_contact_deg'] == 0. and handoff['stop'] == 'stalled'
+    assert handoff['cut_count'] == 0 and handoff['last_selection_counts']['start_clearance'] > 0
+    assert not list(tmp_path.iterdir())
+
+
 @pytest.mark.parametrize('second', [False, True])
 def test_first_cuts_leave_the_actual_entry_seed(tmp_path, second):
     path = tmp_path / 'first.nc'

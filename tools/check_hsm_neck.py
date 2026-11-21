@@ -264,7 +264,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -305,9 +305,15 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
     pocket, stock = neck_fixture()
-    if full_stock:
-        stock = pocket
     seed = ((9., 28.5), (1., 0.))
+    if initial_state is not None:
+        if full_stock:
+            raise ValueError('received stock state cannot be combined with full stock')
+        stock, seed = initial_state
+        if stock.difference(pocket).area > 1e-8:
+            raise ValueError('received stock lies outside the neck fixture')
+    elif full_stock:
+        stock = pocket
     radius = 2.
     regions = center_regions(pocket, radius)
 
@@ -453,7 +459,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         component = connected_clearance(pocket, live, seed[0], radius)
         return round(component.bounds[2], 6) if not component.is_empty else -math.inf
 
-    gates = dict(contact_limit=60., sample_step=.1, link_handle=1., require_clear_exit=require_clear_exit,
+    gates = dict(contact_limit=60., sample_step=.1 if initial_state is None else .025, link_handle=1., require_clear_exit=require_clear_exit,
                  with_three_leg_links=with_three_leg_links, min_departure=min_departure)
     diagnostics = []
     cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=max_cuts,
@@ -471,11 +477,12 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        **gates)
     if not cuts and reason == 'stalled' and diagnostics[-1].get('origin_clearance'):
         reason = 'entry_required'
-    if review_gcode is not None and reason != 'entry_required':
+    if review_gcode is not None and reason != 'entry_required' and (initial_state is None or cuts):
         opening = Path(review_gcode).with_suffix('.opening.svg')
         if opening.exists():
             raise FileExistsError(f'review companion already exists: {opening}')
-        write_review_gcode(review_gcode, cuts, seed[0], reason)
+        label = reason if initial_state is None else f'{reason}; modeled helix and seed cuts omitted'
+        write_review_gcode(review_gcode, cuts, seed[0], label)
         link, cut = (cuts[0].link, cuts[0].cut) if cuts else ((), ())
         write_opening_review(opening, pocket, stock, link, cut)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
@@ -492,8 +499,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     report = {'stop': reason, 'regions': len(regions), 'cut_count': len(cuts),
             'corner_cut_count': sum(len(cut.cut) > 2 for cut in cuts),
             'initial_stock_mm2': stock.area, 'removed_mm2': stock.area - remaining.area,
-            'assumed_preclear_mm2': pocket.difference(stock).area,
+            'assumed_preclear_mm2': pocket.difference(stock).area if initial_state is None else 0.,
+            'modeled_handoff_removed_mm2': pocket.difference(stock).area if initial_state is not None else None,
             'seed_contact_deg': contact_angle(seed[0], radius, stock),
+            'received_initial_state': initial_state is not None, 'start_xy_mm': seed[0],
             'reachable_residual_mm2': remaining.intersection(reachable).area,
             'last_selection_counts': diagnostics[-1] if diagnostics else {},
             'last_taper_contact_failures': dict(overload_phases.get(len(diagnostics)-1, {})),

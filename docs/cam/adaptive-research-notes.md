@@ -551,6 +551,10 @@ entry overloads, so a pair-only stop is not a clearing stall.
 single cuts. At 21 cuts it reaches X17.442 versus X17.542 for single
 anchors and removes 9.678 versus 10.258 mm². This does not justify
 replacing the single-anchor baseline.
+`--broader-front-budget 8` transfers the actual modeled material and
+pose to the broader trial. Neither a bare helix nor a helix plus 24
+seed cuts yields a continuation: the dominant failure is start clearance,
+not engagement at the handoff pose. No empty review is emitted.
 
 ## Gate before another generator attempt
 

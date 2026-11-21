@@ -14,7 +14,7 @@ if __package__ in (None, ''):
 
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.cam.hsm_contact import contact_angle
-from tools.check_hsm_neck import clearance_sections, neck_fixture, widest_span, write_opening_review, write_review_gcode
+from tools.check_hsm_neck import check_neck, clearance_sections, neck_fixture, widest_span, write_opening_review, write_review_gcode
 from tools.hsm_center_regions import center_regions, cleared_start_intervals, connected_clearance
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_front_choice import choose_front_cut
@@ -505,8 +505,12 @@ def repeat_shoulder_pairs(pocket, regions, initial, seed_xy, radius, gates, pref
     return accepted, trace, 'cut_budget' if single_fallback else 'pair_budget'
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0):
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0, tapered_anchor_probe=False, clearance_anchor_probe=False, shoulder_probe=False, repeat_shoulders=0, hybrid_shoulders=0, handoff_budget=0):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if handoff_budget < 0 or (handoff_budget and (max_cuts is None or face_probe)):
+        raise ValueError('handoff requires a seed cut budget and no face probe')
+    if max_cuts == 0 and not handoff_budget:
+        raise ValueError('zero seed cuts require a handoff')
     if min(repeat_shoulders, hybrid_shoulders) < 0 or ((repeat_shoulders or hybrid_shoulders) and not shoulder_probe):
         raise ValueError('repeating shoulders requires the shoulder probe and a nonnegative budget')
     if repeat_shoulders and hybrid_shoulders:
@@ -589,10 +593,13 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     diagnostics = []
     budget = max_cuts if max_cuts is not None else 2 if second else 1
     gates = dict(contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25, require_clear_exit=True)
-    accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
-                                          diagnostics=diagnostics, propose_on_stall=propose_bow, **gates,
-                                          on_outcome=note_outcome if longer_straights else None,
-                                          on_ranked=note_ranked if longer_straights or fit_face_neighbor else None)
+    if budget:
+        accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
+                                              diagnostics=diagnostics, propose_on_stall=propose_bow, **gates,
+                                              on_outcome=note_outcome if longer_straights else None,
+                                              on_ranked=note_ranked if longer_straights or fit_face_neighbor else None)
+    else:
+        accepted, remaining, stop = [], stock, 'seed_only'
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
     regions = center_regions(pocket, radius)
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
@@ -699,7 +706,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                             connected_east_gain_mm=None if east is None else east-initial_clearance.bounds[2],
                             preview_cut_count=len(preview), preview_removed_mm2=stock.area-final_stock.area,
                             preview_feed_mm=sum(c.travel_mm for c in preview))
-        if review is not None:
+        if review is not None and not handoff_budget:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
@@ -719,6 +726,17 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                      'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted')
             write_review_gcode(review, preview, pose[0], label)
             write_opening_review(opening, pocket, stock, choice.link, choice.cut)
+    if handoff_budget:
+        handoff_pose = pose
+        if accepted:
+            a, b = accepted[-1].cut[-2:]
+            handoff_pose = b, tuple(y-x for x, y in zip(a, b))
+        report['broader_front'] = check_neck(initial_state=(remaining, handoff_pose), max_cuts=handoff_budget,
+                                             with_corners=True, corner_runoff=.5, with_live_detours=True,
+                                             with_shallow_fronts=True, shallow_runoff=1., shallow_rolloff=1.,
+                                             shallow_rollon=1., with_shifted_joins=True, with_clearance_tapers=True,
+                                             with_early_exits=True, require_clear_exit=True, with_neck_front=True,
+                                             with_front_bites=True, min_departure=.25, review_gcode=review)
     return report
 
 
@@ -745,7 +763,10 @@ if __name__ == '__main__':
     parser.add_argument('--shoulder-probe', action='store_true', help='clear an entry shoulder and retry the exact farther cut')
     parser.add_argument('--repeat-shoulder-pairs', type=int, default=0, help='check more preparation/retry pairs on each new shoulder')
     parser.add_argument('--hybrid-shoulder-budget', type=int, default=0, help='continue with checked pairs or singles within this extra cut budget')
+    parser.add_argument('--broader-front-budget', type=int, default=0, help='pass live stock and pose to the broader front trial')
     args = parser.parse_args()
+    if args.broader_front_budget < 0 or (args.broader_front_budget and args.seed_cut_budget is None):
+        parser.error('a positive broader front budget requires --seed-cut-budget')
     if args.hybrid_shoulder_budget < 0 or (args.hybrid_shoulder_budget and (not args.shoulder_probe or args.repeat_shoulder_pairs)):
         parser.error('hybrid budget requires --shoulder-probe and excludes --repeat-shoulder-pairs')
     if args.repeat_shoulder_pairs < 0 or (args.repeat_shoulder_pairs and not args.shoulder_probe):
@@ -777,8 +798,8 @@ if __name__ == '__main__':
     cut_audit = args.first_cut or args.second_cut or args.seed_cut_budget is not None
     if (args.fitted_straights or args.turned_straights) and not cut_audit:
         parser.error('fitted straights require a cut audit')
-    if args.seed_cut_budget is not None and args.seed_cut_budget < 1:
-        parser.error('seed cut budget must be positive')
+    if args.seed_cut_budget is not None and (args.seed_cut_budget < 0 or (not args.seed_cut_budget and not args.broader_front_budget)):
+        parser.error('seed cut budget must be positive unless handing off without bootstrapping')
     if (cut_audit and args.compare_pitch) or (args.review_gcode and not cut_audit):
         parser.error('select one audit; review output requires a cut audit')
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
@@ -789,6 +810,6 @@ if __name__ == '__main__':
                               anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights,
                               tapered_anchor_probe=args.tapered_anchor_probe,
                               clearance_anchor_probe=args.clearance_anchor_probe, shoulder_probe=args.shoulder_probe,
-                              repeat_shoulders=args.repeat_shoulder_pairs, hybrid_shoulders=args.hybrid_shoulder_budget) if cut_audit else
+                              repeat_shoulders=args.repeat_shoulder_pairs, hybrid_shoulders=args.hybrid_shoulder_budget, handoff_budget=args.broader_front_budget) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

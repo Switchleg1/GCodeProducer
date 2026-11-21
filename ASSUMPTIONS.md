@@ -120,3 +120,6 @@
   pair audit deliberately stops without a pair even if single cuts remain.
   Hybrid continuation prefers an eligible pair when two budget slots
   remain, otherwise a checked single. The comparison fixes total cut count.
+  The handoff transfers modeled stock and the final heading, uses 0.025 mm
+  XY contact sampling, and credits no synthetic clearing. A handoff review
+  would show only accepted continuation motion, not the helix or seed cuts.
