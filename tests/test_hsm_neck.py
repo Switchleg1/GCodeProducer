@@ -23,6 +23,18 @@ def test_section_bites_start_and_end_inside_clearance_and_bow_east():
             assert dx < 0 and abs(dy) < abs(dx)
 
 
+def test_live_section_depths_follow_stock_contact_onset():
+    domain = [box(0, 0, 12, 10)]
+    component = box(1, 2, 5, 7)
+    fixed = list(section_bites(domain, component, 2.))
+    far = list(section_bites(domain, component, 2., live_stock=box(9, 0, 11, 10)))
+    assert far == fixed
+    live = list(section_bites(domain, component, 2., live_stock=box(7.1, 0, 11, 10)))
+    assert len(live) > len(fixed)
+    assert live[:3] == fixed[:3]
+    assert max(x for x, _ in live[3]) == pytest.approx(5.15, abs=.0025)
+
+
 def test_terminal_sections_distinguish_open_spans_from_wall_domain():
     domain = box(0, 0, 10, 10)
     connected = box(0, 2, 6, 3).union(box(0, 5, 6, 7)).union(box(0, 2, 1, 7))

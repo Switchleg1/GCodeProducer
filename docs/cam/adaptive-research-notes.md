@@ -365,6 +365,9 @@ Adding `--section-turn-exits` offers quarter-turn retreats with 0.25 and
 0.5 mm radii, preserving the same departure gate. The 62-cut run reaches
 X26.365 with 4,010.116 mm² remaining. The final bows fail for no removal
 (six) or sampled contact (three), and the probe remains disconnected.
+`--section-live-depth` proposes additional bows just beyond estimated
+midpoint contact. It stalls at 62 cuts, X26.484 and 4,009.843 mm² reachable.
+Peak sampled contact rises to 59.25° under the unchanged 60° gate.
 
 ## Gate before another generator attempt
 

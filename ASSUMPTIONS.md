@@ -25,3 +25,6 @@
   setbacks, 0.2 mm endpoint inset and three bow depths are trial dimensions,
   not clearance guarantees or machining defaults. The 0.25/0.5 mm retreat
   radii are likewise fixture probes and must pass the same post-cut checks.
+  Live-depth probes use the first intersection of a 0.75 mm midpoint ray
+  with buffered stock, plus 0.05/0.10/0.15 mm. This estimates first contact
+  at one point, not immersion or peak contact along the whole bow.

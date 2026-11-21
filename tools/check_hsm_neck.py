@@ -54,18 +54,27 @@ def clearance_sections(regions, component, xs):
     return report
 
 
-def section_bites(regions, component, radius, *, turn_exits=False):
+def section_bites(regions, component, radius, *, turn_exits=False, live_stock=None):
     """Propose shallow eastward bows between clear poses on inset sections."""
     if component.is_empty:
         return
     offsets = (.25, .5)
+    contact_zone = None if live_stock is None else live_stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in clearance_sections(regions, component, [component.bounds[2]-d for d in offsets]):
         x = section['x_mm']
         for low, high in section['connected_y_mm']:
             if high - low < 1.5:
                 continue
             face_x = x + radius + .25
-            for immersion in (.125, .25, .375):
+            depths = (.125, .25, .375)
+            if contact_zone is not None:
+                y = (low + high)/2
+                hit = LineString([(x, y), (x+.75, y)]).intersection(contact_zone)
+                if not hit.is_empty:
+                    onset = hit.bounds[0] - x
+                    probes = (round(onset + delta - .25, 6) for delta in (.05, .10, .15))
+                    depths += tuple(depth for depth in probes if 0 < depth < radius and depth <= .5)
+            for immersion in dict.fromkeys(depths):
                 edge = ((face_x, high-.2), (face_x, low+.2))
                 path = eased_front_bite(edge, radius, immersion, .25, .0025)
                 yield path
@@ -79,7 +88,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -88,8 +97,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
-    if section_turn_exits and not section_bites_last:
-        raise ValueError('section turn exits require last-resort section bites')
+    if (section_turn_exits or section_live_depth) and not section_bites_last:
+        raise ValueError('section exit and depth trials require last-resort section bites')
     if (with_section_bites or section_bites_last) and not with_shallow_fronts:
         raise ValueError('section bites require shallow fronts')
     if with_shifted_joins and not shallow_rollon:
@@ -177,7 +186,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
 
     def propose_section_bites(live, _pose):
         component = connected_clearance(pocket, live, seed[0], radius)
-        return section_bites(regions, component, radius, turn_exits=section_turn_exits)
+        return section_bites(regions, component, radius, turn_exits=section_turn_exits,
+                             live_stock=live if section_live_depth else None)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -296,6 +306,8 @@ if __name__ == '__main__':
                               help='try section bites only when the other families fail')
     parser.add_argument('--section-turn-exits', action='store_true',
                         help='also try quarter-turn retreats on last-resort section bites')
+    parser.add_argument('--section-live-depth', action='store_true',
+                        help='also try depths just past midpoint contact with live stock')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -311,7 +323,8 @@ if __name__ == '__main__':
                             trace_clearance=args.trace_clearance, prioritize_clearance=args.prioritize_clearance,
                             with_wide_bites=args.with_wide_bites, lookahead_width=args.lookahead_width,
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
-                            section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits)
+                            section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
+                            section_live_depth=args.section_live_depth)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))
