@@ -11,6 +11,8 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
     nominal, = section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., advances=(0.,))
     assert max(x for x, _ in nominal) == pytest.approx(4.5)
     assert nominal[0] == paths[0][0] and nominal[-1] == paths[0][-1]
+    intermediate = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., advances=(.01, .04)))
+    assert [max(x for x, _ in path) for path in intermediate] == pytest.approx([4.51, 4.54])
     tapered = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., taper_entry=True))
     assert tapered[:3] == paths and len(tapered) == 6
     for fraction in (.4, .5):

@@ -401,6 +401,10 @@ entry, with first failing samples of 69.23–93.69°; none is committed.
 `--section-nominal-at-stall` sets extra advance to zero for all three
 entry lengths. None of the six probes overloads, but even the best
 passing probe removes only 4.07e-8 mm², negligible for coverage.
+`--section-bracket-at-stall` tests advances of 0.01–0.05 mm independently,
+without committing them. At 0.04 mm two of six pass all checks; the best
+removes 0.166 mm² at 56.49° peak sampled contact. At 0.05 mm all six fail
+contact. This brackets observed candidates, not a continuous limit.
 
 ## Gate before another generator attempt
 

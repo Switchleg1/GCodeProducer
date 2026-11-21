@@ -79,4 +79,5 @@
 - `--section-taper-at-stall` probes tapers without committing them on the 79-cut baseline. All six fail sampled contact on chords 3–4, with first offending samples of 61.05–77.22°. Baseline holds at X27.607 and 4,005.294 mm² reachable.
 - `--section-shallow-approach` probes longer approach blends on the exact 79-cut stall. All 12 fail in the entry blend at 69.23–93.69° first sampled overload; none is committed.
 - `--section-nominal-at-stall` tests six zero-extra-advance contours on the unchanged 79-cut stall. No overloads: two fail no removal and four pass with at most 4.07e-8 mm² removed, negligible for coverage. No probe is committed.
-- Next: bracket the gap between nominal contact and 0.05 mm advance for meaningful verified removal before committing any new stroke. Completion gates are in `GOAL.md`.
+- `--section-bracket-at-stall` tests 0.01–0.05 mm advances independently on unchanged terminal stock. At 0.04 mm two of six pass, with best removal 0.166 mm² at 56.49° peak; at 0.05 mm none passes. No cut is committed.
+- Next: try the verified smaller advances only after standard contours fail, and measure sustained connected progress. Completion gates are in `GOAL.md`.
