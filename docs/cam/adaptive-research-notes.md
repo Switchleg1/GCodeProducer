@@ -569,6 +569,9 @@ reach. The review appends only the checked sweep. With an eight-cut
 continuation from the same 64-cut state, the no-sweep control reaches
 X18.052, removing 7.171 mm² over 38.63 mm. Sweep plus eight reaches
 X17.902, removing 8.271 mm² over 54.46 mm, so it is not adopted.
+Per-cut traces show the control's entire advance comes from one cut;
+none of the eight cuts after the sweep moves the connected east edge.
+The efficiency ranking favors interior cuts once the front is reached.
 
 ## Gate before another generator attempt
 

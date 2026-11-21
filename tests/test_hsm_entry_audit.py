@@ -56,6 +56,9 @@ def test_sweep_followup_reports_a_same_state_control(tmp_path):
     sweep = report['broader_front']['wide_east_sweep']
     assert sweep['control_followup']['cut_count'] == sweep['sweep_followup']['cut_count'] == 1
     assert sweep['preview_cut_count'] == 3
+    for key in ('control_followup', 'sweep_followup'):
+        trace = sweep[key]['trace']
+        assert len(trace) == 1 and trace[0]['east_x_mm'] >= sweep[key]['start_east_x_mm']
     assert '(Cut 3: stock removal)' in (tmp_path / 'sweep.nc').read_text('ascii')
 
 

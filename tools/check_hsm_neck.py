@@ -536,7 +536,16 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                 cuts_after, stock_after, stop = run_front(pocket, live, pose, propose, radius,
                                                           max_cuts=sweep_follow_budget, **run_options)
                 clear_after = connected_clearance(pocket, stock_after, seed[0], radius)
-                return cuts_after, {'stop': stop, 'cut_count': len(cuts_after),
+                start_clear = connected_clearance(pocket, live, seed[0], radius)
+                start_east = None if start_clear.is_empty else start_clear.bounds[2]
+                trace = []
+                for cut in cuts_after:
+                    component = connected_clearance(pocket, cut.remaining, seed[0], radius)
+                    trace.append({'east_x_mm': None if component.is_empty else component.bounds[2],
+                                  'removed_mm2': cut.removed_mm2,
+                                  'cut_max_x_mm': max(x for x, _ in cut.cut),
+                                  'family': 'fallback' if len(cut.cut) > 2 and any(math.dist(a, b) >= .75-1e-9 for a, b in zip(cut.cut, cut.cut[1:])) else 'other'})
+                return cuts_after, {'stop': stop, 'start_east_x_mm': start_east, 'trace': trace, 'cut_count': len(cuts_after),
                                     'removed_mm2': live.area-stock_after.area,
                                     'feed_mm': sum(c.travel_mm for c in cuts_after),
                                     'peak_deg': max((c.peak_deg for c in cuts_after), default=None),
