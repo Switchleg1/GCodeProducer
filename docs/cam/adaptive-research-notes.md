@@ -389,6 +389,10 @@ rays hit, but all six final contours exceed the sampled contact gate.
 All six fail on chords 2–3 (zero-based), near the end of the initial
 blend. At 0.05 mm advance the first offending sample is 61.47°, with
 or without the optional retreat.
+`--section-taper-entry` adds variants that hold nominal first-contact
+position at the end of the initial blend, then ramp extra penetration.
+When mixed with the originals this regresses to 75 cuts, X27.536 and
+4,005.612 mm² residual, with all 12 terminal contours exceeding contact.
 
 ## Gate before another generator attempt
 

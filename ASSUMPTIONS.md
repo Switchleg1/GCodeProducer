@@ -35,3 +35,5 @@
   curvature or contact bound. The original motion checks still apply.
   The width-fit trial scans in 1/16 mm steps beyond 1 mm, capped at 2 mm.
   Its first eligible sampled span need not be the closest continuous one.
+  Entry-taper variants apply extra advance only after the first quarter,
+  reaching full advance halfway through; they do not model cutting forces.

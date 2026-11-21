@@ -105,7 +105,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -131,16 +131,20 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                               'missed_y_mm': missed, 'max_hit_distance_mm': max((d for _, d, _ in rows), default=None)})
             if len(rows) != count+1:
                 continue
-            for advance in (.05, .10, .15):
-                path = [(x + (offset+advance)*blend, y) for y, offset, blend in rows]
-                if on_profile is not None:
-                    on_profile(path, count, advance)
-                yield path
-                if turn_exits:
-                    retreat = roll_off(path, .25, .0025)
+            for tapered in ((False, True) if taper_entry else (False,)):
+                for advance in (.05, .10, .15):
+                    path = []
+                    for i, (y, offset, blend) in enumerate(rows):
+                        weight = math.sin(math.pi/2*max(0., min(1., 4*i/count-1)))**2 if tapered else 1.
+                        path.append((x + (offset+advance*weight)*blend, y))
                     if on_profile is not None:
-                        on_profile(retreat, count, advance)
-                    yield retreat
+                        on_profile(path, count, advance)
+                    yield path
+                    if turn_exits:
+                        retreat = roll_off(path, .25, .0025)
+                        if on_profile is not None:
+                            on_profile(retreat, count, advance)
+                        yield retreat
 
 
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
@@ -148,7 +152,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -157,6 +161,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
+    if section_taper_entry and not section_follow:
+        raise ValueError('section entry taper requires section following')
     if section_fit_width and not (section_follow and section_search_west):
         raise ValueError('fitting section width requires section following and west search')
     if (section_turn_exits or section_live_depth or section_search_west or section_follow) and not section_bites_last:
@@ -268,7 +274,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         if section_follow:
             sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
             yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits,
-                                           on_profile=note_profile)
+                                           on_profile=note_profile, taper_entry=section_taper_entry)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
@@ -327,7 +333,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         audit = []
         sections = section_bite_spans(regions, clearance, search_west=section_search_west, fit_width=section_fit_width)
         proposal_count = sum(1 for _ in section_follow_cuts(sections, remaining, radius,
-                                                          turn_exits=section_turn_exits, audit=audit))
+                                                          turn_exits=section_turn_exits, audit=audit,
+                                                          taper_entry=section_taper_entry))
         report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count,
                                           'first_overloads': follow_overloads.get(len(diagnostics)-1, [])}
     if section_xs:
@@ -404,6 +411,8 @@ if __name__ == '__main__':
                         help='also try cuts following stock contact across the open span')
     parser.add_argument('--section-fit-width', action='store_true',
                         help='search for the closest wider section beyond the default west insets')
+    parser.add_argument('--section-taper-entry', action='store_true',
+                        help='also try delaying contour advance until after the entry blend')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -421,7 +430,7 @@ if __name__ == '__main__':
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
                             section_live_depth=args.section_live_depth, section_search_west=args.section_search_west,
-                            section_follow=args.section_follow, section_fit_width=args.section_fit_width)
+                            section_follow=args.section_follow, section_fit_width=args.section_fit_width, section_taper_entry=args.section_taper_entry)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

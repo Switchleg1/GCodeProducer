@@ -8,6 +8,14 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
     sections = [{'x_mm': 4., 'eligible_y_mm': [(2., 6.)]}]
     paths = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2.))
     assert len(paths) == 3
+    tapered = list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., taper_entry=True))
+    assert tapered[:3] == paths and len(tapered) == 6
+    for flat, ramped in zip(paths, tapered[3:]):
+        quarter = (len(flat)-1)//4
+        half = len(flat)//2
+        assert ramped[0] == flat[0] and ramped[-1] == flat[-1]
+        assert ramped[quarter][0] < flat[quarter][0]
+        assert ramped[half:] == flat[half:]
     for path, expected in zip(paths, (4.55, 4.60, 4.65)):
         assert path[0] == pytest.approx((4., 5.8))
         assert path[-1] == pytest.approx((4., 2.2))

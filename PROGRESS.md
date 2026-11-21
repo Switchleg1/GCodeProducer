@@ -75,4 +75,5 @@
 - `final_section_follow` separates skipped spans from missed contact rays. At the 72-cut stall all four spans are below the 1.5 mm proposal gate (0.588, 0.814, 1.085, 1.462 mm); no rays are cast and no path is proposed.
 - `--section-fit-width` finds the closest sampled eligible opening beyond 1 mm. The benchmark stalls at cut 79, X27.607, 4,005.294 mm² reachable and 59.97° peak. The final 11 rays all hit and all six contour proposals fail sampled contact.
 - The terminal contour audit records the first overload chord and sampled angle. All six overload on zero-based chords 2–3, at or just after the initial ease-in blend. At 0.05 mm advance the first sample over the 60° limit is 61.47°; adding the retreat does not change it.
-- Next: test tapering contact advance near the ease-in transition, not changing the retreat. Completion gates are in `GOAL.md`.
+- `--section-taper-entry` delays extra penetration and ramps it over the second quarter of the contour. Mixed into the candidate set, it regresses to a 75-cut stall at X27.536 with 4,005.612 mm² residual (baseline 79, X27.607, 4,005.294). All 12 terminal contours still exceed contact.
+- Next: isolate the taper against the exact 79-cut baseline stall, distinguishing a geometry failure from a change in earlier selection. Completion gates are in `GOAL.md`.
