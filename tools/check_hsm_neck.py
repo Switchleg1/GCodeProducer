@@ -54,7 +54,7 @@ def clearance_sections(regions, component, xs):
     return report
 
 
-def section_bite_spans(regions, component, *, search_west=False):
+def section_bite_spans(regions, component, *, search_west=False, fit_width=False):
     """Report the exact sections and width gate used by the bow generator."""
     if component.is_empty:
         return []
@@ -70,6 +70,13 @@ def section_bite_spans(regions, component, *, search_west=False):
         for offset in (.75, 1.):
             sections.extend(audit((offset,)))
             if sections[-1]['eligible_y_mm']:
+                break
+    if fit_width and not any(section['eligible_y_mm'] for section in sections):
+        # Keep the nearest sampled opening that actually fits the width gate.
+        for i in range(17, 33):
+            row = audit((i/16,))[0]
+            if row['eligible_y_mm']:
+                sections.append(row)
                 break
     return sections
 
@@ -136,7 +143,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -145,6 +152,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
+    if section_fit_width and not (section_follow and section_search_west):
+        raise ValueError('fitting section width requires section following and west search')
     if (section_turn_exits or section_live_depth or section_search_west or section_follow) and not section_bites_last:
         raise ValueError('section variants require last-resort section bites')
     if (with_section_bites or section_bites_last) and not with_shallow_fronts:
@@ -237,7 +246,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         yield from section_bites(regions, component, radius, turn_exits=section_turn_exits,
                                  live_stock=live if section_live_depth else None, search_west=section_search_west)
         if section_follow:
-            sections = section_bite_spans(regions, component, search_west=section_search_west)
+            sections = section_bite_spans(regions, component, search_west=section_search_west, fit_width=section_fit_width)
             yield from section_follow_cuts(sections, live, radius, turn_exits=section_turn_exits)
 
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
@@ -295,9 +304,10 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         report['final_section_bite_spans'] = section_bite_spans(regions, clearance, search_west=section_search_west)
     if section_follow:
         audit = []
-        proposal_count = sum(1 for _ in section_follow_cuts(report['final_section_bite_spans'], remaining, radius,
+        sections = section_bite_spans(regions, clearance, search_west=section_search_west, fit_width=section_fit_width)
+        proposal_count = sum(1 for _ in section_follow_cuts(sections, remaining, radius,
                                                           turn_exits=section_turn_exits, audit=audit))
-        report['final_section_follow'] = {'profiles': audit, 'proposal_count': proposal_count}
+        report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count}
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:
@@ -370,6 +380,8 @@ if __name__ == '__main__':
                         help='try farther insets only if both default sections are too narrow')
     parser.add_argument('--section-follow', action='store_true',
                         help='also try cuts following stock contact across the open span')
+    parser.add_argument('--section-fit-width', action='store_true',
+                        help='search for the closest wider section beyond the default west insets')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -387,7 +399,7 @@ if __name__ == '__main__':
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
                             section_live_depth=args.section_live_depth, section_search_west=args.section_search_west,
-                            section_follow=args.section_follow)
+                            section_follow=args.section_follow, section_fit_width=args.section_fit_width)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

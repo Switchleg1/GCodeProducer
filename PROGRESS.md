@@ -73,4 +73,5 @@
 - `--section-search-west` tries 0.75/1 mm insets only when both defaults are too narrow. Two additional checked cuts remove just 0.0035 mm²; the run stalls after 64 cuts at effectively the same X26.484. Peak remains 59.25°; final section candidates fail contact (12) or remove nothing (6).
 - `--section-follow` follows sampled stock contact across the open span. Versus the 64-cut west-search trial it stalls at 72 cuts, X27.269 vs X26.484, and 4,006.640 vs 4,009.840 mm² reachable. Peak sampled contact falls from 59.25° to 57.91°; the neck probe is not reached.
 - `final_section_follow` separates skipped spans from missed contact rays. At the 72-cut stall all four spans are below the 1.5 mm proposal gate (0.588, 0.814, 1.085, 1.462 mm); no rays are cast and no path is proposed.
-- Next: choose a section from measured opening width instead of only probing fixed insets. Keep all motion checks. Completion gates are in `GOAL.md`.
+- `--section-fit-width` finds the closest sampled eligible opening beyond 1 mm. The benchmark stalls at cut 79, X27.607, 4,005.294 mm² reachable and 59.97° peak. The final 11 rays all hit and all six contour proposals fail sampled contact.
+- Next: locate the overload within those paths before changing the contact-following geometry. Completion gates are in `GOAL.md`.

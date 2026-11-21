@@ -66,6 +66,19 @@ def test_west_search_stops_at_first_eligible_section_and_leaves_wide_default_alo
     assert len(section_bite_spans(domain, box(1, 0, 5, 1), search_west=True)) == 4
 
 
+def test_fit_width_retains_first_measured_span_beyond_fixed_search():
+    domain = [box(0, 0, 12, 10)]
+    component = Polygon([(1, 0), (3.75, 0), (5, .8), (3.75, 1.6), (1, 1.6)])
+    fixed = section_bite_spans(domain, component, search_west=True)
+    fitted = section_bite_spans(domain, component, search_west=True, fit_width=True)
+    assert len(fixed) == 4 and all(not s['eligible_y_mm'] for s in fixed)
+    assert fitted[:-1] == fixed
+    assert fitted[-1]['x_mm'] == 3.8125
+    assert fitted[-1]['eligible_y_mm']
+    narrow = box(1, 0, 5, 1)
+    assert len(section_bite_spans(domain, narrow, search_west=True, fit_width=True)) == 4
+
+
 def test_live_section_depths_follow_stock_contact_onset():
     domain = [box(0, 0, 12, 10)]
     component = box(1, 2, 5, 7)

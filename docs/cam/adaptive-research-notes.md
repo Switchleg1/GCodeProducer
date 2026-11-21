@@ -381,6 +381,10 @@ and 57.91° peak sampled contact. The neck probe remains disconnected.
 The terminal `final_section_follow` audit finds zero profiles because
 all four spans are too narrow for proposals (widest 1.462 mm against a
 1.5 mm minimum). Extending the contact rays alone cannot fix this stall.
+`--section-fit-width` searches beyond the fixed insets for an eligible
+opening. It adds seven checked cuts relative to the 72-cut run and
+reaches X27.607 with 4,005.294 mm² residual. At this stall all 11 contact
+rays hit, but all six final contours exceed the sampled contact gate.
 
 ## Gate before another generator attempt
 

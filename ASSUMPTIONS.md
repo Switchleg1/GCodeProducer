@@ -33,3 +33,5 @@
 - Section following estimates contact on eastward 1.5 mm rays spaced at most
   0.125 mm apart. It supplies a chord-chain candidate, not a continuous
   curvature or contact bound. The original motion checks still apply.
+  The width-fit trial scans in 1/16 mm steps beyond 1 mm, capped at 2 mm.
+  Its first eligible sampled span need not be the closest continuous one.
