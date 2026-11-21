@@ -16,6 +16,7 @@ if __package__ in (None, ''):
 from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, connected_clearance, nearby_frontier
 from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
                                     shifted_roll_ons, tapered_roll_on)
+from tools.hsm_front_choice import choose_front_cut
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
 from tools.hsm_tangent_link import forward_clearance
@@ -105,7 +106,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None, on_profile=None, taper_entry=False, taper_only=False):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -131,7 +132,8 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None
                               'missed_y_mm': missed, 'max_hit_distance_mm': max((d for _, d, _ in rows), default=None)})
             if len(rows) != count+1:
                 continue
-            for tapered in ((False, True) if taper_entry else (False,)):
+            styles = (True,) if taper_only else (False, True) if taper_entry else (False,)
+            for tapered in styles:
                 for advance in (.05, .10, .15):
                     path = []
                     for i, (y, offset, blend) in enumerate(rows):
@@ -152,7 +154,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -161,6 +163,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('shallow roll-off must be nonnegative and requires shallow proposals')
     if not math.isfinite(shallow_rollon) or shallow_rollon < 0 or (shallow_rollon and not with_shallow_fronts):
         raise ValueError('shallow roll-on must be nonnegative and requires shallow proposals')
+    if section_taper_at_stall and (not section_follow or section_taper_entry):
+        raise ValueError('terminal taper probe requires untapered section following')
     if section_taper_entry and not section_follow:
         raise ValueError('section entry taper requires section following')
     if section_fit_width and not (section_follow and section_search_west):
@@ -286,18 +290,20 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         component = connected_clearance(pocket, live, seed[0], radius)
         return round(component.bounds[2], 6) if not component.is_empty else -math.inf
 
+    gates = dict(contact_limit=60., sample_step=.1, link_handle=1., require_clear_exit=require_clear_exit,
+                 with_three_leg_links=with_three_leg_links, min_departure=min_departure)
     diagnostics = []
     cuts, remaining, reason = run_front(pocket, stock, seed, propose, radius, max_cuts=max_cuts,
-                                       contact_limit=60., sample_step=.1, link_handle=1., diagnostics=diagnostics,
+                                       diagnostics=diagnostics,
                                        waypoints=waypoints,
                                        propose_waypoints=propose_waypoints if with_live_detours else None,
                                        propose_on_stall=propose_shallow if with_shallow_fronts else None,
                                        on_overload=report_overload if with_clearance_tapers or section_follow else None,
-                                       require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
-                                       min_departure=min_departure, priority_region=neck_target if prioritize_neck else None,
+                                       priority_region=neck_target if prioritize_neck else None,
                                        priority_score=clearance_score if prioritize_clearance else None,
                                        lookahead_width=lookahead_width, lookahead_after=lookahead_after,
-                                       propose_last_resort=propose_section_bites if section_bites_last else None)
+                                       propose_last_resort=propose_section_bites if section_bites_last else None,
+                                       **gates)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     last_heading = seed[1]
@@ -337,6 +343,17 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                                           taper_entry=section_taper_entry))
         report['final_section_follow'] = {'sections': sections, 'profiles': audit, 'proposal_count': proposal_count,
                                           'first_overloads': follow_overloads.get(len(diagnostics)-1, [])}
+    if section_taper_at_stall and reason == 'stalled':
+        pose = last_xy, last_heading
+        routes = (*waypoints, *propose_waypoints(remaining, pose)) if with_live_detours else waypoints
+        probes = section_follow_cuts(sections, remaining, radius, turn_exits=section_turn_exits,
+                                     taper_only=True, on_profile=note_profile)
+        counts = Counter()
+        choice = choose_front_cut(pocket, remaining, pose, probes, radius, waypoints=routes, diagnostics=counts,
+                                  on_overload=lambda path, chord, angle: report_overload(len(diagnostics), path, chord, angle),
+                                  **gates)
+        report['terminal_taper_probe'] = {'gates': dict(counts), 'first_overloads': follow_overloads[len(diagnostics)],
+                                          'best_removed_mm2': None if choice is None else choice.removed_mm2}
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:
@@ -413,6 +430,8 @@ if __name__ == '__main__':
                         help='search for the closest wider section beyond the default west insets')
     parser.add_argument('--section-taper-entry', action='store_true',
                         help='also try delaying contour advance until after the entry blend')
+    parser.add_argument('--section-taper-at-stall', action='store_true',
+                        help='audit entry tapers on final baseline stock without committing them')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -430,7 +449,8 @@ if __name__ == '__main__':
                             lookahead_after=args.lookahead_after, section_xs=args.section_x, with_section_bites=args.with_section_bites,
                             section_bites_last=args.section_bites_last, section_turn_exits=args.section_turn_exits,
                             section_live_depth=args.section_live_depth, section_search_west=args.section_search_west,
-                            section_follow=args.section_follow, section_fit_width=args.section_fit_width, section_taper_entry=args.section_taper_entry)
+                            section_follow=args.section_follow, section_fit_width=args.section_fit_width, section_taper_entry=args.section_taper_entry,
+                            section_taper_at_stall=args.section_taper_at_stall)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

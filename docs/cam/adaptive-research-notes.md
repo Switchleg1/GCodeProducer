@@ -393,6 +393,9 @@ or without the optional retreat.
 position at the end of the initial blend, then ramp extra penetration.
 When mixed with the originals this regresses to 75 cuts, X27.536 and
 4,005.612 mm² residual, with all 12 terminal contours exceeding contact.
+`--section-taper-at-stall` tests only the tapered variants on unchanged
+79-cut baseline stock and pose. All six exceed contact on chords 3–4;
+none is committed.
 
 ## Gate before another generator attempt
 
