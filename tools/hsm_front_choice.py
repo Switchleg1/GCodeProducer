@@ -21,14 +21,17 @@ class FrontChoice(NamedTuple):
 
 def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, sample_step,
                      link_handle, link_margin=0., diagnostics=None, waypoints=(), on_overload=None, require_clear_exit=False,
-                     with_three_leg_links=False, min_departure=0., priority_region=None, priority_score=None, on_eligible=None):
+                     with_three_leg_links=False, min_departure=0., priority_region=None, priority_score=None, on_eligible=None, on_outcome=None):
     """Rank by removed stock per mm of checked link plus cut; no implied retract."""
     if not math.isfinite(min_departure) or min_departure < 0:
         raise ValueError('minimum departure must be nonnegative and finite')
     counts = diagnostics if diagnostics is not None else Counter()
+    cut = None
 
     def reject(reason):
         counts[reason] += 1
+        if on_outcome is not None and cut is not None:
+            on_outcome(cut, reason)
 
     xy, heading = pose
     if (not all(map(math.isfinite, (radius, link_margin, link_handle)))
@@ -101,6 +104,8 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
             reject('no_priority_gain')
             continue
         counts['eligible'] += 1
+        if on_outcome is not None:
+            on_outcome(cut, 'eligible')
         removed = stock.area - remaining.area
         travel = _length(link) + _length(cut)
         key = (removed/travel, removed, -travel)

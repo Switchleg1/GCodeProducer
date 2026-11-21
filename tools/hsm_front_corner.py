@@ -130,7 +130,7 @@ def turned_straight_candidates(pocket, stock, radius, clearance, *, focus=None, 
                     path = roll_off(roll_on(body, r, .0025), r, .0025)
                     mapped = clearance.covers(Point(path[0])) and clearance.covers(Point(path[-1]))
                     if span >= 2.25 and on_long_variant is not None:
-                        on_long_variant(mapped)
+                        on_long_variant(path, mapped)
                     if mapped:
                         yield path
 

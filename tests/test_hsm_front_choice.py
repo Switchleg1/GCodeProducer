@@ -20,7 +20,10 @@ def test_selects_efficient_front_from_either_candidate_order():
     corner = filleted_corner(*poses, 1.5, .00025)
     short = [(4., 4.25), (7., 4.25)]
     for cuts in ([short, corner], [corner, short]):
-        choice = _choose(pocket, stock, pose, cuts)
+        observed = []
+        choice = choose_front_cut(pocket, stock, pose, cuts, 1., contact_limit=60., sample_step=.05,
+                                  link_handle=.5, on_outcome=lambda path, outcome: observed.append((path, outcome)))
+        assert observed == [(path, 'eligible') for path in cuts]
         assert choice.cut == corner
         assert choice.link[0] == pose[0] and choice.link[-1] == corner[0]
         assert choice.removed_mm2 == pytest.approx(4.241, abs=.001)
@@ -73,10 +76,13 @@ def test_counts_first_failed_gate_without_changing_selection():
     pocket, stock = box(0, 0, 24, 18), box(5, 5, 15, 12)
     xy = (3., 4.25)
     counts = Counter()
-    choice = choose_front_cut(pocket, stock, (xy, (1., 0.)),
-                              [[xy, (28., 4.25)], [xy, (3.5, 4.25)], [xy, (12., 4.25)]],
-                              1., contact_limit=20., sample_step=.05, link_handle=.5, diagnostics=counts)
+    paths = [[xy, (28., 4.25)], [xy, (3.5, 4.25)], [xy, (12., 4.25)]]
+    observed = []
+    choice = choose_front_cut(pocket, stock, (xy, (1., 0.)), paths,
+                              1., contact_limit=20., sample_step=.05, link_handle=.5, diagnostics=counts,
+                              on_outcome=lambda path, outcome: observed.append((path, outcome)))
     assert choice is None
+    assert observed == list(zip(paths, ('cut_boundary', 'no_removal', 'contact_limit')))
     assert counts == {'cut_boundary': 1, 'no_removal': 1, 'contact_limit': 1}
 
 

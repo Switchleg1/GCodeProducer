@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -212,8 +213,18 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     focus = Point(pose[0]).buffer(orbit + radius + 1.5)
     long_counts = {'endpoint_blocked': 0, 'endpoint_mapped': 0}
 
-    def note_long_variant(mapped):
+    long_outcomes = Counter()
+    mapped_long = None
+
+    def note_long_variant(path, mapped):
+        nonlocal mapped_long
         long_counts['endpoint_mapped' if mapped else 'endpoint_blocked'] += 1
+        if mapped:
+            mapped_long = path
+
+    def note_outcome(path, outcome):
+        if path is mapped_long:
+            long_outcomes[outcome] += 1
 
     def propose_straight(live, _pose, *, audit=True):
         yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
@@ -233,7 +244,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
     budget = max_cuts if max_cuts is not None else 2 if second else 1
     accepted, remaining, stop = run_front(pocket, stock, pose, propose_straight, radius, max_cuts=budget,
                                           contact_limit=60., sample_step=.025, link_handle=1., min_departure=.25,
-                                          require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow)
+                                          require_clear_exit=True, diagnostics=diagnostics, propose_on_stall=propose_bow,
+                                          on_outcome=note_outcome if longer_straights else None)
     longest_chords = [max(math.dist(a, b) for a, b in zip(c.cut, c.cut[1:])) for c in accepted]
     initial_clearance = connected_clearance(pocket, stock, pose[0], radius)
     clearance = connected_clearance(pocket, remaining, pose[0], radius)
@@ -254,6 +266,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
               clearance.bounds[2]-initial_clearance.bounds[2]}
     if longer_straights:
         report['long_variant_counts'] = long_counts
+        report['long_variant_outcomes'] = dict(long_outcomes)
     if max_cuts is None:
         report['stop'] = ('no_checked_cut' if not accepted else 'first_cut_checked' if not second else
                           'two_cuts_checked' if len(accepted) == 2 else 'second_cut_stalled')

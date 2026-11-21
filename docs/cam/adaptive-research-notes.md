@@ -494,6 +494,8 @@ X17.403), and stock removal falls from 42.381 to 42.108 mm².
 `--longer-straights` adds fitted bodies from 2.25 to 3.25 mm. Over 24
 cuts, 42 have mapped endpoints versus 1,774 blocked; none is selected.
 The accepted motion and maximum 1.75 mm straight body are unchanged.
+Of the 42 mapped candidates, exactly 40 pass all motion gates but rank
+below the shorter cuts; two fail sampled contact.
 
 ## Gate before another generator attempt
 
