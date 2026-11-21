@@ -378,6 +378,9 @@ section candidates exceed the sampled contact gate and six remove nothing.
 `--section-follow` samples first contact across each eligible span and eases
 in and out. The 72-cut run stalls at X27.269 with 4,006.640 mm² reachable
 and 57.91° peak sampled contact. The neck probe remains disconnected.
+The terminal `final_section_follow` audit finds zero profiles because
+all four spans are too narrow for proposals (widest 1.462 mm against a
+1.5 mm minimum). Extending the contact rays alone cannot fix this stall.
 
 ## Gate before another generator attempt
 

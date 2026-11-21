@@ -98,7 +98,7 @@ def section_bites(regions, component, radius, *, turn_exits=False, live_stock=No
                         yield roll_off(path, turn_radius, .0025)
 
 
-def section_follow_cuts(sections, stock, radius, *, turn_exits=False):
+def section_follow_cuts(sections, stock, radius, *, turn_exits=False, audit=None):
     """Follow first stock contact across an open span, easing both ends west."""
     occupied = stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
     for section in sections:
@@ -107,14 +107,21 @@ def section_follow_cuts(sections, stock, radius, *, turn_exits=False):
             low, high = low+.2, high-.2
             count = max(8, math.ceil((high-low)/.125))
             rows = []
+            missed = []
             for i in range(count+1):
                 t = i/count
                 y = high + (low-high)*t
                 hit = LineString([(x, y), (x+1.5, y)]).intersection(occupied)
                 if hit.is_empty:
-                    break
+                    if audit is None:
+                        break
+                    missed.append(y)
+                    continue
                 blend = math.sin(math.pi/2*min(1., 4*t, 4*(1-t)))**2
                 rows.append((y, hit.bounds[0]-x, blend))
+            if audit is not None:
+                audit.append({'x_mm': x, 'inset_y_mm': (low, high), 'rows': count+1,
+                              'missed_y_mm': missed, 'max_hit_distance_mm': max((d for _, d, _ in rows), default=None)})
             if len(rows) != count+1:
                 continue
             for advance in (.05, .10, .15):
@@ -286,6 +293,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_wall_distance_mm': point.distance(pocket.boundary)}
     if with_section_bites or section_bites_last:
         report['final_section_bite_spans'] = section_bite_spans(regions, clearance, search_west=section_search_west)
+    if section_follow:
+        audit = []
+        proposal_count = sum(1 for _ in section_follow_cuts(report['final_section_bite_spans'], remaining, radius,
+                                                          turn_exits=section_turn_exits, audit=audit))
+        report['final_section_follow'] = {'profiles': audit, 'proposal_count': proposal_count}
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:

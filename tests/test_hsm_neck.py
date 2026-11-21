@@ -12,7 +12,17 @@ def test_section_follow_eases_to_stock_contact_across_middle_rows():
         assert path[0] == pytest.approx((4., 5.8))
         assert path[-1] == pytest.approx((4., 2.2))
         assert all(x == pytest.approx(expected) for x, y in path if 3.2 < y < 4.8)
-    assert not list(section_follow_cuts(sections, box(8, 0, 11, 10), 2.))
+    audit = []
+    assert list(section_follow_cuts(sections, box(6.5, 0, 11, 10), 2., audit=audit)) == paths
+    assert audit[0]['missed_y_mm'] == []
+    assert audit[0]['max_hit_distance_mm'] == pytest.approx(.5)
+    audit.clear()
+    assert not list(section_follow_cuts(sections, box(8, 0, 11, 10), 2., audit=audit))
+    assert len(audit[0]['missed_y_mm']) == audit[0]['rows']
+    assert audit[0]['max_hit_distance_mm'] is None
+    audit.clear()
+    assert not list(section_follow_cuts([{'x_mm': 4., 'eligible_y_mm': []}], box(8, 0, 11, 10), 2., audit=audit))
+    assert not audit
 
 
 def test_bite_span_audit_explains_empty_candidate_family():
