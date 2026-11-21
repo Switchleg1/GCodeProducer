@@ -459,7 +459,10 @@ angle, not tool suitability or a runnable entry. Slice replay clips at
 Z−0.5, −1, −1.5 and −2 before crediting any sweep. All four enter at
 360°. During the floor pass, contact exceeds 60° over 3.76 mm of XY at
 Z−1.5 and 9.41 mm at Z−2, but not at the two higher slices. These are
-separate planar diagnostics, not a simultaneous axial load estimate.
+separate planar diagnostics. Synchronized midpoint sampling at 16
+axial bands estimates peak thickness above 60° of 0.875 mm on descent
+and 0.750 mm on the floor pass. At eight bands the estimates are 1.000
+and 0.750 mm. This tracks geometric contact, not cutting force.
 
 ## Gate before another generator attempt
 

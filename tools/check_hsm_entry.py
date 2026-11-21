@@ -66,6 +66,48 @@ def entry_plane_contact(stock, points, radius, depth, plane, *, step=.025, limit
     return {'plane_z_mm': plane, 'arrival_xy_mm': active[0, :2].tolist(), 'arrival_contact_deg': arrival, **phases}
 
 
+def axial_contact(stock, points, radius, *, bands, step=.025, limit=60.):
+    """Estimate simultaneous over-limit axial thickness using midpoint Z bands."""
+    path = np.asarray(points, dtype=float)
+    depth = path[-1, 2]
+    if (not isinstance(bands, int) or bands < 1 or not math.isfinite(step) or step <= 0
+            or path[0, 2] <= depth or np.any(np.diff(path[:, 2]) > 0)):
+        raise ValueError('expected positive sampling and a descending entry')
+    band_height = (path[0, 2]-depth)/bands
+    planes = [depth+(i+.5)*band_height for i in range(bands)]
+    xmin, ymin = path[:, :2].min(axis=0)-radius
+    xmax, ymax = path[:, :2].max(axis=0)+radius
+    slices = [stock.intersection(box(xmin, ymin, xmax, ymax))]*bands
+    phases = {name: {'xy_mm': 0., 'peak_over_limit_height_mm': 0., 'height_times_xy_mm2': 0.}
+              for name in ('descent', 'floor')}
+    for start, end in zip(path, path[1:]):
+        distance = math.dist(start[:2], end[:2])
+        count = max(1, math.ceil(distance/step))
+        phase = phases['descent' if start[2] > depth else 'floor']
+        a = start
+        for i in range(1, count+1):
+            b = end if i == count else start+(end-start)*(i/count)
+            xy = tuple(b[:2])
+            heavy = 0
+            for j, plane in enumerate(planes):
+                if b[2] > plane or slices[j].is_empty:
+                    continue
+                heavy += contact_angle(xy, radius, slices[j]) > limit
+                contact_start = a if a[2] <= plane else a+(b-a)*((plane-a[2])/(b[2]-a[2]))
+                start_xy = tuple(contact_start[:2])
+                segment = Point(xy) if start_xy == xy else LineString([start_xy, xy])
+                slices[j] = slices[j].difference(segment.buffer(radius, quad_segs=32))
+            height = heavy*band_height
+            phase['peak_over_limit_height_mm'] = max(height, phase['peak_over_limit_height_mm'])
+            phase['height_times_xy_mm2'] += height*distance/count
+            phase['xy_mm'] += distance/count
+            a = b
+    for phase in phases.values():
+        integral = phase.pop('height_times_xy_mm2')
+        phase['mean_over_limit_height_mm'] = integral/phase['xy_mm'] if phase['xy_mm'] else None
+    return {'bands': bands, 'band_height_mm': band_height, **phases}
+
+
 def check_entry():
     pocket, seeded = neck_fixture()
     radius, top, depth = 2., 0., -2.
@@ -77,6 +119,7 @@ def check_entry():
     report = audit_entry(pocket, pocket, entry.points, radius, depth)
     report['slice_contacts'] = [entry_plane_contact(pocket, entry.points, radius, depth, z)
                                 for z in (-.5, -1., -1.5, -2.)]
+    report['axial_contacts'] = [axial_contact(pocket, entry.points, radius, bands=n) for n in (8, 16)]
     report['synthetic_preclear_mm2'] = pocket.area - seeded.area
     report['entry_end_xy_mm'] = entry.points[-1, :2].tolist()
     report['floor_accounting_delta_mm2'] = report['floor_removed_mm2'] - (pocket.area-entry.remaining.area)

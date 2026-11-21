@@ -65,3 +65,6 @@
   The entry slice replay credits only motion at or below each plane, samples
   at 0.025 mm XY, and uses 60° as a diagnostic cutoff, not an entry limit
   certified for the tool. Separate slice peaks need not occur together.
+  The synchronized axial audit represents a flat cylinder with uniform full
+  stock across Z. Eight and 16 midpoint bands estimate thickness, not a
+  certified peak or flute, chip, or machine load.
