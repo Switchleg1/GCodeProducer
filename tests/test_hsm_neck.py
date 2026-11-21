@@ -193,6 +193,21 @@ def test_terminal_sections_distinguish_open_spans_from_wall_domain():
     ]
 
 
+def test_review_export_writes_xy_only_and_refuses_overwrite(tmp_path):
+    path = tmp_path / 'review.nc'
+    result = check_neck(review_gcode=path)
+    text = path.read_text('ascii')
+    assert text.startswith('(DEBUG ONLY')
+    assert '(Cut 1: cleared link)' in text and '(Cut 1: stock removal)' in text
+    moves = [line.split() for line in text.splitlines() if line.startswith(('G0 ', 'G1 '))]
+    assert moves[0] == ['G0', 'X9.000000', 'Y28.500000']
+    assert len(moves) > 1 and all(len(line) == 3 for line in moves)
+    assert [float(word[1:]) for word in moves[-1][1:]] == pytest.approx(result['last_xy_mm'], abs=1e-6)
+    with pytest.raises(FileExistsError):
+        check_neck(review_gcode=path)
+    assert path.read_text('ascii') == text
+
+
 def test_clearance_trace_includes_seed_and_matches_final_report():
     report = check_neck(trace_clearance=True)
     initial, final = report['clearance_trace']

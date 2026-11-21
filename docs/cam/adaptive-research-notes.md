@@ -431,6 +431,10 @@ eastward extent. No cut is committed.
 The 3 mm target provides a cut widening the fixed approach gauge by
 0.0377 mm and adding 0.0661 mm² of connected area at 50.30° peak sampled
 contact. The 2 and 2.5 mm targets fail contact. Nothing is committed.
+Pass `--review-gcode path/to/new-review.nc` to save accepted links and cuts
+for geometry inspection. The file is debug-only XY, with no Z, tool,
+spindle, or feed schedule. It excludes rejected and uncommitted probes,
+refuses overwrites, and has not been replayed after coordinate rounding.
 
 ## Gate before another generator attempt
 

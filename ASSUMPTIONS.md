@@ -49,3 +49,6 @@
   Widening probes scan 0.25–3 mm setbacks in 1/16 mm steps, with 2.75 mm
   contact rays. The gauge is fixed 0.75 mm behind the pre-cut east edge;
   a width gain there does not verify passage across the whole neck.
+  Review exports default to a separate Documents review folder by convention,
+  not a production output path. The first file shows the synthetic fixture
+  in XY only, not the saved Stormtrooper session or controller-ready output.

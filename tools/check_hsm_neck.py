@@ -220,12 +220,33 @@ def widest_span(section):
     return max((hi-lo for lo, hi in section['connected_y_mm']), default=0.)
 
 
+def write_review_gcode(path, cuts, seed_xy, reason):
+    """Save accepted XY motion for a viewer, not a machine or quantized replay."""
+    with Path(path).open('x', encoding='ascii', newline='\n') as stream:
+        def move(code, xy):
+            stream.write(f'{code} X{xy[0]:.6f} Y{xy[1]:.6f}\n')
+
+        stream.write('(DEBUG ONLY - XY GEOMETRY REVIEW - DO NOT RUN ON A MACHINE)\n'
+                     f'(Synthetic two-lobe fixture: {reason}, {len(cuts)} accepted cuts)\n'
+                     '(No Z, entry, spindle, tool or feed schedule; rounded XY not replayed)\n'
+                     'G21\nG90\n')
+        move('G0', seed_xy)
+        for index, choice in enumerate(cuts, 1):
+            stream.write(f'(Cut {index}: cleared link)\n')
+            for xy in choice.link[1:]:
+                move('G1', xy)
+            stream.write(f'(Cut {index}: stock removal)\n')
+            for xy in choice.cut[1:]:
+                move('G1', xy)
+        stream.write('M2\n')
+
+
 def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                with_live_detours=False, with_shallow_fronts=False, shallow_runoff=2., shallow_rolloff=0.,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -411,6 +432,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        propose_last_resort=propose_section_bites if section_bites_last else None,
                                        propose_final_retry=propose_small_contours if section_small_retry else None,
                                        **gates)
+    if review_gcode is not None:
+        write_review_gcode(review_gcode, cuts, seed[0], reason)
     reachable = union_all([r.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS) for r in regions])
     last_xy = cuts[-1].cut[-1] if cuts else seed[0]
     last_heading = seed[1]
@@ -654,6 +677,7 @@ if __name__ == '__main__':
                         help='test local contour relief over clustered overloads without committing edits to stock')
     parser.add_argument('--section-widen-probe', action='store_true',
                         help='compare wider anchor spans for terminal approach growth without committing cuts')
+    parser.add_argument('--review-gcode', type=Path, help='save accepted XY paths to a new debug-only .nc file')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -677,7 +701,7 @@ if __name__ == '__main__':
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
                             section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe,
-                            section_widen_probe=args.section_widen_probe)
-    except ValueError as error:
+                            section_widen_probe=args.section_widen_probe, review_gcode=args.review_gcode)
+    except (ValueError, OSError) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))
