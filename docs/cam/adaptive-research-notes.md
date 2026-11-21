@@ -559,7 +559,9 @@ not engagement at the handoff pose. No empty review is emitted.
 from connected clearance only after existing families fail. Both handoffs
 now reach an eight-cut budget: the bare helix adds 5.836 mm² at 58.70°;
 the 24-cut seed adds 7.916 mm² at 59.67°. No other family takes over in
-these short trials.
+these short trials. A bare-helix 64-cut run still uses only the fallback,
+removing 58.991 mm² and extending connected clearance to X17.826 at
+59.87° peak. It stops on budget with no removal east of X24.
 
 ## Gate before another generator attempt
 

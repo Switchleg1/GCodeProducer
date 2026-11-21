@@ -55,6 +55,7 @@ def test_broader_front_fallback_cuts_from_bare_helix_and_exports_only_continuati
     result = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True, review=review)
     handoff = result['broader_front']
     assert handoff['stop'] == 'cut_budget' and handoff['clearance_straight_cuts'] == handoff['cut_count'] == 1
+    assert handoff['non_fallback_cut_indices'] == []
     assert handoff['removed_mm2'] == pytest.approx(.820, abs=.003)
     assert handoff['peak_contact_deg'] < 60.
     text = review.read_text('ascii')

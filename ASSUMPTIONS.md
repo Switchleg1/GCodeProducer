@@ -125,3 +125,5 @@
   would show only accepted continuation motion, not the helix or seed cuts.
   The fallback searches within cutter radius plus 0.35 mm of the live
   connected component. The map filters proposals; actual checks still apply.
+  The 64-cut run changes only the bare-handoff budget; accepted-cut family
+  indices describe this offline selection, not elapsed or machining time.

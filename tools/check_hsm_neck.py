@@ -527,7 +527,9 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
     if clearance_straight_fallback:
-        report['clearance_straight_cuts'] = sum(row.get('final_retry_eligible', 0) > 0 for row in diagnostics)
+        other_cuts = [i for i, row in enumerate(diagnostics[:len(cuts)], 1) if not row.get('final_retry_eligible')]
+        report['clearance_straight_cuts'] = len(cuts)-len(other_cuts)
+        report['non_fallback_cut_indices'] = other_cuts
     if section_widen_retry:
         report['widen_retry_cuts'] = sum('scored_retry_eligible' in row for row in diagnostics)
     if section_small_retry:
