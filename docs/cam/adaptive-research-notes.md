@@ -510,6 +510,10 @@ cut. It removes the same 0.674 mm², but its link grows from 3.205 to
 The best pair by removal per feed mm returns through 1.630 mm of link
 and travels 10.305 mm total versus 10.815 mm for the greedy neighbor
 pair. Removal is slightly different (1.491 versus 1.493 mm²).
+`--neck-face-pair` starts on an east-facing body and ranks checked pairs
+by final connected east extent. After three cuts it reaches X16.181 vs
+X16.044 with unrestricted greedy selection, but removes less stock
+(1.656 vs 2.361 mm²). This is directional growth, not neck passage.
 
 ## Gate before another generator attempt
 

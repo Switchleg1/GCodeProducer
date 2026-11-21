@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact, seed_search_focus
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact, neck_facing_straight, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -106,6 +106,13 @@ def test_parallel_face_probe_removes_stock_on_the_straight_body(tmp_path, neighb
         assert 'neighbor then parallel-face probe; helix omitted, 3 accepted cuts' in text
     else:
         assert 'parallel-face probe; helix omitted, 2 accepted cuts' in text
+
+
+def test_neck_facing_straight_preserves_stock_left_direction():
+    assert neck_facing_straight([(1., 4.), (1., 3.), (1.1, 2.9)])
+    assert not neck_facing_straight([(1., 3.), (1., 4.)])
+    assert not neck_facing_straight([(1., 4.), (2., 3.9)])
+    assert not neck_facing_straight([(1., 4.), (1., 3.9)])
 
 
 def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):

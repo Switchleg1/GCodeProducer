@@ -99,3 +99,6 @@
   The fitted comparison exhausts the eligible neighbors for this one pose,
   then checks the return set for each and ranks the pairs by efficiency.
   It does not optimize arbitrary paths or hold removal exactly equal.
+  The neck-pair fixture uses +X as the neck direction. The first body's
+  stock-left unit normal must have an X component of at least 0.7;
+  pair reach is ranked at six decimal places in mm.

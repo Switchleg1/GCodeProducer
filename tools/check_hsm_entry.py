@@ -222,7 +222,7 @@ def probe_parallel_face(pocket, body, after_cut, seed_xy, radius, gates):
     return following, audit
 
 
-def search_face_neighbor(pocket, body, neighbors, seed_xy, radius, gates):
+def search_face_neighbor(pocket, body, neighbors, seed_xy, radius, gates, *, eastward=False):
     """Evaluate each checked neighbor and its checked return as a two-cut pair."""
     best = None
     shortest = None
@@ -235,6 +235,10 @@ def search_face_neighbor(pocket, body, neighbors, seed_xy, radius, gates):
         removed = neighbor.removed_mm2 + returning.removed_mm2
         travel = neighbor.travel_mm + returning.travel_mm
         key = (removed/travel, -audit['link_mm'])
+        if eastward:
+            clearance = connected_clearance(pocket, returning.remaining, seed_xy, radius)
+            east = -math.inf if clearance.is_empty else round(clearance.bounds[2], 6)
+            key = (east, *key)
         if best is None or key > best[0]:
             best = key, neighbor, returning, audit
         if shortest is None or audit['link_mm'] < shortest:
@@ -243,12 +247,21 @@ def search_face_neighbor(pocket, body, neighbors, seed_xy, radius, gates):
     if best is None:
         return [], report
     key, neighbor, returning, audit = best
-    report.update(neighbor=cut_efficiency(neighbor), returning=audit, pair_removed_per_feed_mm=key[0])
+    report.update(neighbor=cut_efficiency(neighbor), returning=audit, pair_removed_per_feed_mm=key[-2])
     return [neighbor, returning], report
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False):
+def neck_facing_straight(path):
+    """Require a straight body whose stock-left normal points predominantly east."""
+    a, b = max(zip(path, path[1:]), key=lambda edge: math.dist(*edge))
+    length = math.dist(a, b)
+    return length >= .75-1e-9 and a[1]-b[1] >= .7*length
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if neck_face_pair and not fit_face_neighbor:
+        raise ValueError('neck-facing pair requires fitted neighbors')
     if fit_face_neighbor and not face_after_neighbor:
         raise ValueError('fitting a neighbor requires the neighbor return probe')
     if face_after_neighbor and not face_probe:
@@ -293,16 +306,21 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             best_long[index] = key, cut_efficiency(choice)
 
     def propose_straight(live, _pose, *, audit=True):
-        yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
+        aim = neck_face_pair and live is stock
+        if not aim:
+            yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
         component = connected_clearance(pocket, live, pose[0], radius) if turned_straights or live_focus else None
         search = seed_search_focus(focus, component, radius, follow=live_focus)
-        if fitted_straights:
+        if fitted_straights and not aim:
             yield from fitted_front_candidates(pocket, live, radius, focus=search)
         if turned_straights:
-            yield from turned_straight_candidates(pocket, live, radius, component, focus=search, longer=longer_straights,
-                                                 on_long_variant=note_long_variant if audit else None)
+            paths = turned_straight_candidates(pocket, live, radius, component, focus=search, longer=longer_straights,
+                                               on_long_variant=note_long_variant if audit else None)
+            yield from filter(neck_facing_straight, paths) if neck_face_pair and live is stock else paths
 
     def propose_bow(live, _pose):
+        if neck_face_pair and live is stock:
+            return ()
         occupied = None if live is stock else live.buffer(radius, quad_segs=32)
         return seed_arc_candidates(pose[0], orbit, contact_zone=occupied)
 
@@ -360,13 +378,22 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                         preview.append(returning)
                     if fit_face_neighbor:
                         pair, report['fitted_face_neighbor'] = search_face_neighbor(pocket, body, neighbors,
-                                                                                    pose[0], radius, gates)
+                                                                                    pose[0], radius, gates, eastward=neck_face_pair)
                         preview = [choice, *pair]
+                        final_stock = preview[-1].remaining
+                        final_clear = connected_clearance(pocket, final_stock, pose[0], radius)
+                        east = None if final_clear.is_empty else final_clear.bounds[2]
+                        report['fitted_face_neighbor'].update(
+                            connected_east_x_mm=east,
+                            connected_east_gain_mm=None if east is None else east-initial_clearance.bounds[2],
+                            preview_cut_count=len(preview), preview_removed_mm2=stock.area-final_stock.area,
+                            preview_feed_mm=sum(c.travel_mm for c in preview))
         if review is not None:
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = ('fitted neighbor then parallel-face probe; helix omitted' if fit_face_neighbor else
+            label = ('neck-facing pair probe; helix omitted' if neck_face_pair else
+                     'fitted neighbor then parallel-face probe; helix omitted' if fit_face_neighbor else
                      'neighbor then parallel-face probe; helix omitted' if face_after_neighbor else
                      'parallel-face probe; helix omitted' if face_probe else 'cuts after modeled floor sweep; helix omitted')
             write_review_gcode(review, preview, pose[0], label)
@@ -388,7 +415,10 @@ if __name__ == '__main__':
     parser.add_argument('--follow-straight-face', action='store_true', help='probe a parallel continuation of the first straight')
     parser.add_argument('--face-after-neighbor', action='store_true', help='probe the parallel return after the greedy neighbor')
     parser.add_argument('--fit-face-neighbor', action='store_true', help='test each eligible neighbor before returning')
+    parser.add_argument('--neck-face-pair', action='store_true', help='form an east-facing first face and prioritize pair reach')
     args = parser.parse_args()
+    if args.neck_face_pair and not args.fit_face_neighbor:
+        parser.error('neck-facing pair requires --fit-face-neighbor')
     if args.fit_face_neighbor and not args.face_after_neighbor:
         parser.error('fitting a neighbor requires --face-after-neighbor')
     if args.face_after_neighbor and not args.follow_straight_face:
@@ -409,6 +439,7 @@ if __name__ == '__main__':
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
                               fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
                               live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
-                              face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor) if cut_audit else
+                              face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor,
+                              neck_face_pair=args.neck_face_pair) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))
