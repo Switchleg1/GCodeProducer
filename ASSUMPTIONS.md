@@ -108,3 +108,5 @@
   and the widest contiguous Y span, not a sum of disconnected spans.
   Anchored straights reserve 0.2 mm at each end of a contiguous span,
   shift east, and require mapped endpoints plus the original motion checks.
+  Moving anchors probe 0.125–0.625 mm behind the live edge; stations at
+  or west of the original seed edge are excluded as in the fixed probe.

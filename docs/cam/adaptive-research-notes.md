@@ -524,6 +524,10 @@ it has 0.752 mm open versus none. `--section-anchored-straight` uses
 such spans to propose a straight body with tangent turns. After the
 seven-cut prefix, the checked 0.75 mm body and turns remove 0.825 mm²
 at 54.06° sampled peak and extend connected clearance by 0.0658 mm.
+`--repeat-anchored-straights 6` recomputes stations behind the live edge.
+All six advance it, adding 0.475 mm. At 14 cuts, clearance reaches
+X17.017 compared with X16.365 greedy, but removal is lower (7.963 vs
+11.355 mm²) and travel higher (80.76 vs 71.35 mm).
 
 ## Gate before another generator attempt
 

@@ -281,12 +281,11 @@ def neck_facing_straight(path):
     return length >= .75-1e-9 and a[1]-b[1] >= .7*length
 
 
-def east_opening_profile(regions, initial, current):
+def east_opening_profile(regions, initial, current, *, offsets=(-.5, -.25, 0., .125, .25, .375, .5)):
     """Measure contiguous center-clearance spans at fixed stations relative to the seed edge."""
     if initial.is_empty:
         return []
     east = initial.bounds[2]
-    offsets = (-.5, -.25, 0., .125, .25, .375, .5)
     sections = clearance_sections(regions, current, [east+d for d in offsets])
     return [{'offset_mm': offset, 'x_mm': section['x_mm'], 'width_mm': widest_span(section),
              'connected_y_mm': section['connected_y_mm']} for offset, section in zip(offsets, sections)]
@@ -311,8 +310,38 @@ def section_anchored_straights(profile, component):
                             yield path
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False):
+def moving_anchor_profile(regions, initial, current):
+    """Place anchor stations behind the live east edge, not behind the original one."""
+    if initial.is_empty or current.is_empty:
+        return []
+    growth = current.bounds[2]-initial.bounds[2]
+    offsets = tuple(growth-back for back in (.125, .25, .375, .5, .625))
+    return east_opening_profile(regions, initial, current, offsets=offsets)
+
+
+def probe_anchored_straight(pocket, regions, initial, seed_xy, tail, radius, gates, *, moving=False):
+    a, b = tail.cut[-2:]
+    start = b, tuple(y-x for x, y in zip(a, b))
+    live = tail.remaining
+    component = connected_clearance(pocket, live, seed_xy, radius)
+    profile = (moving_anchor_profile if moving else east_opening_profile)(regions, initial, component)
+    counts = Counter()
+    follow = choose_front_cut(pocket, live, start, section_anchored_straights(profile, component),
+                              radius, diagnostics=counts, **gates)
+    trial = {'gates': dict(counts)}
+    if follow is not None:
+        body = max(zip(follow.cut, follow.cut[1:]), key=lambda p: math.dist(*p))
+        after = connected_clearance(pocket, follow.remaining, seed_xy, radius)
+        trial.update(cut_efficiency(follow), peak_deg=follow.peak_deg,
+                     body_mm=math.dist(*body), body_x_mm=body[0][0],
+                     east_shift_mm=None if after.is_empty else after.bounds[2]-component.bounds[2])
+    return follow, trial
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False, longer_straights=False, face_probe=False, face_after_neighbor=False, fit_face_neighbor=False, neck_face_pair=False, repeat_face_pairs=0, anchored_straight=False, repeat_anchored=0):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if repeat_anchored < 0 or (repeat_anchored and not anchored_straight):
+        raise ValueError('moving anchors require an anchored straight prefix and nonnegative budget')
     if anchored_straight and not repeat_face_pairs:
         raise ValueError('anchored straight requires the repeated face-pair trial')
     if repeat_face_pairs < 0 or (repeat_face_pairs and not neck_face_pair):
@@ -445,24 +474,23 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
                             report['repeated_face_pairs'] = {'stop': pair_stop, 'trace': trace,
                                                              'peak_contact_deg': max(c.peak_deg for c in preview)}
                         if anchored_straight:
-                            tail = preview[-1]
-                            a, b = tail.cut[-2:]
-                            start = b, tuple(y-x for x, y in zip(a, b))
-                            live = tail.remaining
-                            component = connected_clearance(pocket, live, pose[0], radius)
-                            profile = east_opening_profile(regions, initial_clearance, component)
-                            counts = Counter()
-                            follow = choose_front_cut(pocket, live, start, section_anchored_straights(profile, component),
-                                                      radius, diagnostics=counts, **gates)
-                            trial = {'gates': dict(counts)}
-                            if follow is not None:
-                                body = max(zip(follow.cut, follow.cut[1:]), key=lambda p: math.dist(*p))
-                                after = connected_clearance(pocket, follow.remaining, pose[0], radius)
-                                trial.update(cut_efficiency(follow), peak_deg=follow.peak_deg,
-                                             body_mm=math.dist(*body), body_x_mm=body[0][0],
-                                             east_shift_mm=None if after.is_empty else after.bounds[2]-component.bounds[2])
-                                preview.append(follow)
+                            anchor_context = pocket, regions, initial_clearance, pose[0]
+                            follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates)
                             report['anchored_straight_probe'] = trial
+                            if follow is not None:
+                                preview.append(follow)
+                            if repeat_anchored:
+                                trace = []
+                                status = 'no_fixed_anchor_cut' if follow is None else 'anchor_budget'
+                                if follow is not None:
+                                    for _ in range(repeat_anchored):
+                                        follow, trial = probe_anchored_straight(*anchor_context, preview[-1], radius, gates, moving=True)
+                                        trace.append(trial)
+                                        if follow is None:
+                                            status = 'no_checked_anchor_cut'
+                                            break
+                                        preview.append(follow)
+                                report['moving_anchor_probe'] = {'stop': status, 'trace': trace}
                         final_stock = preview[-1].remaining
                         final_clear = connected_clearance(pocket, final_stock, pose[0], radius)
                         east = None if final_clear.is_empty else final_clear.bounds[2]
@@ -476,7 +504,8 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
             opening = review.with_suffix('.opening.svg')
             if opening.exists():
                 raise FileExistsError(f'review companion already exists: {opening}')
-            label = ('section-anchored straight probe; helix omitted' if anchored_straight else
+            label = ('moving-anchor straight probe; helix omitted' if repeat_anchored else
+                     'section-anchored straight probe; helix omitted' if anchored_straight else
                      'repeated neck-facing pair probe; helix omitted' if repeat_face_pairs else
                      'neck-facing pair probe; helix omitted' if neck_face_pair else
                      'fitted neighbor then parallel-face probe; helix omitted' if fit_face_neighbor else
@@ -504,7 +533,10 @@ if __name__ == '__main__':
     parser.add_argument('--neck-face-pair', action='store_true', help='form an east-facing first face and prioritize pair reach')
     parser.add_argument('--repeat-face-pairs', type=int, default=0, help='probe this many extra live neck-facing pairs')
     parser.add_argument('--section-anchored-straight', action='store_true', help='check a straight from the measured opening')
+    parser.add_argument('--repeat-anchored-straights', type=int, default=0, help='check additional straights from live anchor stations')
     args = parser.parse_args()
+    if args.repeat_anchored_straights < 0 or (args.repeat_anchored_straights and not args.section_anchored_straight):
+        parser.error('moving anchors require --section-anchored-straight and a nonnegative budget')
     if args.section_anchored_straight and not args.repeat_face_pairs:
         parser.error('anchored straight requires --repeat-face-pairs')
     if args.repeat_face_pairs < 0 or (args.repeat_face_pairs and not args.neck_face_pair):
@@ -533,6 +565,6 @@ if __name__ == '__main__':
                               live_focus=args.live_seed_focus, longer_straights=args.longer_straights, face_probe=args.follow_straight_face,
                               face_after_neighbor=args.face_after_neighbor, fit_face_neighbor=args.fit_face_neighbor,
                               neck_face_pair=args.neck_face_pair, repeat_face_pairs=args.repeat_face_pairs,
-                              anchored_straight=args.section_anchored_straight) if cut_audit else
+                              anchored_straight=args.section_anchored_straight, repeat_anchored=args.repeat_anchored_straights) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))

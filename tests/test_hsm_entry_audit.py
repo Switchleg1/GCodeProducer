@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from shapely.geometry import Point, Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, neck_facing_straight, section_anchored_straights, seed_search_focus
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, east_opening_profile, entry_plane_contact, moving_anchor_profile, neck_facing_straight, section_anchored_straights, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -164,6 +164,17 @@ def test_fitted_neighbor_ranks_verified_pairs_not_shortest_return(monkeypatch):
     assert result['checked_neighbors'] == 3 and result['checked_pairs'] == 2
     assert result['shortest_return_link_mm'] == .5
     assert result['pair_removed_per_feed_mm'] == .5
+
+
+def test_moving_anchor_stations_track_live_edge_but_keep_original_offsets():
+    domain = [box(0., 0., 10., 10.)]
+    initial = box(1., 1., 4., 6.)
+    current = box(1., 1., 6., 6.)
+    positions = moving_anchor_profile(domain, initial, current)
+    assert [p['x_mm'] for p in positions] == pytest.approx([5.875, 5.75, 5.625, 5.5, 5.375])
+    assert [p['offset_mm'] for p in positions] == pytest.approx([1.875, 1.75, 1.625, 1.5, 1.375])
+    assert all(p['width_mm'] == 5. for p in positions)
+    assert not moving_anchor_profile(domain, initial, Polygon())
 
 
 def test_anchored_straights_require_one_wide_span_and_clear_ends():
