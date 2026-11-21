@@ -123,3 +123,5 @@
   The handoff transfers modeled stock and the final heading, uses 0.025 mm
   XY contact sampling, and credits no synthetic clearing. A handoff review
   would show only accepted continuation motion, not the helix or seed cuts.
+  The fallback searches within cutter radius plus 0.35 mm of the live
+  connected component. The map filters proposals; actual checks still apply.

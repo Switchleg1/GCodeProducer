@@ -16,7 +16,7 @@ if __package__ in (None, ''):
 from gcodeproducer.core.cam.hsm_contact import contact_angle
 from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions, connected_clearance, nearby_frontier
 from tools.hsm_front_corner import (clearance_tapers, filleted_corner, frontier_corner_poses, roll_off, roll_on,
-                                    shifted_roll_ons, tapered_roll_on)
+                                    shifted_roll_ons, tapered_roll_on, turned_straight_candidates)
 from tools.hsm_front_choice import choose_front_cut
 from tools.hsm_front_run import run_front
 from tools.hsm_live_waypoints import live_waypoints
@@ -264,7 +264,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False, full_stock=False, initial_state=None, clearance_straight_fallback=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -304,6 +304,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         raise ValueError('neck-front proposals require shallow fronts and roll-off')
     if (with_front_bites or with_wide_bites) and not with_neck_front:
         raise ValueError('front bites require neck-front proposals')
+    if clearance_straight_fallback and (initial_state is None or section_small_retry):
+        raise ValueError('clearance straight fallback is for handoff without small section retries')
     pocket, stock = neck_fixture()
     seed = ((9., 28.5), (1., 0.))
     if initial_state is not None:
@@ -449,6 +451,11 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         paths = small_section_cuts(rows, live, radius, turn_exits=section_turn_exits, ray_length=2.75)
         return paths, score
 
+    def propose_clearance_straights(live, _pose):
+        component = connected_clearance(pocket, live, seed[0], radius)
+        focus = component.buffer(radius+.35)
+        return turned_straight_candidates(pocket, live, radius, component, focus=focus)
+
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
     def propose_waypoints(live, pose):
@@ -472,7 +479,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        priority_score=clearance_score if prioritize_clearance else None,
                                        lookahead_width=lookahead_width, lookahead_after=lookahead_after,
                                        propose_last_resort=propose_section_bites if section_bites_last else None,
-                                       propose_final_retry=propose_small_contours if section_small_retry else None,
+                                       propose_final_retry=(propose_small_contours if section_small_retry else
+                                                            propose_clearance_straights if clearance_straight_fallback else None),
                                        scored_retry=propose_widening if section_widen_retry else None,
                                        **gates)
     if not cuts and reason == 'stalled' and diagnostics[-1].get('origin_clearance'):
@@ -518,6 +526,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if clearance_straight_fallback:
+        report['clearance_straight_cuts'] = sum(row.get('final_retry_eligible', 0) > 0 for row in diagnostics)
     if section_widen_retry:
         report['widen_retry_cuts'] = sum('scored_retry_eligible' in row for row in diagnostics)
     if section_small_retry:

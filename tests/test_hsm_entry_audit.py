@@ -50,6 +50,18 @@ def test_broader_front_handoff_uses_actual_floor_stock_without_fake_motion(tmp_p
     assert not list(tmp_path.iterdir())
 
 
+def test_broader_front_fallback_cuts_from_bare_helix_and_exports_only_continuation(tmp_path):
+    review = tmp_path / 'handoff.nc'
+    result = check_first_cut(max_cuts=0, handoff_budget=1, handoff_turned_fallback=True, review=review)
+    handoff = result['broader_front']
+    assert handoff['stop'] == 'cut_budget' and handoff['clearance_straight_cuts'] == handoff['cut_count'] == 1
+    assert handoff['removed_mm2'] == pytest.approx(.820, abs=.003)
+    assert handoff['peak_contact_deg'] < 60.
+    text = review.read_text('ascii')
+    assert 'modeled helix and seed cuts omitted' in text
+    assert '1 accepted cuts' in text and not '(Cut 2:' in text
+
+
 @pytest.mark.parametrize('second', [False, True])
 def test_first_cuts_leave_the_actual_entry_seed(tmp_path, second):
     path = tmp_path / 'first.nc'

@@ -555,6 +555,11 @@ replacing the single-anchor baseline.
 pose to the broader trial. Neither a bare helix nor a helix plus 24
 seed cuts yields a continuation: the dominant failure is start clearance,
 not engagement at the handoff pose. No empty review is emitted.
+`--broader-turned-fallback` proposes straight bodies with tangent turns
+from connected clearance only after existing families fail. Both handoffs
+now reach an eight-cut budget: the bare helix adds 5.836 mm² at 58.70°;
+the 24-cut seed adds 7.916 mm² at 59.67°. No other family takes over in
+these short trials.
 
 ## Gate before another generator attempt
 
