@@ -54,17 +54,23 @@ def clearance_sections(regions, component, xs):
     return report
 
 
+def section_bite_spans(regions, component):
+    """Report the exact sections and width gate used by the bow generator."""
+    if component.is_empty:
+        return []
+    east = component.bounds[2]
+    sections = clearance_sections(regions, component, [east-.25, east-.5])
+    for section in sections:
+        section['eligible_y_mm'] = [(lo, hi) for lo, hi in section['connected_y_mm'] if hi-lo >= 1.5]
+    return sections
+
+
 def section_bites(regions, component, radius, *, turn_exits=False, live_stock=None):
     """Propose shallow eastward bows between clear poses on inset sections."""
-    if component.is_empty:
-        return
-    offsets = (.25, .5)
     contact_zone = None if live_stock is None else live_stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS)
-    for section in clearance_sections(regions, component, [component.bounds[2]-d for d in offsets]):
+    for section in section_bite_spans(regions, component):
         x = section['x_mm']
-        for low, high in section['connected_y_mm']:
-            if high - low < 1.5:
-                continue
+        for low, high in section['eligible_y_mm']:
             face_x = x + radius + .25
             depths = (.125, .25, .375)
             if contact_zone is not None:
@@ -240,6 +246,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if with_section_bites or section_bites_last:
+        report['final_section_bite_spans'] = section_bite_spans(regions, clearance)
     if section_xs:
         report['clearance_sections'] = clearance_sections(regions, clearance, section_xs)
     if trace_clearance:

@@ -368,6 +368,10 @@ X26.365 with 4,010.116 mm² remaining. The final bows fail for no removal
 `--section-live-depth` proposes additional bows just beyond estimated
 midpoint contact. It stalls at 62 cuts, X26.484 and 4,009.843 mm² reachable.
 Peak sampled contact rises to 59.25° under the unchanged 60° gate.
+`final_section_bite_spans` distinguishes an empty proposal family from
+rejected motion. Its terminal insets are only 0.756 and 1.492 mm wide,
+below the 1.5 mm proposal gate. At X25.75 the open span is 2.679 mm,
+which does not by itself verify a cut or a link.
 
 ## Gate before another generator attempt
 
