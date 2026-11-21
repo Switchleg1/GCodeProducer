@@ -1,7 +1,7 @@
 import pytest
 from shapely.geometry import Polygon, box
 
-from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact
+from tools.check_hsm_entry import audit_entry, axial_contact, check_entry, check_first_cut, compare_pitch, entry_plane_contact, seed_search_focus
 
 
 def test_neck_entry_floor_audit_does_not_treat_descent_as_clearance():
@@ -79,6 +79,16 @@ def test_clearance_shaped_turns_unlock_a_straight_body_from_the_seed():
     assert report['connected_east_x_mm'] == pytest.approx(15.86694 + report['connected_east_gain_mm'], abs=.00001)
     assert report['peak_contact_deg'] < 60.
     assert report['gates']['start_clearance'] > 0
+
+
+def test_live_seed_focus_keeps_old_search_and_reaches_new_clearance():
+    fixed = box(0., 0., 5., 5.)
+    current = box(4., 2., 6., 3.)
+    assert seed_search_focus(fixed, current, 2.) is fixed
+    assert seed_search_focus(fixed, Polygon(), 2., follow=True) is fixed
+    expanded = seed_search_focus(fixed, current, 2., follow=True)
+    assert expanded.covers(fixed)
+    assert expanded.bounds[2] == pytest.approx(8.35)
 
 
 def test_pitch_comparison_preserves_floor_and_accounts_for_added_travel():

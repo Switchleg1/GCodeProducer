@@ -487,6 +487,10 @@ runs or timing comparisons. At 24 accepted cuts, turned straights
 remove 19.911 mm² versus 8.246 mm² and reach X16.762 versus X16.267.
 Link-plus-cut feed distance is 118.61 versus 124.37 mm, excluding entry;
 coverage still differs, so this does not establish a timing gain.
+`--live-seed-focus` extends the proposal search with connected clearance.
+At 48 cuts, the search reaches 0.384 mm farther east than the fixed
+focus but actual connected reach is essentially unchanged (X17.404 vs
+X17.403), and stock removal falls from 42.381 to 42.108 mm².
 
 ## Gate before another generator attempt
 

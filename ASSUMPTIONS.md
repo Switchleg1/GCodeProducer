@@ -84,3 +84,5 @@
   filter only; full-disk and sampled contact checks still govern.
   The 24-cut comparison holds the accepted-cut budget fixed, not coverage;
   distance totals include planar links and cuts but exclude the helix.
+  The live focus unions the fixed neighborhood with the connected center
+  region expanded by cutter radius plus 0.35 mm; this is only a search area.

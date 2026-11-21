@@ -187,8 +187,17 @@ def seed_arc_candidates(centre, orbit, *, contact_zone=None):
             yield path
 
 
-def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False):
+def seed_search_focus(fixed_focus, component, radius, *, follow=False):
+    """Extend proposal search along live connected clearance; not a motion check."""
+    if not follow or component.is_empty:
+        return fixed_focus
+    return fixed_focus.union(component.buffer(radius+.35))
+
+
+def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straights=False, turned_straights=False, live_focus=False):
     """Check only the planar motion following the modeled helix floor sweep."""
+    if live_focus and not (fitted_straights or turned_straights):
+        raise ValueError('live focus requires fitted or turned straights')
     pocket, _ = neck_fixture()
     radius = 2.
     entry = seed_entry(neck_entry_region(pocket, radius), pocket, radius=radius, top=0., depth=-2., lead_angle=2.5)
@@ -202,11 +211,12 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
 
     def propose_straight(live, _pose):
         yield from straight_front_candidates(pocket, live, radius, .5, min_edge=2., lead=2., runoff=2.)
+        component = connected_clearance(pocket, live, pose[0], radius) if turned_straights or live_focus else None
+        search = seed_search_focus(focus, component, radius, follow=live_focus)
         if fitted_straights:
-            yield from fitted_front_candidates(pocket, live, radius, focus=focus)
+            yield from fitted_front_candidates(pocket, live, radius, focus=search)
         if turned_straights:
-            component = connected_clearance(pocket, live, pose[0], radius)
-            yield from turned_straight_candidates(pocket, live, radius, component, focus=focus)
+            yield from turned_straight_candidates(pocket, live, radius, component, focus=search)
 
     def propose_bow(live, _pose):
         occupied = None if live is stock else live.buffer(radius, quad_segs=32)
@@ -229,6 +239,7 @@ def check_first_cut(*, review=None, second=False, max_cuts=None, fitted_straight
               'total_removed_mm2': stock.area-remaining.area,
               'total_feed_mm': sum(c.travel_mm for c in accepted),
               'connected_area_gain_mm2': clearance.difference(initial_clearance).area,
+              'search_east_x_mm': seed_search_focus(focus, clearance, radius, follow=live_focus).bounds[2],
               'connected_east_x_mm': None if clearance.is_empty else clearance.bounds[2],
               'connected_east_gain_mm': None if clearance.is_empty or initial_clearance.is_empty else
               clearance.bounds[2]-initial_clearance.bounds[2]}
@@ -259,7 +270,10 @@ if __name__ == '__main__':
     parser.add_argument('--seed-cut-budget', type=int, help='repeat checked live-front cuts up to this count')
     parser.add_argument('--fitted-straights', action='store_true', help='also fit straight cuts across short stock edges')
     parser.add_argument('--turned-straights', action='store_true', help='fit straight bodies with clearance-shaped turns')
+    parser.add_argument('--live-seed-focus', action='store_true', help='extend fitted search with live seed clearance')
     args = parser.parse_args()
+    if args.live_seed_focus and not (args.fitted_straights or args.turned_straights):
+        parser.error('live seed focus requires fitted or turned straights')
     cut_audit = args.first_cut or args.second_cut or args.seed_cut_budget is not None
     if (args.fitted_straights or args.turned_straights) and not cut_audit:
         parser.error('fitted straights require a cut audit')
@@ -268,6 +282,7 @@ if __name__ == '__main__':
     if (cut_audit and args.compare_pitch) or (args.review_gcode and not cut_audit):
         parser.error('select one audit; review output requires a cut audit')
     result = (check_first_cut(review=args.review_gcode, second=args.second_cut, max_cuts=args.seed_cut_budget,
-                              fitted_straights=args.fitted_straights, turned_straights=args.turned_straights) if cut_audit else
+                              fitted_straights=args.fitted_straights, turned_straights=args.turned_straights,
+                              live_focus=args.live_seed_focus) if cut_audit else
               compare_pitch() if args.compare_pitch else check_entry())
     print(json.dumps(result, indent=2))
