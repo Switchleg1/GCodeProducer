@@ -246,7 +246,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                shallow_rollon=0., with_shifted_joins=False, max_cuts=12, with_taper=False,
                with_clearance_tapers=False, with_early_exits=False, require_clear_exit=False,
                with_neck_front=False, with_three_leg_links=False, min_departure=0., prioritize_neck=False, with_front_bites=False, trace_clearance=False,
-               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None):
+               prioritize_clearance=False, with_wide_bites=False, lookahead_width=1, lookahead_after=0, section_xs=(), with_section_bites=False, section_bites_last=False, section_turn_exits=False, section_live_depth=False, section_search_west=False, section_follow=False, section_fit_width=False, section_taper_entry=False, section_taper_at_stall=False, section_shallow_approach=False, section_nominal_at_stall=False, section_bracket_at_stall=False, section_small_retry=False, section_ray_probe=False, section_extend_rays=False, section_relief_probe=False, section_widen_probe=False, review_gcode=None, section_widen_retry=False):
     if not math.isfinite(corner_runoff) or corner_runoff < 0 or (corner_runoff and not with_corners):
         raise ValueError('corner runoff must be nonnegative and requires corner proposals')
     if not math.isfinite(shallow_runoff) or shallow_runoff < 0:
@@ -258,7 +258,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
     probe_count = sum((section_taper_at_stall, section_shallow_approach, section_nominal_at_stall, section_bracket_at_stall))
     if (section_ray_probe or section_extend_rays) and not section_small_retry:
         raise ValueError('ray trials require small section retries')
-    if (section_relief_probe or section_widen_probe) and not section_extend_rays:
+    if (section_relief_probe or section_widen_probe or section_widen_retry) and not section_extend_rays:
         raise ValueError('terminal geometry probes require extended small retries')
     if section_ray_probe and section_extend_rays:
         raise ValueError('ray audit requires unchanged small section retries')
@@ -407,6 +407,25 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
         return bounded_small_section_cuts(sections, live, radius, turn_exits=section_turn_exits,
                                           on_profile=note, extend=section_extend_rays, on_extension=extend_profile)
 
+    def propose_widening(live, _pose):
+        component = connected_clearance(pocket, live, seed[0], radius)
+        if component.is_empty:
+            return (), None
+        gauge_x = component.bounds[2] - .75
+
+        def width(region):
+            return widest_span(clearance_sections(regions, region, (gauge_x,))[0])
+
+        baseline = width(component)
+
+        def score(post_cut):
+            gain = width(connected_clearance(pocket, post_cut, seed[0], radius)) - baseline
+            return gain if gain >= .01 else None
+
+        rows = wider_sections(regions, component)
+        paths = small_section_cuts(rows, live, radius, turn_exits=section_turn_exits, ray_length=2.75)
+        return paths, score
+
     waypoints = tuple((xy, heading) for xy in ((10., 20.), (10., 27.), (17., 23.), (18., 28.))
                       for heading in ((1., 0.), (0., 1.), (-1., 0.), (0., -1.))) if with_detours else ()
     def propose_waypoints(live, pose):
@@ -431,6 +450,7 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
                                        lookahead_width=lookahead_width, lookahead_after=lookahead_after,
                                        propose_last_resort=propose_section_bites if section_bites_last else None,
                                        propose_final_retry=propose_small_contours if section_small_retry else None,
+                                       scored_retry=propose_widening if section_widen_retry else None,
                                        **gates)
     if review_gcode is not None:
         write_review_gcode(review_gcode, cuts, seed[0], reason)
@@ -463,6 +483,8 @@ def check_neck(*, with_corners=False, corner_runoff=0., with_detours=False,
             'nearby_frontier_bounds_mm': None if frontier.is_empty else frontier.bounds,
             'last_stock_distance_mm': None if remaining.is_empty else point.distance(remaining),
             'last_wall_distance_mm': point.distance(pocket.boundary)}
+    if section_widen_retry:
+        report['widen_retry_cuts'] = sum('scored_retry_eligible' in row for row in diagnostics)
     if section_small_retry:
         if section_extend_rays:
             report['small_retry_ray_extensions'] = ray_extensions
@@ -678,6 +700,8 @@ if __name__ == '__main__':
     parser.add_argument('--section-widen-probe', action='store_true',
                         help='compare wider anchor spans for terminal approach growth without committing cuts')
     parser.add_argument('--review-gcode', type=Path, help='save accepted XY paths to a new debug-only .nc file')
+    parser.add_argument('--section-widen-retry', action='store_true',
+                        help='try verified widening only after all other cuts fail')
     args = parser.parse_args()
     if (args.with_section_bites or args.section_bites_last) and not args.with_shallow_fronts:
         parser.error('section bites require --with-shallow-fronts')
@@ -701,7 +725,7 @@ if __name__ == '__main__':
                             section_nominal_at_stall=args.section_nominal_at_stall,
                             section_bracket_at_stall=args.section_bracket_at_stall, section_small_retry=args.section_small_retry,
                             section_ray_probe=args.section_ray_probe, section_extend_rays=args.section_extend_rays, section_relief_probe=args.section_relief_probe,
-                            section_widen_probe=args.section_widen_probe, review_gcode=args.review_gcode)
+                            section_widen_probe=args.section_widen_probe, review_gcode=args.review_gcode, section_widen_retry=args.section_widen_retry)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

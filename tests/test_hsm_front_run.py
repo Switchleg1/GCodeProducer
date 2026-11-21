@@ -80,6 +80,22 @@ def test_late_retries_wait_for_existing_candidate_families(use_final_retry):
     assert reason == 'cut_budget'
 
 
+def test_scored_retry_rejects_checked_cut_without_priority_gain():
+    far_stock = box(14, 3, 18, 5)
+    stock = box(5, 5, 9, 7).union(far_stock)
+
+    def retry(_stock, _pose):
+        candidates = [[(4., 4.25), (10., 4.25)], [(13., 2.25), (19., 2.25)]]
+        return candidates, lambda remaining: 1. if remaining.intersection(far_stock).area < 8. else None
+
+    diagnostics = []
+    choices, _, reason = run_front(POCKET, stock, SEED, lambda *_: (), 1., max_cuts=1,
+                                   contact_limit=60., sample_step=.05, link_handle=.5,
+                                   scored_retry=retry, diagnostics=diagnostics)
+    assert reason == 'cut_budget' and choices[0].cut[-1] == (19., 2.25)
+    assert diagnostics == [{'scored_retry_no_priority_gain': 1, 'scored_retry_eligible': 1}]
+
+
 def test_budget_and_empty_stock_do_not_report_a_stall():
     choices, remaining, reason = _run(_candidates, budget=1)
     assert len(choices) == 1 and remaining.area == pytest.approx(15.)

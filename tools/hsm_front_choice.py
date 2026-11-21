@@ -96,6 +96,10 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
             if forward_clearance(pocket, remaining, clearance, tail, departure, min_departure) < min_departure:
                 reject('departure_clearance')
                 continue
+        score = priority_score(remaining) if priority_score is not None else 0.
+        if score is None:
+            reject('no_priority_gain')
+            continue
         counts['eligible'] += 1
         removed = stock.area - remaining.area
         travel = _length(link) + _length(cut)
@@ -104,7 +108,7 @@ def choose_front_cut(pocket, stock, pose, candidates, radius, *, contact_limit, 
             priority_gain = priority_stock.difference(remaining).area
             key = (priority_gain/travel, *key)
         if priority_score is not None:
-            key = (priority_score(remaining), *key)
+            key = (score, *key)
         candidate = FrontChoice(link, cut, remaining, peak, removed, travel)
         if on_eligible is not None:
             on_eligible(key, candidate)

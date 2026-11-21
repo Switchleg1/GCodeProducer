@@ -8,12 +8,13 @@ from tools.hsm_front_choice import choose_front_cut
 def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, sample_step,
               link_handle, link_margin=0., diagnostics=None, waypoints=(), propose_waypoints=None,
               propose_on_stall=None, on_overload=None, require_clear_exit=False, with_three_leg_links=False, min_departure=0., priority_region=None,
-              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None, propose_final_retry=None):
+              priority_score=None, lookahead_width=1, lookahead_after=0, propose_last_resort=None, propose_final_retry=None, scored_retry=None):
     """Return accepted choices, remaining stock and why the run stopped.
 
     The callback receives live stock and the current pose. This runner neither
     invents entries nor assumes an uncut residual is unreachable when stalled.
     Optional diagnostics records first-gate counts per attempted selection.
+    scored_retry maps live stock and pose to (candidates, post-cut scorer).
     """
     if not isinstance(max_cuts, int) or max_cuts < 1:
         raise ValueError('max_cuts must be a positive integer')
@@ -38,7 +39,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
         def report_overload(path, segment, angle):
             on_overload(len(choices), path, segment, angle)
 
-        def select(factory, live, start, counts, speculative=False):
+        def select(factory, live, start, counts, speculative=False, scorer=priority_score):
             routes = waypoints if propose_waypoints is None else (*waypoints, *propose_waypoints(live, start))
             return choose_front_cut(pocket, live, start, factory(live, start), radius,
                                     contact_limit=contact_limit, sample_step=sample_step,
@@ -47,7 +48,7 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
                                     on_overload=report_overload if on_overload is not None and not speculative else None,
                                     require_clear_exit=require_clear_exit, with_three_leg_links=with_three_leg_links,
                                     min_departure=min_departure, priority_region=priority_region,
-                                    priority_score=priority_score,
+                                    priority_score=scorer,
                                     on_eligible=keep if preview and not speculative else None)
 
         def select_round(live, start, counts, speculative=False):
@@ -61,6 +62,11 @@ def run_front(pocket, stock, pose, propose, radius, *, max_cuts, contact_limit, 
                     retry_counts = Counter()
                     choice = select(factory, live, start, retry_counts, speculative)
                     counts.update({f'{prefix}_{gate}': n for gate, n in retry_counts.items()})
+            if choice is None and scored_retry is not None and not counts['origin_clearance']:
+                paths, scorer = scored_retry(live, start)
+                retry_counts = Counter()
+                choice = select(lambda *_: paths, live, start, retry_counts, speculative, scorer)
+                counts.update({f'scored_retry_{gate}': n for gate, n in retry_counts.items()})
             return choice
 
         choice = select_round(stock, pose, counts)
