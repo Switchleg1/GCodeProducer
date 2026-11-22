@@ -268,6 +268,11 @@ class CAMEditor(QWidget):
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
+        self.follow_surface = QCheckBox("Follow the surface between depths")
+        self.follow_surface.setToolTip("3D Waterfall: after each depth, trace the model surface down to the next depth where "
+                                       "that depth cannot reach, so the slopes are not left as steps. Adds 3D passes.")
+        self.follow_surface.toggled.connect(self._edit)
+        form.addRow(self.follow_surface)
         self.feed_controls = {}
         feeds_body = QFrame()
         ff = QFormLayout(feeds_body)
@@ -434,6 +439,7 @@ class CAMEditor(QWidget):
         self.operation_form.setRowVisible(self.strategy, bool(choices))
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
         self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
+        self.operation_form.setRowVisible(self.follow_surface, op is not None and op.kind == "waterfall")
         self.operation_form.setRowVisible(self.adaptive_engagement, bool(op and op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive'))
         self.strategy.clear()
         for label, value in choices:
@@ -474,6 +480,7 @@ class CAMEditor(QWidget):
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
             self.stay_down.setChecked(op.stay_down)
+            self.follow_surface.setChecked(op.follow_surface)
             self._update_stay_down(op)
             for key, sb in self.feed_controls.items():
                 sb.setValue(getattr(op, key))
@@ -527,6 +534,7 @@ class CAMEditor(QWidget):
         op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
         self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
         op.stay_down = self.stay_down.isChecked()
+        op.follow_surface = self.follow_surface.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())
         self._update_stay_down(op)

@@ -3,6 +3,26 @@ from __future__ import annotations
 import math
 
 
+def drop_surface(run, region, planning):
+    """The model's drop-height grid over ``region`` for this run's cutter (warns when the cell limit coarsens it)."""
+    from gcodeproducer.core.cam.drop_surface import DropSurface
+    from gcodeproducer.core.cam.cam_constants import SURFACE_MIN_RESOLUTION, SURFACE_CELLS_PER_DIAMETER
+    from gcodeproducer.core.settings.preferences import pref
+    op, job = run.op, planning.job
+    explicit = float(pref(job, "cam_surface_resolution"))
+    wanted = (max(.01, explicit) if explicit > 0 else
+              max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")),
+                                              run.diameter/SURFACE_CELLS_PER_DIAMETER)))
+    minx, miny, maxx, maxy = region.bounds
+    pad = run.radius+3*wanted
+    surface = DropSurface(job.mesh, (minx-pad, miny-pad), (maxx+pad, maxy+pad), wanted,
+                          int(pref(job, "stock_max_cells")))
+    if surface.resolution > wanted+1e-9:
+        planning.warn(f"{op.name}: surface height grid coarsened to {surface.resolution:.3f} mm (cell limit); "
+                      "more material is left on slopes.", "SURFACE")
+    return surface
+
+
 def prepare_surface(run, selection, planning):
     """Validate, merge the selected outlines and start from the material surface.
 

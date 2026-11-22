@@ -207,6 +207,32 @@ def test_waterfall_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     assert_program_clear(job.program)
 
 
+def test_waterfall_can_follow_the_slope_down_between_depths(libset):
+    flat, _ = surface_job(libset)
+    generate(flat, StageContext())
+    job, op = surface_job(libset, follow_surface=True)
+    ctx = StageContext()
+    generate(job, ctx)
+    assert any("surface-following passes between depths" in message for message in ctx.messages)
+    assert_clear_of_model(job)
+    levels = sorted({layer.z for layer in flat.layers}, reverse=True)
+    following = [layer for layer in job.layers if all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
+    assert following and len(job.layers) == len(flat.layers) + len(following)
+    for layer in following:
+        z = np.concatenate([np.asarray(p.points)[:, 2] for p in layer.paths])
+        assert z.min() >= -10 - 1e-6 and z.max() < max(levels) + 1e-6  # The last follows down to the floor.
+        # Within one band: above the next depth, below the flat depth just cut.
+        band = [v for v in levels if v >= z.max() - 1e-6]
+        assert band and z.max() <= min(band) + 1e-6
+        for p in layer.paths:  # Each piece runs down the slope from its high end, for its lead.
+            q = np.asarray(p.points)
+            assert q[0, 2] >= q[-1, 2] - 1e-6
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert_program_clear(job.program)
+    restored = CAMSetup.from_dict(job.cam_setup.to_dict()).groups[0].operations[0]
+    assert restored.follow_surface
+
+
 def test_flat_pocket_and_legacy_surface_stop_migration(libset):
     rim = ReferenceShape("rectangle", "edge", (10, 8), (30, 22), z=0)
     ref = [Reference("drawing", [rim.id])]

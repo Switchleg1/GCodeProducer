@@ -110,7 +110,9 @@ class WaterfallGenerator(OperationGenerator):
             edge = None if edge.is_empty else edge
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
-        produced = reachable = 0
+        produced = reachable = slopes = 0
+        follow = (self.follow_setup(run, region if limit is None else region.intersection(limit), planning)
+                  if op.follow_surface else None)
         ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge)
         for i in range(run.count):
             z = run.depth(i)
@@ -134,6 +136,8 @@ class WaterfallGenerator(OperationGenerator):
                 material.remove_planar(planned, z, run.radius)
                 run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
                 produced += 1
+            if follow is not None and not planning.debug_partial:
+                slopes += self.follow_down(run, follow, z, i, planning)
             if planning.debug_partial:
                 break
         if not produced and reachable:
@@ -144,7 +148,58 @@ class WaterfallGenerator(OperationGenerator):
                              f"from Z{run.start:g} to Z{run.end:g}. Check that End Z is below the surface to machine "
                              "(link it to a lower edge/face) and that the cutter fits.")
         ctx.log(f"  {op.name}: 3D Waterfall limited by the model surface, {produced} area/depth passes, "
-                f"Z{run.start:g} to Z{run.end:g}")
+                f"Z{run.start:g} to Z{run.end:g}" + (f"; {slopes} surface-following passes between depths" if follow else ""))
+
+    @staticmethod
+    def follow_setup(run, region, planning):
+        """(drop-height grid, tab floors, simplifier) for following the model between depths."""
+        import math
+        from shapely.geometry import box
+        from gcodeproducer.core.cam.surface_simplifier import SurfaceSimplifier
+        from gcodeproducer.core.settings.preferences import pref
+        from .surface_common import drop_surface
+        surface = drop_surface(run, region, planning)
+        floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(run.radius+run.op.stock+surface.resolution),
+                   math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in planning.tabs]
+        return surface, floors, SurfaceSimplifier(float(pref(planning.job, "cam_surface_tolerance"))), region
+
+    def follow_down(self, run, follow, z, i, planning):
+        """After the flat pass at ``z``: XYZ passes that follow the model down toward the next depth.
+
+        Where the model slopes, the next depth cannot reach the material
+        between this depth and the model, and a flat pass leaves it as a step.
+        These passes trace the model (plus stock to leave) only where it lies
+        between this depth and the next one, never below the next depth and
+        never at or above this one, so they cut that step down to the surface.
+        Returns the number of passes added.
+        """
+        from gcodeproducer.core.jobs.path import Path
+        import numpy as np
+        from gcodeproducer.core.cam.surface_paths import surface_raster
+        from .operations_constants import FOLLOW_MIN_LENGTH
+        surface, floors, simplifier, region = follow
+        op = run.op
+        floor = run.depth(i+1) if i+1 < run.count else run.end
+        if floor >= z-1e-6:
+            return 0
+        lines = surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, floor, op.stock,
+                               planning.ctx.log, floors, z, "raster_x", simplifier=simplifier, above_floor=True)
+        if not lines:
+            return 0
+        # Each line is cut from its highest point down the slope both ways, so each piece's lead can
+        # ramp in along it from the cleared depth just above; a line climbing away from its start
+        # leaves a ramp no room above the surface.
+        pieces = []
+        for p in lines:
+            top = int(np.argmax(p[:, 2]))
+            pieces.extend(q for q in (p[:top+1][::-1], p[top:]) if len(q) >= 2
+                          and float(np.linalg.norm(np.diff(q[:, :2], axis=0), axis=1).sum()) > FOLLOW_MIN_LENGTH)
+        lines = pieces
+        if not lines:
+            return 0
+        low = min(float(p[:, 2].min()) for p in lines)
+        run.add_layer(planning, [Path("cut", p, width=run.diameter) for p in lines], low, z-floor, 0)
+        return 1
 
 
 def _same(one, other):

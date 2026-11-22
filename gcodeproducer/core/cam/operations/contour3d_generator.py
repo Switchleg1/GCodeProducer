@@ -19,24 +19,12 @@ class Contour3dGenerator(OperationGenerator):
     def generate(self, run, selection, planning):
         from shapely.geometry import box
         from gcodeproducer.core.jobs.path import Path
-        from gcodeproducer.core.cam.drop_surface import DropSurface
         from gcodeproducer.core.cam.surface_simplifier import SurfaceSimplifier
-        from gcodeproducer.core.cam.cam_constants import SURFACE_MIN_RESOLUTION, SURFACE_CELLS_PER_DIAMETER
         from gcodeproducer.core.settings.preferences import pref
-        from .surface_common import prepare_surface
+        from .surface_common import drop_surface, prepare_surface
         op, ctx, job = run.op, planning.ctx, planning.job
         region, surface_top = prepare_surface(run, selection, planning)
-        explicit = float(pref(job, "cam_surface_resolution"))
-        wanted = (max(.01, explicit) if explicit > 0 else
-                  max(SURFACE_MIN_RESOLUTION, min(float(pref(job, "stock_resolution")),
-                                                  run.diameter/SURFACE_CELLS_PER_DIAMETER)))
-        minx, miny, maxx, maxy = region.bounds
-        pad = run.radius+3*wanted
-        surface = DropSurface(job.mesh, (minx-pad, miny-pad), (maxx+pad, maxy+pad), wanted,
-                              int(pref(job, "stock_max_cells")))
-        if surface.resolution > wanted+1e-9:
-            planning.warn(f"{op.name}: surface height grid coarsened to {surface.resolution:.3f} mm (cell limit); "
-                          "more material is left on slopes.", "SURFACE")
+        surface = drop_surface(run, region, planning)
         floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(run.radius+op.stock+surface.resolution),
                    math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in planning.tabs]
         ceiling = min(run.start, surface_top)

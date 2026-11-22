@@ -63,7 +63,25 @@ cutter-accessible region**, not just one contour along its wall.
    Stock to leave is kept on the part only: where the selection reaches the
    blank edge, the cutter edge still meets that edge (plus the material boundary
    limit), so roughing leaves no wall of raw stock around the blank.
-4. Generate and inspect each depth and the calculated material outputs.
+4. Optionally tick **Follow the surface between depths** (below). Generate
+   and inspect each depth and the calculated material outputs.
+
+### Follow the surface between depths
+
+A flat depth leaves the slopes as steps: where the model rises between one
+depth and the next, the next depth cannot reach the material above it. With
+**Follow the surface between depths** ticked, each flat depth is followed by
+a 3D pass that traces the model (plus stock to leave) down toward the next
+depth, only where the model lies between the two: never at or above the
+depth just cut, never below the next one (after the last depth, never below
+End). Each trace runs from its highest point down the slope, so its lead can
+ramp in from the cleared depth above; lines run along X with a lift between
+them, at the operation's stepover. On the Mini Yoda (4 mm endmill, 2 mm
+depths, 1 mm stock to leave) the material left above the model after the
+Waterfall fell from 3,205 to 1,577 mm³, for 447 s more machining (622 to
+1,069 s estimated) and 15 s more compute. Material left at a vertical wall or
+under an overhang is unchanged; the passes reach only what a flat cutter can
+reach from above.
 
 Nested selected outlines alternate between boundary and island. Overlapping
 outlines merge. Exact projected upper triangles protect overhangs; undercuts
