@@ -8,15 +8,15 @@ from shapely.geometry import LineString
 
 from gcodeproducer.core.jobs.path import Path
 from .planner import clear_pocket
-from .wavefront_constants import WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
+from .wavefront_constants import END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
 
 
-def contact_limit(op):
-    """The contact angle (degrees) of a straight cut as wide as the operation's adaptive engagement."""
+def engagement_width(op):
+    """The operation's sampled width limit as a share of the cutter diameter."""
     width = op.adaptive_engagement/100
     if not math.isfinite(width) or not .001 <= width <= 1.:
         raise ValueError('Adaptive engagement limit must be between 0.1 and 100%')
-    return math.degrees(math.acos(max(-1., 1 - 2*width)))
+    return width
 
 
 def plan_level(op, region, diameter, material=None, depth_step=None):
@@ -30,11 +30,20 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
     """
     radius = diameter/2
     pocket = region.buffer(-op.stock) if op.stock else region
+    if material is not None and not material.is_empty:
+        # Where the pocket reaches past the material (an overcut past the blank edge), work only
+        # up to where the cutter just leaves it: the cutter centre may go a cutter radius past the
+        # material's edge, and the fronts end there as at a wall instead of crossing strips of air.
+        pocket = pocket.intersection(material.buffer(2*radius + MATERIAL_REACH, quad_segs=16))
     if pocket.is_empty or pocket.buffer(-radius).is_empty:
         raise ValueError(f'{op.name}: pocket is too small for this tool')
-    limit = contact_limit(op)
-    strokes, residual, report = clear_pocket(pocket, radius, limit=limit, material=material,
-                                             top=0., depth=-(depth_step or op.stepdown), lead_angle=op.lead_angle)
+    limit = engagement_width(op)
+    # The setting is a width, as the old generator measured it: across the cutter, square to its
+    # travel. A thin crescent in a corner or a wedge where a front meets the wall touches a wide
+    # angle but little width, and an angle limit refused those at every stepover.
+    strokes, residual, report = clear_pocket(pocket, radius, limit=limit, measure='width', material=material,
+                                             top=0., depth=-(depth_step or op.stepdown), lead_angle=op.lead_angle,
+                                             end_allowance=END_ALLOWANCE)
     leads = {entry['stroke']: np.asarray(entry['helix_xyz'], float) for entry in report['entries']}
     paths, chain, after = [], [], [None]
 
@@ -70,7 +79,7 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
     flush()
     summary = {'left_mm2': report['reachable_residual_mm2'], 'stop': report['stop'],
                'fronts': report['front_arcs'], 'corner_moves': report['corners']['visits'],
-               'limit_deg': limit, 'seconds': report['seconds']}
+               'width_limit': limit, 'seconds': report['seconds']}
     return paths, summary
 
 
@@ -106,8 +115,8 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
 
     See plan_level. planned, if given, is plan_level's result for exactly these
     arguments, worked out ahead (several depths at once in worker processes).
-    The contact limit is the angle of a straight cut as wide as the sampled width
-    limit (op.adaptive_engagement, percent of the cutter diameter). Stock the
+    The limit is the sampled engaged width (op.adaptive_engagement, percent
+    of the cutter diameter), measured square to the cutter's travel. Stock the
     plan cannot reach is reported as an incomplete, debug-only result, never
     silently left.
     """
@@ -116,7 +125,7 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
                          'and does not support this tab-protected area. No contour fallback was generated.')
     if direction == 'conventional':
         raise ValueError(f'{op.name}: Adaptive clearing cuts climb only; set the cutting direction to Climb.')
-    contact_limit(op)
+    engagement_width(op)
     if planned is None:
         planned = plan_level(op, region, diameter, material, depth_step)
     if isinstance(planned, Exception):
@@ -134,5 +143,6 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
     elif log:
         log(f'  {op.name}: Adaptive (wavefront) clearing{where}: {summary["fronts"]} fronts, '
             f'{summary["corner_moves"]} corner moves, {len(paths)} entries or lifts, '
-            f'contact limit {summary["limit_deg"]:.0f}°, {left:.2f} mm² left, planned in {summary["seconds"]:.1f} s')
+            f'width limit {100*summary["width_limit"]:g} % of the cutter, {left:.2f} mm² left, '
+            f'planned in {summary["seconds"]:.1f} s')
     return paths

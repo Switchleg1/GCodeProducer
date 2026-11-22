@@ -125,6 +125,28 @@ the cut.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Low limits and complex parts
+
+At a low limit on a part with narrow necks (the Mini Yoda waterfall at 10 %)
+some fronts cannot be cut at any stepover, typically a thin wedge where a
+front meets the wall at a shallow angle. The planner then:
+
+- **leaves a cutter-sized spot** round each such refusal and lets the later
+  fronts go round it, instead of ending the pass;
+- **enters again with a helix** in stock the fronts could not reach (up to
+  12 times), wherever a helix fits, and grows from there as a new island;
+- **creeps along the wall** at each spot afterwards, as into a corner;
+- **spaces the spiral's laps by the radius**: tight round the helix, where a
+  cutter widening a small hole is wrapped by more of it, and up to 0.5 mm
+  further out, so its cut stays at the limit throughout (the Mini Yoda
+  spiral fell from 9.6 to 5.8 m; the circle test shape is unchanged).
+
+Even so, at 10 % the Mini Yoda waterfall leaves 6–175 mm² at each of its
+eight depths, mostly in channels narrower than a helix between the model
+and the blank edge, and takes about 9 minutes in the application (5 minutes
+of it planning); the result is marked
+DEBUG ONLY. At 18 % it leaves 4–164 mm² and takes about 2 minutes to plan. See Known gaps.
+
 ## Levels and Z
 
 `clear_depths()` clears a pocket in equal levels from the top down to a
@@ -317,6 +339,10 @@ cross still spend most of their cutting distance again on links.
   space are shaped by stock that is only assumed there, and the two corners
   beside the spiral are finished by the wall finish (29 mm of cutting, nothing
   left) rather than by the fronts themselves.
+- **Narrow channels at a low limit.** Where the stock left lies in a
+  channel too narrow for a helix and the fronts cannot turn into it at the
+  limit, it stays; the result is marked incomplete. Mini Yoda waterfall at
+  10 %: 12 mm² at Z-2 (1,754 mm² before 0.2.20), up to 175 mm² further down.
 - **Several starts one way round** cost the square with a boss 7 arcs at
   0.2 mm or less (0 before), at the turns from a side into a corner. Only one
   channel round one boss is handled; pockets with several bosses still let

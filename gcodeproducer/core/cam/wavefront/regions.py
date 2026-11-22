@@ -136,8 +136,12 @@ def choose_seeds(allowed, count=None, *, min_radius, placement='lobes'):
     return seeds
 
 
-def spiral_out(centre, max_radius, stepover, *, chord_error=.0025, blend=3.):
-    """Stock-left (clockwise) spiral from the centre, one full circle, then a roll-off inward."""
+def spiral_out(centre, max_radius, stepover, *, chord_error=.0025, blend=3., pitch=None):
+    """Stock-left (clockwise) spiral from the centre, one full circle, then a roll-off inward.
+
+    pitch, if given, is the distance between laps as a function of the radius
+    (see spiral_pitch); stepover is then only the roll-off at the end.
+    """
     if max_radius <= 0 or stepover <= 0:
         raise ValueError('expected a positive spiral radius and stepover')
     points, theta = [], 0.
@@ -151,8 +155,9 @@ def spiral_out(centre, max_radius, stepover, *, chord_error=.0025, blend=3.):
     radius = 0.
     while radius < max_radius:
         add(radius)
-        theta += advance(radius)
-        radius = stepover*theta/(2*math.pi)
+        step = advance(radius)
+        theta += step
+        radius = stepover*theta/(2*math.pi) if pitch is None else radius + pitch(radius)*step/(2*math.pi)
     full = theta + 2*math.pi
     while theta < full:
         add(max_radius)
@@ -165,6 +170,25 @@ def spiral_out(centre, max_radius, stepover, *, chord_error=.0025, blend=3.):
         add(max_radius - retreat*t*t*(3-2*t))
         theta += advance(max_radius)
     return points
+
+
+def spiral_pitch(cutter, spread, largest, *, scale=1.):
+    """Lap spacing as a function of radius for a spiral whose cut stays as wide as the limit.
+
+    A spiral widens a round hole, and a cutter widening a small hole is wrapped
+    by more of it than one cutting a straight wall at the same stepover. With
+    the cutter centre at radius R widening the hole from rho, the material it
+    meets spans an angle phi either side of straight out, cos phi =
+    (rho² - R² - r²)/(2 R r). Holding phi at the limit's spread (cos phi
+    given) gives rho, and the lap spacing R + r - rho: small near the centre,
+    the straight-wall stepover far out. scale < 1 leaves a margin; the
+    spacing is held between a twentieth of a millimetre and ``largest``.
+    """
+    def pitch(R):
+        R = max(R, cutter)
+        rho = math.sqrt(max(0., R*R + cutter*cutter + 2*R*cutter*spread))
+        return min(largest, max(.05, scale*(R + cutter - rho)))
+    return pitch
 
 
 def clearance(allowed, stock, radius):
@@ -389,3 +413,17 @@ def channel_stretches(allowed, seeds, radius):
         stretch = unary_union([piece, Point(nx, ny).buffer(next_room)]).intersection(allowed)
         stretches[k] = (stretch, (cx + room*tx, cy + room*ty), piece, rank)
     return stretches
+
+
+def clear_of(runs, zone):
+    """The runs with every stretch inside ``zone`` taken out; each remaining stretch is an open run."""
+    kept = []
+    for run, closed in runs:
+        line = LineString(run)
+        if not line.intersects(zone):
+            kept.append((run, closed))
+            continue
+        for piece in get_parts(line.difference(zone)):
+            if piece.geom_type == 'LineString' and piece.length >= .3:
+                kept.append((list(piece.coords), False))
+    return kept

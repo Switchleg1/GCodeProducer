@@ -20,6 +20,6 @@ def stretch(line, start, end):
         return np.array([np.interp(d, along, xy[:, 0]), np.interp(d, along, xy[:, 1])])
 
     inside = xy[(along > lo) & (along < hi)]
-    piece = np.vstack((at(lo), inside, at(hi))) if hi > lo else at(lo)[None, :]
+    piece = np.vstack((at(lo), inside, at(hi)))  # an empty stretch is one point twice
     out = [tuple(q) for q in piece.tolist()]
     return out[::-1] if reverse else out

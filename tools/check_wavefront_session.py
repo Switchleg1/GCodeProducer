@@ -30,10 +30,20 @@ def model_key(kind, path):
 
 
 def run(path, settings, library, strategy):
-    raw = settings.value(model_key('cam', path))
-    if raw is None:
-        raise ValueError(f'No saved CAM setup for {path}')
-    data = json.loads(raw)
+    placement_raw = None
+    if path == 'session':
+        # The desktop's current work session: its single model, setup and placement.
+        session = json.loads(settings.value('workSession/default'))
+        if session['workflow'] != 'cam' or len(session['models']) != 1:
+            raise ValueError('The current work session is not a single-model CAM session')
+        model, = session['models']
+        path, data = model['path'], session['cam']['setup']
+        placement_raw = json.dumps(model['placement'])
+    else:
+        raw = settings.value(model_key('cam', path))
+        if raw is None:
+            raise ValueError(f'No saved CAM setup for {path}')
+        data = json.loads(raw)
     changed = []
     for group in data.get('groups', []):
         for op in group.get('operations', []):
@@ -41,7 +51,7 @@ def run(path, settings, library, strategy):
                 changed.append(f"{op.get('name')}: {op.get('strategy')} → {strategy}")
                 op['strategy'] = strategy
     setup = CAMSetup.from_dict(copy.deepcopy(data))
-    placement_raw = settings.value(model_key('placement_cam', path))
+    placement_raw = placement_raw or settings.value(model_key('placement_cam', path))
     placement = Placement.from_dict(json.loads(placement_raw)) if placement_raw else Placement()
     machine = library.machines.get(settings.value('machine/cam'))
     job = build_job('cam', machine, mesh=load_mesh(path), placement=placement,
@@ -63,7 +73,7 @@ def run(path, settings, library, strategy):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('model', help='model file the CAM setup was saved for')
+    parser.add_argument('model', help='model file the CAM setup was saved for, or "session" for the current work session')
     parser.add_argument('--strategy', action='append', default=[],
                         help='clearing strategy to try (repeatable); "saved" keeps the saved one')
     args = parser.parse_args()

@@ -11,7 +11,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 channel_stretches, clear_depths, convex_corners, motion_time, smooth_link, write_program, corner_pecks, CORNER_DEPTH, round_a_boss,
+                                 channel_stretches, clear_depths, spiral_pitch, convex_corners, motion_time, smooth_link, write_program, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -384,8 +384,8 @@ def test_fast_polyline_pieces_match_shapely_substring():
     from gcodeproducer.core.cam.wavefront.polyline import stretch
     line = LineString([(0, 0), (3, 0), (3, 4), (7, 4), (7, 9)])
     for a, b in ((0., 2.), (1., 6.5), (3., 7.), (2.5, line.length), (0., line.length), (4., 4.), (6.5, 1.)):
-        expected = list(substring(line, a, b).coords) if a != b else [substring(line, a, b).coords[0]]
-        assert np.allclose(stretch(line, a, b), expected)
+        expected = list(substring(line, a, b).coords) if a != b else [substring(line, a, b).coords[0]]*2
+        assert np.allclose(stretch(line, a, b), expected)  # An empty stretch still makes a line.
 
 
 def test_levels_planned_in_workers_match_planning_them_one_by_one(monkeypatch):
@@ -402,6 +402,19 @@ def test_levels_planned_in_workers_match_planning_them_one_by_one(monkeypatch):
     assert pooled[1][1]['fronts'] < pooled[0][1]['fronts']  # Less material at the second level.
     monkeypatch.setenv('GCODEPRODUCER_WORKERS', '0')  # No worker processes: planned here, same result.
     assert [s['fronts'] for _, s in plan_levels(op, levels, 4.)] == [s['fronts'] for _, s in pooled]
+
+
+def test_engaged_width_is_the_radial_depth_share_of_the_diameter():
+    stock = box(0, 0, 40, 20)
+    for depth in (.2, .5, 1., 2., 4.):
+        path = list(segmentize(LineString([(-5, -2 + depth), (45, -2 + depth)]), .2).coords)
+        assert cut(path, stock, 2., .1, measure='width')[0] == pytest.approx(depth/4, abs=.01)
+
+
+def test_spiral_laps_widen_with_the_radius_at_an_even_engagement():
+    pitch = spiral_pitch(2., 1 - 2*.1, .5)  # 10 % width
+    assert pitch(2.) < pitch(6.) < pitch(30.) <= .5
+    assert pitch(1e6) == pytest.approx(.4, abs=.01)  # A straight wall: 10 % of a 4 mm cutter.
 
 
 def test_motion_time_follows_a_trapezoid_and_slows_for_corners():

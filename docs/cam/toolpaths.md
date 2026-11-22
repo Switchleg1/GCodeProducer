@@ -18,17 +18,21 @@ needed, with corner moves and a finish only where stock is left on a wall.
 Every cut is replayed against the stock and refused if its sampled contact
 angle exceeds the limit; a lighter stepover is tried instead.
 
-**Adaptive engagement (%)** is the width of a straight cut, as a share of
-the cutter diameter, whose contact angle becomes the limit (default 18 %,
-about 50°). In curves and corners the same angle is reached at a smaller
-stepover, so the average stepover is below this width.
+**Adaptive engagement (%)** is the largest engaged width, as a share of the
+cutter diameter: how far across the cutter, square to its travel, the
+material it touches reaches (default 18 %). A straight cut that wide is a
+radial depth of that share of the diameter. In a hole the spiral widens,
+and in concave curves, the same width comes at a smaller stepover. The
+first and last 3 mm of each front may reach 1.25 times the limit, a short
+transient where the cut joins the wall.
 
 Each stay-down chain of cuts and links is one path. A chain that begins at
 a start leads with one lap of its helix orbit as a closed contour, so the
 normal CAM lead planner ramps down on it at the operation's lead-in angle;
 the chain follows at depth without lifting. Waterfall plans each depth
-from the stock left by earlier passes; a planar Pocket plans one depth from
-the full pocket and repeats it.
+from the stock left by earlier passes, and only up to a cutter's width past
+the edge of that stock; a planar Pocket plans one depth from the full pocket
+and repeats it.
 
 Stock the plan cannot reach is never left silently. If more than 0.5 mm²
 of reachable stock is left at a depth, the result is marked **DEBUG ONLY**

@@ -6,26 +6,30 @@ import numpy as np
 from shapely import distance, points, segmentize
 from shapely.geometry import LineString, Point
 from shapely.geometry.polygon import orient
-from shapely.ops import unary_union
+from shapely.ops import nearest_points, unary_union
 
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from .stroke import Stroke
-from .regions import center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
+from .regions import spiral_pitch, clear_of, center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
 from .contact import cutting_pieces, cut
 from .walls import wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading
 from .timing import machine_time
-from .wavefront_constants import (STEPOVERS, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX)
+from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX)
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
                  islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None,
-                 smooth_links=True, material=None):
+                 smooth_links=True, material=None, measure='angle', end_allowance=None):
     """Return (strokes, residual, report) for one target plane.
 
     The stock starts as the whole pocket, or as the part of it inside
-    material where earlier cuts or levels already removed some.
+    material where earlier cuts or levels already removed some. limit is
+    the largest contact angle in degrees, or with measure='width' the largest
+    engaged width as a share of the cutter diameter (see contact.cut).
+    end_allowance, as (mm, factor), lets each front's first and last mm reach
+    factor times the limit (see contact.cut).
     """
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -97,6 +101,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         # is finished; elsewhere the front nearest the cutter goes next, which keeps links short and
         # measured better on the L-shape, cross and square with a boss.
         follow = focus is not None
+        # Spots no stepover could take, kept out of later fronts so the rest of the pocket goes on.
+        stuck, stuck_zone = [], None
         while not out_of_time():
             parts = [g for g in polygons(own_clear) if g.area > 1e-6]
             if not parts:
@@ -107,7 +113,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 stepover = stepovers[level]
                 grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(here)
                 runs = fronts(part, grown, edge, zone=zone)
-                failed, halt = [], False
+                if stuck_zone is not None:
+                    runs = clear_of(runs, stuck_zone)
+                failed, halt, peaks = [], False, []
                 while runs and not halt:
                     # Stay with one front. Round a boss two fronts set off opposite ways; taking whichever
                     # is nearer advances both, and they meet head-on on the far side in a narrowing pinch.
@@ -128,10 +136,18 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                             shapes.append(lambda run=run, closed=closed: eased(run, closed, part, allowed, blend))
                     else:
                         shapes = [eased(run, closed, part, allowed, blend)]
-                    done, skip = None, False
+                    done, skip, near_stuck, before = None, False, None, len(peaks)
+                    if stuck_zone is not None:
+                        shapes.append(lambda run=run, closed=closed: eased(run, closed, part, allowed, blend))
                     for path in shapes:
                         # Fallback shapes are callables, built only when the shapes before them fail.
                         path = path() if callable(path) else path
+                        if stuck_zone is not None and len(path) > 1 and LineString(path).intersects(stuck_zone):
+                            # An end along the wall would run into a spot left as stuck. If no shape is
+                            # left, the spot grows to take this front's end in too.
+                            touch = nearest_points(LineString(path), stuck_zone)[0]
+                            near_stuck = (touch.x, touch.y)
+                            continue
                         if len(path) < 2:
                             continue
                         pieces = cutting_pieces(path, stock, radius)
@@ -143,9 +159,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         trial, done = stock, []
                         for piece in pieces:
                             at, tally = [], [0., 0., 0.]
-                            peak, after = cut(piece, trial, radius, sample_step, where=at, tally=tally, stop_above=limit)
+                            peak, after = cut(piece, trial, radius, sample_step, where=at, tally=tally, stop_above=limit,
+                                              measure=measure, ends=end_allowance)
                             if peak > limit:
                                 done = None
+                                if at:
+                                    spot = LineString(piece).interpolate(at[0])
+                                    peaks.append((spot.x, spot.y))
                                 if trace is not None:
                                     trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
                                                   'wall_ended': path is shapes[0] and len(shapes[0]) > 0
@@ -165,6 +185,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         continue
                     if done is None:
                         failed.append(LineString(run))
+                        if near_stuck is not None and len(peaks) == before:
+                            peaks.append(near_stuck)
                         # Retry this front lighter before turning to another; only when it cannot be
                         # cut at all do the others get their turn. Trying the others at the same heavier
                         # stepover first refuses them too, and the lighter retry then cuts one front in
@@ -200,6 +222,15 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     # open; the others wait their turn.
                     halt = zone is None and (bool(done) or followed)
                 blocked = bool(failed)
+                if failed and level == len(stepovers)-1 and peaks:
+                    # Even the smallest stepover is refused here: typically a thin wedge where a front
+                    # meets the wall at a shallow angle, or a tight inside corner of the stock. Leave
+                    # a cutter-sized spot round each refusal and let the fronts go on round it; the
+                    # corner moves and the wall finish come back for what is left.
+                    stuck.extend(peaks)
+                    stuck_zone = unary_union([Point(q).buffer(STUCK_SPOT*radius, quad_segs=8) for q in stuck])
+                    progressed, blocked = True, False
+                    break
                 if not failed or out_of_time():
                     break
                 zone = unary_union(failed).buffer(max(1., 2*stepover))
@@ -225,16 +256,18 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 else:
                     since += 1
             start = max(0, steady-1) if since >= patience else steady
+        stuck_spots.extend(stuck)
         return passes, arcs, blocked
 
     front_passes, any_blocked = 0, False
+    stuck_spots = []
 
-    def open_island(centre, room):
+    def open_island(centre, room, base=None):
         """Helix and spiral for one start: (centre, spiral reach, island report, own stock, spiral kept)."""
         nonlocal stock
         region = Point(centre).buffer(room)
         entry = seed_entry(region, stock, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
-        alone = seed_entry(region, start, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
+        alone = seed_entry(region, start if base is None else base, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
         if entry is None or alone is None:
             return None
         centre = tuple(entry.points[-1, :2])
@@ -247,15 +280,29 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         chosen, kept = None, False
         entry_record = {'stroke': None, 'helix_xyz': helix.tolist()}
         entries.append(entry_record)
-        for stepover in stepovers:
+        # First a spiral whose lap spacing grows with the radius so its cut stays as wide as the
+        # limit allows (tight laps round the helix, the full stepover far out); a fixed spacing must
+        # suit the tightest lap and is far too close further out.
+        spread = 1 - 2*limit if measure == 'width' else math.cos(math.radians(limit))
+        path = peak = None
+        for scale in SPIRAL_SCALES:
+            pitch = spiral_pitch(radius, spread, min(stepovers[0], SPIRAL_LARGEST), scale=scale)
+            trial_path = spiral_out(centre, reach, pitch(reach), blend=blend, pitch=pitch)
+            tally = [0., 0., 0.]
+            peak, trial = cut(trial_path, stock, radius, sample_step, tally=tally, stop_above=limit, measure=measure)
+            if peak <= limit:
+                path, chosen = trial_path, round(pitch(reach), 3)
+                break
+        for stepover in stepovers if path is None else ():
             probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
-            if cut(probe, stock, radius, sample_step, stop_above=limit)[0] <= limit:
+            if cut(probe, stock, radius, sample_step, stop_above=limit, measure=measure)[0] <= limit:
                 chosen = stepover
                 break
-        if chosen is not None:
+        if chosen is not None and path is None:
             path = spiral_out(centre, reach, chosen, blend=blend)
             tally = [0., 0., 0.]
-            peak, trial = cut(path, stock, radius, sample_step, tally=tally)
+            peak, trial = cut(path, stock, radius, sample_step, tally=tally, measure=measure)
+        if chosen is not None:
             island.update(stepover_mm=chosen, peak_deg=peak, feed_mm=LineString(path).length,
                           accepted=peak <= limit)
             if peak <= limit:
@@ -314,11 +361,42 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         any_blocked = any_blocked or blocked
         island_reports.append(island)
 
+    # Restarts: where the fronts could not get through (a neck held by spots no stepover could take,
+    # at a low limit), stock is left beyond. Enter it afresh with a helix wherever one fits in the
+    # stock that is left, and grow from there as a new island.
+    for extra in range(RESTARTS):
+        if out_of_time():
+            break
+        left = stock.intersection(reachable)
+        room = allowed.intersection(left.buffer(-radius, quad_segs=SWEEP_SEGMENTS))
+        if left.area < RESTART_MM2 or room.is_empty:
+            break
+        fresh = choose_seeds(room, 1, min_radius=radius, placement='widest')
+        if not fresh:
+            break
+        found = open_island(*fresh[0], base=stock)
+        if found is None:
+            break
+        centre, reach, island, own, kept = found
+        index = len(island_reports)
+        passes, arcs, blocked = wave(index, centre, own, shared=False)
+        island.update(front_passes=passes, front_arcs=arcs, restart=True)
+        front_passes += passes
+        any_blocked = any_blocked or blocked
+        island_reports.append(island)
+
     # Corners: the fronts swallow a corner once it is within a stepover, so the cutter centre never
     # reaches it. Creep into each corner along one wall in steps no deeper than CORNER_DEPTH.
     corners = {'visits': 0, 'refused': 0, 'no_link': 0, 'feed_mm': 0., 'peak_deg': 0.}
-    for ring in rings:
-        for vertex, along in convex_corners(ring):
+    creeps = [(ring, vertex, along) for ring in rings for vertex, along in convex_corners(ring)]
+    for spot in stuck_spots:
+        # A spot the fronts left is usually a wedge against the wall nearby: creep in along the wall
+        # there from both sides, the same way as into a corner.
+        ring = min(rings, key=lambda r: r.distance(Point(spot)))
+        place = ring.project(Point(spot))
+        foot = ring.interpolate(place)
+        creeps.append((ring, (foot.x, foot.y), [(place, -1, 2*CORNER_RUN_IN), (place, 1, 2*CORNER_RUN_IN)]))
+    for ring, vertex, along in creeps:
             if distance(stock, Point(vertex)) >= radius - WALL_TOLERANCE:
                 continue
             for path in corner_pecks(vertex, along, stock, radius, ring):
@@ -368,7 +446,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                             if len(piece) < 2:
                                 continue
                         tally = [0., 0., 0.]
-                        peak, trial = cut(piece, stock, radius, sample_step, tally=tally)
+                        peak, trial = cut(piece, stock, radius, sample_step, tally=tally, measure=measure)
                         if stock.area - trial.area < MIN_GAIN_MM2:
                             continue
                         if peak > limit:
@@ -399,6 +477,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
               'wall_profile': profile if wall_profile else None, 'corners': corners,
+              'stuck_spots': [tuple(float(v) for v in q) for q in stuck_spots],
               'reachable_stock_before_profile_mm2': profile['reachable_stock_before_mm2'],
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,

@@ -46,3 +46,10 @@ MACHINE_DEFAULTS = {'cut_feed_mm_min': 1500., 'link_feed_mm_min': 3000., 'plunge
                     'retract_mm': 2.}
 WAVEFRONT_LEFT_MM2 = .5  # reachable stock left on one level above which the result is marked incomplete
 WAVEFRONT_SIMPLIFY = .01  # mm; largest deviation when thinning the dense planned points for output
+STUCK_SPOT = 1.  # cutter radii round a spot no stepover can take that later fronts leave alone
+SPIRAL_SCALES = (.95, .85, .7, .55)  # margins tried on the spiral's lap spacing before a fixed spacing
+MATERIAL_REACH = .05  # mm past a cutter's width beyond the material's edge that the pocket is kept
+END_ALLOWANCE = (3., 1.25)  # mm at each end of a front, and how far over the width limit it may go there
+RESTARTS = 12  # most fresh helix entries into stock the fronts could not reach
+RESTART_MM2 = 2.  # stock left below this is not worth a fresh entry
+SPIRAL_LARGEST = .5  # mm; widest lap spacing of a spiral (wider left a skin on the wall where a ring's front comes back)

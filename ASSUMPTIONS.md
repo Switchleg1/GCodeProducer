@@ -179,5 +179,7 @@
 - Every level starts from intact stock at its depth and every XY rapid rises to 2 mm above the top. Rapids down stop
   0.5 mm above the level above; below that the cutter feeds. Safe for a 2.5D pocket; a waterfall needs the stock
   the level above left.
-- Adaptive engagement (%) maps to the contact angle of a straight cut that wide: acos(1 - 2 × width). The application
-  feeds links at the cutting feed; the wavefront's own estimate assumes a faster link feed.
+- (Superseded in 0.2.20: Adaptive engagement is now a width, see below.) The application feeds links at the cutting feed;
+  the wavefront's own estimate assumes a faster link feed.
+- Adaptive engagement (%) is a width, not an angle: the extent of the touched material across the cutter, square to
+  its travel, as a share of the diameter. Each front's first and last 3 mm may reach 1.25 times it.

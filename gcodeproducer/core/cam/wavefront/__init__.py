@@ -5,7 +5,7 @@ each cut is replayed against the live stock and refused over the contact limit. 
 docs/cam/wavefront-clearing.md.
 """
 from .stroke import Stroke
-from .regions import center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
+from .regions import spiral_pitch, clear_of, center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
 from .contact import cutting_pieces, chunk_contact, cut
 from .walls import along_wall, walk_wall, fillet, turn_away, hook_to_wall, glance_onto_wall, bow_across, wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading

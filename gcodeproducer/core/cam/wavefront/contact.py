@@ -61,8 +61,14 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
     return pieces
 
 
-def chunk_contact(chunk, stock, radius, step):
+def chunk_contact(chunk, stock, radius, step, *, widths=None):
     """Contact angle in degrees at each sample along a short stretch of path: (angles, distances).
+
+    widths, if a list, receives the engaged width at each sample, as a share of
+    the cutter diameter: how far across the cutter, square to its travel, the
+    material it touches reaches. A straight cut of radial depth a has width
+    a/2r; a slot has 1. A thin crescent deep in a corner has a large angle but
+    a small width.
 
     stock is the material before this stretch. The cutter has swept
     everything behind it, so only the half of its edge facing forward can
@@ -87,6 +93,8 @@ def chunk_contact(chunk, stock, radius, step):
             headings.append(heading)
             lengths.append(span/count)
     angles = np.zeros(len(poses))
+    if widths is not None:
+        widths[:] = [0.]*len(poses)
     if stock.is_empty or not poses:
         return angles.tolist(), lengths
     a, b = [], []
@@ -128,17 +136,37 @@ def chunk_contact(chunk, stock, radius, step):
     middle = heading[owner] + (lo+hi)/2
     inside = contains_xy(stock, centres[owner, 0] + radius*np.cos(middle), centres[owner, 1] + radius*np.sin(middle))
     np.add.at(angles, owner[inside], np.degrees((hi-lo)[inside]))
+    if widths is not None:
+        # Across the cutter: sin of the angle from the heading. Over each touched stretch of edge the
+        # extremes are at its ends, or at a quarter turn either side where the stretch passes one.
+        owner, lo, hi = owner[inside], lo[inside], hi[inside]
+        top = np.maximum(np.sin(lo), np.sin(hi))
+        top = np.where((lo < math.pi/2) & (hi > math.pi/2), 1., top)
+        low = np.minimum(np.sin(lo), np.sin(hi))
+        low = np.where((lo < -math.pi/2) & (hi > -math.pi/2), -1., low)
+        high = np.full(len(poses), -np.inf)
+        least = np.full(len(poses), np.inf)
+        np.maximum.at(high, owner, top)
+        np.minimum.at(least, owner, low)
+        widths[:] = np.where(np.isfinite(high), (high - least)/2, 0.).tolist()
     return angles.tolist(), lengths
 
 
-def cut(path, stock, radius, sample_step, *, where=None, tally=None, stop_above=None):
+def cut(path, stock, radius, sample_step, *, where=None, tally=None, stop_above=None, measure='angle',
+        ends=None):
     """Sampled peak contact and updated stock; chunked so each replay stays local.
 
     where, if given, receives the distance along the path of the peak sample.
     tally, if given, is [angle x distance, distance, distance in contact] and is added to.
     stop_above, if given, ends the replay at the first sample over it: the cut is refused
     anyway, and the returned stock is then not the stock after the cut.
+    measure is what the peak (and stop_above) is: the contact 'angle' in degrees, or the
+    engaged 'width' as a share of the cutter diameter. The tally is always of angles.
+    ends, if given as (mm, factor), lets the first and last mm of the path reach factor times
+    the limit: the peak is then reported scaled to the limit that applies where it occurs,
+    so comparing it with stop_above still decides the cut.
     """
+    total = sum(math.dist(a, b) for a, b in zip(path, path[1:])) if ends else 0.
     peak, chunk, length, travelled = 0., [path[0]], 0., 0.
     for i in range(1, len(path)):
         chunk.append(path[i])
@@ -147,14 +175,18 @@ def cut(path, stock, radius, sample_step, *, where=None, tally=None, stop_above=
             xs, ys = zip(*chunk)
             reach = radius + .01
             local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
-            for angle, step in zip(*chunk_contact(chunk, local, radius, sample_step)):
+            across = [] if measure == 'width' else None
+            angles, steps = chunk_contact(chunk, local, radius, sample_step, widths=across)
+            for angle, step, value in zip(angles, steps, across if across is not None else angles):
                 travelled += step
                 if tally is not None:
                     tally[0] += angle*step
                     tally[1] += step
                     tally[2] += step if angle > 0 else 0.
-                if angle > peak:
-                    peak = angle
+                if ends and (travelled < ends[0] or total - travelled < ends[0]):
+                    value = value/ends[1]  # A short transient where the cut starts or ends.
+                if value > peak:
+                    peak = value
                     if where is not None:
                         where[:] = [travelled]
                     if stop_above is not None and peak > stop_above:
