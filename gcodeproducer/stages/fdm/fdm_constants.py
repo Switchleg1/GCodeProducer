@@ -116,7 +116,7 @@ FDMPERIMETERS_PARAMS = [
     ]
 
 FDMSKIRTBRIM_PARAMS = [
-        Param("type", "choice", "skirt", group="Adhesion",
+        Param("type", "choice", "skirt", group="",
               choices=[("none", "None"), ("skirt", "Skirt"), ("brim", "Brim"), ("both", "Skirt + brim")]),
         Param("skirt_loops", "int", 1, min=1, max=20, group="Skirt"),
         Param("skirt_distance", "float", 3.0, unit="mm", min=0, decimals=2, group="Skirt",

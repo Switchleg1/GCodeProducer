@@ -63,7 +63,8 @@ def test_old_pipeline_upgraded_with_disabled_stage():
     assert ids == ["fdm_slice", "fdm_skirt_brim", "fdm_support", "fdm_perimeters", "fdm_top_bottom",
                    "fdm_infill", "fdm_emit"]
     assert p.step("fdm_support").enabled          # always runs; Model > Support decides
-    assert not p.step("fdm_skirt_brim").enabled
+    skirt = p.step("fdm_skirt_brim")                 # always on; added as type "none" (no new skirt)
+    assert skirt.enabled and skirt.params["type"] == "none"
     assert p.step("fdm_slice").enabled
 
 
@@ -78,3 +79,12 @@ def test_process_import_export(tmp_path):
     g = tmp_path / "bare.json"
     g.write_text(json.dumps(SlicePipeline.default(wf.CAM).to_dict()))
     assert ProcessPreset.import_file(str(g)).workflow == wf.CAM
+
+
+def test_disabled_skirt_stage_becomes_type_none():
+    from gcodeproducer.stages.fdm.fdm_skirt_brim import FDMSkirtBrim
+    assert not FDMSkirtBrim.optional                  # no 'Enabled' switch: Type = None turns it off
+    old = {"workflow": "fdm", "steps": [{"stage": "fdm_skirt_brim", "enabled": False,
+                                         "params": {"type": "brim", "brim_width": 7}}]}
+    step = SlicePipeline.from_dict(old).step("fdm_skirt_brim")
+    assert step.enabled and step.params["type"] == "none" and step.params["brim_width"] == 7

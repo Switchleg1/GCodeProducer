@@ -382,8 +382,8 @@ def test_section_summary_updates(win):
     step = win.pipelines["fdm"].step("fdm_skirt_brim")
     step.params.update({"type": "brim", "brim_width": 7.0})
     assert summary(step) == "brim 7 mm"
-    step.enabled = False
-    assert summary(step) == "off"
+    step.params["type"] = "none"
+    assert summary(step) == "none"
 
 
 def test_slice_in_gui(win, app):

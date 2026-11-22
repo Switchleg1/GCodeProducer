@@ -56,7 +56,7 @@ def param_table(params):
             limits.append(f"IDs from {p.choices_from}; `*` = all, `[]` = none")
         out.append(f"| `{p.name}` — {cell(p.label)} | {p.type}" +
                    (f" / {cell(p.unit)}" if p.unit else "") +
-                   f" | {default} | {'; '.join(limits) or 'No schema bound'} | {cell(p.group)}. {cell(p.help)} |")
+                   f" | {default} | {'; '.join(limits) or 'No schema bound'} | {cell(p.group) + '. ' if p.group else ''}{cell(p.help)} |")
     return "\n".join(out) + "\n"
 
 

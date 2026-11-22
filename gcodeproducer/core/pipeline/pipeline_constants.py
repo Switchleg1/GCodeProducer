@@ -9,3 +9,8 @@ DEFAULT_PIPELINES = {
 }
 
 DEFAULT_DISABLED: set = set()
+
+# Stages that are always on and switch themselves off through a parameter.
+# An older process that disabled (or lacked) one of them gets these values
+# instead, so it keeps producing the same output.
+STAGE_OFF_PARAMS = {"fdm_skirt_brim": {"type": "none"}}

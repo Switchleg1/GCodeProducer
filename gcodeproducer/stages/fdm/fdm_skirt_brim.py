@@ -22,6 +22,7 @@ class FDMSkirtBrim(SliceStage):
     description = "Bed adhesion: a skirt around the part and / or a brim attached to it."
     workflows = (FDM,)
     category = "Adhesion"
+    optional = False          # always runs; Type = None turns it off
     params = FDMSKIRTBRIM_PARAMS
 
     def run(self, job, params, ctx):

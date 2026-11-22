@@ -2,7 +2,10 @@
 
 # Skirt and brim
 
-**Where:** Process → Skirt / brim. **Stage:** `fdm_skirt_brim` (optional).
+**Where:** Process → Skirt / brim. **Stage:** `fdm_skirt_brim` (always runs).
+**Type**, at the top of the section, chooses the mode; **None** turns adhesion
+off, so the section has no separate Enabled switch. A process saved with the
+stage disabled loads with Type = None.
 Adhesion paths are inserted before other paths on their layer and tagged
 `skirt` in Preview and output, including brim paths.
 

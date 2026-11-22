@@ -53,9 +53,12 @@ class ParamEditor(QWidget):
                 form.setContentsMargins(*SECTION_BODY_MARGINS)
                 form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
                 groups[p.group] = form
-                section = Section(p.group, body, level=section_level)   # the title escapes Qt's '&' itself
-                self.sections.append(section)
-                outer.addWidget(section)
+                if p.group:
+                    section = Section(p.group, body, level=section_level)   # the title escapes Qt's '&' itself
+                    self.sections.append(section)
+                    outer.addWidget(section)
+                else:
+                    outer.addWidget(body)        # no group: the fields sit in the parent section itself
             form = groups[p.group]
             w = self._make(p)
             if p.row:

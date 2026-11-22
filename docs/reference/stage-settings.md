@@ -25,11 +25,11 @@ Workflow: fdm. Optional stage: no.
 
 **Skirt / brim** — Bed adhesion: a skirt around the part and / or a brim attached to it.
 
-Workflow: fdm. Optional stage: yes.
+Workflow: fdm. Optional stage: no.
 
 | Key / label | Type / unit | Default | Allowed values / range | Group / meaning |
 |---|---|---|---|---|
-| `type` — Type | choice | `skirt` | `none` = None; `skirt` = Skirt; `brim` = Brim; `both` = Skirt + brim | Adhesion.  |
+| `type` — Type | choice | `skirt` | `none` = None; `skirt` = Skirt; `brim` = Brim; `both` = Skirt + brim |  |
 | `skirt_loops` — Skirt loops | int | `1` | minimum 1; maximum 20 | Skirt.  |
 | `skirt_distance` — Skirt distance | float / mm | `3.0` | minimum 0 | Skirt. Gap between the part (or brim) and the skirt. |
 | `skirt_height` — Skirt layers | int | `1` | minimum 1; maximum 1000 | Skirt. Number of layers the skirt is printed on (tall skirt = draft shield). |

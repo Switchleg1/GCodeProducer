@@ -6,7 +6,7 @@ from gcodeproducer.core.jobs.job import Job
 from gcodeproducer.core.pipeline.step import Step
 from gcodeproducer.core.pipeline.step_result import StepResult
 from gcodeproducer.core.pipeline.pipeline_result import PipelineResult
-from gcodeproducer.core.pipeline.pipeline_constants import DEFAULT_PIPELINES, DEFAULT_DISABLED
+from gcodeproducer.core.pipeline.pipeline_constants import DEFAULT_PIPELINES, DEFAULT_DISABLED, STAGE_OFF_PARAMS
 
 class SlicePipeline:
     def __init__(self, workflow: str, steps: Optional[list] = None):
@@ -29,7 +29,16 @@ class SlicePipeline:
                  for s in d.get("steps", [])]
         pipeline = cls(d.get("workflow", wf.FDM), steps)
         pipeline._move_fdm_infill_option()
+        pipeline._off_switch_to_params()
         return pipeline
+
+    def _off_switch_to_params(self):
+        """A disabled stage that now turns itself off by a parameter becomes enabled with that value."""
+        for step in self.steps:
+            off = STAGE_OFF_PARAMS.get(step.stage)
+            if off is not None and not step.enabled:
+                step.params.update(off)
+                step.enabled = True
 
     def _move_fdm_infill_option(self):
         if self.workflow == wf.FDM:
@@ -69,9 +78,14 @@ class SlicePipeline:
                 if idx is not None:
                     pos = idx + 1
                     break
-            self.steps.insert(pos, Step(sid, enabled=not optional))
+            off = STAGE_OFF_PARAMS.get(sid)
+            if off is not None:          # added "off": the old process had none of it
+                self.steps.insert(pos, Step(sid, dict(off), enabled=True))
+            else:
+                self.steps.insert(pos, Step(sid, enabled=not optional))
             have.add(sid)
         self._move_fdm_infill_option()
+        self._off_switch_to_params()
         return self
 
     def step(self, stage_id: str):
