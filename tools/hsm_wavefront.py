@@ -1201,7 +1201,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         failed.append(LineString(run))
                         # Retry this front lighter before turning to another; only when it cannot be
                         # cut at all do the others get their turn.
-                        halt = zone is None and focus is not None and level < len(stepovers)-1
+                        halt = zone is None and level < len(stepovers)-1
                         continue
                     if trace is not None:
                         trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
