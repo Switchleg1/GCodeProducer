@@ -9,7 +9,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 channel_stretches, convex_corners, smooth_link, corner_pecks, CORNER_DEPTH, round_a_boss,
+                                 channel_stretches, convex_corners, motion_time, smooth_link, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -377,6 +377,17 @@ def test_links_leave_and_join_cuts_tangentially_and_stay_in_cleared_space():
     assert blocked == route  # Where a curve would touch stock, the checked route stays as it was.
 
 
+def test_motion_time_follows_a_trapezoid_and_slows_for_corners():
+    total, _ = motion_time([(0., 0.), (100., 0.)], [600.], 100., .02)  # 10 mm/s, 100 mm/s²
+    assert total == pytest.approx(100/10 + 10/100, rel=1e-6)  # Cruise plus the time lost speeding up and down.
+    square = [(0., 0.), (50., 0.), (50., 50.), (0., 50.)]
+    straight, _ = motion_time([(0., 0.), (150., 0.)], [600.]*1, 100., .02)
+    cornered, _ = motion_time(square, [600.]*3, 100., .02)
+    assert cornered > straight + .1  # Each square corner is taken at about 2 mm/s, not 10.
+    rounded = [(25*math.cos(t), 25*math.sin(t)) for t in [k*math.pi/40 for k in range(41)]]
+    assert motion_time(rounded, [600.]*40, 100., .02)[0] < LineString(rounded).length/10 + .5
+
+
 def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     pocket = box(0, 0, 18, 14)
     strokes, residual, report = clear_pocket(pocket, 2., sample_step=.2)
@@ -392,7 +403,10 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     for before, link in zip(strokes, strokes[1:]):
         if link.kind == 'link':
             assert link.points[0] == before.points[-1]
-    assert report['spiral_feed_mm'] > .3*report['cut_feed_mm']  # 0.45 mm spiral since finer stepovers
+    assert report['spiral_feed_mm'] > .3*report['cut_feed_mm']
+    timing = report['machine_time']
+    assert timing['total_s'] == pytest.approx(sum(timing[k] for k in ('cutting_s', 'links_s', 'helix_s', 'rapids_s')))
+    assert timing['cutting_s'] >= 60*report['cut_feed_mm']/timing['machine']['cut_feed_mm_min']  # 0.45 mm spiral since finer stepovers
     allowed = unary_union(center_regions(pocket, 2.)).buffer(2e-3)
     assert all(allowed.covers(LineString(stroke.points)) for stroke in strokes)
     assert clearance(allowed, residual, 2.).area > .9*allowed.area

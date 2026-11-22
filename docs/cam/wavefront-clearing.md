@@ -126,6 +126,38 @@ the cut.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Machine time
+
+The report's `machine_time` estimates one depth with a controller-like
+motion planner: each move speeds up and slows down at the set acceleration,
+corners are taken at the speed the junction deviation allows, and a forward
+and a backward pass keep every speed reachable (the same model as the FDM
+time estimate). Cuts, corner moves and links run as one chain without
+stopping wherever each starts where the last ended; a lift stops the
+machine, rises to 2 mm above the top, crosses at rapid and comes down
+again. Helices run at the plunge feed. It is an estimate for comparing
+paths, not a machine measurement.
+
+Defaults (`MACHINE_DEFAULTS`): cutting 1,500 mm/min, links 3,000 mm/min,
+plunge 500 mm/min, rapid 5,000 mm/min, 500 mm/s², junction deviation
+0.02 mm. One depth with these:
+
+| Pocket | Cutting | Links | Helices | Rapids | Total |
+|---|---|---|---|---|---|
+| Two-lobe neck fixture | 354 s | 89 s | 17 s | 2 s | 462 s |
+| Circle, 44 mm | 106 s | 0 | 8 s | 0 | 114 s |
+| Rectangle 60×30 | 150 s | 39 s | 17 s | 1 s | 206 s |
+| L-shape | 157 s | 60 s | 8 s | 0 | 225 s |
+| Cross | 160 s | 53 s | 8 s | 0 | 221 s |
+| Slot 80×12 | 103 s | 38 s | 17 s | 1 s | 158 s |
+| Square with a 16 mm boss | 207 s | 81 s | 33 s | 3 s | 324 s |
+| Ring | 158 s | 64 s | 8 s | 0 | 230 s |
+
+The curved links of 0.2.14 are 5–17 % longer than the straight routes but
+save 1–4 % of the total: the cuts and links before and after them no longer
+stop at the joins (ring 238.7 → 229.8 s, boss 329.0 → 322.7 s, L-shape
+230.2 → 225.3 s).
+
 ## Speed
 
 One depth of the two-lobe fixture takes about 10 s (145 s before 0.2.9), the
@@ -175,6 +207,8 @@ each cut, its stepover and its sampled peak contact in comments.
 | Field | Meaning |
 |---|---|
 | `stop` | `front_exhausted`: nothing left that a front can reach. `blocked`: some cuts were refused at every stepover. `time_budget`: stopped early. |
+| `machine_time` | Estimated seconds for one depth: `cutting_s`, `links_s`, `helix_s`, `rapids_s`, `total_s`, and the `machine` settings used (see Machine time). |
+| `corners`, `wall_profile` | Corner moves (count, feed, contact) and the finish along wall with stock left on it. |
 | `reachable_residual_mm2`, `cleared_fraction` | Stock the cutter could reach but did not remove. Corners tighter than the cutter radius are not counted. |
 | `peak_contact_deg` | Largest sampled contact angle on any kept cut. The refusal rule keeps it at or below the limit. |
 | `mean_contact_deg`, `mean_contact_while_cutting_deg` | Distance-weighted average contact over all cutting moves, and over the moves touching stock. |
@@ -243,8 +277,9 @@ cross still spend most of their cutting distance again on links.
 - **Link travel** is now mostly the way back across a channel after each
   bow: a bow always starts on the same wall to keep climb milling, so the
   L-shape's 16 mm-wide arm costs a 16 mm link per pass, now a loop rather
-  than a reversal. Links have no feed rate of their own yet. Corner moves
-  still reverse at the tip.
+  than a reversal. Corner moves still reverse at the tip. The machine time
+  uses one cutting feed everywhere; it does not yet slow for heavier
+  contact or speed up for light peels.
 - **Corner moves** back out along their own track: a full reversal at the
   tip, tiny but abrupt. They are judged by depth only, and their contact
   angle (up to 115°) is reported separately in `corners`, not in
