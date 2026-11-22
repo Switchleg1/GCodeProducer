@@ -1200,7 +1200,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     if done is None:
                         failed.append(LineString(run))
                         # Retry this front lighter before turning to another; only when it cannot be
-                        # cut at all do the others get their turn.
+                        # cut at all do the others get their turn. Trying the others at the same heavier
+                        # stepover first refuses them too, and the lighter retry then cuts one front in
+                        # each arm in turn, crossing the pocket between arms on every pass.
                         halt = zone is None and level < len(stepovers)-1
                         continue
                     if trace is not None:

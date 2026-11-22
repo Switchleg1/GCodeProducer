@@ -86,7 +86,10 @@ the cut.
    angle is sampled every 0.1 mm. A cut over the contact limit (60° by default)
    is refused and retried at the next smaller stepover, near the failure only:
    1.0, 0.8, 0.65, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15 and 0.12 mm.
-   Nothing over the limit is kept. Below 0.5 mm the steps are 0.05 mm apart,
+   Nothing over the limit is kept. A refused front is retried lighter
+   before any other front is tried: trying the others at the same heavier
+   stepover first refused them too, and the lighter retry then cut one front
+   in each arm in turn, crossing the pocket between arms on every pass. Below 0.5 mm the steps are 0.05 mm apart,
    so a cut that just misses at one step loses little at the next; with
    0.1 mm steps the slot and ring jumped between 0.4 and 0.2 mm passes.
    At 0.35 mm or below a cut may also roll off before the wall instead of
@@ -179,19 +182,19 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.11; the last column is the compute time for one depth
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.13; the last column is the compute time for one depth
 (measured while another slicing job shared the machine, so about half again slower than 0.2.9's).
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Corner moves | Links | Lifts | Time |
 |---|---|---|---|---|---|---|---|---|
-| Two-lobe neck fixture | 187 | 0 | 0.0 mm² | 8,744 mm | 13, 45 mm | 4,478 mm | 2 | 14.4 s |
-| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² (a film under 0.01 mm) | 2,640 mm | 0 | 0 | 1 | 0.5 s |
-| Rectangle 60×30 | 86 | 0 | 0.0 mm² | 3,587 mm | 30, 97 mm | 1,864 mm | 2 | 4.4 s |
-| L-shape | 142 | 4 | 0.0 mm² | 3,758 mm | 23, 69 mm | 3,081 mm | 1 | 7.3 s |
-| Cross | 202 | 25 | 0.0 mm² | 3,660 mm | 26, 88 mm | 3,312 mm | 1 | 14.9 s |
-| Slot 80×12 | 178 | 8 | 0.2 mm² | 2,451 mm | 12, 33 mm | 1,824 mm | 2 | 8.5 s |
-| Square with a 16 mm boss (4 starts, one way round; 0.2.12) | 283 | 7 | 0.0 mm² | 5,059 mm | 17, 55 mm | 3,007 mm | 4 | 12.3 s |
-| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 0 | 2,323 mm | 1 | 20.5 s |
+| Two-lobe neck fixture | 184 | 0 | 0.0 mm² | 8,766 mm | 12, 44 mm | 3,840 mm | 2 | 19.1 s |
+| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² (a film under 0.01 mm) | 2,640 mm | 0 | 0 | 1 | 0.6 s |
+| Rectangle 60×30 | 86 | 0 | 0.0 mm² | 3,598 mm | 25, 86 mm | 1,594 mm | 2 | 4.7 s |
+| L-shape | 143 | 10 | 0.0 mm² | 3,783 mm | 25, 84 mm | 2,448 mm | 1 | 7.4 s |
+| Cross | 208 | 23 | 0.0 mm² | 3,786 mm | 32, 106 mm | 1,889 mm | 1 | 12.4 s |
+| Slot 80×12 | 173 | 4 | 0.3 mm² | 2,474 mm | 18, 49 mm | 1,388 mm | 2 | 5.1 s |
+| Square with a 16 mm boss (4 starts, one way round) | 283 | 7 | 0.0 mm² | 5,059 mm | 17, 55 mm | 3,007 mm | 4 | 12.5 s |
+| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 0 | 2,323 mm | 1 | 21.2 s |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
 contact is 41.1° and almost every front uses a 0.45–0.65 mm stepover. In the
@@ -228,7 +231,9 @@ cross still spend most of their cutting distance again on links.
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to
   pass instead of holding steady; the contact check refuses the heavy passes.
-- **Link travel** is long on the L-shape and cross. Link corners are not
+- **Link travel** is now mostly the way back across a channel after each
+  bow: a bow always starts on the same wall to keep climb milling, so the
+  L-shape's 16 mm-wide arm costs a 16 mm link per pass. Link corners are not
   rounded and links have no feed rate yet.
 - **Corner moves** back out along their own track: a full reversal at the
   tip, tiny but abrupt. They are judged by depth only, and their contact
