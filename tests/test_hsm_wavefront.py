@@ -9,7 +9,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 round_a_boss,
+                                 convex_corners, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -211,6 +211,33 @@ def test_bow_crosses_a_curved_channel_square_to_its_walls():
     assert max(off) < 2.  # Radial, not along the 6 degree lean (10 degrees off before).
 
 
+def test_corner_creep_reaches_the_corner_in_steps_no_deeper_than_the_limit():
+    # Regression: the fronts swallow a corner once it is within a stepover, so the cutter centre never
+    # got there; 1-3 mm² were left in every square corner of the test shapes.
+    pocket = box(0, 0, 30, 20).buffer(-2., join_style=2).buffer(2., quad_segs=16)  # corners of cutter radius
+    allowed = pocket.buffer(-2., join_style=2)
+    corners = convex_corners(LineString(allowed.exterior.coords))
+    assert len(corners) == 4
+    (vertex, along), = [c for c in corners if c[0] == pytest.approx((28., 18.), abs=.01)]
+    cleared = unary_union([box(2, 2, 28, 17.2), box(2, 2, 27.2, 18)])  # centres; the corner itself missed
+    stock = pocket.difference(cleared.buffer(2., quad_segs=32))
+    assert Point(vertex).distance(stock) < 1.5
+    cuts = 0
+    for path in corner_pecks(vertex, along, stock, 2., LineString(allowed.exterior.coords)):
+        assert path is not None  # Never stuck here.
+        assert 2. - min(Point(q).distance(stock) for q in path) <= CORNER_DEPTH + 1e-9
+        assert path[0] == path[-1]  # Backs out along its own track.
+        stock = stock.difference(LineString(path).buffer(2., quad_segs=32))
+        cuts += 1
+    assert 1 < cuts < 20 and Point(vertex).distance(stock) > 2. - .02
+
+
+def test_square_cornered_pocket_is_cleared_into_its_corners():
+    strokes, residual, report = clear_pocket(box(0, 0, 30, 20), 2.)
+    assert report['reachable_residual_mm2'] < .1 and report['corners']['visits'] > 0
+    assert report['retract_rapids'] == 1 and report['peak_contact_deg'] <= 60.
+
+
 def test_fast_contact_measure_agrees_with_the_step_by_step_replay():
     # chunk_contact measures the forward half of the cutter against the stock before the stretch; the
     # reference subtracts the sweep after every sample. They must agree, the reference reading a
@@ -321,7 +348,7 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     assert strokes[0].kind == 'spiral' and report['islands'][0]['accepted']
     assert report['cleared_fraction'] > .95
     assert report['peak_contact_deg'] <= 60.
-    assert all(stroke.peak_deg <= 60. for stroke in strokes)
+    assert all(stroke.peak_deg <= 60. for stroke in strokes if stroke.kind != "corner")  # Corners go by depth.
     assert 0 < report['mean_contact_deg'] <= report['mean_contact_while_cutting_deg'] < report['peak_contact_deg']
     assert .5 < report['share_of_cut_feed_in_contact'] <= 1.
     links = [stroke for stroke in strokes if stroke.kind == 'link']

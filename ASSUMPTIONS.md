@@ -172,3 +172,5 @@
   The 60° limit was set on the older measure, which read about 0.7° higher.
 - Stock films thinner than 2 µm are treated as polygon arithmetic and dropped; wall with less than 0.02 mm on it is
   not revisited by the finish.
+- Corner moves are judged by depth (0.3 mm), not contact angle, and back out along their own track. The depth was
+  chosen from the test shapes, not from cutting data; a reversal at the tip is assumed acceptable for these short moves.

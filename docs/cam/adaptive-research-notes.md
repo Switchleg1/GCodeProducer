@@ -629,6 +629,7 @@ shaped it, each prompted by reviewing a preview:
 | Bow set back behind a curved front; roll-off allowed at 0.35 mm or below | Straight bow stood out beyond a U-shaped front; no clean wall beside a spiral | Slot small arcs 12 → 4; boss +38 arcs |
 | Forward-half contact measure for a whole stretch at once, cleared region updated near each cut, polygon films dropped | The sample-by-sample replay and whole-pocket recomputation took nearly all the time | Two-lobe 145 → 10 s, ring 124 → 12 s; same angles to about 0.7° |
 | Finish along wall that still has stock | The last front of a channel leaves a skin no later front sweeps | Ring: stock left 3.5 → 0.0 mm² for 29 mm of cutting |
+| Corner creep along each wall, judged by depth (0.3 mm) | Fronts swallow a corner within a stepover; a cutter-radius corner then reads 90-115° contact however thin the crescent | Stock left 5-10 mm² → 0.0-0.2 mm² on every square-cornered shape; neck fixture 2.8 → 0.0 mm² |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,

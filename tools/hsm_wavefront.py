@@ -32,6 +32,10 @@ STEPOVERS = (1., .8, .65, .5, .45, .4, .35, .3, .25, .2, .15, .12)
 SWEEP_SEGMENTS = 16
 CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true disc
 WALL_TOLERANCE = .02
+CORNER_DEPTH = .3  # mm of stock a corner creep may meet at its deepest point
+CORNER_TURN = 30.  # degrees of wall turn that make a corner worth creeping into
+CORNER_RUN_IN = 8.  # mm of wall back from a corner where a creep may start
+CORNER_STEPS = (2., 1., .4, .3, .2, .15, .1, .06)  # mm a corner creep goes deeper each time, tried in turn
 SLIVER = 1e-3  # mm; half the thickness of a film of stock that is only polygon arithmetic
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
@@ -63,7 +67,7 @@ LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly appr
 
 
 class Stroke(NamedTuple):
-    kind: str  # 'spiral', 'front' or wall 'profile' cut, or a stay-down 'link' through cleared area
+    kind: str  # 'spiral', 'front', 'corner' or wall 'profile' cut, or a stay-down 'link' through cleared area
     points: list
     stepover_mm: float
     peak_deg: float
@@ -747,6 +751,92 @@ def without_slivers(stock):
     return stock.buffer(-SLIVER, join_style=2).buffer(SLIVER, join_style=2)
 
 
+def convex_corners(ring):
+    """[(vertex xy, [(position along ring, direction, wall length)] * 2)] where the wall turns sharply.
+
+    A corner is a stretch of at most CORNER_WINDOW in which the wall turns
+    by more than CORNER_TURN in all: a sharp vertex, or a short chamfer or
+    small arc that a polygon outline makes of one. Each wall reaches to the
+    next corner, so a creep never runs round onto another wall.
+    """
+    pts = list(ring.coords)[:-1]
+    n = len(pts)
+    if n < 3:
+        return []
+    total, at, turn = ring.length, [0.], []
+    for i in range(1, n):
+        at.append(at[-1] + math.dist(pts[i-1], pts[i]))
+    for i in range(n):
+        a, here, b = pts[i-1], pts[i], pts[(i+1) % n]
+        h1, h2 = math.atan2(here[1]-a[1], here[0]-a[0]), math.atan2(b[1]-here[1], b[0]-here[0])
+        turn.append(abs((h2-h1+math.pi) % (2*math.pi) - math.pi) if math.dist(a, here) > 1e-9 and math.dist(here, b) > 1e-9 else 0.)
+    bent = [i for i in range(n) if turn[i] > math.radians(1.)]
+    clusters, used = [], set()
+    for i in sorted(bent, key=lambda k: -turn[k]):
+        if i in used:
+            continue
+        group = [k for k in bent if k not in used and min(abs(at[k]-at[i]), total-abs(at[k]-at[i])) <= CORNER_WINDOW/2]
+        if sum(turn[k] for k in group) > math.radians(CORNER_TURN):
+            used.update(group)
+            clusters.append(at[i])
+    clusters.sort()
+    found = []
+    for j, place in enumerate(clusters):
+        before = (place - clusters[j-1]) % total if len(clusters) > 1 else total/2
+        after = (clusters[(j+1) % len(clusters)] - place) % total if len(clusters) > 1 else total/2
+        corner = ring.interpolate(place)
+        found.append(((corner.x, corner.y), [(place, -1, before), (place, 1, after)]))
+    return found
+
+
+def corner_pecks(vertex, along, stock, radius, ring):
+    """Yield short cuts along a wall into a corner, each a little deeper; None when stuck.
+
+    Each runs in along the wall from clean wall to a point nearer the corner
+    and backs out along its own track. A step is
+    judged by depth, not contact angle: at its deepest point the cutter may
+    meet at most CORNER_DEPTH of stock. Deep in a corner the stock left is a
+    crescent hugging the cutter, so the contact angle reads 90-180 degrees
+    however thin the crescent is; its depth is what loads the cutter.
+    The caller cuts each one before asking for the next.
+    """
+    state, total = {'stock': stock}, ring.length
+    for place, sign, length in along:
+        reach_in = min(CORNER_RUN_IN, .9*length)
+
+        def at(d, place=place, sign=sign):
+            q = ring.interpolate((place + sign*d) % total)
+            return (q.x, q.y)
+
+        def touches(d, live):
+            return distance(live, Point(at(d))) < radius - WALL_TOLERANCE
+
+        # Clean wall to start from: the nearest point back from the corner where the cutter is clear,
+        # beyond any skin still on this wall.
+        dirty = [d for d in np.arange(0., reach_in, .05) if touches(d, state['stock'])]
+        if not dirty:
+            continue
+        start = next((d for d in np.arange(max(dirty), reach_in + 1e-9, .05) if not touches(d, state['stock'])), None)
+        if start is None:
+            continue
+        reached = start
+        while reached > 1e-6:
+            done = False
+            for step in CORNER_STEPS:
+                target = max(0., reached - step)
+                run = [at(d) for d in np.linspace(min(reach_in, reached + 1.), target, 16)]
+                # Back out along the same track: the cleared space beside a corner creep is only as
+                # wide as the track itself, too narrow for a link to find its way.
+                path = run + run[-2::-1]
+                if radius - float(distance(state['stock'], points(run)).min()) <= CORNER_DEPTH:
+                    state['stock'] = (yield path) or sweep(path, state['stock'], radius)
+                    reached, done = target, True
+                    break
+            if not done:
+                yield None
+                break
+
+
 def sweep(path, stock, radius):
     """Remove the cutter's swept area without measuring contact."""
     return without_slivers(stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS)))
@@ -1135,6 +1225,27 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         any_blocked = any_blocked or blocked
         island_reports.append(island)
 
+    # Corners: the fronts swallow a corner once it is within a stepover, so the cutter centre never
+    # reaches it. Creep into each corner along one wall in steps no deeper than CORNER_DEPTH.
+    corners = {'visits': 0, 'refused': 0, 'no_link': 0, 'feed_mm': 0., 'peak_deg': 0.}
+    for ring in rings:
+        for vertex, along in convex_corners(ring):
+            if distance(stock, Point(vertex)) >= radius - WALL_TOLERANCE:
+                continue
+            for path in corner_pecks(vertex, along, stock, radius, ring):
+                if path is None:
+                    corners['refused'] += 1
+                    continue
+                if strokes and stay_down_link(stock_clear(), stock, radius, strokes[-1].points[-1], path[0]) is None:
+                    corners['no_link'] += 1  # Not worth a lift for a corner.
+                    break
+                peak, trial = cut(path, stock, radius, sample_step)
+                commit('corner', path, 0., peak)
+                corners['peak_deg'] = max(corners['peak_deg'], peak)
+                stock, cleared[0] = without_slivers(trial), None
+                corners['visits'] += 1
+                corners['feed_mm'] += LineString(path).length
+
     # Finish: follow the pocket wall only where stock is still on it, such as the skin the last front
     # of a channel leaves because no later front sweeps back over it. Clean wall is not passed again.
     profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.,
@@ -1193,12 +1304,12 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     residual = stock.intersection(reachable)
     total = pocket.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
-    feeds = [s for s in strokes if s.kind != 'link']
+    feeds = [s for s in strokes if s.kind not in ('link', 'corner')]  # Corners are judged by depth.
     report = {'stop': stop, 'placement': placement, 'wall_pull_back': wall_pull_back,
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
-              'wall_profile': profile if wall_profile else None,
+              'wall_profile': profile if wall_profile else None, 'corners': corners,
               'reachable_stock_before_profile_mm2': profile['reachable_stock_before_mm2'],
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,
               'cleared_fraction': 1 - residual.area/total if total else None,
