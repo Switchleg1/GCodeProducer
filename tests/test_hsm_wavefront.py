@@ -40,6 +40,17 @@ def test_default_placement_starts_one_island_in_each_lobe_joined_by_a_neck():
     assert choose_seeds(allowed, 1, min_radius=2.) == [big[:2]]
 
 
+def test_a_boss_gets_a_start_at_each_wider_spot_on_the_way_round():
+    # Regression: one start in a corner sent fronts both ways round the boss; they fanned out at its
+    # corners (162 of 351 arcs at the smallest stepovers) and spent more on links than on cutting.
+    square = box(0, 0, 50, 50).difference(box(17, 17, 33, 33))
+    starts = choose_seeds(unary_union(center_regions(square, 2.)), min_radius=2.)
+    assert sorted((round(x), round(y)) for (x, y), _ in starts) == [(10, 10), (10, 40), (40, 10), (40, 40)]
+    assert all(room == pytest.approx(8., abs=.1) for _, room in starts)
+    ring = Point(25, 25).buffer(24, quad_segs=32).difference(Point(25, 25).buffer(10, quad_segs=32))
+    assert len(choose_seeds(unary_union(center_regions(ring, 2.)), min_radius=2.)) == 1  # Even width: one start.
+
+
 def test_single_lobe_takes_two_islands_only_when_elongated():
     long = unary_union(center_regions(box(0, 0, 60, 20), 2.))
     squarer = unary_union(center_regions(box(0, 0, 30, 24), 2.))

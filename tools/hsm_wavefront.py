@@ -33,6 +33,8 @@ CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true d
 WALL_TOLERANCE = .02
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
+NECK_RATIO = 2.  # a lobe is at least this much wider than the neck that separates it
+HOLED_NECK_RATIO = 1.15  # the same round a boss
 PROFILE_CHUNK = 8.  # mm of wall judged at a time
 GLANCE_TURN = 40.  # degrees turned over a hook's length; more means the arc is curling onto an old hook
 GLANCE_REACH = 6.  # mm of wall an arc may run on along before reaching clean wall
@@ -58,13 +60,19 @@ class Stroke(NamedTuple):
     peak_deg: float
 
 
-def find_lobes(allowed, *, min_radius, step=.25, neck_ratio=2.):
+def find_lobes(allowed, *, min_radius, step=.25, neck_ratio=None):
     """Split a cutter-centre region at its necks: [(widest xy, distance to wall, bounds)].
 
     The region is shrunk in steps. A piece counts as a lobe while its widest
     spot is at least neck_ratio times the shrink that separated it, so a
-    passage must be clearly narrower than the areas it joins.
+    passage must be clearly narrower than the areas it joins. Round a boss a
+    milder narrowing counts: fronts from one start would have to wrap round
+    the boss both ways and fan out at its corners, so each wider spot on the
+    way round is worth its own start.
     """
+    if neck_ratio is None:
+        holed = any(part.interiors for part in polygons(allowed))
+        neck_ratio = HOLED_NECK_RATIO if holed else NECK_RATIO
     def widest(part):
         centre = polylabel(part, tolerance=.05)
         return centre, centre.distance(allowed.boundary)

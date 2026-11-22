@@ -158,3 +158,5 @@
 - A channel is crossed in one bow when it is at most 2.6 full hook trims wide and its walls are within 8° of parallel;
   each end of the bow rounds 45% of the channel width. The wall is not followed past 40° of turning within 2 mm.
   Both untuned beyond the seven test shapes.
+- Round a boss a lobe needs to be only 1.15 times wider than the passage beside it (2 elsewhere). Chosen from the square
+  with a boss (8 against 6.5 mm); an evenly wide ring still gets one start. Untuned on other boss shapes.

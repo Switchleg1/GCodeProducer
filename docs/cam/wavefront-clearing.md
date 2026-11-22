@@ -23,7 +23,9 @@ the cut.
    pocket.
 2. **Start islands.** The region is split into lobes wherever a neck is at
    least twice as narrow as the areas it joins. Each lobe gets one start at its
-   widest spot. A pocket with a single lobe gets two starts a third of the way
+   widest spot. Round a boss a milder narrowing counts (1.15 times): fronts from
+   a single start would have to wrap round the boss both ways and fan out at its
+   corners, so a square pocket with a boss gets a start in each corner. A pocket with a single lobe gets two starts a third of the way
    in from each end if it is at least twice as long as it is wide, otherwise
    one start. `--islands` and `--placement` override this choice.
 3. **Entry.** Each start is entered with a helix. The helix is modelled
@@ -120,7 +122,7 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.2.
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.2 or later.
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts |
 |---|---|---|---|---|---|---|
@@ -130,18 +132,21 @@ rates are not modelled.
 | L-shape | 143 | 10 | 8.3 mm² | 3,989 mm | 3,195 mm | 1 |
 | Cross | 177 | 7 | 15.5 mm² | 3,671 mm | 2,667 mm | 1 |
 | Slot 80×12 | 187 | 11 | 9.5 mm² | 2,771 mm | 1,497 mm | 2 |
-| Square with a 16 mm boss | 351 | 162 | 7.5 mm² | 7,433 mm | 10,908 mm | 1 |
+| Square with a 16 mm boss (4 starts) | 249 | 14 | 5.1 mm² | 5,110 mm | 3,312 mm | 5 |
+| Ring, 48 mm across with a 20 mm boss | 430 | 193 | 1.1 mm² | 5,604 mm | 10,710 mm | 1 |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
 contact is 39.6° and almost every front uses a 0.4–0.65 mm stepover. In the
-slot the bows settle at a 0.4 mm stepover with a steady 56° peak. All shapes
-except the pocket with a boss now hold an even peel; the L-shape and cross
-still spend most of their cutting distance again on links.
+slot the bows settle at a 0.4 mm stepover with a steady 56° peak. The square
+with a boss went from one start (162 of 351 arcs at 0.2 mm or less, 7,433 mm
+cutting, 10,908 mm links) to four. All shapes except the ring now hold an
+even peel; the L-shape and cross still spend most of their cutting distance
+again on links.
 
 ## Known gaps
 
-- **Pockets with a boss**: uneven peel and more link travel than cutting; the
-  single start sits in a corner and the fronts wrap both ways round the boss.
+- **Curved channels** (the ring): uneven peel and twice as much link travel as
+  cutting. The bow assumes straight walls.
 - **Channels**: the first few bows after a spiral, the end of a channel, and
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to

@@ -622,6 +622,7 @@ shaped it, each prompted by reviewing a preview:
 | Wide hooks onto the wall | A cutter driven square into the wall is wrapped by the corner it left | Small-stepover arcs 113 → 55 |
 | Shallow arrivals run on along the wall | Beside a spiral, hooks dug into stock (100–184°) | No arc at 0.2 mm or less; 9,912 mm cutting |
 | One bow across narrow parallel channels | In the 80×12 slot, two hooks on each short arc dug in (110°+) | Slot: arcs at 0.2 mm or less 176 → 11, cutting 3,672 → 2,771 mm |
+| A start at each wider spot round a boss | One corner start sent fronts both ways round the boss to fan out at its corners | Boss: arcs at 0.2 mm or less 162 → 14, links 10,908 → 3,312 mm |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,
