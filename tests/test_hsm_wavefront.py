@@ -1,11 +1,13 @@
 import math
 
 import pytest
+from shapely import segmentize
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
+from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
                                  round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
@@ -209,6 +211,27 @@ def test_bow_crosses_a_curved_channel_square_to_its_walls():
     assert max(off) < 2.  # Radial, not along the 6 degree lean (10 degrees off before).
 
 
+def test_fast_contact_measure_agrees_with_the_step_by_step_replay():
+    # chunk_contact measures the forward half of the cutter against the stock before the stretch; the
+    # reference subtracts the sweep after every sample. They must agree, the reference reading a
+    # little high from its polygonal sweeps.
+    stock = box(0, 0, 40, 20).difference(box(10, 3, 14, 30))
+    paths = [[(-5., -1.5), (45., -1.5)],                                                # side cut, 0.5 mm deep
+             [(20 + 6*math.cos(k*math.pi/60), -4 + 6*math.sin(k*math.pi/60)) for k in range(61)],  # arc into stock
+             [(k*.2 - 5, .8*math.sin((k*.2 - 5)/2.) - 1.3) for k in range(250)]]        # wavering depth
+    for path in paths:
+        path = list(segmentize(LineString(path), .2).coords)
+        reference = []
+        for _, angle, _ in indexed_contact(path, stock, 2., .1, 16):
+            reference.append(angle)
+        tally = [0., 0., 0.]
+        peak, after = cut(path, stock, 2., .1, tally=tally)
+        assert peak == pytest.approx(max(reference), abs=1.5)
+        assert tally[0]/tally[1] == pytest.approx(sum(reference)/len(reference), abs=.7)
+        assert after.area == pytest.approx(stock.difference(LineString(path).buffer(2., quad_segs=32)).area, abs=.05)
+    assert math.acos(1 - .5/2.) < math.radians(cut(paths[0], stock, 2., .1)[0]) < math.acos(1 - .5/2.) + .03  # Analytic.
+
+
 @pytest.mark.parametrize('gap', [0., .7])
 def test_arcs_round_a_disc_that_touches_or_nearly_touches_a_wall_stay_light(gap):
     # Regression: beside a spiral the next front meets the wall almost parallel to it. A hook there ran
@@ -270,7 +293,7 @@ def test_each_island_keeps_its_own_fronts_and_the_last_breaks_through():
     assert kinds[0] == 'spiral' and kinds.count('spiral') == 2
     second_spiral = kinds.index('spiral', 1)
     assert 'front' in kinds[1:second_spiral]  # The first island works its own ground before the lift.
-    assert 'profile' not in kinds and report['wall_profile'] is None
+    assert report['wall_profile']['feed_mm'] < .05*report['cut_feed_mm']  # The finish only touches leftovers.
     centre_x = [island['centre_xy_mm'][0] for island in report['islands']]
     for stroke in strokes[:[s.kind for s in strokes].index('spiral', 1)]:
         if stroke.kind == 'front':

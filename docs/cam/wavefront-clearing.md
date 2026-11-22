@@ -89,9 +89,32 @@ the cut.
    link is checked to keep the whole cutter clear of the live stock. The
    preview shows a lift (G0) only where no such route exists: the first cut,
    and moving from one island to the next.
-9. **Wall pass (optional).** `--wall-profile` adds a pass along the pocket
-   wall at the end. It is off by default because the wall ends above leave
-   almost nothing for it.
+9. **Finish on leftovers.** Last, the cutter follows the pocket wall only
+   where stock thicker than 0.02 mm is still on it, first 0.3 mm off the wall
+   and then on it, each stretch checked against the contact limit. This takes
+   the skin the last front of a channel leaves because no later front sweeps
+   back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
+
+## Speed
+
+One depth of the two-lobe fixture takes about 10 s (145 s before 0.2.9), the
+ring 12 s (124 s) and the other shapes 0.4–9 s. What made the difference:
+
+- **Contact is measured without replaying the cut.** The cutter has swept
+  everything behind it, so only the half of its edge facing forward can touch
+  material. That half is measured against the stock from before the stretch,
+  for all samples of a stretch at once. The earlier measure subtracted the
+  sweep after every 0.1 mm sample. Both give the same angles to about 0.7°
+  (the old one read that much high from its polygon sweeps); a test holds
+  them together.
+- **A refused cut stops being measured** at the first sample over the limit.
+- **The cleared region is updated near each cut** instead of being recomputed
+  for the whole pocket.
+- **Films of stock under 2 µm thick are dropped.** They are leftovers of
+  polygon arithmetic, and each one put a scallop in the cleared region's
+  outline, which grew to many thousands of points.
+- **A larger stepover is retried only now and then** once a front has settled
+  at 0.4 mm or more, not on every pass.
 
 ## Running it
 
@@ -107,7 +130,7 @@ python tools/hsm_wavefront.py --pocket-wkt examples/hsm-shapes/slot.wkt --review
 | `--islands N` | Number of start islands, overriding the shape-based choice. |
 | `--placement lobes\|thirds\|widest` | One start per lobe (default), spread along the long axis, or the widest remaining spots. |
 | `--no-wall-pull-back` | Roll cuts off before the wall instead of following it back. Kept for comparison. |
-| `--wall-profile` | Finish with a pass along the pocket wall. |
+| `--no-wall-finish` | Skip the finish along wall that still has stock on it. |
 | `--time-budget SECONDS` | Stop adding fronts after this long; the report then says `time_budget`. |
 | `--sample-step MM` | Contact sampling distance (default 0.1 mm). |
 
@@ -137,22 +160,25 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.8.
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.9; the last column is the compute time for one depth.
 
-| Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts |
-|---|---|---|---|---|---|---|
-| Two-lobe neck fixture | 191 | 0 | 4.3 mm² | 9,227 mm | 3,601 mm | 2 |
-| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 2,919 mm | 0 | 1 |
-| Rectangle 60×30 | 93 | 5 | 7.8 mm² | 3,844 mm | 1,912 mm | 2 |
-| L-shape | 141 | 6 | 7.9 mm² | 3,839 mm | 3,153 mm | 1 |
-| Cross | 186 | 11 | 12.1 mm² | 3,701 mm | 2,927 mm | 1 |
-| Slot 80×12 | 168 | 4 | 8.9 mm² | 2,465 mm | 1,427 mm | 2 |
-| Square with a 16 mm boss (4 starts) | 282 | 5 | 5.2 mm² | 5,163 mm | 3,480 mm | 5 |
-| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 1.8 mm² | 3,982 mm | 2,272 mm | 1 |
+| Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts | Time |
+|---|---|---|---|---|---|---|---|
+| Two-lobe neck fixture | 187 | 0 | 2.8 mm² | 8,739 mm | 4,229 mm | 2 | 9.6 s |
+| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 2,640 mm | 0 | 1 | 0.4 s |
+| Rectangle 60×30 | 86 | 0 | 10.4 mm² | 3,587 mm | 1,705 mm | 2 | 3.3 s |
+| L-shape | 142 | 4 | 7.4 mm² | 3,765 mm | 2,959 mm | 1 | 5.1 s |
+| Cross | 202 | 25 | 9.7 mm² | 3,660 mm | 3,111 mm | 1 | 7.7 s |
+| Slot 80×12 | 178 | 8 | 5.6 mm² | 2,457 mm | 1,606 mm | 2 | 4.6 s |
+| Square with a 16 mm boss (4 starts) | 288 | 0 | 9.0 mm² | 5,114 mm | 3,199 mm | 4 | 9.2 s |
+| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 2,323 mm | 1 | 11.7 s |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
-contact is 40.9° and almost every front uses a 0.45–0.65 mm stepover. In the
-slot 115 of 168 bows run at 0.45 mm. The finer steps cut every shape's cutting
+contact is 41.1° and almost every front uses a 0.45–0.65 mm stepover. In the
+slot 125 of 178 bows run at 0.45 mm; in the ring 223 of 243 run at 0.5 mm.
+Figures moved a little against 0.2.8 because the contact measure reads about
+0.7° lower: the cross has more small arcs (11 → 25), the rectangle and the
+square with a boss none. The finer steps cut every shape's cutting
 distance by 3–11 % against 0.2.4, and halved the ring's small arcs (194 → 102);
 the two-lobe fixture now takes 103 s a depth instead of 221 s. The square
 with a boss went from one start (162 of 351 arcs at 0.2 mm or less, 7,433 mm
@@ -166,9 +192,10 @@ cross still spend most of their cutting distance again on links.
 
 ## Known gaps
 
-- **Arriving back at the spiral** in a ring: the last few passes before the
-  spiral roll off short of the outer wall (up to about 0.7 mm) and a few short
-  strokes clean it afterwards.
+- **Arriving back at the spiral** in a ring: the fronts inside the spiral's
+  space are shaped by stock that is only assumed there, and the two corners
+  beside the spiral are finished by the wall finish (29 mm of cutting, nothing
+  left) rather than by the fronts themselves.
 - **One way round is only used with a single start.** A square with a boss
   has four starts, and their fronts still set off both ways and meet between
   the corners.
@@ -178,11 +205,12 @@ cross still spend most of their cutting distance again on links.
   pass instead of holding steady; the contact check refuses the heavy passes.
 - **Link travel** is long on the L-shape and cross. Link corners are not
   rounded and links have no feed rate yet.
-- **Leftover stock** of a few square millimetres on most shapes is not yet
-  located.
+- **Leftover stock** of 5–10 mm² on shapes with square corners sits in those
+  corners; the fronts and the wall finish are both refused there at every
+  stepover. It needs a corner move of its own.
 - **Not built:** Z motion and helix output, depth steps, allowance, tabs and
   protected geometry, replay of rounded output coordinates, and the application
-  interface. One depth of the two-lobe fixture takes about three and a half minutes.
+  interface.
 - The 60° limit and the shape constants (hook radius, overlap, neck ratio) are
   trial values tuned on these shapes only.
 

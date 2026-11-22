@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
-from shapely import distance, get_parts, points, prepare, segmentize
+import numpy as np
+from shapely import contains_xy, covers, distance, get_coordinates, get_parts, line_interpolate_point, points, prepare, segmentize
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polylabel, substring, unary_union
@@ -31,6 +32,7 @@ STEPOVERS = (1., .8, .65, .5, .45, .4, .35, .3, .25, .2, .15, .12)
 SWEEP_SEGMENTS = 16
 CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true disc
 WALL_TOLERANCE = .02
+SLIVER = 1e-3  # mm; half the thickness of a film of stock that is only polygon arithmetic
 MIN_GAIN_MM2 = 1e-4
 ELONGATED_ASPECT = 2.
 NECK_RATIO = 2.  # a lobe is at least this much wider than the neck that separates it
@@ -44,6 +46,9 @@ BOW_SET_BACKS = 6  # tries at setting a bow back behind a curved front
 BOW_EXCESS = .03  # mm a bow may stand out beyond its front
 ROLL_STEPOVER = .35  # mm; at or below this an arc may roll off before the wall instead of sweeping it
 SPAN_SLACK = .15  # cutter radii by which a spiral may miss the second wall and still span the channel
+STEADY_STEPOVER = .4  # mm; from here up a refused larger stepover is not retried on every pass
+RAISE_PATIENCE = 2  # passes at one stepover before a larger one is tried again
+RAISE_PATIENCE_MAX = 8  # the wait doubles up to this each time the larger one is refused
 BOW_PARALLEL = 8.  # degrees; walls further from parallel than this get separate hooks
 HOOK_SHARE = .45  # share of the channel width each end of a bow may round
 MIN_HOOK_TRIM = .5  # mm; below this an arc end rolls off to the old front instead
@@ -212,6 +217,30 @@ def clearance(allowed, stock, radius):
     return allowed.difference(stock.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS))
 
 
+def grow_clearance(clear, allowed, stock, path, radius):
+    """clearance(allowed, stock, radius) after a cut along path, given it from before the cut.
+
+    A cut only opens centre positions within two cutter radii of its path,
+    and stock only ever shrinks, so the new positions are worked out stretch
+    by stretch near the path and added. Recomputing the whole pocket after
+    every cut took over half of the run time.
+    """
+    reach, stretch, length, added = 2*radius + .1, [path[0]], 0., []
+    for i in range(1, len(path)):
+        stretch.append(path[i])
+        length += math.dist(path[i-1], path[i])
+        if length >= 8. or i == len(path)-1:
+            xs, ys = zip(*stretch)
+            around = box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach)
+            near = stock.intersection(around.buffer(radius + .1, join_style=2))
+            opened = allowed.intersection(around)
+            if not near.is_empty:
+                opened = opened.difference(near.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS))
+            added.append(opened)
+            stretch, length = [path[i]], 0.
+    return unary_union([clear, *added])
+
+
 def fronts(clear, grown, wall, *, zone=None):
     """Stock-left runs of the grown boundary that are not pocket wall: (points, closed)."""
     runs = []
@@ -276,11 +305,18 @@ def eased(run, closed, clear, allowed, blend, *, ends=(True, True)):
             w = max(0., t*t*(3-2*t))
             n = nearest_points(clear, Point(q))[0]
             q = (n.x + (q[0]-n.x)*w, n.y + (q[1]-n.y)*w)
-        if not allowed.covers(Point(q)):
-            n = nearest_points(allowed, Point(q))[0]
-            q = (n.x, n.y)
         if not out or q != out[-1]:
             out.append(q)
+    inside = covers(allowed, points(out)).tolist() if out else []
+    if not all(inside):
+        kept = []
+        for q, ok in zip(out, inside):
+            if not ok:
+                n = nearest_points(allowed, Point(q))[0]
+                q = (n.x, n.y)
+            if not kept or q != kept[-1]:
+                kept.append(q)
+        out = kept
     return out
 
 
@@ -338,7 +374,26 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     return route
 
 
+_WALL_MEMO = {'for': (None, None), 'found': {}}
+
+
 def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_REACH):
+    """walk_wall, remembered while the cleared area and stock stay the same.
+
+    One front asks about the same wall points several times over: to see
+    whether its ends are on the wall, again for each shape of end tried, and
+    again for each position of a bow.
+    """
+    if _WALL_MEMO['for'][0] is not part or _WALL_MEMO['for'][1] is not own:
+        _WALL_MEMO['for'], _WALL_MEMO['found'] = (part, own), {}
+    key = (round(xy[0], 6), round(xy[1], 6), radius, overlap, at_least, limit, len(rings))
+    if key not in _WALL_MEMO['found']:
+        _WALL_MEMO['found'][key] = walk_wall(rings, xy, part, own, radius, overlap, at_least=at_least, limit=limit)
+    found = _WALL_MEMO['found'][key]
+    return None if found is None else list(found)
+
+
+def walk_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_REACH):
     """Dense points from a wall point back along the wall until it is already clean, plus an overlap.
 
     The wall counts as clean where the cutter, sitting on it, would find no
@@ -357,12 +412,16 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
     steps = max(2, math.ceil(limit/.1))
 
     def walk(sign):
-        pts = [ring.interpolate((here + sign*limit*k/steps) % total) for k in range(1, steps+1)]
-        return [(q.x, q.y) for q in pts]
+        at = (here + sign*limit*np.arange(1, steps+1)/steps) % total
+        return [tuple(q) for q in get_coordinates(line_interpolate_point(ring, at)).tolist()]
 
-    ways = (walk(1), walk(-1))
-    way = min(ways, key=lambda pts: part.distance(Point(pts[min(4, len(pts)-1)])))
-    clean = [True]*len(way) if own.is_empty else (distance(own, points(way)) >= radius - WALL_TOLERANCE).tolist()
+    probe = min(4, steps-1) + 1
+    way = walk(min((1, -1), key=lambda sign: part.distance(ring.interpolate((here + sign*limit*probe/steps) % total))))
+    # Measure against what lies near this stretch of wall only; the whole pocket is far slower.
+    xs, ys = zip(*way)
+    around = box(min(xs), min(ys), max(xs), max(ys))
+    near_own = own.intersection(around.buffer(radius + .5)) if not own.is_empty else own
+    clean = [True]*len(way) if near_own.is_empty else (distance(near_own, points(way)) >= radius - WALL_TOLERANCE).tolist()
     keep, spacing = len(way), limit/steps
     if any(clean):
         keep = min(len(way), max(clean.index(True) + 1 + math.ceil(overlap/spacing), math.ceil(at_least/spacing)))
@@ -373,7 +432,8 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
         if abs((headings[k]-headings[k-window]+math.pi) % (2*math.pi) - math.pi) > math.radians(WALL_CORNER):
             keep = min(keep, k)
             break
-    gap = distance(part, points(way))
+    near_part = part.intersection(around.buffer(WALL_GAP + 3.))
+    gap = np.full(len(way), WALL_GAP + 3.) if near_part.is_empty else distance(near_part, points(way))
     deep = (gap > max(WALL_GAP, float(gap[0]) + .2)).tolist()
     if any(deep):
         keep = min(keep, deep.index(True))
@@ -674,9 +734,22 @@ def round_a_boss(centre, reach, rings, radius):
     return behind, (at.x + reach*px, at.y + reach*py)
 
 
+def without_slivers(stock):
+    """Drop films thinner than 2*SLIVER that polygon arithmetic leaves along walls and between cuts.
+
+    A cutter disc is a 128-sided polygon here, so two cuts that meet exactly
+    leave a film under a micron thick. Every film puts a scallop in the
+    cleared region, whose outline then grows by thousands of points and slows
+    every later step.
+    """
+    if stock.is_empty:
+        return stock
+    return stock.buffer(-SLIVER, join_style=2).buffer(SLIVER, join_style=2)
+
+
 def sweep(path, stock, radius):
     """Remove the cutter's swept area without measuring contact."""
-    return stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS))
+    return without_slivers(stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS)))
 
 
 def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
@@ -724,11 +797,83 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
     return pieces
 
 
-def cut(path, stock, radius, sample_step, *, where=None, tally=None):
+def chunk_contact(chunk, stock, radius, step):
+    """Contact angle in degrees at each sample along a short stretch of path: (angles, distances).
+
+    stock is the material before this stretch. The cutter has swept
+    everything behind it, so only the half of its edge facing forward can
+    touch material; that half is measured against stock, and the path's own
+    sweep never has to be subtracted sample by sample. The window reaches a
+    little past the half, by the angle the previous sample's disc leaves
+    uncovered, which is what a replay that subtracts each step would see. This
+    holds where the path turns no tighter than the cutter radius; a tighter
+    turn reads high, never low. hsm_contact_replay.indexed_contact is the
+    reference this is checked against.
+    """
+    poses, headings, lengths = [], [], []
+    for start, end in zip(chunk, chunk[1:]):
+        span = math.dist(start, end)
+        if not span:
+            continue
+        count = math.ceil(span/step)
+        heading = math.atan2(end[1]-start[1], end[0]-start[0])
+        for k in range(1, count+1):
+            t = k/count
+            poses.append((start[0] + (end[0]-start[0])*t, start[1] + (end[1]-start[1])*t))
+            headings.append(heading)
+            lengths.append(span/count)
+    angles = np.zeros(len(poses))
+    if stock.is_empty or not poses:
+        return angles.tolist(), lengths
+    a, b = [], []
+    for part in polygons(stock):
+        for ring in (part.exterior, *part.interiors):
+            coords = np.asarray(ring.coords)[:, :2]
+            a.append(coords[:-1])
+            b.append(coords[1:])
+    if not a:
+        return angles.tolist(), lengths
+    a, b = np.concatenate(a), np.concatenate(b)
+    delta = (b - a)/radius
+    norm2 = (delta*delta).sum(axis=1)
+    a, delta, norm2 = a[norm2 > 0], delta[norm2 > 0], norm2[norm2 > 0]
+    centres, heading = np.asarray(poses), np.asarray(headings)
+    half = math.pi/2 + np.arcsin(np.minimum(1., np.asarray(lengths)/(2*radius)))
+    # Every sample against every edge at once: where the cutter circle crosses the stock outline.
+    p = (a[None, :, :] - centres[:, None, :])/radius
+    t = -(p*delta[None, :, :]).sum(axis=2)/norm2[None, :]
+    closest = p + t[:, :, None]*delta[None, :, :]
+    h2 = 1. - (closest*closest).sum(axis=2)
+    reach = np.sqrt(np.maximum(0., h2)/norm2[None, :])
+    sample, angle = [np.arange(len(poses)), np.arange(len(poses))], [-half, half]
+    for sense in (-1, 1):
+        at = t + sense*reach
+        on = (h2 >= -1e-12) & (at >= -1e-12) & (at <= 1.+1e-12)
+        rows, cols = np.nonzero(on)
+        q = p[rows, cols] + np.clip(at[rows, cols], 0., 1.)[:, None]*delta[cols]
+        phi = (np.arctan2(q[:, 1], q[:, 0]) - heading[rows] + math.pi) % math.tau - math.pi
+        inside = np.abs(phi) < half[rows]
+        sample.append(rows[inside])
+        angle.append(phi[inside])
+    sample, angle = np.concatenate(sample), np.concatenate(angle)
+    order = np.lexsort((angle, sample))
+    sample, angle = sample[order], angle[order]
+    # Between neighbouring crossings the edge is either all in stock or all out: test the middle.
+    pair = (sample[1:] == sample[:-1]) & (angle[1:] - angle[:-1] > 1e-12)
+    owner, lo, hi = sample[:-1][pair], angle[:-1][pair], angle[1:][pair]
+    middle = heading[owner] + (lo+hi)/2
+    inside = contains_xy(stock, centres[owner, 0] + radius*np.cos(middle), centres[owner, 1] + radius*np.sin(middle))
+    np.add.at(angles, owner[inside], np.degrees((hi-lo)[inside]))
+    return angles.tolist(), lengths
+
+
+def cut(path, stock, radius, sample_step, *, where=None, tally=None, stop_above=None):
     """Sampled peak contact and updated stock; chunked so each replay stays local.
 
     where, if given, receives the distance along the path of the peak sample.
     tally, if given, is [angle x distance, distance, distance in contact] and is added to.
+    stop_above, if given, ends the replay at the first sample over it: the cut is refused
+    anyway, and the returned stock is then not the stock after the cut.
     """
     peak, chunk, length, travelled = 0., [path[0]], 0., 0.
     for i in range(1, len(path)):
@@ -738,7 +883,7 @@ def cut(path, stock, radius, sample_step, *, where=None, tally=None):
             xs, ys = zip(*chunk)
             reach = radius + .01
             local = stock.intersection(box(min(xs)-reach, min(ys)-reach, max(xs)+reach, max(ys)+reach))
-            for _, angle, step in indexed_contact(chunk, local, radius, sample_step, SWEEP_SEGMENTS):
+            for angle, step in zip(*chunk_contact(chunk, local, radius, sample_step)):
                 travelled += step
                 if tally is not None:
                     tally[0] += angle*step
@@ -748,13 +893,15 @@ def cut(path, stock, radius, sample_step, *, where=None, tally=None):
                     peak = angle
                     if where is not None:
                         where[:] = [travelled]
+                    if stop_above is not None and peak > stop_above:
+                        return peak, stock
             stock = stock.difference(LineString(chunk).buffer(radius, quad_segs=CUT_SEGMENTS))
             chunk, length = [path[i]], 0.
     return peak, stock
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=False, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -770,11 +917,17 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             contact[k] += tally[k]
 
     refused = {}
+    cleared = [None]  # clearance for the live stock; None until asked for after a wholesale change
+
+    def stock_clear():
+        if cleared[0] is None:
+            cleared[0] = clearance(allowed, stock, radius)
+        return cleared[0]
 
     def commit(kind, path, stepover, peak):
         """Join the cut to the previous one through cleared space, else count a retract and rapid."""
         if strokes:
-            route = stay_down_link(clearance(allowed, stock, radius), stock, radius, strokes[-1].points[-1], path[0],
+            route = stay_down_link(stock_clear(), stock, radius, strokes[-1].points[-1], path[0],
                                   why=refused)
             if route is None:
                 travel['rapids'] += 1
@@ -805,12 +958,14 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         """
         nonlocal stock
         start, passes, arcs, blocked = 0, 0, 0, False
+        own_clear = clearance(allowed, own, radius)
+        steady, since, patience = 0, 0, RAISE_PATIENCE  # stepover level in use; passes at it; passes to wait
         # focus is the middle of the front last cut. Where it is given, that front is followed until it
         # is finished; elsewhere the front nearest the cutter goes next, which keeps links short and
         # measured better on the L-shape, cross and square with a boss.
         follow = focus is not None
         while not out_of_time():
-            parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
+            parts = [g for g in polygons(own_clear) if g.area > 1e-6]
             if not parts:
                 break
             part = min(parts, key=lambda g: g.distance(Point(centre)))
@@ -853,7 +1008,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         trial, done = stock, []
                         for piece in pieces:
                             at, tally = [], [0., 0., 0.]
-                            peak, after = cut(piece, trial, radius, sample_step, where=at, tally=tally)
+                            peak, after = cut(piece, trial, radius, sample_step, where=at, tally=tally, stop_above=limit)
                             if peak > limit:
                                 done = None
                                 if trace is not None:
@@ -887,9 +1042,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     for piece, peak, tally in done:
                         commit('front', piece, stepover, peak)
                         count(tally)
+                    if done:
+                        trial = without_slivers(trial)
+                        cleared[0] = grow_clearance(stock_clear(), allowed, trial, path, radius)
                     stock = trial
                     before = own.area
                     own = sweep(path, own, radius)
+                    own_clear = grow_clearance(own_clear, allowed, own, path, radius)
                     # A pass through air counts only if it moved the front on; otherwise it would repeat for ever.
                     moved = bool(done) or before - own.area > MIN_GAIN_MM2
                     progressed = progressed or moved
@@ -907,7 +1066,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 if not failed or out_of_time():
                     break
                 zone = unary_union(failed).buffer(max(1., 2*stepover))
-                parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
+                parts = [g for g in polygons(own_clear) if g.area > 1e-6]
                 part = min(parts, key=lambda g: g.distance(Point(centre)))
             if not progressed:
                 if focus is None:
@@ -915,7 +1074,20 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 focus = None  # The front being followed cannot be cut at all: give every front a turn.
                 continue
             passes += used is not None
-            start = max(0, (start if used is None else used)-1)
+            # Try a larger stepover again only now and then. A front that takes 0.5 mm but not 0.65 mm
+            # would otherwise have every pass replayed twice, once to be refused.
+            if used is not None:
+                if used < steady:
+                    steady, since, patience = used, RAISE_PATIENCE, RAISE_PATIENCE  # It took more: try more again at once.
+                elif used > steady:
+                    steady, since, patience = used, RAISE_PATIENCE, RAISE_PATIENCE  # Dropped: climb back without waiting.
+                elif start < steady and stepovers[steady] < STEADY_STEPOVER:
+                    since = patience  # A thin peel: keep trying for a thicker one every pass.
+                elif start < steady:
+                    since, patience = 0, min(2*patience, RAISE_PATIENCE_MAX)  # The larger one was refused: wait longer.
+                else:
+                    since += 1
+            start = max(0, steady-1) if since >= patience else steady
         return passes, arcs, blocked
 
     front_passes, any_blocked = 0, False
@@ -927,12 +1099,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             continue
         centre = tuple(entry.points[-1, :2])
         stock, own = entry.remaining, alone.remaining
+        cleared[0] = None
         reach = Point(centre).distance(wall) - 1e-3
         island = {'centre_xy_mm': centre, 'radius_mm': reach}
         chosen = None
         for stepover in stepovers:
             probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
-            if cut(probe, stock, radius, sample_step)[0] <= limit:
+            if cut(probe, stock, radius, sample_step, stop_above=limit)[0] <= limit:
                 chosen = stepover
                 break
         if chosen is not None:
@@ -945,6 +1118,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 commit('spiral', path, chosen, peak)
                 count(tally)
                 stock, own = trial, sweep(path, own, radius)
+                cleared[0] = None
         focus = None
         if len(seeds) == 1 and peak <= limit if chosen is not None else False:
             one_way = round_a_boss(centre, reach, rings, radius)
@@ -961,17 +1135,20 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         any_blocked = any_blocked or blocked
         island_reports.append(island)
 
-    # Optional wall profile: follow the pocket wall to take whatever the arc ends left on it.
+    # Finish: follow the pocket wall only where stock is still on it, such as the skin the last front
+    # of a channel leaves because no later front sweeps back over it. Clean wall is not passed again.
     profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.,
                'reachable_stock_before_mm2': stock.intersection(reachable).area}
     for inset in ((.3, 0.) if wall_profile else ()):
+        # Only stock thicker than the wall tolerance sends the cutter back to a wall.
+        thick = stock.buffer(-WALL_TOLERANCE/2, join_style=2).buffer(WALL_TOLERANCE/2, join_style=2)
         for part in polygons(allowed.buffer(-inset) if inset else allowed):
             if part.area < 1e-6:
                 continue
             part = orient(part, sign=-1.)
             for ring in (part.exterior, *part.interiors):
                 dense = list(segmentize(LineString(ring.coords), .1).coords)
-                for whole in cutting_pieces(dense, stock, radius, run_out=1.5, closed=True):
+                for whole in cutting_pieces(dense, thick, radius, run_out=1.5, closed=True):
                     # Judge the wall in short stretches so one tight spot does not refuse the rest.
                     chunks, chunk, length = [], [whole[0]], 0.
                     for q in whole[1:]:
@@ -986,7 +1163,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     for piece in chunks:
                         if restart:
                             # The stretch before was refused, so roll on from cleared space again.
-                            piece = eased(piece, False, clearance(allowed, stock, radius), allowed, 1.5,
+                            piece = eased(piece, False, stock_clear(), allowed, 1.5,
                                           ends=(True, False))
                             if len(piece) < 2:
                                 continue
@@ -1007,6 +1184,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                             commit('profile', piece, inset, peak)
                             profile['pieces'] += 1
                         stock = trial
+                        cleared[0] = None
                         count(tally)
                         profile['feed_mm'] += LineString(piece).length
 
@@ -1085,7 +1263,7 @@ if __name__ == '__main__':
                         help='one island per lobe, spread along the long axis, or the widest remaining spots')
     parser.add_argument('--no-wall-pull-back', action='store_true',
                         help='roll arcs off before the wall instead of following it back')
-    parser.add_argument('--wall-profile', action='store_true', help='finish with a pass along the pocket wall')
+    parser.add_argument('--no-wall-finish', action='store_true', help='skip the finish along wall that still has stock on it')
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
     args = parser.parse_args()
@@ -1095,7 +1273,7 @@ if __name__ == '__main__':
     else:
         fixture, _ = neck_fixture()
     result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement,
-                          wall_pull_back=not args.no_wall_pull_back, wall_profile=args.wall_profile, time_budget=args.time_budget,
+                          wall_pull_back=not args.no_wall_pull_back, wall_profile=not args.no_wall_finish, time_budget=args.time_budget,
                           sample_step=args.sample_step)
     if args.review_gcode is not None:
         write_review(args.review_gcode, fixture, *result)
