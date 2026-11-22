@@ -27,7 +27,7 @@ from tools.hsm_center_regions import CENTER_BUFFER_SEGMENTS, center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_replay_overlay import write_overlay
 
-STEPOVERS = (1., .8, .65, .5, .4, .3, .2, .12)
+STEPOVERS = (1., .8, .65, .5, .45, .4, .35, .3, .25, .2, .15, .12)
 SWEEP_SEGMENTS = 16
 CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true disc
 WALL_TOLERANCE = .02

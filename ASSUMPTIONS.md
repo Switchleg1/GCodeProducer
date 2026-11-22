@@ -162,3 +162,4 @@
   with a boss (8 against 6.5 mm); an evenly wide ring still gets one start. Untuned on other boss shapes.
 - A bow crosses square to the mean heading of the two walls it meets; checked on straight slots (unchanged), a ring and a
   square with a boss.
+- Stepover levels below 0.5 mm are 0.05 mm apart. Finer levels cost compute only on refused cuts; not tried finer.

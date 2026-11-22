@@ -68,8 +68,10 @@ the cut.
 7. **Stepover.** Each cut is replayed against the live stock and its contact
    angle is sampled every 0.1 mm. A cut over the contact limit (60° by default)
    is refused and retried at the next smaller stepover, near the failure only:
-   1.0, 0.8, 0.65, 0.5, 0.4, 0.3, 0.2 and 0.12 mm. Nothing over the limit is
-   kept.
+   1.0, 0.8, 0.65, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15 and 0.12 mm.
+   Nothing over the limit is kept. Below 0.5 mm the steps are 0.05 mm apart,
+   so a cut that just misses at one step loses little at the next; with
+   0.1 mm steps the slot and ring jumped between 0.4 and 0.2 mm passes.
 8. **Links.** Cuts are joined by stay-down feed moves through space already
    cleared, routed along the edge of the cleared region and pulled taut. Every
    link is checked to keep the whole cutter clear of the live stock. The
@@ -123,22 +125,24 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.2 or later.
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.5.
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts |
 |---|---|---|---|---|---|---|
-| Two-lobe neck fixture | 187 | 0 | 2.6 mm² | 9,912 mm | 3,884 mm | 2 |
-| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 3,268 mm | 0 | 1 |
-| Rectangle 60×30 | 85 | 1 | 11.8 mm² | 4,124 mm | 1,709 mm | 2 |
-| L-shape | 143 | 10 | 8.3 mm² | 3,989 mm | 3,195 mm | 1 |
-| Cross | 177 | 7 | 15.5 mm² | 3,671 mm | 2,667 mm | 1 |
-| Slot 80×12 | 187 | 11 | 9.5 mm² | 2,771 mm | 1,497 mm | 2 |
-| Square with a 16 mm boss (4 starts) | 238 | 0 | 8.9 mm² | 5,091 mm | 2,551 mm | 5 |
-| Ring, 48 mm across with a 20 mm boss (stopped at 900 s) | 437 | 194 | 5.2 mm² | 5,622 mm | 10,717 mm | 1 |
+| Two-lobe neck fixture | 192 | 0 | 2.2 mm² | 9,240 mm | 4,129 mm | 2 |
+| Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 2,919 mm | 0 | 1 |
+| Rectangle 60×30 | 93 | 5 | 8.1 mm² | 3,846 mm | 1,911 mm | 2 |
+| L-shape | 141 | 6 | 7.9 mm² | 3,839 mm | 3,153 mm | 1 |
+| Cross | 178 | 13 | 14.6 mm² | 3,508 mm | 2,954 mm | 1 |
+| Slot 80×12 | 168 | 12 | 9.4 mm² | 2,516 mm | 1,245 mm | 2 |
+| Square with a 16 mm boss (4 starts) | 244 | 8 | 6.2 mm² | 4,849 mm | 3,071 mm | 5 |
+| Ring, 48 mm across with a 20 mm boss | 411 | 102 | 1.4 mm² | 5,308 mm | 9,663 mm | 1 |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
-contact is 39.6° and almost every front uses a 0.4–0.65 mm stepover. In the
-slot the bows settle at a 0.4 mm stepover with a steady 56° peak. The square
+contact is 40.9° and almost every front uses a 0.45–0.65 mm stepover. In the
+slot 115 of 168 bows run at 0.45 mm. The finer steps cut every shape's cutting
+distance by 3–11 % against 0.2.4, and halved the ring's small arcs (194 → 102);
+the two-lobe fixture now takes 103 s a depth instead of 221 s. The square
 with a boss went from one start (162 of 351 arcs at 0.2 mm or less, 7,433 mm
 cutting, 10,908 mm links) to four; crossing square to the walls then took
 its last small arcs away (14 → 0) and cut links to 2,551 mm. All shapes except the ring now hold an
@@ -151,9 +155,11 @@ again on links.
   cutting. The fronts keep the U shape of the spiral all the way round: a
   straight bow across the U cuts too deep in the middle (90–100°), and hooks
   along the U meet stock inside corners where earlier passes met, so most
-  passes fall to 0.2–0.3 mm. Tried and not adopted: refusing bows that stand
+  passes fall to 0.25–0.35 mm. Two or four starts round the ring cut links
+  to 6.2 or 3.0 m but not the small arcs. Tried and not adopted: refusing bows that stand
   out beyond the front, stopping wall runs where the cleared area only touches
-  the wall, bows flattened to a set depth, and fronts with their corners opened.
+  the wall, bows flattened to a set depth, and fronts with their corners opened
+  (one cutter radius: ring 194 → 171 small arcs, but the two-lobe fixture 0 → 17).
 - **Channels**: the first few bows after a spiral, the end of a channel, and
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to

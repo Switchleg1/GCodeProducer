@@ -292,7 +292,7 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     for before, link in zip(strokes, strokes[1:]):
         if link.kind == 'link':
             assert link.points[0] == before.points[-1]
-    assert report['spiral_feed_mm'] > .35*report['cut_feed_mm']
+    assert report['spiral_feed_mm'] > .3*report['cut_feed_mm']  # 0.45 mm spiral since finer stepovers
     allowed = unary_union(center_regions(pocket, 2.)).buffer(2e-3)
     assert all(allowed.covers(LineString(stroke.points)) for stroke in strokes)
     assert clearance(allowed, residual, 2.).area > .9*allowed.area

@@ -624,6 +624,7 @@ shaped it, each prompted by reviewing a preview:
 | One bow across narrow parallel channels | In the 80×12 slot, two hooks on each short arc dug in (110°+) | Slot: arcs at 0.2 mm or less 176 → 11, cutting 3,672 → 2,771 mm |
 | A start at each wider spot round a boss | One corner start sent fronts both ways round the boss to fan out at its corners | Boss: arcs at 0.2 mm or less 162 → 14, links 10,908 → 3,312 mm |
 | Bow crossing square to both walls | The crossing followed the slant of the front and drifted round curves | Boss: arcs at 0.2 mm or less 14 → 0, links 3,312 → 2,551 mm; ring unchanged (194 of 437) |
+| Stepovers 0.05 mm apart below 0.5 mm | A cut that just missed 0.4 mm fell to 0.3 or 0.2 mm | Cutting distance −3 to −11 % on every shape; ring small arcs 194 → 102; two-lobe 221 → 103 s |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,
