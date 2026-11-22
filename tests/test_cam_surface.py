@@ -207,30 +207,44 @@ def test_waterfall_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     assert_program_clear(job.program)
 
 
-def test_waterfall_can_follow_the_slope_down_between_depths(libset):
+def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
     flat, _ = surface_job(libset)
     generate(flat, StageContext())
     job, op = surface_job(libset, follow_surface=True)
     ctx = StageContext()
     generate(job, ctx)
-    assert any("surface-following passes between depths" in message for message in ctx.messages)
+    assert any("paths follow the surface up to the depth above" in message for message in ctx.messages)
+    # The same depths, and a lower one where only riding up the slope reaches; no extra passes in between.
+    assert {l.z for l in flat.layers} <= {l.z for l in job.layers} and len(job.layers) <= len(flat.layers) + 1
     assert_clear_of_model(job)
-    levels = sorted({layer.z for layer in flat.layers}, reverse=True)
-    following = [layer for layer in job.layers if all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
-    assert following and len(job.layers) == len(flat.layers) + len(following)
-    for layer in following:
-        z = np.concatenate([np.asarray(p.points)[:, 2] for p in layer.paths])
-        assert z.min() >= -10 - 1e-6 and z.max() < max(levels) + 1e-6  # The last follows down to the floor.
-        # Within one band: above the next depth, below the flat depth just cut.
-        band = [v for v in levels if v >= z.max() - 1e-6]
-        assert band and z.max() <= min(band) + 1e-6
-        for p in layer.paths:  # Each piece runs down the slope from its high end, for its lead.
-            q = np.asarray(p.points)
-            assert q[0, 2] >= q[-1, 2] - 1e-6
+    levels = [layer.z for layer in job.layers]
+    lifted_levels = 0
+    for layer, above in zip(job.layers, [0.] + levels[:-1]):
+        lifted = [np.asarray(p.points) for p in layer.paths if np.asarray(p.points).shape[1] == 3]
+        if not lifted:
+            continue
+        lifted_levels += 1
+        z = np.concatenate([q[:, 2] for q in lifted])
+        assert z.min() >= layer.z - 1e-6 and z.max() <= above + 1e-6 and z.max() > layer.z + .1
+    assert lifted_levels and any(np.asarray(p.points).shape[1] == 3 for p in job.layers[0].paths)  # From the first.
+    # Reaching up the slope at each depth also reaches further than the flat depth did.
+    reach = {layer.z: min(float(np.asarray(p.points)[:, 0].min()) for p in layer.paths) for layer in job.layers}
+    flat_reach = {layer.z: min(float(np.asarray(p.points)[:, 0].min()) for p in layer.paths) for layer in flat.layers}
+    assert all(reach[z] <= x + 1e-6 for z, x in flat_reach.items()) and any(reach[z] < x - .5 for z, x in flat_reach.items())
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
     restored = CAMSetup.from_dict(job.cam_setup.to_dict()).groups[0].operations[0]
     assert restored.follow_surface
+
+
+@pytest.mark.parametrize("strategy", ["raster_x", "adaptive"])
+def test_waterfall_varying_its_depth_works_with_every_clearing_strategy(libset, strategy):
+    job, op = surface_job(libset, follow_surface=True, strategy=strategy)
+    generate(job, StageContext())
+    assert_clear_of_model(job)
+    assert any(np.asarray(p.points).shape[1] == 3 for layer in job.layers for p in layer.paths)
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert_program_clear(job.program)
 
 
 def test_flat_pocket_and_legacy_surface_stop_migration(libset):

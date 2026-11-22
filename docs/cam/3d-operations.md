@@ -63,25 +63,27 @@ cutter-accessible region**, not just one contour along its wall.
    Stock to leave is kept on the part only: where the selection reaches the
    blank edge, the cutter edge still meets that edge (plus the material boundary
    limit), so roughing leaves no wall of raw stock around the blank.
-4. Optionally tick **Follow the surface between depths** (below). Generate
+4. Optionally tick **Follow the surface within each depth** (below). Generate
    and inspect each depth and the calculated material outputs.
 
-### Follow the surface between depths
+### Follow the surface within each depth
 
-A flat depth leaves the slopes as steps: where the model rises between one
-depth and the next, the next depth cannot reach the material above it. With
-**Follow the surface between depths** ticked, each flat depth is followed by
-a 3D pass that traces the model (plus stock to leave) down toward the next
-depth, only where the model lies between the two: never at or above the
-depth just cut, never below the next one (after the last depth, never below
-End). Each trace runs from its highest point down the slope, so its lead can
-ramp in from the cleared depth above; lines run along X with a lift between
-them, at the operation's stepover. On the Mini Yoda (4 mm endmill, 2 mm
-depths, 1 mm stock to leave) the material left above the model after the
-Waterfall fell from 3,205 to 1,577 mm³, for 447 s more machining (622 to
-1,069 s estimated) and 15 s more compute. Material left at a vertical wall or
-under an overhang is unchanged; the passes reach only what a flat cutter can
-reach from above.
+A flat depth stops at the model's shadow and leaves the slope above it as a
+step; on the first depth that is the whole slope between the top of the
+material and that depth. With **Follow the surface within each depth**
+ticked, each depth also works the area that was free at the depth above (the
+material top for the first one). Its paths are planned as usual, then every
+point rides at the model's height (plus stock to leave) under the cutter
+where that is above the current depth, up to the depth above: never below
+the current depth, never above the one before. Paths that stay flat are
+unchanged; a lifted closed contour is opened at its highest point so its
+lead ramps in down the slope. Lifted paths are 3D moves, so they are entered
+and linked like 3D Contour paths rather than with stay-down links. On the
+Mini Yoda (4 mm endmill, 2 mm depths, 1 mm stock to leave, wall-parallel
+contours) the material left above the model after the Waterfall fell from
+3,205 to 1,931 mm³, for 147 s more machining (622 to 769 s estimated) and
+18 s more compute. A wall that is vertical or overhangs is unchanged: a flat
+cutter cannot reach it from above.
 
 Nested selected outlines alternate between boundary and island. Overlapping
 outlines merge. Exact projected upper triangles protect overhangs; undercuts

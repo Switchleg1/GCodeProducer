@@ -74,7 +74,7 @@ def waterfall_paths(shadow, allowed, radius, allowance, direction):
 
 
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
-                   strategy="meander", *, simplifier=None, above_floor=False):
+                   strategy="meander", *, simplifier=None):
     """Depth-clamped XYZ rasters, as meander or independent X/Y cutting lines.
 
     Meander alternates along the longer side and joins neighbouring passes
@@ -82,9 +82,7 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
     raster lines run in one direction and retract between cutting lines.
     Stretches where the cutter would sit at or above ``ceiling`` (it rests on
     material that is not being machined, e.g. the top face beside a wall) are
-    left out instead of being traced in the air. With ``above_floor`` the
-    stretches where the cutter would sit on the floor are left out too, so
-    only the slopes between floor and ceiling are traced.
+    left out instead of being traced in the air.
     """
     if region.is_empty or spacing <= 0:
         return []
@@ -126,8 +124,6 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
                 ends = ends[::-1]
             whole = sample(ends[0], ends[1])
             below = whole[:, 2] < ceiling-1e-6
-            if above_floor:
-                below &= whole[:, 2] > floor+1e-6
             edges = np.flatnonzero(np.diff(np.r_[False, below, False].astype(int)))
             for first, last in zip(edges[::2], edges[1::2]):
                 run = whole[first:last]
@@ -140,7 +136,7 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
                     link = LineString((current[-1][:2], run[0, :2]))
                     if link.length <= 2.5*spacing+1e-9 and cover.covers(link):
                         bridge = sample(current[-1][:2], run[0, :2])
-                        if np.all(bridge[:, 2] < ceiling-1e-6) and (not above_floor or np.all(bridge[:, 2] > floor+1e-6)):
+                        if np.all(bridge[:, 2] < ceiling-1e-6):
                             current = np.vstack((current, bridge[1:-1], run))
                             continue
                     paths.append(current)

@@ -268,9 +268,9 @@ class CAMEditor(QWidget):
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
-        self.follow_surface = QCheckBox("Follow the surface between depths")
-        self.follow_surface.setToolTip("3D Waterfall: after each depth, trace the model surface down to the next depth where "
-                                       "that depth cannot reach, so the slopes are not left as steps. Adds 3D passes.")
+        self.follow_surface = QCheckBox("Follow the surface within each depth")
+        self.follow_surface.setToolTip("3D Waterfall: each depth also works the area up to the depth above, riding up the "
+                                       "model surface instead of stopping at it, so slopes are not left as steps.")
         self.follow_surface.toggled.connect(self._edit)
         form.addRow(self.follow_surface)
         self.feed_controls = {}

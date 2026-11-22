@@ -26,7 +26,23 @@ class WaterfallGenerator(OperationGenerator):
         free = free.buffer(0)
         return free, active
 
-    def plan_ahead(self, run, region, limit, surface_top, planning, edge=None):
+    def level_free(self, run, region, limit, z, above, planning, edge=None, follow=None):
+        """(free region, active tabs) of the depth at ``z``.
+
+        Following the surface, the depth works the area free at the depth
+        above: where the model rises between the two depths the cutter rides up
+        it instead of stopping at its shadow (see lift).
+        """
+        free, active = self.free_at(run, region, limit, z, planning, edge)
+        if follow is None or above <= z+1e-6:
+            return free, active
+        from shapely.ops import unary_union
+        wider, _ = self.free_at(run, region, limit, above, planning, edge)
+        if active:
+            wider = wider.difference(unary_union(active))
+        return wider.union(free).buffer(0), active
+
+    def plan_ahead(self, run, region, limit, surface_top, planning, edge=None, follow=None):
         """Adaptive clearing: plan every depth at once, in worker processes; {z: (material, plan)}.
 
         A depth's plan needs only that depth's free region and the material there,
@@ -37,12 +53,13 @@ class WaterfallGenerator(OperationGenerator):
         op = run.op
         if op.strategy != 'adaptive' or run.count < 2:
             return {}
-        jobs = []
+        jobs, above = [], run.start
         for i in range(run.count):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, active = self.free_at(run, region, limit, z, planning, edge)
+            free, active = self.level_free(run, region, limit, z, above, planning, edge, follow)
+            above = z
             if active or free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
                 continue
             jobs.append((z, free, planning.material.planar_at(z), min(run.step, run.start-z)))
@@ -51,12 +68,13 @@ class WaterfallGenerator(OperationGenerator):
         plans = plan_levels(op, [(free, material, step) for _, free, material, step in jobs], run.diameter)
         return {z: (material, plan) for (z, _, material, _), plan in zip(jobs, plans)}
 
-    def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None):
+    def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None, above=None, follow=None):
         """(free region, areas) the cutter can clear at ``z``."""
         from gcodeproducer.core.cam.paths import machining_areas
         from .pocket_generator import pocket_paths
         op = run.op
-        free, active = self.free_at(run, region, limit, z, planning, edge)
+        free, active = self.level_free(run, region, limit, z, run.start if above is None else above,
+                                       planning, edge, follow)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
@@ -81,6 +99,7 @@ class WaterfallGenerator(OperationGenerator):
     def generate(self, run, selection, planning):
         from shapely.geometry import box
         from shapely import BufferJoinStyle
+        import numpy as np
         from gcodeproducer.core.cam.engagement import plan_engagement
         from gcodeproducer.core.cam.planner.pass_scheduler import drop_air_paths
         from .clearing_region import apply_overcut, clearing_part_section, validate_overcut
@@ -110,21 +129,25 @@ class WaterfallGenerator(OperationGenerator):
             edge = None if edge.is_empty else edge
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
-        produced = reachable = slopes = 0
-        follow = (self.follow_setup(run, region if limit is None else region.intersection(limit), planning)
-                  if op.follow_surface else None)
-        ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge)
+        produced = reachable = lifted = 0
+        follow = self.follow_setup(run, region, planning) if op.follow_surface else None
+        ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge, follow)
+        above = run.start
         for i in range(run.count):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, areas = self.level_paths(run, region, limit, z, planning, edge, ahead)
+            free, areas = self.level_paths(run, region, limit, z, planning, edge, ahead, above, follow)
+            ceiling, above = above, z
             if areas is None:
                 ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
                 continue
             reachable += len(areas)
             remaining = material.planar_at(z)
             for ai, planned in enumerate(areas):
+                if follow is not None:
+                    planned = [self.lift(path, z, ceiling, follow, run) for path in planned]
+                    lifted += sum(np.asarray(path.points).shape[1] == 3 for path in planned)
                 planned[0].stay_down, planned[0].stay_down_from = False, None
                 # Adaptive paths were planned against this same material and only cut where it is;
                 # checking them for air again would buffer every long chain for nothing.
@@ -136,8 +159,6 @@ class WaterfallGenerator(OperationGenerator):
                 material.remove_planar(planned, z, run.radius)
                 run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
                 produced += 1
-            if follow is not None and not planning.debug_partial:
-                slopes += self.follow_down(run, follow, z, i, planning)
             if planning.debug_partial:
                 break
         if not produced and reachable:
@@ -148,59 +169,55 @@ class WaterfallGenerator(OperationGenerator):
                              f"from Z{run.start:g} to Z{run.end:g}. Check that End Z is below the surface to machine "
                              "(link it to a lower edge/face) and that the cutter fits.")
         ctx.log(f"  {op.name}: 3D Waterfall limited by the model surface, {produced} area/depth passes, "
-                f"Z{run.start:g} to Z{run.end:g}" + (f"; {slopes} surface-following passes between depths" if follow else ""))
+                f"Z{run.start:g} to Z{run.end:g}" + (f"; {lifted} paths follow the surface up to the depth above"
+                                                      if follow else ""))
 
     @staticmethod
     def follow_setup(run, region, planning):
-        """(drop-height grid, tab floors, simplifier) for following the model between depths."""
+        """(drop-height grid, tab floors) for following the model within each depth."""
         import math
         from shapely.geometry import box
-        from gcodeproducer.core.cam.surface_simplifier import SurfaceSimplifier
-        from gcodeproducer.core.settings.preferences import pref
         from .surface_common import drop_surface
-        surface = drop_surface(run, region, planning)
+        surface = drop_surface(run, region.buffer(run.radius), planning)
         floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(run.radius+run.op.stock+surface.resolution),
                    math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in planning.tabs]
-        return surface, floors, SurfaceSimplifier(float(pref(planning.job, "cam_surface_tolerance"))), region
+        return surface, floors
 
-    def follow_down(self, run, follow, z, i, planning):
-        """After the flat pass at ``z``: XYZ passes that follow the model down toward the next depth.
+    @staticmethod
+    def lift(path, z, ceiling, follow, run):
+        """The path with its depth varied: at ``z``, raised over the model (plus stock to leave) up to ``ceiling``.
 
-        Where the model slopes, the next depth cannot reach the material
-        between this depth and the model, and a flat pass leaves it as a step.
-        These passes trace the model (plus stock to leave) only where it lies
-        between this depth and the next one, never below the next depth and
-        never at or above this one, so they cut that step down to the surface.
-        Returns the number of passes added.
+        A flat depth stops at the model's shadow and leaves the slope above it
+        as a step. Working the area free at the depth above instead, each point
+        rides at the model's height under the cutter where that is above this
+        depth, so the step is cut down to the surface in the same pass. Paths
+        that stay flat are returned unchanged; a lifted closed contour is opened
+        at its highest point so its lead ramps in down the slope.
         """
-        from gcodeproducer.core.jobs.path import Path
         import numpy as np
-        from gcodeproducer.core.cam.surface_paths import surface_raster
-        from .operations_constants import FOLLOW_MIN_LENGTH
-        surface, floors, simplifier, region = follow
-        op = run.op
-        floor = run.depth(i+1) if i+1 < run.count else run.end
-        if floor >= z-1e-6:
-            return 0
-        lines = surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, floor, op.stock,
-                               planning.ctx.log, floors, z, "raster_x", simplifier=simplifier, above_floor=True)
-        if not lines:
-            return 0
-        # Each line is cut from its highest point down the slope both ways, so each piece's lead can
-        # ramp in along it from the cleared depth just above; a line climbing away from its start
-        # leaves a ramp no room above the surface.
-        pieces = []
-        for p in lines:
-            top = int(np.argmax(p[:, 2]))
-            pieces.extend(q for q in (p[:top+1][::-1], p[top:]) if len(q) >= 2
-                          and float(np.linalg.norm(np.diff(q[:, :2], axis=0), axis=1).sum()) > FOLLOW_MIN_LENGTH)
-        lines = pieces
-        if not lines:
-            return 0
-        low = min(float(p[:, 2].min()) for p in lines)
-        run.add_layer(planning, [Path("cut", p, width=run.diameter) for p in lines], low, z-floor, 0)
-        return 1
-
+        from shapely import contains_xy, segmentize
+        from shapely.geometry import LineString
+        from gcodeproducer.core.jobs.path import Path
+        from gcodeproducer.core.cam.surface_simplifier import simplify3d
+        surface, floors = follow
+        xy = np.asarray(path.points, float)[:, :2]
+        if len(xy) < 2 or ceiling <= z+1e-6:
+            return path
+        if path.closed:
+            xy = np.vstack((xy, xy[:1]))
+        dense = np.asarray(segmentize(LineString(xy), surface.resolution).coords)[:, :2]
+        height = surface.heights(dense, run.radius) + run.op.stock
+        for area, roof in floors:   # retained material (holding tabs): never below its top
+            height = np.where(contains_xy(area, dense[:, 0], dense[:, 1]), np.maximum(height, roof), height)
+        depth = np.clip(height, z, ceiling)
+        if depth.max() <= z+1e-6:
+            return path
+        points = np.column_stack((dense, depth))
+        if path.closed:
+            top = int(np.argmax(points[:-1, 2]))
+            points = np.vstack((points[top:-1], points[:top+1]))
+        lifted = Path(path.feature, simplify3d(points), width=path.width, speed=path.speed)
+        return lifted
 
 def _same(one, other):
     """Two material regions (or None) are the same, to well under a square micron."""

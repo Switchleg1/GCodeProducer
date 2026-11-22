@@ -52,7 +52,7 @@ def run(path, settings, library, strategy, follow_surface=None):
                 op['strategy'] = strategy
             if follow_surface is not None and op.get('kind') == 'waterfall':
                 op['follow_surface'] = follow_surface
-                changed.append(f"{op.get('name')}: follow the surface between depths {'on' if follow_surface else 'off'}")
+                changed.append(f"{op.get('name')}: follow the surface within each depth {'on' if follow_surface else 'off'}")
     setup = CAMSetup.from_dict(copy.deepcopy(data))
     placement_raw = placement_raw or settings.value(model_key('placement_cam', path))
     placement = Placement.from_dict(json.loads(placement_raw)) if placement_raw else Placement()
@@ -115,7 +115,7 @@ def main():
     parser.add_argument('model', help='model file the CAM setup was saved for, or "session" for the current work session')
     parser.add_argument('--strategy', action='append', default=[],
                         help='clearing strategy to try (repeatable); "saved" keeps the saved one')
-    parser.add_argument('--follow-surface', choices=('on', 'off'), help='override Waterfall "Follow the surface between depths"')
+    parser.add_argument('--follow-surface', choices=('on', 'off'), help='override Waterfall "Follow the surface within each depth"')
     args = parser.parse_args()
     settings = QSettings('GCodeProducer', 'GCodeProducer')
     library = LibrarySet().load()

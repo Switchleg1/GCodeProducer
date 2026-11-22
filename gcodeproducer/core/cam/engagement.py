@@ -171,7 +171,8 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         return mode not in ('climb', 'conventional') or condition.hand in (mode, 'air', 'neutral')
 
     for path in paths:
-        p = np.asarray(path.points, float)
+        full = np.asarray(path.points, float)
+        p = full[:, :2]  # measured in plan; a path that follows the surface keeps its own Z
         path.link_condition = None
         if path.stay_down and (previous is None or path.stay_down_from is None or
                                not np.allclose(previous, path.stay_down_from, atol=1e-7, rtol=0)):
@@ -216,8 +217,9 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             reverse = (desired == "climb" and vote < 0) or (desired == "conventional" and vote > 0)
             # A spiral must enter at its already chosen inner start, not run wall-in.
             if reverse and not spiral:
-                p = np.vstack((p[0], p[:0:-1])) if path.closed else p[::-1].copy()
-                path.points = p
+                full = np.vstack((full[0], full[:0:-1])) if path.closed else full[::-1].copy()
+                path.points = full
+                p = full[:, :2]
                 if not path.closed:
                     path.stay_down = False
                     path.stay_down_from = None
