@@ -20,8 +20,8 @@ def pocket_paths(op, loops, region, diameter, direction, log=None, **adaptive_op
                       stay_down_from=tuple(linked[i-1][0][0]) if link else None)
                  for i, (p, link) in enumerate(linked)]
     elif strategy == "adaptive":
-        from gcodeproducer.core.cam.adaptive_paths import adaptive_paths
-        return adaptive_paths(op, region, diameter, direction, log, **adaptive_options)
+        from gcodeproducer.core.cam.wavefront import wavefront_paths
+        return wavefront_paths(op, region, diameter, direction, log, **adaptive_options)
     elif strategy in ("raster_x", "raster_y"):
         centre_region = region.buffer(-(diameter/2+op.stock))
         regions = [p for p, _ in boundary_paths(centre_region, direction)]

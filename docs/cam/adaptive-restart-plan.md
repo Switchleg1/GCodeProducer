@@ -69,14 +69,14 @@ complete coverage.
    meet a time target. Report slicing time separately from estimated machine
    time and hardware validation.
 
-**Status:** the application still runs the old generator. Milestones 1 and 2
-have offline tooling: the CamBam replay and contact verifier
-(`tools/check_cambam_pocket.py`, `tools/hsm_contact_replay.py`) and pinned
-fixtures, including `examples/adaptive-neck-pocket.wkt` and the shapes in
-`examples/hsm-shapes/`. FreeCAD was not benchmarked: no reproducible build was
-available. For milestone 3, the replacement under trial is the
-[wavefront](wavefront-clearing.md), which advances from the cleared region
-as planned above. It clears the two-lobe fixture and the open test shapes with
-even peels under the contact limit. Narrow channels and pockets with a boss
-are not yet acceptable, and it has no Z motion, so milestones 4 and 5 have
-not started.
+**Status:** the application runs the [wavefront](wavefront-clearing.md)
+behind Adaptive clearing (milestone 4). Milestones 1 and 2 have offline
+tooling: the CamBam replay and contact verifier (`tools/check_cambam_pocket.py`,
+`tools/hsm_contact_replay.py`) and pinned fixtures, including
+`examples/adaptive-neck-pocket.wkt` and the shapes in `examples/hsm-shapes/`.
+FreeCAD was not benchmarked: no reproducible build was available. Milestone 3
+is met on every test shape: 0.0 mm² left except a slot sliver and a circle
+film, few arcs at the smallest stepovers, checked stay-down links, helices and
+levels. Milestone 5 has a first read-only run on the saved Stormtrooper setup
+(complete, no safety findings) but is not yet faster than wall-parallel
+contours at the same feed; see the guide's known gaps.

@@ -86,6 +86,11 @@ def entry_path(points,closed,distance):
         cycle=np.vstack((p[0],p[:0:-1],p[0]))
     else:
         out=p
+        # Only the first ``distance`` of the path can be walked before turning back, so a long
+        # open path (an adaptive chain of cuts) need not be copied whole into the cycle.
+        run=np.r_[0,np.cumsum(np.linalg.norm(np.diff(out,axis=0),axis=1))]
+        if run[-1]>distance:
+            out=out[:int(np.searchsorted(run,distance))+2]
         cycle=np.vstack((out,out[-2::-1]))          # there and back: ends at p[0] again
     perimeter=float(np.linalg.norm(np.diff(cycle,axis=0),axis=1).sum())
     xy=_repeat_walk(cycle,distance)

@@ -3,6 +3,7 @@ import os
 from types import SimpleNamespace
 import numpy as np
 import pytest
+from shapely.ops import unary_union
 from shapely.geometry import box
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -139,9 +140,10 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
 @pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
 def test_adaptive_incomplete_pass_exports_only_debug_prefix(libset, kind, monkeypatch):
     from copy import deepcopy
-    from gcodeproducer.core.cam import generate, adaptive_paths
+    from gcodeproducer.core.cam import generate
+    from gcodeproducer.core.cam.wavefront import app_paths
     from gcodeproducer.stages.cam_emit import CAMEmit
-    monkeypatch.setattr(adaptive_paths, 'ADAPTIVE_CAM_POINT_LIMIT', 180)
+    monkeypatch.setattr(app_paths, 'WAVEFRONT_LEFT_MM2', -1.)  # Treat any result as incomplete.
     shape = ReferenceShape('rectangle', 'edge', (10, 8), (30, 22), 0)
     job, op = surface_job(libset, kind=kind, refs=[Reference('drawing', [shape.id])],
                           end=Depth('absolute', -2), strategy='adaptive', lead_angle=4.)
@@ -150,8 +152,8 @@ def test_adaptive_incomplete_pass_exports_only_debug_prefix(libset, kind, monkey
     following.name, following.strategy = 'Must not execute', 'contour'
     job.cam_setup.groups[0].operations.append(following)
     generate(job, StageContext())
-    assert len(job.layers) == 1 and len(job.layers[0].paths) == 1
-    assert not job.layers[0].paths[0].closed
+    assert len(job.layers) == 1 and job.layers[0].paths  # Only the first depth: the run stops there.
+    assert job.layers[0].paths[0].closed  # The helix orbit the lead planner ramps on.
     assert any(w.startswith('DEBUG ONLY') for w in job.warnings)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert job.program.to_text().startswith(';DEBUG ONLY')
@@ -166,8 +168,12 @@ def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():
     stock = Point(0, 0).buffer(1)
     op = Operation(kind='waterfall', strategy='adaptive')
     paths = pocket_paths(op, [], area, 3., 'climb', material=stock)
-    assert paths and all(not p.closed for p in paths)
-    assert stock.difference(LineString(paths[0].points).buffer(1.5)).area < 1e-8
+    assert paths and paths[0].closed and not any(p.closed for p in paths[1:])  # Orbit, then stay-down cuts.
+    assert all(p.stay_down and p.stay_down_from == tuple(paths[i].points[-1 if not paths[i].closed else 0])
+               for i, p in enumerate(paths[1:]) if p.stay_down)
+    swept = unary_union([LineString(np.vstack((p.points, p.points[:1])) if p.closed else p.points).buffer(1.5)
+                         for p in paths])
+    assert stock.difference(swept).area < 1e-3
     with pytest.raises(ValueError, match='tab-protected.*No contour fallback'):
         pocket_paths(op, [], area, 3., 'climb', tabs=True)
 

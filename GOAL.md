@@ -14,7 +14,7 @@ Incomplete paths stay debug-only. Do not qualify output for a physical machine.
    proposals: closed and open pockets, rounded and sharp corners, two lobes,
    an off-center island, and previous-tool stock. Use CamBam as a measured
    reference; compare FreeCAD offline if a reproducible build is available.
-3. Offline replacement: the wavefront in `tools/hsm_wavefront.py`
+3. Replacement: the wavefront, `gcodeproducer/core/cam/wavefront/` (offline tool `tools/hsm_wavefront.py`)
    ([guide](docs/cam/wavefront-clearing.md)). It must clear the two-lobe
    fixture and every shape in `examples/hsm-shapes/` with an even peel (few
    arcs at the smallest stepovers) under the contact limit and without a wall

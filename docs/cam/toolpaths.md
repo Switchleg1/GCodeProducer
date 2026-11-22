@@ -8,34 +8,39 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 
 ## Adaptive clearing
 
-Choose **Adaptive clearing** for Pocket or 3D Waterfall. With a flat endmill,
-**Lead-in ramp** and **Stay down between contours** enabled, it plans curved
-peels against a planar stock model. **Adaptive engagement (%)** sets the
-maximum sampled cutter-width engagement (default 18%). It keeps a connected sequence
-and uses the normal CAM lead planner, including the operation’s lead-in angle.
-Waterfall can use the stock left by previous passes; a planar Pocket plans its
-initial geometry from a nominal stock envelope.
+Choose **Adaptive clearing** for Pocket or 3D Waterfall. It needs a flat
+endmill, **Lead-in ramp**, **Stay down between contours** and the **Climb**
+cutting direction. It is planned by the wavefront described in
+[Wavefront clearing](wavefront-clearing.md): a helix and an outward spiral
+at each start, then fronts that grow the cleared area by an even stepover
+into every corner, ending along the walls so that no separate wall pass is
+needed, with corner moves and a finish only where stock is left on a wall.
+Every cut is replayed against the stock and refused if its sampled contact
+angle exceeds the limit; a lighter stepover is tried instead.
 
-There is no peel-count cutoff. The planner keeps peeling until the remaining
-stock can be cleared with finish moves that **all** pass the same engagement
-check in cutting order, with verified stay-down transfers. Finish moves can
-use long straight sides, but abrupt cutting corners get tangent circular
-blends. The planner checks the blended path for containment, engagement and
-coverage before accepting it; it does not retry with sharp corners. A rejected finish
-trial adds no moves. If the search stalls or hits its path-point resource guard
-while coverage is incomplete, the generated prefix is kept for debugging
-and marked **DEBUG ONLY** in Messages and the G-code. It skips subsequent
-depths and operations. Do not run that diagnostic program on a machine.
-If no path can be generated, the error remains. An exhausted local run can
-restart with a separate checked lead-in where a fresh entry fits.
-Tab-protected areas are not supported. The error reports uncovered area and
-the reason for stopping. The sampled-width limit is not a bound on actual
-tool load and does not apply to leads. Qualify depth
-per pass for the actual cutter and setup; do not carry an adaptive depth over
-to a different strategy without reviewing it. See the [design and benchmark](adaptive-clearing-design.md).
+**Adaptive engagement (%)** is the width of a straight cut, as a share of
+the cutter diameter, whose contact angle becomes the limit (default 18 %,
+about 50°). In curves and corners the same angle is reached at a smaller
+stepover, so the average stepover is below this width.
 
-A replacement generator is being developed offline and is not used by the
-application yet; see [Wavefront clearing](wavefront-clearing.md).
+Each stay-down chain of cuts and links is one path. A chain that begins at
+a start leads with one lap of its helix orbit as a closed contour, so the
+normal CAM lead planner ramps down on it at the operation's lead-in angle;
+the chain follows at depth without lifting. Waterfall plans each depth
+from the stock left by earlier passes; a planar Pocket plans one depth from
+the full pocket and repeats it.
+
+Stock the plan cannot reach is never left silently. If more than 0.5 mm²
+of reachable stock is left at a depth, the result is marked **DEBUG ONLY**
+in Messages and the G-code, and later depths and operations are skipped. Do
+not run that diagnostic program on a machine. Tab-protected areas and the
+conventional direction are not supported and give an error. The contact
+angle is not a bound on actual tool load and does not apply to leads.
+Qualify depth per pass and feed for the actual cutter and setup; do not
+carry an adaptive depth over to a different strategy without reviewing it.
+
+The earlier peel-picking generator is kept in the source for reference
+(`adaptive_paths`), with its [design and benchmark](adaptive-clearing-design.md).
 
 ## Wall-parallel contours (default clearing strategy)
 

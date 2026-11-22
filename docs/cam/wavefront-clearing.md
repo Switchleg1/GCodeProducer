@@ -1,13 +1,12 @@
 [Documentation](../README.md) / [CAM](README.md) / [Clearing toolpaths](toolpaths.md)
 
-# Wavefront clearing (offline trial)
+# Wavefront clearing
 
-> **Not in the application.** Choosing **Adaptive clearing** in GCodeProducer
-> still runs the generator described under
-> [Adaptive clearing](toolpaths.md#adaptive-clearing). The wavefront is an
-> offline test tool, `tools/hsm_wavefront.py`. It plans one flat depth of one
-> pocket outline and writes XY-only previews. It has no Z moves, entries,
-> feeds or tool changes. **Never run its output on a machine.**
+> **Adaptive clearing in the application uses this planner** for Pocket and
+> 3D Waterfall (see [Adaptive clearing](toolpaths.md#adaptive-clearing)).
+> The command line tool `tools/hsm_wavefront.py` also writes XY previews and
+> XYZ programs for a viewer; those are marked incomplete and are **never to
+> be run on a machine**.
 
 The wavefront replaces candidate-by-candidate peel picking with one rule:
 grow the area the cutter has already cleared by one stepover, then cut the
@@ -316,11 +315,19 @@ cross still spend most of their cutting distance again on links.
   angle (up to 115°) is reported separately in `corners`, not in
   `peak_contact_deg`. Links grew by 100–300 mm on the square-cornered shapes
   to reach them.
-- **Not built:** allowance, tabs and protected geometry, replay of rounded
-  output coordinates, the application interface, and the waterfall's slices
-  (`clear_depths` takes them as a function of Z, but nothing yet makes them
-  from a model). Each level starts from intact stock even where the level
-  above, in a waterfall, left less.
+- **Not built:** tabs, the conventional direction and replay of rounded
+  output coordinates. In the application, stock to leave is kept from every
+  wall and each Waterfall depth starts from the stock earlier passes left.
+- **Slower than wall-parallel contours at the same feed.** On the saved
+  Stormtrooper setup (3D Waterfall, 4 mm endmill, two depths to Z-2.5, soft
+  wood, cutting at 2,000 mm/min) the application estimates 1,553 s against
+  236 s for wall-parallel contours at 40 % stepover and 495 s for raster
+  lines; all three complete with no safety findings. Per depth the wavefront
+  cuts about 15.5 m (10.3 m of it spirals at three starts) and links about
+  9.4 m, against 3.4 m of contours: at the 18 % limit (about 50°) its
+  average stepover is 0.35–0.4 mm against 1.6 mm. Adaptive clearing pays
+  off with a deeper cut and a feed raised for the thin chip; neither is
+  applied yet. Compute: 151 s against 5 s.
 - The 60° limit and the shape constants (hook radius, overlap, neck ratio) are
   trial values tuned on these shapes only.
 

@@ -274,7 +274,7 @@ depths, so a part that widens below the floor blocks the overcut at that
 width for the whole operation. Invalid STL sections fall back to their convex
 hull, which only ever protects more material.
 
-Not implemented: adaptive constant-engagement clearing, rest machining,
+Not implemented: rest machining,
 automatic rough/finish stock tracking, helical entry or machining from a full
 3D stock-removal simulation. Air-cut removal across operations is described
 in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) and
@@ -298,8 +298,9 @@ uses validated surface links. This motion pattern is distinct from the machine's
 Meander *cutting direction*, which alternates one-sided cutting hands.
 All Contour strategies retain the same depth bands and model protection.
 
-**Adaptive clearing** uses stock-aware curved peels and stops generation
-if it cannot cover the pass without a fallback. See [Adaptive clearing](toolpaths.md#adaptive-clearing).
+**Adaptive clearing** grows the cleared area by an even, contact-checked
+stepover from helical starts and marks the result incomplete if it cannot
+cover the pass. See [Adaptive clearing](toolpaths.md#adaptive-clearing).
 
 Historical captures (the clearing menu predates Adaptive clearing):
 
