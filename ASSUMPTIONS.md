@@ -160,3 +160,5 @@
   Both untuned beyond the seven test shapes.
 - Round a boss a lobe needs to be only 1.15 times wider than the passage beside it (2 elsewhere). Chosen from the square
   with a boss (8 against 6.5 mm); an evenly wide ring still gets one start. Untuned on other boss shapes.
+- A bow crosses square to the mean heading of the two walls it meets; checked on straight slots (unchanged), a ring and a
+  square with a boss.

@@ -175,6 +175,25 @@ def test_bow_needs_a_narrow_channel_with_near_parallel_walls():
         assert (bow is not None) is expected
 
 
+def test_bow_crosses_a_curved_channel_square_to_its_walls():
+    # Regression: the crossing followed the slant of the front, so in a ring (and round the corners of
+    # a boss) each bow ran a little further from square; here the front leans 6 degrees.
+    lo, hi = 12., 22.
+    ring = Point(0, 0).buffer(24, quad_segs=64).difference(Point(0, 0).buffer(10, quad_segs=64))
+    allowed = Point(0, 0).buffer(hi, quad_segs=64).difference(Point(0, 0).buffer(lo, quad_segs=64))
+    rings = [LineString(allowed.exterior.coords), LineString(allowed.interiors[0].coords)]
+    a0, a1 = math.radians(10), math.radians(4)
+    run = [(r*math.cos(a0 + (a1-a0)*(r-lo)/(hi-lo)), r*math.sin(a0 + (a1-a0)*(r-lo)/(hi-lo)))
+           for r in [lo + k*(hi-lo)/20 for k in range(21)]]
+    sector = [(0, 0)] + [(30*math.cos(t), 30*math.sin(t)) for t in [-1 + k*.05 for k in range(int((1+a1-.03)/.05)+1)]]
+    part = Polygon(sector).intersection(allowed)
+    bow = bow_across(run, rings, part, ring.difference(part.buffer(2.)), 2., allowed, 2*2./.7, .75, .75)
+    middle = [q for q in bow if 16 < math.hypot(*q) < 18]
+    off = [abs(math.degrees((math.atan2(q[1]-p[1], q[0]-p[0]) - math.atan2(p[1], p[0]) + math.pi/2) % math.pi - math.pi/2))
+           for p, q in zip(middle, middle[1:])]
+    assert max(off) < 2.  # Radial, not along the 6 degree lean (10 degrees off before).
+
+
 @pytest.mark.parametrize('gap', [0., .7])
 def test_arcs_round_a_disc_that_touches_or_nearly_touches_a_wall_stay_light(gap):
     # Regression: beside a spiral the next front meets the wall almost parallel to it. A hook there ran

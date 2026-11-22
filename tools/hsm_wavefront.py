@@ -543,6 +543,19 @@ def bow_across(path, rings, part, own, radius, allowed, full, overlap, turn):
     ahead, behind = hit(1), hit(-1)
     if ahead is None or behind is None:
         return None
+    # Cross at right angles to the two walls the front spans, not along the front: the front only
+    # lies square to the walls in a straight channel, and following it round a curved one would turn
+    # the crossing a little further from square on every pass.
+    one, other = wall_heading(ahead[2], ahead[1]), wall_heading(behind[2], behind[1])
+    if math.cos(one - other) < 0:
+        other += math.pi
+    tx, ty = math.cos(one) + math.cos(other), math.sin(one) + math.sin(other)
+    if math.hypot(tx, ty) > 1e-9:
+        nx, ny = -ty/math.hypot(tx, ty), tx/math.hypot(tx, ty)
+        hx, hy = (nx, ny) if nx*hx + ny*hy >= 0 else (-nx, -ny)
+        ahead, behind = hit(1), hit(-1)
+        if ahead is None or behind is None:
+            return None
     width = ahead[0] + behind[0]
     skew = wall_heading(ahead[2], ahead[1]) - wall_heading(behind[2], behind[1])
     if width > BOW_WIDTH_FACTOR*full or abs((skew + math.pi/2) % math.pi - math.pi/2) > math.radians(BOW_PARALLEL):

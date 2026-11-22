@@ -44,7 +44,8 @@ the cut.
    - **Crosses as one bow** in a narrow channel whose walls are within 8° of
      parallel and up to about 15 mm apart (for a 4 mm cutter): the cut comes
      in along one wall, curves out across the channel at right angles to the
-     walls, curves onto the other wall tangentially and runs back along it.
+     walls (square to both walls it spans, not along the slant of the front,
+     so curved channels and boss corners do not drift), curves onto the other wall tangentially and runs back along it.
      Every pass is the last one moved on by a stepover. Two separate hooks
      would be tight corners on so short an arc. Where the bow is too heavy,
      as at the mouth of an arm while the front is still curved from the
@@ -132,21 +133,27 @@ rates are not modelled.
 | L-shape | 143 | 10 | 8.3 mm² | 3,989 mm | 3,195 mm | 1 |
 | Cross | 177 | 7 | 15.5 mm² | 3,671 mm | 2,667 mm | 1 |
 | Slot 80×12 | 187 | 11 | 9.5 mm² | 2,771 mm | 1,497 mm | 2 |
-| Square with a 16 mm boss (4 starts) | 249 | 14 | 5.1 mm² | 5,110 mm | 3,312 mm | 5 |
-| Ring, 48 mm across with a 20 mm boss | 430 | 193 | 1.1 mm² | 5,604 mm | 10,710 mm | 1 |
+| Square with a 16 mm boss (4 starts) | 238 | 0 | 8.9 mm² | 5,091 mm | 2,551 mm | 5 |
+| Ring, 48 mm across with a 20 mm boss (stopped at 900 s) | 437 | 194 | 5.2 mm² | 5,622 mm | 10,717 mm | 1 |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
 contact is 39.6° and almost every front uses a 0.4–0.65 mm stepover. In the
 slot the bows settle at a 0.4 mm stepover with a steady 56° peak. The square
 with a boss went from one start (162 of 351 arcs at 0.2 mm or less, 7,433 mm
-cutting, 10,908 mm links) to four. All shapes except the ring now hold an
+cutting, 10,908 mm links) to four; crossing square to the walls then took
+its last small arcs away (14 → 0) and cut links to 2,551 mm. All shapes except the ring now hold an
 even peel; the L-shape and cross still spend most of their cutting distance
 again on links.
 
 ## Known gaps
 
 - **Curved channels** (the ring): uneven peel and twice as much link travel as
-  cutting. The bow assumes straight walls.
+  cutting. The fronts keep the U shape of the spiral all the way round: a
+  straight bow across the U cuts too deep in the middle (90–100°), and hooks
+  along the U meet stock inside corners where earlier passes met, so most
+  passes fall to 0.2–0.3 mm. Tried and not adopted: refusing bows that stand
+  out beyond the front, stopping wall runs where the cleared area only touches
+  the wall, bows flattened to a set depth, and fronts with their corners opened.
 - **Channels**: the first few bows after a spiral, the end of a channel, and
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to
