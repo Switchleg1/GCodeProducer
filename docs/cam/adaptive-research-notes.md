@@ -625,6 +625,8 @@ shaped it, each prompted by reviewing a preview:
 | A start at each wider spot round a boss | One corner start sent fronts both ways round the boss to fan out at its corners | Boss: arcs at 0.2 mm or less 162 → 14, links 10,908 → 3,312 mm |
 | Bow crossing square to both walls | The crossing followed the slant of the front and drifted round curves | Boss: arcs at 0.2 mm or less 14 → 0, links 3,312 → 2,551 mm; ring unchanged (194 of 437) |
 | Stepovers 0.05 mm apart below 0.5 mm | A cut that just missed 0.4 mm fell to 0.3 or 0.2 mm | Cutting distance −3 to −11 % on every shape; ring small arcs 194 → 102; two-lobe 221 → 103 s |
+| One front all the way round a boss (single start) | Two fronts met head-on on the far side in a pinch | Ring: arcs at 0.2 mm or less 102 → 0, cutting 5,308 → 3,982 mm, links 9,663 → 2,272 mm |
+| Bow set back behind a curved front; roll-off allowed at 0.35 mm or below | Straight bow stood out beyond a U-shaped front; no clean wall beside a spiral | Slot small arcs 12 → 4; boss +38 arcs |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,

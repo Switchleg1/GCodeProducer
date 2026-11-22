@@ -7,6 +7,7 @@ from shapely.ops import unary_union
 from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
+                                 round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -173,6 +174,20 @@ def test_bow_needs_a_narrow_channel_with_near_parallel_walls():
         own = pocket.difference(part.buffer(2., join_style=2))
         bow = bow_across(run, rings, part, own, 2., allowed, 2*2./.7, .75, .75)
         assert (bow is not None) is expected
+
+
+def test_spiral_that_spans_a_channel_round_a_boss_sends_one_front_one_way():
+    # Regression: in a ring the two sides of the spiral each sent a front round the boss; they met
+    # head-on on the far side in a pinch of small wobbling cuts (102 of 411 arcs at 0.2 mm or less).
+    ring = Point(25, 25).buffer(22, quad_segs=64).difference(Point(25, 25).buffer(12, quad_segs=64))  # cutter centres
+    rings = [LineString(ring.exterior.coords), LineString(ring.interiors[0].coords)]
+    behind, ahead = round_a_boss((42., 25.), 5. - 1e-3, rings, 2.)
+    assert behind.covers(Point(42, 22.9)) and not behind.covers(Point(42, 23.1))  # A cutter radius behind the centre.
+    assert not behind.covers(Point(42, 30)) and behind.covers(Point(25, 0))
+    assert ahead == pytest.approx((42., 30.), abs=.1)  # The polygon wall makes the nearest point a little off.
+    assert round_a_boss((42., 25.), 3., rings, 2.) is None  # Does not reach both walls.
+    slot = [LineString(box(2, 2, 78, 10).exterior.coords)]
+    assert round_a_boss((20., 6.), 4. - 1e-3, slot, 2.) is None  # Both walls are one ring: nothing to go round.
 
 
 def test_bow_crosses_a_curved_channel_square_to_its_walls():

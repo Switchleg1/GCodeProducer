@@ -40,6 +40,10 @@ GLANCE_TURN = 40.  # degrees turned over a hook's length; more means the arc is 
 GLANCE_REACH = 6.  # mm of wall an arc may run on along before reaching clean wall
 GLANCE_ANGLE = 55.  # degrees; an arc meeting the wall more squarely than this gets a hook
 BOW_WIDTH_FACTOR = 2.6  # a channel narrower than this many full hook trims is crossed in one bow
+BOW_SET_BACKS = 6  # tries at setting a bow back behind a curved front
+BOW_EXCESS = .03  # mm a bow may stand out beyond its front
+ROLL_STEPOVER = .35  # mm; at or below this an arc may roll off before the wall instead of sweeping it
+SPAN_SLACK = .15  # cutter radii by which a spiral may miss the second wall and still span the channel
 BOW_PARALLEL = 8.  # degrees; walls further from parallel than this get separate hooks
 HOOK_SHARE = .45  # share of the channel width each end of a bow may round
 MIN_HOOK_TRIM = .5  # mm; below this an arc end rolls off to the old front instead
@@ -556,19 +560,45 @@ def bow_across(path, rings, part, own, radius, allowed, full, overlap, turn):
         ahead, behind = hit(1), hit(-1)
         if ahead is None or behind is None:
             return None
-    width = ahead[0] + behind[0]
-    skew = wall_heading(ahead[2], ahead[1]) - wall_heading(behind[2], behind[1])
-    if width > BOW_WIDTH_FACTOR*full or abs((skew + math.pi/2) % math.pi - math.pi/2) > math.radians(BOW_PARALLEL):
+    def build():
+        width = ahead[0] + behind[0]
+        skew = wall_heading(ahead[2], ahead[1]) - wall_heading(behind[2], behind[1])
+        if width > BOW_WIDTH_FACTOR*full or abs((skew + math.pi/2) % math.pi - math.pi/2) > math.radians(BOW_PARALLEL):
+            return None
+        trim = min(full, HOOK_SHARE*width)
+        tail = along_wall(rings, ahead[1], part, own, radius, overlap, at_least=trim+overlap)
+        lead = along_wall(rings, behind[1], part, own, radius, overlap, at_least=trim+overlap)
+        if tail is None or lead is None:
+            return None
+        body = fillet([behind[1], (mid.x, mid.y), ahead[1]], tail, trim, shares=(.5, .85))
+        body = fillet(lead[::-1], body, trim, shares=(.85, .5))
+        return (turn_away(lead[-2], lead[-1], allowed, turn)[::-1] + body
+                + turn_away(tail[-2], tail[-1], allowed, turn))
+
+    bow = build()
+    if bow is None:
         return None
-    trim = min(full, HOOK_SHARE*width)
-    tail = along_wall(rings, ahead[1], part, own, radius, overlap, at_least=trim+overlap)
-    lead = along_wall(rings, behind[1], part, own, radius, overlap, at_least=trim+overlap)
-    if tail is None or lead is None:
-        return None
-    body = fillet([behind[1], (mid.x, mid.y), ahead[1]], tail, trim, shares=(.5, .85))
-    body = fillet(lead[::-1], body, trim, shares=(.85, .5))
-    return (turn_away(lead[-2], lead[-1], allowed, turn)[::-1] + body
-            + turn_away(tail[-2], tail[-1], allowed, turn))
+    # The crossing is straight; a front still curved from a spiral is not. Through the middle of such
+    # a front the crossing would stand out beyond it beside the walls and cut far deeper there. Set it
+    # back until it is nowhere further from cleared ground than the front: it then takes the two
+    # flanks, passes through air in the middle, and the front is straight after a few passes.
+    step = float(distance(part, points(path)).max())
+    ox, oy = -hy, hx
+    if part.distance(Point(mid.x + .2*ox, mid.y + .2*oy)) < part.distance(Point(mid.x - .2*ox, mid.y - .2*oy)):
+        ox, oy = -ox, -oy
+    for _ in range(BOW_SET_BACKS):
+        # Judge the crossing only: the legs along the walls and the turns off them lie where they must.
+        body = [q for q in segmentize(LineString(bow), .2).coords if allowed.boundary.distance(Point(q)) > 2*turn]
+        excess = float(distance(part, points(body)).max()) - step if body else 0.
+        if excess <= BOW_EXCESS:
+            break
+        mid = Point(mid.x - excess*ox, mid.y - excess*oy)
+        ahead, behind = hit(1), hit(-1)
+        moved = None if ahead is None or behind is None else build()
+        if moved is None:
+            break
+        bow = moved
+    return bow
 
 
 def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, turn=.75, note=None, alternatives=None, bows=True):
@@ -620,6 +650,28 @@ def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, tur
         path = eased(path, False, part, allowed, blend, ends=(at_start and not hooked[0], at_end and not hooked[1]))
     # Snap the two tips into ground this island has already cleared.
     return eased(path, False, part, allowed, 1., ends=tuple(hooked))
+
+
+def round_a_boss(centre, reach, rings, radius):
+    """Where a spiral spans the channel between the outer wall and a boss: (half behind it, way ahead).
+
+    The half is everything more than a cutter radius behind the line across
+    the channel through the spiral's centre, so that the cutter centre may
+    come up to that line. None when the spiral does not touch two walls.
+    """
+    at = Point(centre)
+    near = sorted(rings, key=lambda ring: ring.distance(at))
+    if len(near) < 2 or near[1].distance(at) > reach + SPAN_SLACK*radius:
+        return None
+    wall = nearest_points(near[0], at)[0]
+    span = wall.distance(at)
+    if span < 1e-9:
+        return None
+    dx, dy = (wall.x-at.x)/span, (wall.y-at.y)/span
+    px, py, far = -dy, dx, 1e4
+    line = [(at.x - radius*px - far*dx, at.y - radius*py - far*dy), (at.x - radius*px + far*dx, at.y - radius*py + far*dy)]
+    behind = Polygon(line + [(line[1][0] - far*px, line[1][1] - far*py), (line[0][0] - far*px, line[0][1] - far*py)])
+    return behind, (at.x + reach*px, at.y + reach*py)
 
 
 def sweep(path, stock, radius):
@@ -744,7 +796,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         """Island whose spiral disc is nearest; decides who finishes shared ground."""
         return min(range(len(seeds)), key=lambda k: math.dist(xy, seeds[k][0]) - seeds[k][1])
 
-    def wave(index, centre, own, shared):
+    def wave(index, centre, own, shared, focus=None):
         """Grow one island as if it were alone, cutting only where real stock remains.
 
         own is the stock this island would see by itself; it keeps the fronts
@@ -753,6 +805,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         """
         nonlocal stock
         start, passes, arcs, blocked = 0, 0, 0, False
+        # focus is the middle of the front last cut. Where it is given, that front is followed until it
+        # is finished; elsewhere the front nearest the cutter goes next, which keeps links short and
+        # measured better on the L-shape, cross and square with a boss.
+        follow = focus is not None
         while not out_of_time():
             parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
             if not parts:
@@ -765,15 +821,22 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 runs = fronts(part, grown, wall, zone=zone)
                 failed, halt = [], False
                 while runs and not halt:
-                    at = strokes[-1].points[-1] if strokes else centre
-                    run, closed = runs.pop(min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0])))
-                    # Sweep the wall at the arc ends; only at the smallest stepover fall back to
+                    # Stay with one front. Round a boss two fronts set off opposite ways; taking whichever
+                    # is nearer advances both, and they meet head-on on the far side in a narrowing pinch.
+                    # One front followed all the way round breaks through into the space the spiral opened.
+                    if focus is None:
+                        at = strokes[-1].points[-1] if strokes else centre
+                        pick = min(range(len(runs)), key=lambda k: math.dist(at, runs[k][0][0]))
+                    else:
+                        pick = min(range(len(runs)), key=lambda k: LineString(runs[k][0]).distance(Point(focus)))
+                    run, closed = runs.pop(pick)
+                    # Sweep the wall at the arc ends; only at ROLL_STEPOVER or below fall back to
                     # rolling off before the wall, so a lighter cut gets to try the wall first.
                     if wall_pull_back and not closed:
                         ends, others = [], []
                         shapes = [wall_ends(run, part, own, radius, allowed, rings, blend, note=ends, alternatives=others),
                                   *others]
-                        if level == len(stepovers)-1:
+                        if stepover <= ROLL_STEPOVER or level == len(stepovers)-1:
                             shapes.append(eased(run, closed, part, allowed, blend))
                     else:
                         shapes = [eased(run, closed, part, allowed, blend)]
@@ -812,6 +875,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         continue
                     if done is None:
                         failed.append(LineString(run))
+                        # Retry this front lighter before turning to another; only when it cannot be
+                        # cut at all do the others get their turn.
+                        halt = zone is None and focus is not None and level < len(stepovers)-1
                         continue
                     if trace is not None:
                         trace.append({'island': index, 'stepover_mm': stepover, 'retry': zone is not None,
@@ -822,12 +888,21 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         commit('front', piece, stepover, peak)
                         count(tally)
                     stock = trial
+                    before = own.area
                     own = sweep(path, own, radius)
-                    progressed = True
+                    # A pass through air counts only if it moved the front on; otherwise it would repeat for ever.
+                    moved = bool(done) or before - own.area > MIN_GAIN_MM2
+                    progressed = progressed or moved
+                    followed = focus is not None and moved
+                    if follow and (done or followed):
+                        middle = LineString(run).interpolate(.5, normalized=True)
+                        focus = (middle.x, middle.y)
                     if done:
                         arcs += len(done)
                         used = level if used is None else used
-                        halt = zone is None  # Stay with this stretch of front; the others wait their turn.
+                    # Stay with this stretch of front, also while it passes through space already
+                    # open; the others wait their turn.
+                    halt = zone is None and (bool(done) or followed)
                 blocked = bool(failed)
                 if not failed or out_of_time():
                     break
@@ -835,7 +910,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 parts = [g for g in polygons(clearance(allowed, own, radius)) if g.area > 1e-6]
                 part = min(parts, key=lambda g: g.distance(Point(centre)))
             if not progressed:
-                break
+                if focus is None:
+                    break
+                focus = None  # The front being followed cannot be cut at all: give every front a turn.
+                continue
             passes += used is not None
             start = max(0, (start if used is None else used)-1)
         return passes, arcs, blocked
@@ -867,8 +945,17 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 commit('spiral', path, chosen, peak)
                 count(tally)
                 stock, own = trial, sweep(path, own, radius)
+        focus = None
+        if len(seeds) == 1 and peak <= limit if chosen is not None else False:
+            one_way = round_a_boss(centre, reach, rings, radius)
+            if one_way is not None:
+                # The spiral fills a channel that runs round a boss. Its two sides would each send a
+                # front round, to meet head-on on the far side. Treat the half behind as still uncut:
+                # one front then goes all the way round and passes straight through the spiral.
+                behind, focus = one_way
+                own = own.union(pocket.difference(stock).intersection(behind))
         # Every island but the last leaves shared ground to its neighbour; the last one cleans up.
-        passes, arcs, blocked = wave(index, centre, own, shared=index < len(seeds)-1)
+        passes, arcs, blocked = wave(index, centre, own, shared=index < len(seeds)-1, focus=focus)
         island.update(front_passes=passes, front_arcs=arcs)
         front_passes += passes
         any_blocked = any_blocked or blocked

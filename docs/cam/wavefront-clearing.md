@@ -38,6 +38,12 @@ the cut.
    so its fronts stay concentric where two islands meet. Where two islands can
    reach the same ground, the island whose spiral edge is nearer takes it. The
    last island cuts through into space the earlier ones opened.
+   **One way round a boss:** where a single spiral fills the channel between
+   the outer wall and a boss, its two sides would each send a front round, to
+   meet head-on on the far side in a narrowing pinch. Instead the half of the
+   spiral behind is treated as still uncut and one front is followed all the
+   way round; its last passes go straight through the spiral, cutting only
+   the two corners beside it. Elsewhere the front nearest the cutter goes next.
 6. **Ends at the wall.** A front that reaches the wall does not stop square
    against it. Depending on where it is and the angle at which it arrives, it
    does one of four things:
@@ -47,9 +53,12 @@ the cut.
      walls (square to both walls it spans, not along the slant of the front,
      so curved channels and boss corners do not drift), curves onto the other wall tangentially and runs back along it.
      Every pass is the last one moved on by a stepover. Two separate hooks
-     would be tight corners on so short an arc. Where the bow is too heavy,
-     as at the mouth of an arm while the front is still curved from the
-     spiral, separate hooks are tried instead.
+     would be tight corners on so short an arc. Behind a front still curved
+     from the spiral the straight crossing is set back until it is nowhere
+     further from cleared ground than the front: it takes the two flanks,
+     passes through air in the middle, and the front is straight after a few
+     passes. Where the bow is still too heavy, separate hooks are tried
+     instead.
    - **Runs on along the wall** if it arrives at a shallow angle, as beside a
      spiral.
    - **Hooks round** onto the wall if it arrives steeply: it continues its own
@@ -72,6 +81,9 @@ the cut.
    Nothing over the limit is kept. Below 0.5 mm the steps are 0.05 mm apart,
    so a cut that just misses at one step loses little at the next; with
    0.1 mm steps the slot and ring jumped between 0.4 and 0.2 mm passes.
+   At 0.35 mm or below a cut may also roll off before the wall instead of
+   sweeping it. Beside a spiral that only touches the wall there is no clean
+   wall to run back onto, and without this the first fronts fell to 0.12 mm.
 8. **Links.** Cuts are joined by stay-down feed moves through space already
    cleared, routed along the edge of the cleared region and pulled taut. Every
    link is checked to keep the whole cutter clear of the live stock. The
@@ -125,18 +137,18 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.5.
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.8.
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Links | Lifts |
 |---|---|---|---|---|---|---|
-| Two-lobe neck fixture | 192 | 0 | 2.2 mm² | 9,240 mm | 4,129 mm | 2 |
+| Two-lobe neck fixture | 191 | 0 | 4.3 mm² | 9,227 mm | 3,601 mm | 2 |
 | Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² | 2,919 mm | 0 | 1 |
-| Rectangle 60×30 | 93 | 5 | 8.1 mm² | 3,846 mm | 1,911 mm | 2 |
+| Rectangle 60×30 | 93 | 5 | 7.8 mm² | 3,844 mm | 1,912 mm | 2 |
 | L-shape | 141 | 6 | 7.9 mm² | 3,839 mm | 3,153 mm | 1 |
-| Cross | 178 | 13 | 14.6 mm² | 3,508 mm | 2,954 mm | 1 |
-| Slot 80×12 | 168 | 12 | 9.4 mm² | 2,516 mm | 1,245 mm | 2 |
-| Square with a 16 mm boss (4 starts) | 244 | 8 | 6.2 mm² | 4,849 mm | 3,071 mm | 5 |
-| Ring, 48 mm across with a 20 mm boss | 411 | 102 | 1.4 mm² | 5,308 mm | 9,663 mm | 1 |
+| Cross | 186 | 11 | 12.1 mm² | 3,701 mm | 2,927 mm | 1 |
+| Slot 80×12 | 168 | 4 | 8.9 mm² | 2,465 mm | 1,427 mm | 2 |
+| Square with a 16 mm boss (4 starts) | 282 | 5 | 5.2 mm² | 5,163 mm | 3,480 mm | 5 |
+| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 1.8 mm² | 3,982 mm | 2,272 mm | 1 |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
 contact is 40.9° and almost every front uses a 0.45–0.65 mm stepover. In the
@@ -145,21 +157,21 @@ distance by 3–11 % against 0.2.4, and halved the ring's small arcs (194 → 10
 the two-lobe fixture now takes 103 s a depth instead of 221 s. The square
 with a boss went from one start (162 of 351 arcs at 0.2 mm or less, 7,433 mm
 cutting, 10,908 mm links) to four; crossing square to the walls then took
-its last small arcs away (14 → 0) and cut links to 2,551 mm. All shapes except the ring now hold an
-even peel; the L-shape and cross still spend most of their cutting distance
-again on links.
+its last small arcs away (14 → 0) and cut links to 2,551 mm. In the ring,
+going one way round took the arcs at 0.2 mm or less from 102 of 411 to none:
+213 of 243 fronts run at 0.5 mm, cutting fell from 5,308 to 3,982 mm and links
+from 9,663 to 2,272 mm. The set-back bows and roll-offs of 0.2.8 cost the
+square with a boss 38 more arcs and about 300 mm more cutting. The L-shape and
+cross still spend most of their cutting distance again on links.
 
 ## Known gaps
 
-- **Curved channels** (the ring): uneven peel and twice as much link travel as
-  cutting. The fronts keep the U shape of the spiral all the way round: a
-  straight bow across the U cuts too deep in the middle (90–100°), and hooks
-  along the U meet stock inside corners where earlier passes met, so most
-  passes fall to 0.25–0.35 mm. Two or four starts round the ring cut links
-  to 6.2 or 3.0 m but not the small arcs. Tried and not adopted: refusing bows that stand
-  out beyond the front, stopping wall runs where the cleared area only touches
-  the wall, bows flattened to a set depth, and fronts with their corners opened
-  (one cutter radius: ring 194 → 171 small arcs, but the two-lobe fixture 0 → 17).
+- **Arriving back at the spiral** in a ring: the last few passes before the
+  spiral roll off short of the outer wall (up to about 0.7 mm) and a few short
+  strokes clean it afterwards.
+- **One way round is only used with a single start.** A square with a boss
+  has four starts, and their fronts still set off both ways and meet between
+  the corners.
 - **Channels**: the first few bows after a spiral, the end of a channel, and
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to

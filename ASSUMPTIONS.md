@@ -163,3 +163,7 @@
 - A bow crosses square to the mean heading of the two walls it meets; checked on straight slots (unchanged), a ring and a
   square with a boss.
 - Stepover levels below 0.5 mm are 0.05 mm apart. Finer levels cost compute only on refused cuts; not tried finer.
+- One way round a boss applies only to a single start whose spiral reaches a second wall ring within 0.15 cutter radii;
+  which way round is fixed by the nearest wall point, not chosen for travel or cutting direction.
+- Roll-off before the wall is allowed at 0.35 mm stepover or below; chosen between the smallest step only (first fronts
+  beside a spiral fell to 0.12 mm) and every step (skin up to 0.7 mm left on the ring's wall).
