@@ -98,6 +98,15 @@ the cut.
 8. **Links.** Cuts are joined by stay-down feed moves through space already
    cleared, routed along the edge of the cleared region and pulled taut. Every
    link is checked to keep the whole cutter clear of the live stock. The
+   route is then made into a chain of curves through its corners, leaving
+   the cut before along its heading and arriving along the heading of the
+   cut after, so the machine need not stop at either end or at a corner.
+   The curves are checked the same way; shorter handles are tried before
+   the straight route is kept as it was. Sharp turns (over 45° between
+   0.5 mm steps) in links fell from 134 to 40 on the rectangle, 285 to 64
+   on the L-shape, 302 to 149 on the cross and 461 to 18 on the ring; the
+   links grew by 5–17 % (ring 2,323 → 2,728 mm), since curves are longer
+   than corners. The
    preview shows a lift (G0) only where no such route exists: the first cut,
    and moving from one island to the next.
 9. **Corners.** The fronts swallow a corner once it is within a stepover,
@@ -182,19 +191,19 @@ rates are not modelled.
 
 ## Current results
 
-4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.13; the last column is the compute time for one depth
+4 mm cutter, 60° limit, no wall pass. Each row is one run of version 0.2.14; the last column is the compute time for one depth
 (measured while another slicing job shared the machine, so about half again slower than 0.2.9's).
 
 | Pocket | Front arcs | Of which ≤ 0.2 mm | Stock left | Cutting | Corner moves | Links | Lifts | Time |
 |---|---|---|---|---|---|---|---|---|
-| Two-lobe neck fixture | 184 | 0 | 0.0 mm² | 8,766 mm | 12, 44 mm | 3,840 mm | 2 | 19.1 s |
+| Two-lobe neck fixture | 184 | 0 | 0.0 mm² | 8,766 mm | 12, 44 mm | 4,040 mm | 2 | 19.0 s |
 | Circle, 44 mm | 0 (spiral only) | 0 | 0.7 mm² (a film under 0.01 mm) | 2,640 mm | 0 | 0 | 1 | 0.6 s |
-| Rectangle 60×30 | 86 | 0 | 0.0 mm² | 3,598 mm | 25, 86 mm | 1,594 mm | 2 | 4.7 s |
-| L-shape | 143 | 10 | 0.0 mm² | 3,783 mm | 25, 84 mm | 2,448 mm | 1 | 7.4 s |
-| Cross | 208 | 23 | 0.0 mm² | 3,786 mm | 32, 106 mm | 1,889 mm | 1 | 12.4 s |
-| Slot 80×12 | 173 | 4 | 0.3 mm² | 2,474 mm | 18, 49 mm | 1,388 mm | 2 | 5.1 s |
-| Square with a 16 mm boss (4 starts, one way round) | 283 | 7 | 0.0 mm² | 5,059 mm | 17, 55 mm | 3,007 mm | 4 | 12.5 s |
-| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 0 | 2,323 mm | 1 | 21.2 s |
+| Rectangle 60×30 | 86 | 0 | 0.0 mm² | 3,598 mm | 25, 86 mm | 1,685 mm | 2 | 4.8 s |
+| L-shape | 143 | 10 | 0.0 mm² | 3,783 mm | 25, 84 mm | 2,607 mm | 1 | 7.7 s |
+| Cross | 208 | 23 | 0.0 mm² | 3,786 mm | 32, 106 mm | 2,049 mm | 1 | 12.3 s |
+| Slot 80×12 | 173 | 4 | 0.3 mm² | 2,474 mm | 18, 49 mm | 1,577 mm | 2 | 5.4 s |
+| Square with a 16 mm boss (4 starts, one way round) | 283 | 7 | 0.0 mm² | 5,059 mm | 17, 55 mm | 3,313 mm | 4 | 13.7 s |
+| Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 0 | 2,728 mm | 1 | 21.6 s |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
 contact is 41.1° and almost every front uses a 0.45–0.65 mm stepover. In the
@@ -233,8 +242,9 @@ cross still spend most of their cutting distance again on links.
   pass instead of holding steady; the contact check refuses the heavy passes.
 - **Link travel** is now mostly the way back across a channel after each
   bow: a bow always starts on the same wall to keep climb milling, so the
-  L-shape's 16 mm-wide arm costs a 16 mm link per pass. Link corners are not
-  rounded and links have no feed rate yet.
+  L-shape's 16 mm-wide arm costs a 16 mm link per pass, now a loop rather
+  than a reversal. Links have no feed rate of their own yet. Corner moves
+  still reverse at the tip.
 - **Corner moves** back out along their own track: a full reversal at the
   tip, tiny but abrupt. They are judged by depth only, and their contact
   angle (up to 115°) is reported separately in `corners`, not in

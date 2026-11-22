@@ -632,6 +632,7 @@ shaped it, each prompted by reviewing a preview:
 | Corner creep along each wall, judged by depth (0.3 mm) | Fronts swallow a corner within a stepover; a cutter-radius corner then reads 90-115° contact however thin the crescent | Stock left 5-10 mm² → 0.0-0.2 mm² on every square-cornered shape; neck fixture 2.8 → 0.0 mm² |
 | Several starts one way round a boss: channel cut at each start, spirals first, one front per stretch running on through the next spiral | Four corner starts sent fronts both ways to meet in pinches | Square with a boss: links 3,443 → 3,007 mm, cutting 5,114 → 5,059 mm, small arcs 0 → 7, lifts 4 |
 | Retry a refused front lighter before trying other fronts | The heavier try was refused in every arm, then the lighter retry cut one front per arm in turn, crossing between arms each pass | Links: cross 3,312 → 1,889 mm, L 3,081 → 2,448, neck 4,478 → 3,840, slot 1,824 → 1,388, rectangle 1,864 → 1,594; L small arcs 4 → 10 |
+| Links as tangent curves through the route's corners, checked like the route | Links left and joined cuts at sharp angles and turned square at their own corners | Sharp turns: rectangle 134 → 40, L 285 → 64, cross 302 → 149, ring 461 → 18; links 5-17 % longer |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,

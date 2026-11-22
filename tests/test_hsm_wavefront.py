@@ -9,7 +9,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 channel_stretches, convex_corners, corner_pecks, CORNER_DEPTH, round_a_boss,
+                                 channel_stretches, convex_corners, smooth_link, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -358,6 +358,23 @@ def test_stay_down_link_routes_round_stock_and_refuses_what_it_cannot_check():
     assert stay_down_link(clear, box(4, 2.5, 6, 12), 1., (1.5, 9.), (8.5, 9.), why=why) is None
     assert stay_down_link(unary_union([box(0, 0, 2, 2), box(5, 0, 7, 2)]), stock, 1., (1., 1.), (6., 1.), why=why) is None
     assert why == {'route_touches_stock': 1, 'separate_cleared_areas': 1}
+
+
+def test_links_leave_and_join_cuts_tangentially_and_stay_in_cleared_space():
+    clear = box(0, 0, 20, 20)
+    route = [(2., 2.), (2., 18.), (18., 18.)]
+    curve = smooth_link(route, (1., 0.), (0., -1.), clear, box(30, 30, 31, 31), 1.)
+    assert curve[0] == route[0] and curve[-1] == route[-1]
+    first, last = (curve[1][0]-curve[0][0], curve[1][1]-curve[0][1]), (curve[-1][0]-curve[-2][0], curve[-1][1]-curve[-2][1])
+    assert first[0] > 0 and abs(first[1]) < first[0]  # Leaves along the cut before ...
+    assert last[1] < 0 and abs(last[0]) < -last[1]     # ... and arrives along the cut after.
+    assert clear.buffer(1e-3).covers(LineString(curve))
+    turns = [abs((math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(b[1]-a[1], b[0]-a[0]) + math.pi) % (2*math.pi) - math.pi)
+             for a, b, c in zip(curve, curve[1:], curve[2:])]
+    assert max(turns) < math.radians(45)  # No sharp corner left (the route turned 90 degrees).
+    blocked = smooth_link(route, (1., 0.), (0., -1.), clear, box(0, 0, 20, 20).difference(box(1, 1, 3, 19)).difference(
+        box(1, 17, 19, 19)), 1.)
+    assert blocked == route  # Where a curve would touch stock, the checked route stays as it was.
 
 
 def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):

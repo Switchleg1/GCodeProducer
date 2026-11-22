@@ -64,6 +64,9 @@ WALL_GAP = .8  # mm between cleared ground and the wall beyond which the wall is
 NEAR_WALL = .3  # mm; an arc end this close to the wall is carried onto it
 WALL_REACH = 20.  # mm; farthest an arc end follows the wall back looking for clean wall
 LINK_TOLERANCE = 1e-3  # mm; buffered arcs make the cleared region slightly approximate
+LINK_HANDLE = 3.  # mm; longest handle of a link curve, so how widely it rounds a corner
+LINK_HANDLE_SHARES = (.4, .25, .12)  # handle as a share of the leg, tried in turn
+LINK_STEP = .5  # mm between points of a link curve
 
 
 class Stroke(NamedTuple):
@@ -376,6 +379,63 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
     if not stock.is_empty and LineString(route).distance(stock) < radius - 5*LINK_TOLERANCE:
         return refuse('route_touches_stock')
     return route
+
+
+def smooth_link(route, leaving, arriving, clear, stock, radius):
+    """A stay-down route made tangent to the cuts it joins and rounded at its corners.
+
+    leaving and arriving are unit headings at the end of the cut before and
+    the start of the cut after. The route becomes a chain of cubic curves
+    through its corners, each tangent to the next, with handles as long as
+    the legs allow up to LINK_HANDLE. It is kept only where it stays inside
+    the cleared region and clear of stock; shorter handles are tried before
+    falling back to the route as it was, so smoothing never makes a link unsafe.
+    """
+    if len(route) < 2 or math.dist(route[0], route[-1]) < 1e-6:
+        return route
+    room = clear.buffer(LINK_TOLERANCE)
+    prepare(room)
+    n = len(route)
+    heads = []
+    for i, q in enumerate(route):
+        if i == 0:
+            heads.append(leaving)
+        elif i == n-1:
+            heads.append(arriving)
+        else:
+            a, b = route[i-1], route[i+1]
+            la, lb = math.dist(a, q), math.dist(q, b)
+            ux, uy = (q[0]-a[0])/la + (b[0]-q[0])/lb, (q[1]-a[1])/la + (b[1]-q[1])/lb
+            size = math.hypot(ux, uy)
+            heads.append((ux/size, uy/size) if size > 1e-9 else ((b[0]-q[0])/lb, (b[1]-q[1])/lb))
+    for share in LINK_HANDLE_SHARES:
+        curve = [route[0]]
+        for i in range(n-1):
+            a, b = route[i], route[i+1]
+            h = min(LINK_HANDLE, share*math.dist(a, b))
+            c1 = (a[0] + h*heads[i][0], a[1] + h*heads[i][1])
+            c2 = (b[0] - h*heads[i+1][0], b[1] - h*heads[i+1][1])
+            steps = max(4, math.ceil(math.dist(a, b)/LINK_STEP))
+            for k in range(1, steps+1):
+                t = k/steps
+                u = 1-t
+                curve.append((u*u*u*a[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*b[0],
+                              u*u*u*a[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*b[1]))
+        line = LineString(curve)
+        if room.covers(line) and (stock.is_empty or line.distance(stock) >= radius - 5*LINK_TOLERANCE):
+            return curve
+    return route
+
+
+def heading(points, at_end):
+    """Unit heading of a path at its start or end, over its last or first non-zero step."""
+    seq = points[::-1] if at_end else points
+    for q in seq[1:]:
+        dx, dy = q[0]-seq[0][0], q[1]-seq[0][1]
+        size = math.hypot(dx, dy)
+        if size > 1e-6:
+            return (-dx/size, -dy/size) if at_end else (dx/size, dy/size)
+    return (0., 0.)
 
 
 _WALL_MEMO = {'for': (None, None), 'found': {}}
@@ -1066,7 +1126,8 @@ def cut(path, stock, radius, sample_step, *, where=None, tally=None, stop_above=
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
-                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None):
+                 islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None,
+                 smooth_links=True):
     """Return (strokes, residual, report) for one target plane, starting from intact stock."""
     allowed = unary_union(center_regions(pocket, radius))
     wall = allowed.boundary
@@ -1098,6 +1159,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 travel['rapids'] += 1
             else:
                 travel['links'] += 1
+                if smooth_links:
+                    route = smooth_link(route, heading(strokes[-1].points, True), heading(path, False),
+                                        stock_clear(), stock, radius)
                 strokes.append(Stroke('link', route, 0., 0.))
         else:
             travel['rapids'] += 1
