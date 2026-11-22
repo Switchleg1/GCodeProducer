@@ -1,6 +1,6 @@
 """ComputeService — runtime subsystem."""
 from __future__ import annotations
-import gc, itertools, multiprocessing as mp
+import atexit, gc, itertools, multiprocessing as mp
 from PyQt6.QtCore import QObject, pyqtSignal
 from gcodeproducer.gui.runtime.result_reader import _Reader
 from .runtime_constants import MESSAGE_HANDLERS
@@ -20,6 +20,7 @@ class ComputeService(QObject):
         self._ids = itertools.count(1)
         self.running: set = set()             # task ids submitted and not finished
         self._chunks: dict = {}               # task id -> program lines received so far
+        self._atexit = False
 
     # ------------------------------------------------------------ process
     def _ensure(self):
@@ -28,9 +29,15 @@ class ComputeService(QObject):
         from gcodeproducer.core.runtime.compute import worker_main
         self._task_q = self._ctx.Queue()
         self._out_q = self._ctx.Queue()
+        # Not a daemon: the compute process starts its own pool of slicing workers, which daemon
+        # processes may not do. It exits by itself when this process goes away (parent watch in
+        # worker_main), and shutdown()/cancel() still terminate it.
         self._proc = self._ctx.Process(target=worker_main, args=(self._task_q, self._out_q),
-                                       name="gcodeproducer-compute", daemon=True)
+                                       name="gcodeproducer-compute", daemon=False)
         self._proc.start()
+        if not self._atexit:
+            atexit.register(self._stop_process, False)
+            self._atexit = True
         self._reader = _Reader(self._out_q, self)
         self._reader.message.connect(self._dispatch)
         self._reader.start()

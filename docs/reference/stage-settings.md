@@ -68,7 +68,7 @@ Workflow: fdm. Optional stage: no.
 | `line_width` — Wall line width | float / mm | `auto` | minimum 0.05; maximum 3; `auto` accepted | Walls. auto = nozzle line width. |
 | `variable_width` — Variable-width walls | bool | `True` | No schema bound | Walls. Keep the normal wall loops but vary their flow: where a wall narrows below two line widths the folded loop prints thinner so its sides do not overlap, and tips narrower than one line width get a tapering centre bead (e.g. fan blade tips, lettering). |
 | `min_bead_width` — Minimum bead width | float / % | `50.0` | minimum 25; maximum 100 | Walls. Narrowest variable-width bead, as % of the line width. Thinner tips are left empty. Also used by gap fill. |
-| `max_bead_width` — Maximum bead width | float / % | `150.0` | minimum 100; maximum 200 | Walls. Widest centre bead gap fill may use, as % of the line width; wider gaps get a thinned loop. |
+| `max_bead_width` — Maximum bead width | float / % | `150.0` | minimum 100; maximum 200 | Walls. Widest centre bead gap fill (or a wall loop scrap merged into one bead) may use, as % of the line width; wider gaps get a thinned loop. |
 
 ## fdm_top_bottom
 
@@ -133,7 +133,7 @@ Workflow: fdm. Optional stage: no.
 | `inside_travel_retract` — Inside travel retraction distance | float / mm | `10.0` | minimum 0 | Travel. Independent threshold for travels staying inside the model, when long inside retraction is enabled. |
 | `coast_length` — Coast length | float / mm | `0.0` | minimum 0 | Travel. Follow the last part of each extrusion path without feeding filament. 0 disables coasting. |
 | `travel_detour_time` — Max time to avoid open spaces | float / s | `0.0` | minimum 0 | Travel. Maximum estimated extra time per travel to avoid gaps or shorten open-air jumps. 0 disables detours. |
-| `travel_order` — Order paths to shorten travel | bool | `True` | No schema bound | Travel. Print each part island in turn: its wall groups (an outer wall with the inner walls next to it) nearest first, then its bridges, then all its other fill (sparse, solid, gap fill) nearest first. Off prints in generated order: all inner walls, all outer walls, then each fill feature. |
+| `travel_order` — Order paths to shorten travel | bool | `True` | No schema bound | Travel. Print each part island in turn: inner walls nearest first with each outer wall right after the inner walls beside it, then its bridges, then all its other fill (sparse, solid, gap fill) nearest first. Off prints in generated order: all inner walls, all outer walls, then each fill feature. |
 | `seam` — Perimeter start / stop | choice | `nearest` | `nearest` = Fastest (nearest start); `xy` = Toward XY point; `origin` = Fixed (loop start) | Seam. Choose where each perimeter starts and ends. Fastest minimizes the local approach distance. |
 | `seam_x` — Target X | float / mm | `0.0` | No schema bound | Seam. Bed-coordinate target for Toward XY point. May be outside the part. |
 | `seam_y` — Target Y | float / mm | `0.0` | No schema bound | Seam. Bed-coordinate target for Toward XY point. May be outside the part. |

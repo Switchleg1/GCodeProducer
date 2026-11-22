@@ -222,6 +222,18 @@ construction pauses. Toolpath preparation and filament calculation also run
 in the worker. The GUI freezes large completed object graphs out of periodic
 GC scanning; that is a responsiveness measure, not removal of all memory cost.
 
+The compute process is not a daemon, because it runs its own pool of
+**slicing worker processes** (`core/fdm/layer_threads.layer_map`). Slicing
+planes, walls, top/bottom shells, infill/gap fill and the output stage's
+per-layer planning (`core/fdm/emit_plan`) are spread over the pool as
+module-level functions of plain data (`core/fdm/layer_tasks`); the stages
+apply the results in layer order, so the output is identical to a run on
+threads. Closures, `GCODEPRODUCER_WORKERS=0`/`1`, a daemonic parent or a
+broken pool fall back to threads. The compute process and every pool worker
+watch their parent and exit with it, so cancelling or closing the GUI leaves
+no orphans. The pool is created on the first slice and reused; tests set
+`GCODEPRODUCER_WORKERS=3` in `conftest.py`.
+
 Cancellation terminates/restarts the compute service rather than depending on
 a cooperative check in every geometry loop. Selection results are task-ID
 checked and highlights debounced so stale scenes do not overwrite current

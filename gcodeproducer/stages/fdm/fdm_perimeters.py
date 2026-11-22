@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMPERIMETERS_PARAMS
 from gcodeproducer.core.fdm.layer_threads import layer_map
-from gcodeproducer.core.fdm.variable_walls import variable_wall_levels
-from gcodeproducer.core.fdm.wall_regions import slice_region, wall_levels
+from functools import partial
+from gcodeproducer.core.fdm.layer_tasks import wall_task
 from gcodeproducer.core.jobs.path import Path
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
@@ -32,11 +32,8 @@ class FDMPerimeters(SliceStage):
         job.settings["min_bead_width"] = min_width
         job.settings["max_bead_width"] = max_width
 
-        def walls(contours):
-            if variable:
-                return variable_wall_levels(slice_region(contours), lw, count, min_width, max_width)
-            levels, inner = wall_levels(contours, lw, count)
-            return [[(loop, None, True) for loop in level] for level in levels], inner
+        walls = partial(wall_task, {"variable": variable, "width": lw, "count": count,
+                                    "min_width": min_width, "max_width": max_width})
 
         total = varied = 0
         n = max(1, len(job.layers))

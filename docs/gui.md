@@ -338,7 +338,10 @@ context notes for viewport-only and Preview-only keys.
 The action reads **Slice** for FDM and **Generate paths** for CAM. It shares
 its height with **Save G-code…** and takes about 70 % of the row. While a job
 is running, it becomes **Cancel**. Heavy geometry work and toolpath preparation
-run in a persistent spawned compute process. The GUI receives progress/log
+run in a persistent spawned compute process, which spreads the per-layer work
+of FDM slicing over a pool of worker processes (one less than the CPU cores,
+at most 16; environment variable `GCODEPRODUCER_WORKERS` overrides, 0 or 1 =
+no pool). The first slice after start-up also starts that pool. The GUI receives progress/log
 signals and chunked program results. Cancelling stops the compute process;
 a later task starts it again. Cancellation does not undo settings edits.
 

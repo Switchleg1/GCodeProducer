@@ -216,31 +216,60 @@ def _wall_groups(walls):
 
 
 def _print_walls(walls, head, seam, target):
+    """Inner walls nearest first across all wall groups; each group's outer wall right after
+    its last inner wall.
+
+    An outer wall waits for all inner walls beside it (inner-first printing),
+    but the inner walls are not tied to their group's turn: a large outer
+    loop whose inner walls are spread over the part (split at narrow necks)
+    picks them up as the head passes, instead of crossing the part for them.
+    Outer walls with no inner walls join the same nearest-first walk.
+    """
     groups = _wall_groups(walls)
-    if len(groups) == 1:
-        return _group_order(groups[0], head, seam, target)
-    # visit groups nearest-first by their entry points
+    items, owner = [], []                  # inner walls, and outer walls of groups without any
+    for g, group in enumerate(groups):
+        inner = [p for p in group if p.feature != "outer_perimeter"]
+        for p in inner or [p for p in group if p.feature == "outer_perimeter"]:
+            items.append(p)
+            owner.append(g if inner else -1)
+    remaining = np.bincount(np.asarray([g for g in owner if g >= 0], int), minlength=len(groups))
     out = []
-    pending = list(range(len(groups)))
-    entries = []
-    for g in groups:
-        pts = np.concatenate([_entries(p, seam, target)[0] for p in g])
-        entries.append(pts)
     head = np.asarray(head, float)
-    while pending:
-        best = min(pending, key=lambda g: float(((entries[g] - head)**2).sum(1).min()))
-        pending.remove(best)
-        ordered, head = _group_order(groups[best], head, seam, target)
-        out.extend(ordered)
+    if not items:
+        return out, head
+    points, rows, reverse = [], [], []
+    for i, path in enumerate(items):
+        pts, rev = _entries(path, seam, target)
+        points.append(pts)
+        rows.append(np.full(len(pts), i))
+        reverse.append(rev)
+    points = np.concatenate(points)
+    rows = np.concatenate(rows)
+    reverse = np.concatenate(reverse)
+    first_row = np.searchsorted(rows, np.arange(len(items)))
+    last_row = np.r_[first_row[1:], len(rows)]
+    alive = np.ones(len(points), bool)
+    for _ in range(len(items)):
+        d = ((points - head)**2).sum(axis=1)
+        d[~alive] = np.inf
+        k = int(d.argmin())
+        i = int(rows[k])
+        alive[first_row[i]:last_row[i]] = False
+        path = items[i]
+        out.append(path)
+        if path.closed:
+            head = points[k]
+        else:
+            ends = np.asarray(path.points, float)[[0, -1], :2]
+            head = ends[0] if reverse[k] else ends[1]
+        g = owner[i]
+        if g >= 0:
+            remaining[g] -= 1
+            if remaining[g] == 0:
+                ordered, head = _nearest_first([p for p in groups[g] if p.feature == "outer_perimeter"],
+                                               head, seam, target)
+                out.extend(ordered)
     return out, head
-
-
-def _group_order(group, head, seam, target):
-    inner = [p for p in group if p.feature != "outer_perimeter"]
-    outer = [p for p in group if p.feature == "outer_perimeter"]
-    first, head = _nearest_first(inner, head, seam, target)
-    second, head = _nearest_first(outer, head, seam, target)
-    return first + second, head
 
 
 def _island_of(paths, islands):
@@ -288,8 +317,9 @@ def order_layer(paths, head, islands, seam="nearest", target=(0., 0.), mixed_fil
         group = members[isl]
         walls = [p for p in group if p.feature in WALL_FEATURES]
         fill = [p for p in group if p.feature not in WALL_FEATURES]
-        ordered, head = _print_walls(walls, head, seam, target) if walls else ([], head)
-        out.extend(ordered)
+        if walls:
+            ordered, head = _print_walls(walls, head, seam, target)
+            out.extend(ordered)
         # bridges together first: they switch the fan and anchor on the walls just printed
         ordered, head = _nearest_first([p for p in fill if p.feature == "bridge"], head, seam, target)
         out.extend(ordered)

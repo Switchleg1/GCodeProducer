@@ -6,16 +6,13 @@ claimed by the top / bottom solid shells (so sparse and solid never overlap).
 from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMINFILL_PARAMS
-import numpy as np, gcodeproducer.core.geometry.infill as infill_gen
+from functools import partial
+from types import SimpleNamespace
+import numpy as np
 from gcodeproducer.core.jobs.path import Path
-from dataclasses import replace
-from gcodeproducer.core.fdm.bridges import exclude_bridges
 from gcodeproducer.core.fdm.fdm_constants import GAP_CLIPPED_FEATURES
+from gcodeproducer.core.fdm.layer_tasks import infill_task
 from gcodeproducer.core.fdm.layer_threads import layer_map
-from gcodeproducer.core.fdm.wall_regions import region_rings, slice_region
-import shapely
-from shapely.geometry import Polygon
-from gcodeproducer.core.fdm.gap_fill import clip_segments, gap_beads, gap_regions, infill_area, small_islands
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -49,40 +46,27 @@ class FDMInfill(SliceStage):
         max_width = job.settings.get("max_bead_width", lw * 1.5)
         gap_overlap = lw * 0.5 * params["overlap"] / 100.0
 
-        def work(layer):
-            regions = [np.asarray(c, float) for c in layer.contours if len(c) >= 3]
-            if not regions:
-                return None
-            segs_all = []
-            if density > 0:
-                block = layer.solid_mask            # RegionMask of solid cells, or None
-                # scan the inset region itself: no line can then run along a wall
-                inner = list(region_rings(slice_region(layer.contours).buffer(-inset)))
-                for phi, period, off in infill_gen.pattern_families(pattern, layer.index, layer.z,
-                                                                    spacing, angle):
-                    s = infill_gen.scan_fill(inner, phi, period, off, 0., params["min_length"])
-                    if block is not None and len(s):
-                        s = infill_gen.split_by_raster(s, block, params["min_length"])
-                    s = exclude_bridges(s, layer.bridge_region, params['min_length'])
-                    if len(s):
-                        segs_all.append(s)
-            segs = np.concatenate(segs_all) if segs_all else np.zeros((0, 2, 2))
-            paths, beads = None, []
-            if gap_fill or solid_islands > 0:
-                segs, paths, beads = self._gap_fill(layer, segs, wall_lw, lw, gap_width if gap_fill else 0.,
-                                                    (min_width, max_width), gap_overlap, params["min_length"],
-                                                    solid_islands)
-            if len(segs) and params["connect"]:
-                segs = infill_gen.order_segments(segs, start=(0.0, 0.0))
-            return segs, paths, beads
+        cfg = {"density": density, "inset": inset, "pattern": pattern, "spacing": spacing, "angle": angle,
+               "min_length": params["min_length"], "connect": params["connect"],
+               "gap_width": gap_width if gap_fill else 0., "island_area": solid_islands,
+               "wall_width": wall_lw, "width": lw, "min_width": min_width, "max_width": max_width,
+               "gap_overlap": gap_overlap}
 
         total = gaps_total = island_total = 0
         n = max(1, len(job.layers))
-        for i, (layer, result) in enumerate(zip(job.layers, layer_map(work, job.layers))):
+        # workers get only what they read: outlines, masks and the solid lines to trim
+        slim = [SimpleNamespace(index=l.index, z=l.z, contours=l.contours, outline=l.outline,
+                                solid_mask=l.solid_mask, bridge_region=l.bridge_region,
+                                paths=[p for p in l.paths if p.feature in GAP_CLIPPED_FEATURES and len(p.points) == 2])
+                for l in job.layers]
+        results = layer_map(partial(infill_task, cfg), slim)
+        for i, (layer, result) in enumerate(zip(job.layers, results)):
             if result is not None:
-                segs, paths, beads = result
-                if paths is not None:
-                    layer.paths[:] = paths
+                segs, solid, beads = result
+                if solid is not None:
+                    # solid lines come after walls and bridges, so their relative order is unchanged
+                    layer.paths[:] = [p for p in layer.paths
+                                      if not (p.feature in GAP_CLIPPED_FEATURES and len(p.points) == 2)] + solid
                 for feature, (points, widths, closed) in beads:
                     layer.paths.append(Path(feature, points, closed=closed, width=lw, widths=widths))
                     gaps_total += feature == "gap_fill"
@@ -97,36 +81,3 @@ class FDMInfill(SliceStage):
         if density <= 0:
             return f"infill off{gaps}"
         return f"{total} infill lines ({params['density']:.0f}% {pattern}){gaps}"
-
-    @staticmethod
-    def _gap_fill(layer, segs, wall_lw, lw, gap_width, bead_range, overlap, min_length, island_area=0.):
-        """Gap-fill / small-island beads, the fill segments outside them and the layer paths
-        with trimmed solid lines.
-
-        Returns ``(segs, paths or None, [(feature, bead), ...])``; reads the layer but does not
-        change it. ``gap_width`` 0 skips thin gaps; ``island_area`` > 0 fills every layer island
-        (outline piece) smaller than that many mm² completely with concentric perimeters.
-        """
-        area = infill_area(layer.contours, wall_lw)
-        if area.is_empty:
-            return segs, None, []
-        gaps = gap_regions(area, gap_width, lw, blocked=layer.bridge_region) if gap_width > 0 else Polygon()
-        islands, pieces = small_islands(layer.outline, area, island_area) if island_area > 0             else (Polygon(), Polygon())
-        if not islands.is_empty:
-            gaps = gaps.difference(islands)
-        # fill lines must stay off the beads, which grow by the overlap into the walls,
-        # and off the whole small island (its walls included)
-        clip = shapely.union_all([gaps.buffer(overlap) if overlap > 0 else gaps, pieces])
-        if clip.is_empty:
-            return segs, None, []
-        paths = None
-        solid = [p for p in layer.paths if p.feature in GAP_CLIPPED_FEATURES and len(p.points) == 2]
-        if solid:
-            # solid lines come after walls and bridges, so their relative order is unchanged
-            paths = [p for p in layer.paths if not (p.feature in GAP_CLIPPED_FEATURES and len(p.points) == 2)]
-            for path in solid:
-                for part in clip_segments(np.asarray([path.points], float), clip, min_length):
-                    paths.append(replace(path, points=part))
-        beads = [("gap_fill", b) for b in gap_beads(gaps, area, lw, *bead_range, overlap)]
-        beads += [("solid_infill", b) for b in gap_beads(islands, area, lw, *bead_range, overlap)]
-        return clip_segments(segs, clip, min_length), paths, beads

@@ -15,6 +15,15 @@ def extrusion_per_mm(line_width: float, layer_height: float, filament_diameter: 
     fil_area = math.pi * (filament_diameter / 2) ** 2
     return (area / fil_area) * flow
 
+def extrusion_per_mm_array(widths, layer_height: float, filament_diameter: float, flow: float = 1.0):
+    """:func:`extrusion_per_mm` for an array of bead widths."""
+    import numpy as np
+    w = np.asarray(widths, float)
+    h = layer_height
+    area = np.where(w >= h, (w - h) * h + math.pi * (h / 2) ** 2, math.pi * (w / 2) ** 2)
+    return area / (math.pi * (filament_diameter / 2) ** 2) * flow
+
+
 class GCodeBuilder:
     def __init__(self, relative_e: bool = True, decimals_xyz: int = 3, decimals_e: int = 5):
         self.lines: list[GCodeLine] = []
@@ -113,16 +122,33 @@ class GCodeBuilder:
         if z is not None:
             dist = math.hypot(dist, z - self.z)
         de = e_per_mm * dist
-        body = self._xyzf(x=x, y=y, z=z, f=feed)
-        if not body and de == 0:
+        # The hottest call of the FDM output: build the text and its parsed
+        # words together instead of formatting text and parsing it back.
+        words = []
+        if abs(x - self.x) > 10 ** -self.dx:
+            words.append(("X", format_number(x, self.dx)))
+        self.x = x
+        if abs(y - self.y) > 10 ** -self.dx:
+            words.append(("Y", format_number(y, self.dx)))
+        self.y = y
+        if z is not None:
+            if abs(z - self.z) > 10 ** -self.dx:
+                words.append(("Z", format_number(z, self.dx)))
+            self.z = z
+        if feed is not None and feed != self.feed:
+            words.append(("F", format_number(feed, 1)))
+            self.feed = feed
+        if not words and de == 0:
             return
-        if self.relative_e:
-            eword = self._fmt("E", de, self.de)
-            self.e += de
-        else:
-            self.e += de
-            eword = self._fmt("E", self.e, self.de)
-        self._emit(f"G1 {body} {eword}".replace("  ", " ").strip())
+        self.e += de
+        words.append(("E", format_number(de if self.relative_e else self.e, self.de)))
+        raw = "G1 " + " ".join(letter + text for letter, text in words)
+        ln = GCodeLine.parsed(raw, "G1", {letter: float(text) for letter, text in words}, origin=self._origin)
+        self._origin += 1
+        ln.layer = self.layer
+        ln.feature = self.feature
+        ln.op = self.op
+        self.lines.append(ln)
 
     def retract(self, length: float, speed_mm_s: float, zhop: float = 0.0) -> None:
         if length <= 0:

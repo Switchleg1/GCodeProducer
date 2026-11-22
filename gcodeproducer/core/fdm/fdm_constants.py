@@ -41,3 +41,10 @@ FILL_RUN_OVERLAP = 1.                    # neighbouring segments join if they ov
 FILL_RUN_MAX_SPACING = 1.5               # mm: families with wider line spacing (sparse) don't form runs
 LAYER_ORDER_RELOCATE_PASSES = 2          # passes moving straggler fill paths to their cheapest place
 LAYER_ORDER_RELOCATE_MIN = .5            # mm saved before a straggler is moved
+VARIABLE_SCRAP_LOOP = 4.                 # wall loops shorter than this * width print as one straight bead
+VARIABLE_SCRAP_MIN_SPAN = .05            # mm: shortest bead made from a loop scrap
+LAYER_PROCESSES = 16                     # most worker processes for per-layer work
+LAYER_PROCESS_MIN = 4                    # fewer layers than this run on threads (pool start-up is not free)
+LAYER_WORKERS_ENV = "GCODEPRODUCER_WORKERS"   # environment override of the worker count (0 / 1 = threads)
+EMIT_REPLAN_DISTANCE = 1.                # mm: re-plan a layer whose plan starts this far from the last end
+EMIT_REPLAN_PASSES = 2                   # re-planning passes before the first travels are routed as planned

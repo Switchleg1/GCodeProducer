@@ -25,3 +25,7 @@ DECIMATE_WIDTH_TOLERANCE = 0.02
 
 # Rounding (decimal places) that identifies shared medial-axis vertices.
 MEDIAL_KEY_DECIMALS = 6
+
+# Slicing planes in parallel worker processes (only for enough planes).
+SLICE_PARALLEL_MIN_PLANES = 32
+SLICE_PARALLEL_GROUPS = 32

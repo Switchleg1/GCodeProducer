@@ -26,13 +26,13 @@ def medial_edges(material, window, step, margin, window_tolerance=0.):
     empty = np.zeros((0, 2, 2)), np.zeros((0, 2))
     if material.is_empty or window.is_empty:
         return empty
-    shapely.prepare(window)
     x0, y0, x1, y1 = window.bounds
     boundary = shapely.clip_by_rect(material.boundary, x0 - margin, y0 - margin, x1 + margin, y1 + margin)
     if boundary.is_empty:
         return empty
     pts = shapely.get_coordinates(shapely.segmentize(boundary, step))
-    pts = pts[shapely.dwithin(window, shapely.points(pts), margin)]
+    parts = shapely.STRtree(shapely.get_parts(window))
+    pts = pts[np.unique(parts.query(shapely.points(pts), predicate="dwithin", distance=margin)[0])]
     pts = np.unique(np.round(pts, MEDIAL_KEY_DECIMALS), axis=0)
     if len(pts) < 3:
         return empty
@@ -51,7 +51,10 @@ def medial_edges(material, window, step, margin, window_tolerance=0.):
     shapely.prepare(material)
     inside = ok.copy()
     inside[ok] = shapely.contains_xy(material, centre[ok, 0], centre[ok, 1])
-    inside[inside] = shapely.dwithin(window, shapely.points(centre[inside]), window_tolerance)
+    candidates = np.flatnonzero(inside)
+    close = np.zeros(len(candidates), bool)
+    close[parts.query(shapely.points(centre[candidates]), predicate="dwithin", distance=window_tolerance)[0]] = True
+    inside[candidates] = close
     # triangle sides as sorted vertex-id pairs; a side shared by two inside triangles is an axis edge
     ids = np.searchsorted(_row_keys(pts), _row_keys(np.round(tris.reshape(-1, 2), MEDIAL_KEY_DECIMALS)))
     ids = ids.reshape(-1, 3)

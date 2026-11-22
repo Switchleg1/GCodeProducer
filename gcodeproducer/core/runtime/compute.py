@@ -81,6 +81,8 @@ def run_cam_highlight(payload):
 def worker_main(task_q, out_q) -> None:
     """Loop of the compute process: run tasks until ``None`` arrives."""
     from gcodeproducer.core.runtime.runtime_constants import TASKS, CHUNK
+    from gcodeproducer.core.fdm.layer_threads import watch_parent
+    watch_parent()            # not a daemon (it runs a worker pool): leave with the GUI
     while True:
         task = task_q.get()
         if task is None:

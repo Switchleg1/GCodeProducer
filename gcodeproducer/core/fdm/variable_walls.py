@@ -27,6 +27,7 @@ import shapely
 
 from gcodeproducer.core.fdm.fdm_constants import (VARIABLE_DENSIFY, VARIABLE_MIN_AREA, VARIABLE_MIN_LENGTH,
                                                    VARIABLE_MITRE_LIMIT, VARIABLE_PRUNE, VARIABLE_PRUNE_RADII, VARIABLE_RAY_START,
+                                                   VARIABLE_SCRAP_LOOP, VARIABLE_SCRAP_MIN_SPAN,
                                                    VARIABLE_SAMPLE_STEP, VARIABLE_THIN_MIN_AREA, VARIABLE_LOOP_MIN_AREA,
                                                    VARIABLE_THIN_REACH)
 from gcodeproducer.core.fdm.wall_regions import region_rings
@@ -50,10 +51,14 @@ def _narrow_parts(material, width, eroded=None):
     return narrow
 
 
-def _thin_beads(material, covered, width, min_width, max_width, reach=2.):
+def _thin_beads(material, covered, width, min_width, max_width, reach=2., narrow=None):
     """Open centre-line beads where no loop reaches; ``reach`` limits them to material below
-    ``reach * width`` wide."""
-    thin = material.difference(covered)
+    ``reach * width`` wide.
+
+    ``narrow`` (the parts of ``material`` under two widths) may be given when
+    every uncovered part lies inside it, which keeps the Boolean small.
+    """
+    thin = (narrow if narrow is not None else material).difference(covered)
     pieces = [p for p in polygons(thin) if p.area > VARIABLE_THIN_MIN_AREA * width**2]
     if not pieces:
         return []
@@ -149,7 +154,7 @@ def _thinned_loop(ring, narrow, material, width, min_width, max_width, move=True
     normal keeps neighbouring vertices consistent at corners and stroke ends.
     """
     pts, original = _densify(np.asarray(ring, float)[:, :2], width * VARIABLE_DENSIFY)
-    candidate = np.flatnonzero(shapely.dwithin(narrow, shapely.points(pts), width * .5))
+    candidate = np.flatnonzero(shapely.contains_xy(narrow, pts[:, 0], pts[:, 1]))
     if not len(candidate):
         return ring, None
     normal = _ring_normals(pts)[candidate]
@@ -220,19 +225,57 @@ def variable_wall_levels(region, width, count, min_width, max_width=None, keep_l
             beads = [(ring, None, True) for ring in rings]
         else:
             beads = []
+            # loop vertices within half a width of the narrow parts
+            near_narrow = narrow.buffer(width * .5, quad_segs=4)
+            shapely.prepare(near_narrow)
             for ring in rings:
-                if shapely.dwithin(narrow, shapely.linearrings(ring), width * .5):
-                    pts, widths = _thinned_loop(ring, narrow, material, width, min_width, max_width,
+                if shapely.intersects(near_narrow, shapely.linearrings(ring)):
+                    pts, widths = _thinned_loop(ring, near_narrow, material, width, min_width, max_width,
                                                 move=not keep_loops)
                 else:
                     pts, widths = ring, None
                 beads.append((pts, widths, True))
             covered = inset.buffer(width * .5, quad_segs=8)
+            # with the fixed loops nothing wider than one width is left uncovered,
+            # and all of that lies in the narrow parts
             beads.extend(_thin_beads(material, covered, width, min_width, max_width,
-                                     reach=1. if keep_loops else 2.))
+                                     reach=1. if keep_loops else 2., narrow=narrow if keep_loops else None))
+        if keep_loops:
+            beads = [_scrap_to_bead(b, width, min_width, max_width) for b in beads]
         levels.append(beads)
         last_rings = rings
         if inset.is_empty:
             break
         material = eroded
     return levels, last_rings
+
+
+def _scrap_to_bead(bead, width, min_width, max_width):
+    """A wall loop around a tiny scrap of centre region becomes one straight bead.
+
+    Where the material is only a little over two line widths across, the
+    inset leaves slivers whose loop is shorter than a few line widths: two
+    half-width passes over the same spot, each needing its own travel. One
+    bead along the sliver, as wide as the loop's coverage, prints the same
+    material in one stroke.
+    """
+    pts, widths, closed = bead
+    if not closed:
+        return bead
+    pts = np.asarray(pts, float)[:, :2]
+    ring = np.vstack((pts, pts[:1]))
+    length = float(np.hypot(*np.diff(ring, axis=0).T).sum())
+    if length >= VARIABLE_SCRAP_LOOP * width or len(pts) < 2:
+        return bead
+    d = ((pts[:, None, :] - pts[None, :, :])**2).sum(-1)
+    i, j = np.unravel_index(int(d.argmax()), d.shape)
+    span = float(np.sqrt(d[i, j]))
+    x, y = pts[:, 0], pts[:, 1]
+    area = .5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+    thickness = area / span if span > 1e-9 else 0.
+    w = float(np.clip(width + thickness, min_width, max_width))
+    a, b = pts[i], pts[j]
+    if span < VARIABLE_SCRAP_MIN_SPAN:
+        centre = pts.mean(axis=0)
+        a, b = centre - [VARIABLE_SCRAP_MIN_SPAN / 2, 0.], centre + [VARIABLE_SCRAP_MIN_SPAN / 2, 0.]
+    return np.array([a, b]), np.array([w, w]), False

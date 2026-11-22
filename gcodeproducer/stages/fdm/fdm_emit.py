@@ -19,17 +19,11 @@ from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMEMIT_PARAMS, _FEATURE_SPEED
 import math, numpy as np
-from gcodeproducer.core.fdm.fdm_constants import WALL_FEATURES
-from gcodeproducer.core.fdm.layer_order import order_layer
-from gcodeproducer.core.fdm.path_order import closed_loop, ordered_paths
-from gcodeproducer.core.fdm.wall_regions import slice_region
-from gcodeproducer.core.geometry.polygon_parts import polygons
-from gcodeproducer.core.fdm.travel_router import TravelRouter
-from gcodeproducer.core.geometry.decimate import decimate
+from gcodeproducer.core.fdm.emit_plan import make_router, orient_path, plan_layers, travel_to
 from gcodeproducer.core.gcode.gcode_constants import MOTION_DEFAULTS
 from gcodeproducer.core.gcode.time_estimate import motion_comment
 from gcodeproducer.core.settings.preferences import pref
-from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm
+from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm, extrusion_per_mm_array
 from gcodeproducer.stages.base.api import FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -140,7 +134,18 @@ class FDMEmit(SliceStage):
         simplification = pref(job, 'fdm_travel_simplification')
         min_segment = pref(job, 'fdm_min_segment_length')
         deviation = pref(job, 'fdm_max_deviation')
-        for li, layer in enumerate(job.layers):
+        mixed = job.settings.get("optimize_mixed_infill", True)
+        plan_cfg = {"travel_order": params["travel_order"], "mixed": mixed, "seam": params["seam"],
+                    "seam_x": params["seam_x"], "seam_y": params["seam_y"], "min_segment": min_segment,
+                    "deviation": deviation, "route_or_classify": route_or_classify,
+                    "simplification": simplification, "decimals": b.dx, "detour": detour,
+                    "retraction_mode": params["retraction_mode"], "retract_length": retract_len,
+                    "min_travel_retract": params["min_travel_retract"],
+                    "inside_travel_retract": params["inside_travel_retract"]}
+        target = (params["seam_x"], params["seam_y"])
+        # plan every layer in parallel; only the first travel of each layer waits for the previous one
+        plans = plan_layers(job.layers, plan_cfg, target)
+        for li, (layer, plan) in enumerate(zip(job.layers, plans)):
             b.new_layer(layer.index, layer.z)
             if layer.index == 1:
                 self._layer_temperatures(b, temps)
@@ -150,26 +155,18 @@ class FDMEmit(SliceStage):
             active_pwm = normal_pwm
             h = flh if layer.index == 0 else lh
             first = layer.index == 0
-            router = (TravelRouter(layer.outline, b.dx, simplification=simplification)
-                      if route_or_classify else None)
-            mixed = job.settings.get("optimize_mixed_infill", True)
-            if params["travel_order"]:
-                islands = router.islands if router is not None else list(polygons(slice_region(layer.outline)))
-                paths = order_layer(layer.paths, (b.x, b.y), islands, params["seam"],
-                                    (params["seam_x"], params["seam_y"]), mixed)
-            else:
-                paths = ordered_paths(layer.paths, lambda: (b.x, b.y)) if mixed else layer.paths
-            for path in paths:
-                pts, widths = decimate(np.asarray(path.points, float), path.closed, min_segment, deviation,
-                                       path.widths)
-                if len(pts) < 2:
-                    continue
+            router = None
+            for index, loop, widths, route, retract in plan["steps"]:
+                path = layer.paths[index]
+                if route is None:
+                    # the layer's first travel starts where the previous layer really ended
+                    router = make_router(layer.outline, plan_cfg)
+                    route, retract = travel_to(np.array([b.x, b.y]), loop[0], router, detour, plan_cfg)
                 width = path.width or job.line_width
                 epm = extrusion_per_mm(width, h, fil, flow)
                 if widths is not None:
                     # Per-segment flow relative to the nominal bead; feed caps use the widest bead.
-                    widths = np.asarray(widths, float)
-                    scale = np.array([extrusion_per_mm(float(w), h, fil, flow) for w in widths]) / epm
+                    scale = extrusion_per_mm_array(widths, h, fil, flow) / epm
                     epm *= float(scale.max())
                     scale /= scale.max()
                 else:
@@ -188,15 +185,18 @@ class FDMEmit(SliceStage):
                 else:
                     requested = path.speed or params[_FEATURE_SPEED.get(path.feature, "print_speed")]
                 feed = print_feed("first layer" if first else path.feature, requested, epm)
-                self._print_path(b, path, pts, epm, feed, travel_f, params,
-                                 retract_len, retract_spd, zhop, router, detour, scale)
+                self._emit_path(b, path, loop, scale, epm, feed, travel_f, params, route, retract,
+                                retract_len, retract_spd, zhop)
             if active_pwm != normal_pwm:
                 self._fan(b, normal_pwm)
+            stats = plan["stats"]
             if router is not None:
-                detours += router.detours
-                fallbacks += router.fallbacks
-                outside += router.outside
-                bridges += router.bridges
+                stats = [a + c for a, c in zip(stats, (router.detours, router.fallbacks, router.outside,
+                                                       router.bridges))]
+            detours += stats[0]
+            fallbacks += stats[1]
+            outside += stats[2]
+            bridges += stats[3]
             ctx.progress((li + 1) / n)
 
         if detour > 0:
@@ -215,52 +215,30 @@ class FDMEmit(SliceStage):
 
     def _print_path(self, b, path, pts, epm, feed, travel_f, params,
                     rlen, rspd, zhop, router=None, detour=0., scale=None):
-        """Print one path; ``scale`` optionally holds per-vertex flow factors (variable width)."""
+        """Print one path from the current head (orient, travel, extrude); ``scale`` optionally
+        holds per-vertex flow factors (variable width)."""
         head = np.array([b.x, b.y])
-        if path.closed:
-            seam = params["seam"]
-            if path.feature in WALL_FEATURES and seam != "origin":
-                target = np.array([params["seam_x"], params["seam_y"]]) if seam == "xy" else head
-                if scale is None:
-                    pts = closed_loop(pts, target)
-                else:
-                    pts, scale = closed_loop(pts, target, scale)
-            elif seam != "origin":
-                # Do not aim skirt or support seams at the perimeter XY target.
-                s = int(np.argmin(((pts - head)**2).sum(axis=1)))
-                pts = np.roll(pts, -s, axis=0)
-                if scale is not None:
-                    scale = np.roll(scale, -s)
-            loop = np.vstack([pts, pts[0]])
-            if scale is not None:
-                scale = np.append(scale, scale[0])
-        else:
-            loop = pts
-            # orient so we start from the closer end
-            if ((loop[-1] - head)**2).sum() < ((loop[0] - head)**2).sum():
-                loop = loop[::-1]
-                if scale is not None:
-                    scale = scale[::-1]
+        loop, scale = orient_path(np.asarray(pts, float), path.closed, path.feature,
+                                  None if scale is None else np.asarray(scale, float), head,
+                                  params.get("seam", "nearest"),
+                                  (params.get("seam_x", 0.), params.get("seam_y", 0.)))
+        cfg = {"retraction_mode": params.get("retraction_mode", "all"), "retract_length": rlen,
+               "min_travel_retract": params.get("min_travel_retract", 0.),
+               "inside_travel_retract": params.get("inside_travel_retract", 0.)}
+        route, retract = travel_to(head, loop[0], router, detour, cfg)
+        self._emit_path(b, path, loop, scale, epm, feed, travel_f, params, route, retract, rlen, rspd, zhop)
+
+    def _emit_path(self, b, path, loop, scale, epm, feed, travel_f, params, route, retract,
+                   rlen, rspd, zhop):
+        """Travel along ``route`` (retracting if asked) and print the oriented ``loop``."""
         # flow of each segment (k -> k+1)
         seg_epm = [epm]*(len(loop)-1) if scale is None else (epm*(scale[:-1]+scale[1:])/2).tolist()
-
-        start = loop[0]
-        route = router.route(head, start, detour) if router is not None else [start]
-        dist = sum(math.dist(a, q) for a, q in zip([head, *route], route))
-        do_retract = False
-        mode = params['retraction_mode']
-        if mode != 'off' and rlen > 0 and dist > 1e-9:
-            inside = mode in ('open', 'separate') and router is not None and not router.crosses_open(head, route)
-            if inside:
-                do_retract = mode == 'separate' and dist >= params['inside_travel_retract']
-            else:
-                do_retract = dist >= params['min_travel_retract']
-        if do_retract:
+        if retract:
             b.retract(rlen, rspd, zhop)
         for q in route:
             # Even a one-unit change in the last decimal can matter at a wall.
             b.travel(float(q[0]), float(q[1]), feed=travel_f, force_xy=len(route) > 1)
-        if do_retract:
+        if retract:
             b.unretract(rlen, rspd, zhop)
         coast = 0. if path.feature == 'bridge' else params.get('coast_length', 0.)
         if coast > 0:

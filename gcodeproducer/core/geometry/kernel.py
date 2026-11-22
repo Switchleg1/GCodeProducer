@@ -74,7 +74,41 @@ def slice_z(mesh: Mesh, z: float) -> list:
 
 
 def slice_planes(mesh: Mesh, planes):
-    """Slice ordered planes in bounded batches, preserving original triangle order."""
+    """Slice ordered planes in bounded batches, preserving original triangle order.
+
+    Many planes of a float64 mesh are sliced in parallel worker processes, each
+    getting only the triangles that cross its group of planes.
+    """
+    from .geometry_constants import SLICE_PARALLEL_GROUPS, SLICE_PARALLEL_MIN_PLANES
+
+    planes = np.asarray(planes, float)
+    if len(planes) >= SLICE_PARALLEL_MIN_PLANES and mesh.vertices.dtype == np.float64:
+        from functools import partial
+        from gcodeproducer.core.fdm.layer_threads import layer_map, process_pool
+        if process_pool() is not None:
+            v, t = mesh.vertices, mesh.triangles
+            zt = v[:, 2][t]
+            low, high = zt.min(axis=1), zt.max(axis=1)
+            groups = []
+            for chunk in np.array_split(planes, min(SLICE_PARALLEL_GROUPS, len(planes))):
+                if not len(chunk):
+                    continue
+                ids = np.flatnonzero((low <= chunk[-1]) & (high > chunk[0]))
+                groups.append((v[t[ids]], chunk))
+            for contours in layer_map(partial(_slice_group), groups):
+                yield from contours
+            return
+    yield from _slice_planes_serial(mesh, planes)
+
+
+def _slice_group(group):
+    """Contours of each plane of a group, from the triangles (m, 3, 3) that cross it."""
+    tris, planes = group
+    mesh = Mesh(tris.reshape(-1, 3), np.arange(len(tris) * 3).reshape(-1, 3))
+    return list(_slice_planes_serial(mesh, planes))
+
+
+def _slice_planes_serial(mesh: Mesh, planes):
     from .geometry_constants import SLICE_PLANE_BATCH
 
     v, t = mesh.vertices, mesh.triangles

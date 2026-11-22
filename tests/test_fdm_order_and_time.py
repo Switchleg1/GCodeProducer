@@ -104,3 +104,23 @@ def test_solid_fill_takes_the_short_side_of_a_fork_first():
         hops.append(np.hypot(*(start - head)))
         head = end
     assert max(hops[1:]) < 15.                 # never a trip back across the whole part
+
+
+def test_outer_wall_follows_its_last_inner_wall():
+    outer = _loop(0, 0, 40, "outer_perimeter")
+    inner_a = _loop(1, 1, 8, "inner_perimeter")          # two inner walls of one big outer loop,
+    inner_b = _loop(31, 1, 8, "inner_perimeter")         # far apart (split at a neck)
+    lone = _loop(60, 0, 5, "outer_perimeter")
+    out = order_layer([outer, inner_a, inner_b, lone], (0., 0.), [box(-1, -1, 70, 41)])
+    names = [id(p) for p in out]
+    assert names.index(id(outer)) > max(names.index(id(inner_a)), names.index(id(inner_b)))
+    assert names.index(id(inner_a)) < names.index(id(inner_b))
+
+
+def test_tiny_wall_loop_scrap_becomes_one_bead():
+    from gcodeproducer.core.fdm.variable_walls import variable_wall_levels
+    # 3.1 line widths across: the inner level is a 0.05 mm sliver whose loop is a scrap
+    levels, _ = variable_wall_levels(box(0, 0, 1.6, 1.25), .4, 2, .2, .6)
+    (pts, widths, closed), = levels[1]
+    assert not closed and len(pts) == 2
+    assert .4 < widths[0] <= .6                       # one stroke as wide as the loop covered

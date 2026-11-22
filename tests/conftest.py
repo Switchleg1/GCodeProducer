@@ -1,5 +1,9 @@
+import os
 import struct
 from pathlib import Path
+
+# a small slicing worker pool for the test run (the default uses most cores)
+os.environ.setdefault("GCODEPRODUCER_WORKERS", "3")
 
 import pytest
 

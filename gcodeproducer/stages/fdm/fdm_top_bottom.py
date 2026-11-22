@@ -9,11 +9,13 @@ just the first/last N layers.
 from __future__ import annotations
 
 from gcodeproducer.stages.fdm.fdm_constants import FDMTOPBOTTOM_PARAMS
-import numpy as np, gcodeproducer.core.geometry.kernel as geometry, gcodeproducer.core.geometry.infill as infill_gen
+from functools import partial
+from types import SimpleNamespace
+import numpy as np, gcodeproducer.core.geometry.kernel as geometry
 from gcodeproducer.core.jobs.path import Path
 from shapely import union_all
-from gcodeproducer.core.fdm.bridges import bridge_fill, exclude_bridges
-from gcodeproducer.core.fdm.wall_regions import region_rings, slice_region
+from gcodeproducer.core.fdm.layer_tasks import top_bottom_task
+from gcodeproducer.core.fdm.layer_threads import layer_map
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -64,64 +66,43 @@ class FDMTopBottom(SliceStage):
             return acc if acc is not None else np.ones_like(empty)
 
         inset = lw * 0.5 * (1.0 - params["overlap"] / 100.0)
-        total = bridge_count = 0
         growth = job.mat('bridge_growth', .8) if bridge_min else 0.
         support_gap = job.settings.get('bridge_support_gap_layers', 0)
+        cfg = {"width": lw, "inset": inset, "growth": growth, "bridge_min": bridge_min, "base": base,
+               "pattern": params["pattern"], "angle": params["angle"], "min_length": params["min_length"]}
+        # the masks need every layer; the bridges and solid lines of a layer need only these
+        tasks = []
         for i, layer in enumerate(job.layers):
-            layer.bridge_region = None
-            if bridge_min and i > 0 and layer.contours:
-                fill = slice_region(layer.contours)
-                supported = slice_region(job.layers[i-1].outline)
-                support_regions = [previous.support_region for previous in job.layers[max(0, i-support_gap-1):i]
-                                   if previous.support_region is not None]
-                support_material = union_all(support_regions) if support_regions else None
-                segments, layer.bridge_region = bridge_fill(fill, supported, lw, growth, bridge_min, support_material)
-                for segment in infill_gen.order_segments(np.asarray(segments)):
-                    layer.paths.append(Path('bridge', segment, width=lw))
-                    bridge_count += 1
             g = masks[i]
             above = stack_and(range(i + 1, i + 1 + top_n)) if top_n > 0 else np.ones_like(g)
             below = stack_and(range(i - bot_n, i)) if bot_n > 0 else np.ones_like(g)
             top_solid = g & ~above
             bottom_solid = g & ~below & above       # avoid double-classifying
-            solid = top_solid | bottom_solid
-            layer.solid_mask = base.like(solid)
-            if not solid.any():
-                ctx.progress((i + 1) / nL)
-                continue
-            total += self._fill(layer, top_solid, "top_infill", params, lw, inset, res, base)
-            total += self._fill(layer, bottom_solid, "solid_infill", params, lw, inset, res, base)
+            layer.solid_mask = base.like(top_solid | bottom_solid)
+            supported = support_material = None
+            if bridge_min and i > 0 and layer.contours:
+                supported = job.layers[i-1].outline
+                regions = [previous.support_region for previous in job.layers[max(0, i-support_gap-1):i]
+                           if previous.support_region is not None]
+                support_material = union_all(regions) if regions else None
+            tasks.append(SimpleNamespace(index=layer.index, z=layer.z, contours=layer.contours, supported=supported,
+                                         support_material=support_material, top=top_solid, bottom=bottom_solid))
+        total = bridge_count = 0
+        for i, (layer, (bridges, region, top, bottom)) in enumerate(
+                zip(job.layers, layer_map(partial(top_bottom_task, cfg), tasks))):
+            layer.bridge_region = region
+            for segment in bridges:
+                layer.paths.append(Path('bridge', segment, width=lw))
+            for feature, segs in (("top_infill", top), ("solid_infill", bottom)):
+                for p0, p1 in segs:
+                    layer.paths.append(Path(feature, np.array([p0, p1]), closed=False, width=lw))
+            bridge_count += len(bridges)
+            total += len(top) + len(bottom)
             ctx.progress((i + 1) / nL)
         detail = f', {bridge_count} bridge lines' if bridge_min else ''
         return f"{total} solid surface lines (top {top_n}, bottom {bot_n}){detail}"
 
-    def _fill(self, layer, cell_grid, feature, params, lw, inset, res, base):
-        if not cell_grid.any():
-            return 0
-        regions = [np.asarray(c, float) for c in layer.contours if len(c) >= 3]
-        if not regions:
-            return 0
-        # keep solid lines only where this surface mask is set: block the rest
-        block = base.like(~cell_grid)
-        # scan the inset region itself: no line can then run along a wall
-        inner = list(region_rings(slice_region(layer.contours).buffer(-inset)))
-        spacing = lw           # 100 % solid
-        count = 0
-        for phi, period, off in infill_gen.pattern_families(params["pattern"], layer.index, layer.z,
-                                                            spacing, params["angle"]):
-            segs = infill_gen.scan_fill(inner, phi, period, off, 0., params["min_length"])
-            if not len(segs):
-                continue
-            segs = infill_gen.split_by_raster(segs, block, params["min_length"])
-            segs = exclude_bridges(segs, layer.bridge_region, params['min_length'])
-            if not len(segs):
-                continue
-            segs = infill_gen.order_segments(segs, start=(layer_x(layer), 0.0))
-            for p0, p1 in segs:
-                layer.paths.append(Path(feature, np.array([p0, p1]), closed=False, width=lw))
-                count += 1
-        return count
-
 
 def layer_x(layer):
+    """Start X of the solid-line ordering (kept for the ``stages.fdm_top_bottom`` facade)."""
     return 0.0

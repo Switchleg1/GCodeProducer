@@ -93,8 +93,13 @@ not print-speed settings.
 With open-space avoidance enabled, routing can still dominate slicing time
 on detailed outlines. Check the **Speed & travel** stage time in the log;
 setting the detour budget to zero is a useful comparison, but changes the
-paths. These optimizations run in the existing compute process, not a thread
-pool.
+paths. Slicing, walls, top/bottom shells, infill and gap fill, and the
+output stage's per-layer planning (print order, simplification, seams and the
+travel routes inside a layer) run on all layers at once in worker processes;
+only writing the lines is sequential. The plan of a layer starts from an
+estimate of where the previous layer ends and is re-planned once from the
+previous plan's end when that estimate was off, so only a layer's first
+travel can differ from a fully sequential plan.
 
 ## Troubleshooting
 

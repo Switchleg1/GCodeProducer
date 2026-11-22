@@ -110,6 +110,7 @@ def slice_with_shell_check(mesh, planes, merge, found):
     shells = _shells(mesh)
     planes = np.asarray(planes)
     candidates = _candidate_planes(shells, planes)
+    replaced = {}
     for i in range(0, len(planes), SLICE_PLANE_BATCH):
         batch = planes[i:i+SLICE_PLANE_BATCH]
         ids = candidates[np.searchsorted(candidates, i):np.searchsorted(candidates, i+len(batch))]
@@ -135,5 +136,7 @@ def slice_with_shell_check(mesh, planes, merge, found):
                 if merge:
                     result = joined if len(positive) == len(signed) else _solid_region(signed)
                     altered[idx] = list(region_rings(result))
-        for offset, contours in enumerate(slice_planes(mesh, batch), i):
-            yield altered.get(offset, contours)
+        replaced.update(altered)
+    # the ordinary contours of all planes at once (sliced in parallel when worthwhile)
+    for offset, contours in enumerate(slice_planes(mesh, planes)):
+        yield replaced.get(offset, contours)

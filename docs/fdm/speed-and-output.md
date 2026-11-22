@@ -44,10 +44,13 @@ Firmware print acceleration** (see [GUI statistics](../gui.md)).
 ## Print order within a layer
 
 **Order paths to shorten travel** (Travel group, on by default) prints each
-part island in turn, nearest first. Inside an island the walls print as wall
-groups — each outer wall with the inner walls next to it, inner first —
-visited nearest first, so a feature such as one fan or blade opening is
-finished before the head moves on. Then the island's bridges print together
+part island in turn, nearest first. Inside an island every outer wall is
+grouped with the inner walls next to it. Inner walls print nearest first, and
+each outer wall prints right after the last inner wall of its group (inner
+before outer, as before). Most groups have one inner wall, so a fan or blade
+opening is finished before the head moves on; a large outer wall whose inner
+walls are split at narrow necks picks them up as the head passes instead of
+crossing the part for them. Then the island's bridges print together
 (one fan change), then all its other fill (sparse, solid and gap fill
 together) nearest first, each line entered
 at its nearer end and each loop where it will start (respecting the seam

@@ -59,30 +59,44 @@ def _merge_short(points, closed, min_length, max_deviation, widths=None):
 
 
 def _douglas_peucker(points, widths, tolerance):
-    """Douglas-Peucker keep mask on an open polyline, treating width as a third coordinate."""
+    """Douglas-Peucker keep mask on an open polyline, treating width as a third coordinate.
+
+    The XY simplification runs in GEOS; vertices it drops whose width differs
+    from the linear interpolation between their kept neighbours by more than
+    :data:`DECIMATE_WIDTH_TOLERANCE` are put back (until none is left).
+    """
     n = len(points)
     keep = np.zeros(n, dtype=bool)
     keep[0] = keep[-1] = True
-    stack = [(0, n - 1)]
-    while stack:
-        i, j = stack.pop()
-        if j <= i + 1:
-            continue
-        a, b = points[i], points[j]
-        inner = points[i+1:j]
-        ab = b - a
-        denom = float(ab @ ab)
-        t = np.clip(((inner - a) @ ab) / denom, 0., 1.) if denom > 1e-24 else np.zeros(len(inner))
-        score = np.hypot(*(inner - (a + t[:, None]*ab)).T) / tolerance
-        if widths is not None:
-            interp = widths[i] + t*(widths[j] - widths[i])
-            score = np.maximum(score, np.abs(widths[i+1:j] - interp) / DECIMATE_WIDTH_TOLERANCE)
-        k = int(score.argmax())
-        if score[k] > 1.:
-            k += i + 1
-            keep[k] = True
-            stack.append((i, k))
-            stack.append((k, j))
+    simple = np.asarray(shapely.simplify(LineString(points), tolerance, preserve_topology=False).coords)
+    keys = points[:, 0] + 1j * points[:, 1]
+    at = 0
+    for key in (simple[:, 0] + 1j * simple[:, 1]).tolist():
+        hit = np.flatnonzero(keys[at:] == key)
+        if len(hit):
+            at += int(hit[0])
+            keep[at] = True
+    if widths is None:
+        return keep
+    seglen = np.hypot(*np.diff(points, axis=0).T)
+    s = np.r_[0., np.cumsum(seglen)]
+    for _ in range(n):
+        kept = np.flatnonzero(keep)
+        right = kept[np.minimum(np.searchsorted(kept, np.arange(n)), len(kept) - 1)]
+        left = kept[np.maximum(np.searchsorted(kept, np.arange(n), side="right") - 1, 0)]
+        span = s[right] - s[left]
+        t = np.where(span > 1e-12, (s - s[left]) / np.where(span > 1e-12, span, 1.), 0.)
+        error = np.abs(widths - (widths[left] + t * (widths[right] - widths[left])))
+        error[keep] = 0.
+        if error.max() <= DECIMATE_WIDTH_TOLERANCE:
+            break
+        # put back the worst vertex between each pair of kept neighbours
+        bad = error > DECIMATE_WIDTH_TOLERANCE
+        worst = {}
+        for i in np.flatnonzero(bad).tolist():
+            if left[i] not in worst or error[i] > error[worst[left[i]]]:
+                worst[left[i]] = i
+        keep[list(worst.values())] = True
     return keep
 
 

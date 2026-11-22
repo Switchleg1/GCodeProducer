@@ -96,6 +96,25 @@ class GCodeLine:
                 self.extra = " ".join(extras)
 
     @classmethod
+    def parsed(cls, raw: str, cmd: str, params: dict, origin: Optional[int] = None) -> "GCodeLine":
+        """A line whose command and words are already known (``raw`` must parse to them)."""
+        ln = cls.__new__(cls)
+        ln.raw = raw
+        ln.cmd = cmd
+        ln.params = params
+        ln.comment = None
+        ln.extra = None
+        ln.layer = 0
+        ln.feature = "unknown"
+        ln.op = None
+        ln.engagement = float("nan")
+        ln.origin = origin
+        ln.note = None
+        ln.dirty = False
+        ln._text = None
+        return ln
+
+    @classmethod
     def make(cls, text: str, template: Optional["GCodeLine"] = None, note: Optional[str] = None) -> "GCodeLine":
         """Create a new (inserted) line, inheriting layer/feature from ``template``."""
         ln = cls(text, origin=None)
