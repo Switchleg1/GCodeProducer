@@ -4,10 +4,11 @@ import numpy as np
 
 from shapely import distance, get_coordinates, get_parts, line_interpolate_point, points, segmentize
 from shapely.geometry import LineString, Point, box
-from shapely.ops import nearest_points, substring
+from shapely.ops import nearest_points
 
 from .regions import eased, sweep
 from .links import heading
+from .polyline import stretch
 from .wavefront_constants import (WALL_TOLERANCE, CORNER_DEPTH, CORNER_TURN, CORNER_RUN_IN, CORNER_STEPS, GLANCE_TURN, GLANCE_REACH, GLANCE_ANGLE, BOW_WIDTH_FACTOR, BOW_SET_BACKS, BOW_EXCESS, BOW_PARALLEL, HOOK_SHARE, MIN_HOOK_TRIM, HOOK_SEARCH, HOOK_RADIUS_FACTOR, WALL_CORNER, CORNER_WINDOW, WALL_GAP, NEAR_WALL, WALL_REACH)
 
 
@@ -28,6 +29,12 @@ def along_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL
         _wall_memo['found'][key] = walk_wall(rings, xy, part, own, radius, overlap, at_least=at_least, limit=limit)
     found = _wall_memo['found'][key]
     return None if found is None else list(found)
+
+
+def grown_box(rect, by):
+    """A box grown by ``by`` on every side; a square-cornered stand-in for buffering it."""
+    x0, y0, x1, y1 = rect.bounds
+    return box(x0 - by, y0 - by, x1 + by, y1 + by)
 
 
 def walk_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_REACH):
@@ -57,7 +64,7 @@ def walk_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_
     # Measure against what lies near this stretch of wall only; the whole pocket is far slower.
     xs, ys = zip(*way)
     around = box(min(xs), min(ys), max(xs), max(ys))
-    near_own = own.intersection(around.buffer(radius + .5)) if not own.is_empty else own
+    near_own = own.intersection(grown_box(around, radius + .5)) if not own.is_empty else own
     clean = [True]*len(way) if near_own.is_empty else (distance(near_own, points(way)) >= radius - WALL_TOLERANCE).tolist()
     keep, spacing = len(way), limit/steps
     if any(clean):
@@ -69,7 +76,7 @@ def walk_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_
         if abs((headings[k]-headings[k-window]+math.pi) % (2*math.pi) - math.pi) > math.radians(WALL_CORNER):
             keep = min(keep, k)
             break
-    near_part = part.intersection(around.buffer(WALL_GAP + 3.))
+    near_part = part.intersection(grown_box(around, WALL_GAP + 3.))
     gap = np.full(len(way), WALL_GAP + 3.) if near_part.is_empty else distance(near_part, points(way))
     deep = (gap > max(WALL_GAP, float(gap[0]) + .2)).tolist()
     if any(deep):
@@ -96,7 +103,7 @@ def fillet(first, second, trim, *, shares=(1/3, 1/2)):
     start, end, corner = a.interpolate(a.length-trim), b.interpolate(trim), first[-1]
     curve = [((1-t)**2*start.x + 2*(1-t)*t*corner[0] + t*t*end.x,
               (1-t)**2*start.y + 2*(1-t)*t*corner[1] + t*t*end.y) for t in (k/8 for k in range(1, 8))]
-    return list(substring(a, 0., a.length-trim).coords) + curve + list(substring(b, trim, b.length).coords)
+    return stretch(a, 0., a.length-trim) + curve + stretch(b, trim, b.length)
 
 
 def turn_away(before, end, allowed, radius):
@@ -149,15 +156,14 @@ def hook_to_wall(path, rings, part, own, radius, allowed, trim, overlap, turn):
     p0, p1, p2 = (line.interpolate(line.length-back-k*span) for k in (2, 1, 0))
     a1, a2 = math.atan2(p1.y-p0.y, p1.x-p0.x), math.atan2(p2.y-p1.y, p2.x-p1.x)
     bend = ((a2-a1+math.pi) % (2*math.pi) - math.pi)/span  # radians per mm, signed
-    angle, x, y, onward = a2 + bend*span/2, p2.x, p2.y, [(p2.x, p2.y)]
-    for _ in range(math.ceil((back + 4*trim)/.2)):
-        angle += bend*.2
-        x, y = x + .2*math.cos(angle), y + .2*math.sin(angle)
-        onward.append((x, y))
-    ahead = LineString(onward).intersection(ring)
+    steps = math.ceil((back + 4*trim)/.2)
+    angles = a2 + bend*span/2 + bend*.2*np.arange(1, steps+1)
+    onward = np.vstack(((p2.x, p2.y), (p2.x, p2.y) + np.cumsum(.2*np.column_stack((np.cos(angles), np.sin(angles))), axis=0)))
+    run_up = LineString(onward)
+    lo, hi = onward.min(axis=0) - 1., onward.max(axis=0) + 1.
+    ahead = run_up.intersection(ring.intersection(box(lo[0], lo[1], hi[0], hi[1])))
     if ahead.is_empty:
         return None
-    run_up = LineString(onward)
     reach = min(run_up.project(g) for g in get_parts(ahead) if g.geom_type == 'Point') if any(
         g.geom_type == 'Point' for g in get_parts(ahead)) else None
     if reach is None or reach < 1e-6:
@@ -166,7 +172,7 @@ def hook_to_wall(path, rings, part, own, radius, allowed, trim, overlap, turn):
     tail = along_wall(rings, (corner.x, corner.y), part, own, radius, overlap, at_least=trim+overlap)
     if tail is None:
         return None
-    leg = list(substring(line, 0., line.length - back).coords) + list(substring(run_up, 0., reach).coords)[1:]
+    leg = stretch(line, 0., line.length - back) + stretch(run_up, 0., reach)[1:]
     hooked = fillet(leg, tail, trim, shares=(1., .85))
     return hooked + turn_away(tail[-2], tail[-1], allowed, turn)
 
@@ -326,8 +332,9 @@ def wall_ends(run, part, own, radius, allowed, rings, blend, *, overlap=.75, tur
             if alternatives is not None:
                 # Separate hooks stay a fallback where the bow is too heavy, as at the mouth of an arm
                 # where the front is still curved from the spiral.
-                alternatives.append(wall_ends(run, part, own, radius, allowed, rings, blend,
-                                              overlap=overlap, turn=turn, bows=False))
+                # Built only if asked for: the bow is usually taken.
+                alternatives.append(lambda: wall_ends(run, part, own, radius, allowed, rings, blend,
+                                                      overlap=overlap, turn=turn, bows=False))
             return eased(bow, False, part, allowed, 1., ends=(True, True))
     for side, wanted in ((1, at_end), (0, at_start)):
         if not wanted:

@@ -1,5 +1,7 @@
 import math
 
+import numpy as np
+
 import pytest
 from shapely import segmentize
 from shapely.geometry import LineString, Point, Polygon, box
@@ -375,6 +377,31 @@ def test_links_leave_and_join_cuts_tangentially_and_stay_in_cleared_space():
     blocked = smooth_link(route, (1., 0.), (0., -1.), clear, box(0, 0, 20, 20).difference(box(1, 1, 3, 19)).difference(
         box(1, 17, 19, 19)), 1.)
     assert blocked == route  # Where a curve would touch stock, the checked route stays as it was.
+
+
+def test_fast_polyline_pieces_match_shapely_substring():
+    from shapely.ops import substring
+    from gcodeproducer.core.cam.wavefront.polyline import stretch
+    line = LineString([(0, 0), (3, 0), (3, 4), (7, 4), (7, 9)])
+    for a, b in ((0., 2.), (1., 6.5), (3., 7.), (2.5, line.length), (0., line.length), (4., 4.), (6.5, 1.)):
+        expected = list(substring(line, a, b).coords) if a != b else [substring(line, a, b).coords[0]]
+        assert np.allclose(stretch(line, a, b), expected)
+
+
+def test_levels_planned_in_workers_match_planning_them_one_by_one(monkeypatch):
+    from gcodeproducer.core.cam import Operation
+    from gcodeproducer.core.cam.wavefront import plan_level, plan_levels
+    op = Operation(kind='waterfall', strategy='adaptive')
+    region = box(0, 0, 16, 12)
+    levels = [(region, None, 1.), (region, region.difference(box(0, 0, 6, 12)), 1.)]
+    one_by_one = [plan_level(op, r, 4., m, d) for r, m, d in levels]
+    pooled = plan_levels(op, levels, 4.)
+    for (paths, summary), (other, again) in zip(one_by_one, pooled):
+        assert summary['fronts'] == again['fronts'] and len(paths) == len(other)
+        assert all(np.allclose(p.points, q.points) and p.closed == q.closed for p, q in zip(paths, other))
+    assert pooled[1][1]['fronts'] < pooled[0][1]['fronts']  # Less material at the second level.
+    monkeypatch.setenv('GCODEPRODUCER_WORKERS', '0')  # No worker processes: planned here, same result.
+    assert [s['fronts'] for _, s in plan_levels(op, levels, 4.)] == [s['fronts'] for _, s in pooled]
 
 
 def test_motion_time_follows_a_trapezoid_and_slows_for_corners():

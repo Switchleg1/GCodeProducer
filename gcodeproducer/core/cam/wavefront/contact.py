@@ -2,7 +2,7 @@
 import math
 import numpy as np
 
-from shapely import contains_xy, distance, points
+from shapely import contains_xy, distance, dwithin, points, prepare
 from shapely.geometry import LineString, box
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
@@ -14,7 +14,13 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
     """Keep the stretches of a dense path that touch stock, with a short run in and out through air."""
     if stock.is_empty or len(path) < 2:
         return []
-    touching = (distance(stock, points([tuple(q) for q in path])) < radius - 1e-6).tolist()
+    xy = np.asarray(path, float)[:, :2]
+    lo, hi = xy.min(axis=0) - radius, xy.max(axis=0) + radius
+    near = stock.intersection(box(lo[0], lo[1], hi[0], hi[1]))  # far faster than measuring the whole stock
+    if near.is_empty:
+        return []
+    prepare(near)
+    touching = dwithin(near, points(xy), radius - 1e-6).tolist()
     if not any(touching):
         return []
     if closed and not all(touching):

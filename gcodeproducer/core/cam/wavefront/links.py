@@ -3,9 +3,9 @@ import math
 
 from shapely import points, prepare
 from shapely.geometry import LineString, Point
-from shapely.ops import substring
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
+from .polyline import stretch
 from .wavefront_constants import (LINK_TOLERANCE, LINK_HANDLE, LINK_HANDLE_SHARES, LINK_STEP)
 
 
@@ -41,8 +41,8 @@ def stay_down_link(clear, stock, radius, start, end, *, why=None):
             return refuse('no_way_to_front_edge')
         da, db = ring.project(a), ring.project(b)
         lo, hi = sorted((da, db))
-        inner = list(substring(ring, lo, hi).coords)
-        outer = list(substring(ring, hi, ring.length).coords) + list(substring(ring, 0., lo).coords)[1:]
+        inner = stretch(ring, lo, hi)
+        outer = stretch(ring, hi, ring.length) + stretch(ring, 0., lo)[1:]
         if LineString(outer).length < LineString(inner).length:
             walk = outer if da > db else outer[::-1]
         else:

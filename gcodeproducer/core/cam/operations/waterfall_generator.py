@@ -9,12 +9,11 @@ class WaterfallGenerator(OperationGenerator):
     needs_closed = True
     allows_sloped = True
 
-    def level_paths(self, run, region, limit, z, planning, edge=None):
-        """(free region, areas) the cutter can clear at ``z``."""
+    @staticmethod
+    def free_at(run, region, limit, z, planning, edge=None):
+        """(free region, active tabs) the cutter may work in at ``z``."""
         from shapely.geometry import box
         from shapely.ops import unary_union
-        from gcodeproducer.core.cam.paths import machining_areas
-        from .pocket_generator import pocket_paths
         op = run.op
         blocked = planning.shadow.at(z)
         active = [box(lo[0], lo[1], hi[0], hi[1]) for lo, hi in planning.tabs if z < hi[2]-1e-6]
@@ -25,14 +24,51 @@ class WaterfallGenerator(OperationGenerator):
         if limit is not None:
             free = free.intersection(limit)
         free = free.buffer(0)
+        return free, active
+
+    def plan_ahead(self, run, region, limit, surface_top, planning, edge=None):
+        """Adaptive clearing: plan every depth at once, in worker processes; {z: (material, plan)}.
+
+        A depth's plan needs only that depth's free region and the material there,
+        and cutting one depth never changes the material below it, so the depths
+        are independent. The loop still checks each plan's material before use.
+        """
+        from gcodeproducer.core.cam.wavefront import plan_levels
+        op = run.op
+        if op.strategy != 'adaptive' or run.count < 2:
+            return {}
+        jobs = []
+        for i in range(run.count):
+            z = run.depth(i)
+            if z >= surface_top-1e-6:
+                continue
+            free, active = self.free_at(run, region, limit, z, planning, edge)
+            if active or free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
+                continue
+            jobs.append((z, free, planning.material.planar_at(z), min(run.step, run.start-z)))
+        if len(jobs) < 2:
+            return {}
+        plans = plan_levels(op, [(free, material, step) for _, free, material, step in jobs], run.diameter)
+        return {z: (material, plan) for (z, _, material, _), plan in zip(jobs, plans)}
+
+    def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None):
+        """(free region, areas) the cutter can clear at ``z``."""
+        from gcodeproducer.core.cam.paths import machining_areas
+        from .pocket_generator import pocket_paths
+        op = run.op
+        free, active = self.free_at(run, region, limit, z, planning, edge)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
             options = {}
             if op.strategy == 'adaptive':
-                options = dict(material=planning.material.planar_at(z), cutting=run.cutting,
+                material = planning.material.planar_at(z)
+                options = dict(material=material, cutting=run.cutting,
                                tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
                                depth_step=min(run.step, run.start-z), warn=planning.mark_partial, depth_label=f'Z{z:g}')
+                early = (ahead or {}).get(z)
+                if early is not None and _same(early[0], material):
+                    options['planned'] = early[1]
             paths = pocket_paths(op, [], free, run.diameter, run.direction,
                                  planning.ctx.log if op.strategy == 'adaptive' else None,
                                  **options)
@@ -75,11 +111,12 @@ class WaterfallGenerator(OperationGenerator):
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
         produced = reachable = 0
+        ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge)
         for i in range(run.count):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, areas = self.level_paths(run, region, limit, z, planning, edge)
+            free, areas = self.level_paths(run, region, limit, z, planning, edge, ahead)
             if areas is None:
                 ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
                 continue
@@ -87,7 +124,9 @@ class WaterfallGenerator(OperationGenerator):
             remaining = material.planar_at(z)
             for ai, planned in enumerate(areas):
                 planned[0].stay_down, planned[0].stay_down_from = False, None
-                if planning.skip_air and remaining is not None:
+                # Adaptive paths were planned against this same material and only cut where it is;
+                # checking them for air again would buffer every long chain for nothing.
+                if planning.skip_air and remaining is not None and op.strategy != 'adaptive':
                     planned = drop_air_paths(planned, remaining, run.radius, op.name, ctx.log)
                     if not planned:
                         continue
@@ -106,3 +145,10 @@ class WaterfallGenerator(OperationGenerator):
                              "(link it to a lower edge/face) and that the cutter fits.")
         ctx.log(f"  {op.name}: 3D Waterfall limited by the model surface, {produced} area/depth passes, "
                 f"Z{run.start:g} to Z{run.end:g}")
+
+
+def _same(one, other):
+    """Two material regions (or None) are the same, to well under a square micron."""
+    if one is None or other is None:
+        return one is other
+    return one.symmetric_difference(other).area < 1e-6

@@ -12,5 +12,5 @@ from .links import stay_down_link, smooth_link, heading
 from .timing import motion_time, machine_time
 from .planner import clear_pocket, clear_depths
 from .program import write_program
-from .app_paths import wavefront_paths
+from .app_paths import plan_level, plan_levels, wavefront_paths
 from .wavefront_constants import *  # noqa: F401,F403

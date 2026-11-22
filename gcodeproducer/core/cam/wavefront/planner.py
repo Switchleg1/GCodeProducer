@@ -125,11 +125,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         shapes = [wall_ends(run, part, own, radius, allowed, rings, blend, note=ends, alternatives=others),
                                   *others]
                         if stepover <= ROLL_STEPOVER or level == len(stepovers)-1:
-                            shapes.append(eased(run, closed, part, allowed, blend))
+                            shapes.append(lambda run=run, closed=closed: eased(run, closed, part, allowed, blend))
                     else:
                         shapes = [eased(run, closed, part, allowed, blend)]
                     done, skip = None, False
                     for path in shapes:
+                        # Fallback shapes are callables, built only when the shapes before them fail.
+                        path = path() if callable(path) else path
                         if len(path) < 2:
                             continue
                         pieces = cutting_pieces(path, stock, radius)

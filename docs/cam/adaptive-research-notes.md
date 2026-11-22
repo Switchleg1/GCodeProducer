@@ -636,6 +636,7 @@ shaped it, each prompted by reviewing a preview:
 | Machine time with a trapezoidal planner (acceleration, junction deviation) | Feed distance is not time | Curved links save 1-4 % despite being 5-17 % longer; ring 238.7 → 229.8 s |
 | Levels and an XYZ program (`clear_depths`, `write_program`) | The trials were one XY plane without helices | Three levels to Z-5: boss 956 s machine, 13 s compute (planned once, moved down); parses with the application reader, its estimate 964 s |
 | Wavefront behind Adaptive in the application (`gcodeproducer/core/cam/wavefront/`) | The old peel picker stalled with stock left | Stormtrooper Waterfall, two depths: complete, no safety findings; 1,553 s machine against 236 s contours and 495 s raster at the same feed; 151 s compute |
+| Waterfall depths planned at once in worker processes; no second air check; output thinned to 0.01 mm; array polyline pieces, prepared range tests, vectorised easing, lazy fallback hooks | 151 s to compute the Stormtrooper Waterfall | 58 s; 37 → 22 s processor time per depth; test shapes 10-40 % faster |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,

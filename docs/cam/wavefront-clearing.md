@@ -190,9 +190,34 @@ stop at the joins (ring 238.7 → 229.8 s, boss 329.0 → 322.7 s, L-shape
 
 ## Speed
 
-One depth of the two-lobe fixture takes about 10 s (145 s before 0.2.9), the
-ring 12 s (124 s) and the other shapes 0.4–9 s. What made the difference:
+On the saved Stormtrooper setup (3D Waterfall, two depths) Adaptive clearing
+takes 58 s to compute in the application, from 151 s in 0.2.17; contours
+take 5 s. Each depth plans in about 22 s of processor time (from 37 s), and
+the depths are planned at the same time in worker processes. The rest is the
+application's own work on the long paths: engagement and feed classes, the
+material model and the motion planner. One depth of the test shapes takes
+0.4–10.5 s (two-lobe fixture 10.5 s, ring 8.8 s). What made the difference:
 
+- **Waterfall depths are planned at once in worker processes.** A depth's plan
+  needs only its own free region and the material there, and cutting one
+  depth never changes the material below it, so the depths are independent.
+  The plans are made before the depth loop; each is used only if the
+  material at its depth is still the same when the loop reaches it. Without
+  worker processes (`GCODEPRODUCER_WORKERS=0`) they are planned one by one.
+- **Adaptive paths are not checked for air again.** They were planned
+  against the same material and only cut where it is; the check buffered
+  every long chain of cuts (10 s on the Stormtrooper).
+- **Output points are thinned to 0.01 mm**, not 0.002 mm: 20 % fewer lines
+  for the application to plan feeds and moves on.
+- **Pieces of polylines are cut with arrays**, not shapely's `substring`,
+  which builds the result point by point; a hook's run-up is built the same
+  way and met against only the stretch of wall near it.
+- **Distance tests that only ask "within this far?"** use prepared geometry
+  (the wall once per pocket, the stock near a cut once per cut), and a cut's
+  test is made against only the stock near it.
+- **A front's ends are eased toward the old front in one step** for all
+  points, not point by point.
+- **The hooks behind a bow are built only if the bow is refused.**
 - **Contact is measured without replaying the cut.** The cutter has swept
   everything behind it, so only the half of its edge facing forward can touch
   material. That half is measured against the stock from before the stretch,
@@ -327,7 +352,7 @@ cross still spend most of their cutting distance again on links.
   9.4 m, against 3.4 m of contours: at the 18 % limit (about 50°) its
   average stepover is 0.35–0.4 mm against 1.6 mm. Adaptive clearing pays
   off with a deeper cut and a feed raised for the thin chip; neither is
-  applied yet. Compute: 151 s against 5 s.
+  applied yet. Compute: 58 s against 5 s (see Speed).
 - The 60° limit and the shape constants (hook radius, overlap, neck ratio) are
   trial values tuned on these shapes only.
 

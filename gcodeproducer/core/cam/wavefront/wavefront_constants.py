@@ -45,4 +45,4 @@ MACHINE_DEFAULTS = {'cut_feed_mm_min': 1500., 'link_feed_mm_min': 3000., 'plunge
                     'rapid_mm_min': 5000., 'acceleration_mm_s2': 500., 'junction_deviation_mm': .02,
                     'retract_mm': 2.}
 WAVEFRONT_LEFT_MM2 = .5  # reachable stock left on one level above which the result is marked incomplete
-WAVEFRONT_SIMPLIFY = .002  # mm; largest deviation when thinning the dense planned points for output
+WAVEFRONT_SIMPLIFY = .01  # mm; largest deviation when thinning the dense planned points for output

@@ -1,12 +1,14 @@
 """Cutter-centre regions of a wavefront pocket: starts, spirals, fronts and the cleared area."""
 import math
 
-from shapely import covers, get_parts, points, segmentize
+import numpy as np
+from shapely import covers, distance, dwithin, get_coordinates, get_parts, points, prepare, segmentize, shortest_line
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
-from shapely.ops import nearest_points, polylabel, split, substring, unary_union
+from shapely.ops import nearest_points, polylabel, split, unary_union
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
+from .polyline import stretch
 from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK)
 
 
@@ -204,10 +206,12 @@ def fronts(clear, grown, wall, *, zone=None):
             continue
         part = orient(part, sign=-1.)
         for ring in (part.exterior, *part.interiors):
-            pts = list(ring.coords)[:-1]
+            coords = np.asarray(ring.coords)[:-1, :2]
+            pts = [tuple(q) for q in coords.tolist()]
             n = len(pts)
-            free = [wall.distance(Point((pts[i][0]+pts[(i+1) % n][0])/2,
-                                        (pts[i][1]+pts[(i+1) % n][1])/2)) > WALL_TOLERANCE for i in range(n)]
+            middles = (coords + np.roll(coords, -1, axis=0))/2
+            prepare(wall)  # the same wall for every pass: prepared once, then a fast range test
+            free = (~dwithin(wall, points(middles), WALL_TOLERANCE)).tolist()
             if all(free):
                 runs.append((pts + [pts[0]], True))
                 continue
@@ -243,36 +247,33 @@ def fronts(clear, grown, wall, *, zone=None):
 
 def eased(run, closed, clear, allowed, blend, *, ends=(True, True)):
     """Roll on from the old front and roll off back to it; closed rings overlap their start."""
-    line = LineString(run)
+    xy = np.asarray(run, float)[:, :2]
+    line = LineString(xy)
     reach = min(blend, line.length/3)
-    pts = list(run)
     if closed:
-        pts += list(substring(line, 0., min(2*reach, line.length)).coords)[1:]
-    dense = list(segmentize(LineString(pts), .1).coords)
-    total = LineString(dense).length
-    out, travelled = [], 0.
-    for i, q in enumerate(dense):
-        if i:
-            travelled += math.dist(dense[i-1], q)
-        near = min(travelled if ends[0] else math.inf, total-travelled if ends[1] else math.inf)
-        t = near/reach if reach else 1.
-        if t < 1.:
-            w = max(0., t*t*(3-2*t))
-            n = nearest_points(clear, Point(q))[0]
-            q = (n.x + (q[0]-n.x)*w, n.y + (q[1]-n.y)*w)
-        if not out or q != out[-1]:
-            out.append(q)
-    inside = covers(allowed, points(out)).tolist() if out else []
-    if not all(inside):
-        kept = []
-        for q, ok in zip(out, inside):
-            if not ok:
-                n = nearest_points(allowed, Point(q))[0]
-                q = (n.x, n.y)
-            if not kept or q != kept[-1]:
-                kept.append(q)
-        out = kept
-    return out
+        xy = np.vstack((xy, np.asarray(stretch(line, 0., min(2*reach, line.length))[1:], float).reshape(-1, 2)))
+    dense = get_coordinates(segmentize(LineString(xy), .1))
+    if len(dense) < 2:
+        return [tuple(q) for q in dense.tolist()]
+    travelled = np.r_[0., np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))]
+    total = travelled[-1]
+    near = np.minimum(travelled if ends[0] else np.inf, total - travelled if ends[1] else np.inf)
+    t = near/reach if reach else np.ones(len(dense))
+    blend_at = np.flatnonzero(t < 1.)
+    if len(blend_at):
+        # Pull each point toward the old front, fully at the very ends and less further in.
+        w = np.clip(t[blend_at], 0., 1.)
+        w = w*w*(3 - 2*w)
+        foot = get_coordinates(shortest_line(points(dense[blend_at]), clear))[1::2]
+        dense[blend_at] = foot + (dense[blend_at] - foot)*w[:, None]
+    keep = np.r_[True, np.any(np.diff(dense, axis=0) != 0, axis=1)]
+    dense = dense[keep]
+    inside = covers(allowed, points(dense))
+    if not inside.all():
+        outside = np.flatnonzero(~inside)
+        dense[outside] = get_coordinates(shortest_line(points(dense[outside]), allowed))[1::2]
+        dense = dense[np.r_[True, np.any(np.diff(dense, axis=0) != 0, axis=1)]]
+    return [tuple(q) for q in dense.tolist()]
 
 
 def without_slivers(stock):
