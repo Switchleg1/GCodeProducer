@@ -1236,6 +1236,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             contact[k] += tally[k]
 
     refused = {}
+    entries = []  # {'stroke': index of the first cut after the helix, 'helix_xyz': helix points}
     cleared = [None]  # clearance for the live stock; None until asked for after a wholesale change
 
     def stock_clear():
@@ -1436,6 +1437,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         island = {'centre_xy_mm': centre, 'radius_mm': reach,
                   'helix_mm': float(np.linalg.norm(np.diff(helix, axis=0), axis=1).sum()) if len(helix) > 1 else 0.}
         chosen, kept = None, False
+        entry_record = {'stroke': None, 'helix_xyz': helix.tolist()}
+        entries.append(entry_record)
         for stepover in stepovers:
             probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
             if cut(probe, stock, radius, sample_step, stop_above=limit)[0] <= limit:
@@ -1449,10 +1452,13 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                           accepted=peak <= limit)
             if peak <= limit:
                 commit('spiral', path, chosen, peak)
+                entry_record['stroke'] = len(strokes)-1
                 count(tally)
                 stock, own = trial, sweep(path, own, radius)
                 cleared[0] = None
                 kept = True
+        if entry_record['stroke'] is None:
+            entry_record['stroke'] = len(strokes)  # Leads into whatever cut comes next.
         return centre, reach, island, own, kept
 
     stretches = channel_stretches(allowed, seeds, radius) if len(seeds) > 1 else None
@@ -1600,6 +1606,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'arcs_at_0.2_mm_or_less': sum(s.stepover_mm <= .2 for s in cuts),
               'front_stepover_histogram': {str(v): sum(s.stepover_mm == v for s in cuts) for v in stepovers},
               'seconds': time.time()-started}
+    report['entries'] = entries
+    report['top_mm'], report['depth_mm'] = top, depth
     report['machine_time'] = machine_time(strokes, report['islands'], top=top, depth=depth)
     return strokes, residual, report
 
@@ -1639,6 +1647,91 @@ def write_review(path, pocket, strokes, residual, report):
                              'orange: reachable stock left | retracts not drawn')
 
 
+def clear_depths(pocket, radius, *, top=0., bottom, step_down, **options):
+    """Clear a pocket in levels from top down to bottom: [(z, strokes, residual, report)].
+
+    Levels are equal and at most step_down deep; each starts from intact
+    stock at its own depth, with the floor of the level above as the top its
+    helices start from. pocket is one outline for every level (a 2.5D
+    pocket), or a function of Z giving each level's outline (the slices of a
+    3D waterfall). With one outline the plan is the same at every level, so
+    it is worked out once and moved down: only the helices differ in Z.
+    clear_pocket options pass through.
+    """
+    if step_down <= 0 or bottom >= top:
+        raise ValueError('expected a positive step-down and a bottom below the top')
+    count = max(1, math.ceil((top - bottom)/step_down - 1e-9))
+    levels, above, first = [], top, None
+    for k in range(1, count+1):
+        z = top - (top - bottom)*k/count
+        if callable(pocket) or first is None:
+            outline = pocket(z) if callable(pocket) else pocket
+            strokes, residual, report = clear_pocket(outline, radius, top=above, depth=z, **options)
+            first = first or (z, above)
+        else:
+            z0, above0 = first
+            _, strokes, residual, base = levels[0]
+            shift = z - z0
+            report = dict(base, top_mm=above, depth_mm=z, reused_from_mm=z0, seconds=0.,
+                          entries=[dict(entry, helix_xyz=[[x, y, hz + shift] for x, y, hz in entry['helix_xyz']])
+                                   for entry in base['entries']])
+            if abs((above - z) - (above0 - z0)) > 1e-9:
+                raise AssertionError('levels are meant to be equal')
+        levels.append((z, strokes, residual, report))
+        above = z
+    return levels
+
+
+def write_program(path, levels, *, top=0., machine=None):
+    """Write the levels as one XYZ program for a viewer or simulator; never overwrites.
+
+    Every cut and link runs at its level's depth. A helix enters each start
+    from just above the floor of the level above. Wherever a cut does not
+    start where the last ended, the cutter rises to RETRACT above the top,
+    crosses at rapid and comes down at rapid to just above the level above,
+    then at the plunge feed: into a helix at a start, or straight down into
+    space already cleared at this level. Untested on a machine.
+    """
+    settings = dict(MACHINE_DEFAULTS, **(machine or {}))
+    safe = top + settings['retract_mm']
+    cut_f, link_f = settings['cut_feed_mm_min'], settings['link_feed_mm_min']
+    plunge_f = settings['plunge_feed_mm_min']
+    path = Path(path)
+    with path.open('x', encoding='ascii', newline='\n') as out:
+        out.write('(WAVEFRONT TRIAL - INCOMPLETE - FOR A VIEWER OR SIMULATOR ONLY - NOT RUN ON A MACHINE)\n'
+                  f'({len(levels)} levels, top Z{top:.3f}, bottom Z{levels[-1][0]:.3f})\n'
+                  '(No tool change, spindle, coolant, tabs or allowance)\nG21\nG90\nG17\n'
+                  f'G0 Z{safe:.4f}\n')
+        above, here = top, None
+        for z, strokes, _, report in levels:
+            out.write(f'(Level Z{z:.3f}: {report["front_arcs"]} fronts, stop {report["stop"]})\n')
+            helices = {entry['stroke']: entry['helix_xyz'] for entry in report.get('entries', [])}
+            for index, stroke in enumerate(strokes):
+                points = list(LineString(stroke.points).simplify(.002).coords)
+                if here is None or math.dist(here, points[0]) > 1e-6 or index in helices:
+                    helix = helices.get(index)
+                    start = helix[0][:2] if helix else points[0]
+                    out.write(f'G0 Z{safe:.4f}\nG0 X{start[0]:.4f} Y{start[1]:.4f}\n'
+                              f'G0 Z{above + .5:.4f}\n')
+                    if helix:
+                        out.write(f'(Helix entry)\nG1 Z{helix[0][2]:.4f} F{plunge_f:g}\n')
+                        for x, y, hz in helix[1:]:
+                            out.write(f'G1 X{x:.4f} Y{y:.4f} Z{hz:.4f}\n')
+                        if math.dist(helix[-1][:2], points[0]) > 1e-6:
+                            out.write(f'G1 X{points[0][0]:.4f} Y{points[0][1]:.4f} Z{z:.4f}\n')
+                    else:
+                        out.write(f'G1 Z{z:.4f} F{plunge_f:g}\n')
+                feed = link_f if stroke.kind == 'link' else cut_f
+                out.write(f'({stroke.kind})\nG1 X{points[1][0]:.4f} Y{points[1][1]:.4f} Z{z:.4f} F{feed:g}\n'
+                          if len(points) > 1 else f'({stroke.kind})\n')
+                for x, y in points[2:]:
+                    out.write(f'G1 X{x:.4f} Y{y:.4f}\n')
+                here = points[-1]
+            above = z
+        out.write(f'G0 Z{safe:.4f}\nM2\n')
+    return path
+
+
 if __name__ == '__main__':
     from tools.check_hsm_neck import neck_fixture
 
@@ -1653,12 +1746,26 @@ if __name__ == '__main__':
     parser.add_argument('--no-wall-finish', action='store_true', help='skip the finish along wall that still has stock on it')
     parser.add_argument('--time-budget', type=float, help='stop adding passes after this many seconds')
     parser.add_argument('--sample-step', type=float, default=.1, help='contact sampling distance in mm')
+    parser.add_argument('--bottom', type=float, help='clear in levels down to this Z (top is 0); needs --step-down')
+    parser.add_argument('--step-down', type=float, help='largest depth of one level in mm')
+    parser.add_argument('--program', type=Path, help='with --bottom: save all levels as one new XYZ .nc for a viewer')
     args = parser.parse_args()
     if args.pocket_wkt is not None:
         from shapely import from_wkt
         fixture = from_wkt(args.pocket_wkt.read_text(encoding='utf-8'))
     else:
         fixture, _ = neck_fixture()
+    options = dict(islands=args.islands, placement=args.placement, wall_pull_back=not args.no_wall_pull_back,
+                   wall_profile=not args.no_wall_finish, time_budget=args.time_budget, sample_step=args.sample_step)
+    if args.bottom is not None:
+        levels = clear_depths(fixture, 2., bottom=args.bottom, step_down=args.step_down or -args.bottom, **options)
+        if args.program is not None:
+            write_program(args.program, levels)
+        summary = [{'z_mm': z, **{k: report[k] for k in ('stop', 'front_arcs', 'reachable_residual_mm2', 'seconds')},
+                    'machine_s': report['machine_time']['total_s']} for z, _, _, report in levels]
+        print(json.dumps({'levels': summary, 'machine_s': sum(level['machine_s'] for level in summary),
+                          'compute_s': sum(level['seconds'] for level in summary)}, indent=2))
+        raise SystemExit(0)
     result = clear_pocket(fixture, 2., islands=args.islands, placement=args.placement,
                           wall_pull_back=not args.no_wall_pull_back, wall_profile=not args.no_wall_finish, time_budget=args.time_budget,
                           sample_step=args.sample_step)

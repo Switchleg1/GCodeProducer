@@ -126,6 +126,37 @@ the cut.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Levels and Z
+
+`clear_depths()` clears a pocket in equal levels from the top down to a
+bottom Z, none deeper than the step-down. Each level starts from intact
+stock at its own depth; its helices start from the floor of the level
+above. Given one outline (a 2.5D pocket) the plan is the same at every
+level, so it is worked out once and moved down, with only the helices
+changed; given a function of Z (the slices of a 3D waterfall) every level
+is planned from its own outline.
+
+`write_program()` writes all levels as one XYZ program for a viewer or
+simulator, marked incomplete and never run on a machine: cuts and links at
+the level's depth at their feeds, a helix into every start, and wherever a
+cut does not start where the last ended, a rise to 2 mm above the top, a
+rapid across and a rapid down to just above the level above before the
+plunge feed. No tool change, spindle, coolant, tabs or allowance. The
+program parses with the application's G-code reader; its time estimate
+agrees with `machine_time` to within a few per cent (square with a boss,
+three levels to Z-5: 964 s against 956 s).
+
+```bash
+python tools/hsm_wavefront.py --pocket-wkt examples/hsm-shapes/boss.wkt \
+    --bottom -5 --step-down 2 --program boss-levels-INCOMPLETE-program.nc
+```
+
+| Pocket, three levels to Z-5 | Machine time | Compute |
+|---|---|---|
+| Two-lobe neck fixture | 1,377 s | 20 s |
+| Square with a 16 mm boss | 956 s | 13 s |
+| Ring | 685 s | 21 s |
+
 ## Machine time
 
 The report's `machine_time` estimates one depth with a controller-like
@@ -285,9 +316,11 @@ cross still spend most of their cutting distance again on links.
   angle (up to 115°) is reported separately in `corners`, not in
   `peak_contact_deg`. Links grew by 100–300 mm on the square-cornered shapes
   to reach them.
-- **Not built:** Z motion and helix output, depth steps, allowance, tabs and
-  protected geometry, replay of rounded output coordinates, and the application
-  interface.
+- **Not built:** allowance, tabs and protected geometry, replay of rounded
+  output coordinates, the application interface, and the waterfall's slices
+  (`clear_depths` takes them as a function of Z, but nothing yet makes them
+  from a model). Each level starts from intact stock even where the level
+  above, in a waterfall, left less.
 - The 60° limit and the shape constants (hook radius, overlap, neck ratio) are
   trial values tuned on these shapes only.
 

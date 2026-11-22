@@ -9,7 +9,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 channel_stretches, convex_corners, motion_time, smooth_link, corner_pecks, CORNER_DEPTH, round_a_boss,
+                                 channel_stretches, clear_depths, convex_corners, motion_time, smooth_link, write_program, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -386,6 +386,36 @@ def test_motion_time_follows_a_trapezoid_and_slows_for_corners():
     assert cornered > straight + .1  # Each square corner is taken at about 2 mm/s, not 10.
     rounded = [(25*math.cos(t), 25*math.sin(t)) for t in [k*math.pi/40 for k in range(41)]]
     assert motion_time(rounded, [600.]*40, 100., .02)[0] < LineString(rounded).length/10 + .5
+
+
+def test_levels_make_one_program_with_helices_and_safe_rapids(tmp_path):
+    from gcodeproducer.core.gcode.program import GCodeProgram
+    from gcodeproducer.core.gcode.simulation import simulate
+    from gcodeproducer.core.gcode.time_estimate import estimate_time
+    pocket = box(0, 0, 18, 14)
+    levels = clear_depths(pocket, 2., bottom=-3., step_down=2., sample_step=.2)
+    assert [round(z, 6) for z, *_ in levels] == [-1.5, -3.]  # Equal levels, none deeper than the step.
+    assert all(report['reachable_residual_mm2'] < .1 for *_, report in levels)
+    assert levels[1][3]['reused_from_mm'] == pytest.approx(-1.5)  # One outline: planned once, moved down.
+    shapes = clear_depths(lambda z: box(0, 0, 18 + z, 14), 2., bottom=-3., step_down=2., sample_step=.2)
+    assert 'reused_from_mm' not in shapes[1][3] and shapes[1][1] != shapes[0][1]  # A slice per level.
+    program = write_program(tmp_path / 'levels.nc', levels)
+    parsed = GCodeProgram.from_file(str(program))
+    sim = simulate(parsed)
+    assert min(sim.z) == pytest.approx(-3.) and max(sim.z) == pytest.approx(2.)
+    lines = parsed.lines
+    for i, line in enumerate(lines):
+        if line.cmd == 'G0' and ('X' in line.params or 'Y' in line.params):
+            assert sim.z[i] == pytest.approx(2.)  # Every rapid across the pocket is above the top.
+        if line.cmd == 'G1' and ('X' in line.params or 'Y' in line.params):
+            assert sim.z[i] <= -1.5 + 1e-6 or 'Z' in line.params  # Feeds across run at a level or on a helix.
+    assert program.read_text().count('(Helix entry)') == sum(len(report['entries']) for *_, report in levels)
+    # The program's own time estimate agrees with the planner's.
+    expected = sum(report['machine_time']['total_s'] for *_, report in levels)
+    motion = {'print_acceleration': 500., 'travel_acceleration': 500., 'junction_deviation': .02}
+    assert estimate_time(parsed, sim, motion) == pytest.approx(expected, rel=.08)
+    with pytest.raises(FileExistsError):
+        write_program(program, levels)
 
 
 def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):

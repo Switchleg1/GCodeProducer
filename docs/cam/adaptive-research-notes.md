@@ -634,6 +634,7 @@ shaped it, each prompted by reviewing a preview:
 | Retry a refused front lighter before trying other fronts | The heavier try was refused in every arm, then the lighter retry cut one front per arm in turn, crossing between arms each pass | Links: cross 3,312 → 1,889 mm, L 3,081 → 2,448, neck 4,478 → 3,840, slot 1,824 → 1,388, rectangle 1,864 → 1,594; L small arcs 4 → 10 |
 | Links as tangent curves through the route's corners, checked like the route | Links left and joined cuts at sharp angles and turned square at their own corners | Sharp turns: rectangle 134 → 40, L 285 → 64, cross 302 → 149, ring 461 → 18; links 5-17 % longer |
 | Machine time with a trapezoidal planner (acceleration, junction deviation) | Feed distance is not time | Curved links save 1-4 % despite being 5-17 % longer; ring 238.7 → 229.8 s |
+| Levels and an XYZ program (`clear_depths`, `write_program`) | The trials were one XY plane without helices | Three levels to Z-5: boss 956 s machine, 13 s compute (planned once, moved down); parses with the application reader, its estimate 964 s |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,
