@@ -26,7 +26,9 @@ import numpy as np
 import shapely
 
 from gcodeproducer.core.fdm.fdm_constants import (LAYER_ORDER_FILL_FEATURES, LAYER_ORDER_LOOP_SAMPLES,
+                                                   LAYER_ORDER_RELOCATE_MIN, LAYER_ORDER_RELOCATE_PASSES,
                                                    WALL_FEATURES)
+from gcodeproducer.core.fdm.fill_runs import build_runs, run_entries
 from gcodeproducer.core.fdm.path_order import closed_loop
 
 
@@ -60,6 +62,8 @@ def _nearest_first(paths, head, seam, target):
     points = np.concatenate(points)
     owner = np.concatenate(owner)
     reverse = np.concatenate(reverse)
+    first_entry = np.searchsorted(owner, np.arange(len(paths)))
+    last_entry = np.r_[first_entry[1:], len(owner)]
     alive = np.ones(len(points), bool)
     out = []
     head = np.asarray(head, float)
@@ -68,7 +72,7 @@ def _nearest_first(paths, head, seam, target):
         d[~alive] = np.inf
         k = int(d.argmin())
         i = int(owner[k])
-        alive[owner == i] = False
+        alive[first_entry[i]:last_entry[i]] = False
         path = paths[i]
         out.append(path)
         if path.closed:
@@ -77,6 +81,113 @@ def _nearest_first(paths, head, seam, target):
             ends = np.asarray(path.points, float)[[0, -1], :2]
             head = ends[0] if reverse[k] else ends[1]
     return out, head
+
+
+def _order_fill(fill, head, seam, target):
+    """Fill in runs: zig-zag blocks of parallel lines plus single paths, nearest first.
+
+    At a fork - the run just finished continues into several runs, e.g. on
+    both sides of a hole - the shortest of those runs is printed first, so
+    the way back to the longer side is short and no stragglers are left.
+    """
+    runs, singles = build_runs(fill)
+    points, exits, owner, choice = [], [], [], []
+    for r, run in enumerate(runs):
+        for entry, exit_, seq, forward in run_entries(run):
+            points.append(entry)
+            exits.append(exit_)
+            owner.append(r)
+            choice.append((seq, forward))
+    for n, path in enumerate(singles):
+        pts, rev = _entries(path, seam, target)
+        ends = np.asarray(path.points, float)[[0, -1], :2]
+        for k in range(len(pts)):
+            points.append(pts[k])
+            exits.append(pts[k] if path.closed else (ends[0] if rev[k] else ends[1]))
+            owner.append(len(runs) + n)
+            choice.append(([path], True))
+    head = np.asarray(head, float)
+    if not points:
+        return [], head
+    points = np.asarray(points, float)
+    exits = np.asarray(exits, float)
+    owner = np.asarray(owner)
+    alive = np.ones(len(points), bool)
+    done = np.zeros(len(runs) + len(singles), bool)
+    start = head
+    order = []
+    branches = ()
+    while alive.any():
+        d = ((points - head)**2).sum(axis=1)
+        d[~alive] = np.inf
+        options = [r for r in branches if not done[r]]
+        if len(options) >= 2:
+            shortest = min(options, key=lambda r: runs[r]["length"])
+            d = np.where(owner == shortest, d, np.inf)
+        k = int(d.argmin())
+        item = int(owner[k])
+        alive[owner == item] = False
+        done[item] = True
+        order.append(k)
+        head = exits[k]
+        branches = ()
+        if item < len(runs):
+            _, forward = choice[k]
+            branches = runs[item]["next"] if forward else runs[item]["prev"]
+    order = _relocate(order, points, exits, owner, start)
+    out = [path for k in order for path in choice[k][0]]
+    return out, exits[order[-1]]
+
+
+def _relocate(order, points, exits, owner, start):
+    """Move stragglers to where they cost least (Or-opt with one item, any entry).
+
+    Greedy nearest-neighbour leaves a few paths behind that it must come back
+    for. Each item is tried at every gap of the sequence, entered at each of
+    its entries; a move is kept when it shortens the total travel.
+    """
+    rows = {}
+    for k, o in enumerate(owner.tolist()):
+        rows.setdefault(o, []).append(k)
+    rows = {o: np.asarray(v) for o, v in rows.items()}
+    order = list(order)
+    for _ in range(LAYER_ORDER_RELOCATE_PASSES):
+        moved = False
+        seq = np.asarray(order)
+        prev_exit = np.vstack((start[None], exits[seq[:-1]]))
+        hop = np.hypot(*(points[seq] - prev_exit).T)
+        nxt_hop = np.r_[hop[1:], 0.]
+        for p in np.argsort(-(hop + nxt_hop)).tolist():
+            if len(order) < 3:
+                break
+            seq = np.asarray(order)
+            k = order[p] if p < len(order) else None
+            if k is None:
+                continue
+            prev_e = start if p == 0 else exits[order[p - 1]]
+            nxt = points[order[p + 1]] if p + 1 < len(order) else None
+            gain = np.hypot(*(points[k] - prev_e))
+            if nxt is not None:
+                gain += np.hypot(*(nxt - exits[k])) - np.hypot(*(nxt - prev_e))
+            rest = np.delete(seq, p)
+            slot_prev = np.vstack((start[None], exits[rest]))                 # gap q sits after rest[q-1]
+            slot_next = np.vstack((points[rest], np.full((1, 2), np.nan)))
+            base = np.hypot(*(slot_next - slot_prev).T)
+            base = np.where(np.isnan(base), 0., base)
+            cand = rows[int(owner[k])]
+            e_in = points[cand]
+            e_out = exits[cand]
+            cost = (np.hypot(*(slot_prev[:, None, :] - e_in[None]).transpose(2, 0, 1))
+                    + np.nan_to_num(np.hypot(*(e_out[None] - slot_next[:, None, :]).transpose(2, 0, 1)))
+                    - base[:, None])
+            q, r = np.unravel_index(int(np.argmin(cost)), cost.shape)
+            if cost[q, r] < gain - LAYER_ORDER_RELOCATE_MIN:
+                order = rest.tolist()
+                order.insert(int(q), int(cand[r]))
+                moved = True
+        if not moved:
+            break
+    return order
 
 
 def _exit(path, k, pts, head):
@@ -184,10 +295,10 @@ def order_layer(paths, head, islands, seam="nearest", target=(0., 0.), mixed_fil
         out.extend(ordered)
         fill = [p for p in fill if p.feature != "bridge"]
         if mixed_fill:
-            ordered, head = _nearest_first(fill, head, seam, target)
+            ordered, head = _order_fill(fill, head, seam, target)
             out.extend(ordered)
         else:
             for feature in dict.fromkeys(p.feature for p in fill):
-                ordered, head = _nearest_first([p for p in fill if p.feature == feature], head, seam, target)
+                ordered, head = _order_fill([p for p in fill if p.feature == feature], head, seam, target)
                 out.extend(ordered)
     return out

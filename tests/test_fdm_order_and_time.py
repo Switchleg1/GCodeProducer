@@ -80,3 +80,27 @@ def test_manifold_chain_matches_general_chain():
     fast, slow = _chain_manifold(segs, 1e-4), _chain_general(segs, 1e-4)
     assert len(fast) == len(slow) == 1 and len(fast[0]) == 4
     assert _chain_manifold([(square[0], square[1]), (square[1], square[2])], 1e-4) is None   # open
+
+
+def test_solid_fill_takes_the_short_side_of_a_fork_first():
+    from gcodeproducer.core.fdm.fill_runs import build_runs
+    paths = []
+    for k in range(40):
+        y = .2 + k * .45
+        if 6 <= y <= 12:                      # hole from x 3 to 7: short left side, long right side
+            paths += [Path("top_infill", np.array([[0., y], [3., y]])), Path("top_infill", np.array([[7., y], [30., y]]))]
+        else:
+            paths.append(Path("top_infill", np.array([[0., y], [30., y]])))
+    runs, singles = build_runs(paths)
+    assert len(runs) == 4 and not singles
+    out = order_layer(paths, (0., 0.), [box(0, 0, 30, 18)])
+    left = [i for i, p in enumerate(out) if np.asarray(p.points)[:, 0].max() <= 3.]
+    assert left == list(range(left[0], left[0] + len(left)))       # one block, no return trip
+    hops = []
+    head = np.zeros(2)
+    for p in out:
+        a, b = np.asarray(p.points, float)
+        start, end = (a, b) if np.hypot(*(a - head)) <= np.hypot(*(b - head)) else (b, a)
+        hops.append(np.hypot(*(start - head)))
+        head = end
+    assert max(hops[1:]) < 15.                 # never a trip back across the whole part

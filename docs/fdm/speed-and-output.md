@@ -51,7 +51,13 @@ finished before the head moves on. Then the island's bridges print together
 (one fan change), then all its other fill (sparse, solid and gap fill
 together) nearest first, each line entered
 at its nearer end and each loop where it will start (respecting the seam
-setting). Skirt, brim and support print first, as before. Turn it off to get
+setting). Dense solid lines are grouped into *runs* — the lines on
+consecutive scan lines that print as one zig-zag. Where a run splits into
+several (a fork in the road, e.g. on both sides of a hole) the shortest
+branch is printed first, so the way back to the longer side is short. A final
+pass moves any path the nearest-first walk left behind to the place in the
+sequence where it costs the least travel. Skirt, brim and support print
+first, as before. Turn it off to get
 the generated order: all inner walls, all outer walls, then each fill
 feature across the whole layer.
 
