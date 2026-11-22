@@ -174,3 +174,5 @@
   not revisited by the finish.
 - Corner moves are judged by depth (0.3 mm), not contact angle, and back out along their own track. The depth was
   chosen from the test shapes, not from cutting data; a reversal at the tip is assumed acceptable for these short moves.
+- Several starts go one way round only when the centre region is one polygon with one hole and every start's spiral
+  reaches both walls; forward is the outer outline's direction. Pockets with several bosses are not handled.

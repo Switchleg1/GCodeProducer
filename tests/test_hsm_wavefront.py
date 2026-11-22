@@ -9,7 +9,7 @@ from tools.check_hsm_neck import neck_fixture
 from tools.hsm_center_regions import center_regions
 from tools.hsm_contact_replay import indexed_contact
 from tools.hsm_wavefront import (along_wall, bow_across, choose_seeds, clear_pocket, clearance, cut, cutting_pieces, eased,
-                                 convex_corners, corner_pecks, CORNER_DEPTH, round_a_boss,
+                                 channel_stretches, convex_corners, corner_pecks, CORNER_DEPTH, round_a_boss,
                                  find_lobes, fronts, polygons, spiral_out, stay_down_link, wall_ends, write_review)
 
 
@@ -190,6 +190,24 @@ def test_spiral_that_spans_a_channel_round_a_boss_sends_one_front_one_way():
     assert round_a_boss((42., 25.), 3., rings, 2.) is None  # Does not reach both walls.
     slot = [LineString(box(2, 2, 78, 10).exterior.coords)]
     assert round_a_boss((20., 6.), 4. - 1e-3, slot, 2.) is None  # Both walls are one ring: nothing to go round.
+
+
+def test_starts_round_a_boss_each_take_one_stretch_forward_into_the_next_spiral():
+    # Regression: four corner starts each sent fronts both ways; they met head-on between the corners
+    # in pinches of small arcs, as in the ring. Now the channel is cut across at every start.
+    square = box(0, 0, 50, 50).difference(box(17, 17, 33, 33))
+    allowed = unary_union(center_regions(square, 2.))
+    seeds = choose_seeds(allowed, min_radius=2.)
+    stretches = channel_stretches(allowed, seeds, 2.)
+    assert sorted(rank for *_, rank in stretches) == [0, 1, 2, 3]
+    pieces = [piece for _, _, piece, _ in stretches]
+    assert sum(piece.area for piece in pieces) == pytest.approx(allowed.area, rel=1e-6)  # The channel, once.
+    for ((x, y), room), (stretch, ahead, piece, rank) in zip(seeds, stretches):
+        following = seeds[[r for *_, r in stretches].index((rank+1) % 4)][0]
+        assert stretch.buffer(1e-6).covers(Point(following))  # Runs on into the next spiral ...
+        assert math.dist(ahead, following) < math.dist((x, y), following)  # ... going forward.
+        assert piece.distance(Point(x, y)) < 1e-6
+    assert channel_stretches(unary_union(center_regions(box(0, 0, 60, 30), 2.)), [((20, 15), 13.), ((40, 15), 13.)], 2.) is None
 
 
 def test_bow_crosses_a_curved_channel_square_to_its_walls():

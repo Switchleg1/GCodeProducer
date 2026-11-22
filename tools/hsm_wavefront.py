@@ -17,7 +17,7 @@ import numpy as np
 from shapely import contains_xy, covers, distance, get_coordinates, get_parts, line_interpolate_point, points, prepare, segmentize
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
-from shapely.ops import nearest_points, polylabel, substring, unary_union
+from shapely.ops import nearest_points, polylabel, split, substring, unary_union
 
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -837,6 +837,81 @@ def corner_pecks(vertex, along, stock, radius, ring):
                 break
 
 
+def channel_stretches(allowed, seeds, radius):
+    """For starts along one channel round a boss: [(stretch, point ahead, own piece, rank)] per start, else None.
+
+    rank is the start's place going forward round the channel.
+
+    The centre region is cut across the channel at every start. A start's
+    stretch runs forward from its cut to the next start's cut, plus the next
+    start's spiral disc, so its front can run on into that spiral. Forward is
+    the direction of the outer wall's outline.
+    """
+    parts = list(polygons(allowed))
+    if len(parts) != 1 or len(parts[0].interiors) != 1 or len(seeds) < 2:
+        return None
+    outer, inner = LineString(parts[0].exterior.coords), LineString(parts[0].interiors[0].coords)
+
+    def first_hit(at, dx, dy):
+        hits = [g for g in get_parts(LineString([(at.x, at.y), (at.x + 1e3*dx, at.y + 1e3*dy)]).intersection(outer))
+                if g.geom_type == 'Point']
+        return min(hits, key=at.distance) if hits else None
+
+    feet, places = [], []
+    for centre, room in seeds:
+        at = Point(centre)
+        if outer.distance(at) > room + SPAN_SLACK*radius or inner.distance(at) > room + SPAN_SLACK*radius:
+            return None  # This start's spiral does not span the channel.
+        into = nearest_points(inner, at)[0]
+        span = math.dist((at.x, at.y), (into.x, into.y))
+        if span < 1e-9:
+            return None
+        out = first_hit(at, (at.x-into.x)/span, (at.y-into.y)/span)
+        if out is None:
+            return None
+        feet.append(into)
+        places.append(outer.project(out))
+    ranked = sorted(range(len(seeds)), key=lambda k: places[k])
+    cuts, forward = [None]*len(seeds), [None]*len(seeds)
+    for rank, k in enumerate(ranked):
+        (cx, cy), _ = seeds[k]
+        (nx, ny), _ = seeds[ranked[(rank+1) % len(ranked)]]
+        span = math.hypot(nx-cx, ny-cy)
+        if span < 1e-9:
+            return None
+        fx, fy = (nx-cx)/span, (ny-cy)/span
+        into = feet[k]
+        # Cut across the channel: from the boss to the start, then on to the outer wall square to the
+        # way forward. A corner outside the start then falls to the stretch that arrives there,
+        # whose front runs straight on into it, instead of being split down its bisector.
+        ox, oy = -fy, fx
+        if ox*(cx-into.x) + oy*(cy-into.y) < 0:
+            ox, oy = -ox, -oy
+        out = first_hit(Point(cx, cy), ox, oy)
+        if out is None:
+            return None
+        bx, by = cx-into.x, cy-into.y
+        size = math.hypot(bx, by)
+        cuts[k] = LineString([(into.x - bx/size, into.y - by/size), (cx, cy), (out.x + ox, out.y + oy)])
+        forward[k] = (fx, fy)
+    pieces = list(polygons(split(parts[0], unary_union(cuts))))
+    if len(pieces) != len(seeds):
+        return None
+    stretches = [None]*len(seeds)
+    for rank, k in enumerate(ranked):
+        following = ranked[(rank+1) % len(ranked)]
+        (cx, cy), room = seeds[k]
+        tx, ty = forward[k]
+        probe = Point(cx + .5*tx, cy + .5*ty)
+        piece = next((g for g in pieces if g.buffer(1e-6).covers(probe)), None)
+        if piece is None:
+            return None
+        (nx, ny), next_room = seeds[following]
+        stretch = unary_union([piece, Point(nx, ny).buffer(next_room)]).intersection(allowed)
+        stretches[k] = (stretch, (cx + room*tx, cy + room*ty), piece, rank)
+    return stretches
+
+
 def sweep(path, stock, radius):
     """Remove the cutter's swept area without measuring contact."""
     return without_slivers(stock.difference(LineString(path).buffer(radius, quad_segs=CUT_SEGMENTS)))
@@ -1039,16 +1114,20 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         """Island whose spiral disc is nearest; decides who finishes shared ground."""
         return min(range(len(seeds)), key=lambda k: math.dist(xy, seeds[k][0]) - seeds[k][1])
 
-    def wave(index, centre, own, shared, focus=None):
+    def wave(index, centre, own, shared, focus=None, region=None):
         """Grow one island as if it were alone, cutting only where real stock remains.
 
         own is the stock this island would see by itself; it keeps the fronts
         concentric when they reach space another island has opened. A shared
         island leaves arcs that mostly belong to a neighbour for that neighbour.
+        region, if given, is the stretch of the centre region this island works; its edges that are
+        not pocket wall are not fronts.
         """
         nonlocal stock
+        here = allowed if region is None else region
+        edge = wall if region is None else region.boundary
         start, passes, arcs, blocked = 0, 0, 0, False
-        own_clear = clearance(allowed, own, radius)
+        own_clear = clearance(here, own, radius)
         steady, since, patience = 0, 0, RAISE_PATIENCE  # stepover level in use; passes at it; passes to wait
         # focus is the middle of the front last cut. Where it is given, that front is followed until it
         # is finished; elsewhere the front nearest the cutter goes next, which keeps links short and
@@ -1062,8 +1141,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             progressed, used, zone, blocked = False, None, None, False
             for level in range(start, len(stepovers)):
                 stepover = stepovers[level]
-                grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
-                runs = fronts(part, grown, wall, zone=zone)
+                grown = part.buffer(stepover, quad_segs=SWEEP_SEGMENTS).intersection(here)
+                runs = fronts(part, grown, edge, zone=zone)
                 failed, halt = [], False
                 while runs and not halt:
                     # Stay with one front. Round a boss two fronts set off opposite ways; taking whichever
@@ -1138,7 +1217,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     stock = trial
                     before = own.area
                     own = sweep(path, own, radius)
-                    own_clear = grow_clearance(own_clear, allowed, own, path, radius)
+                    own_clear = grow_clearance(own_clear, here, own, path, radius)
                     # A pass through air counts only if it moved the front on; otherwise it would repeat for ever.
                     moved = bool(done) or before - own.area > MIN_GAIN_MM2
                     progressed = progressed or moved
@@ -1181,18 +1260,21 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
         return passes, arcs, blocked
 
     front_passes, any_blocked = 0, False
-    for index, (centre, room) in enumerate(seeds):
+
+    def open_island(centre, room):
+        """Helix and spiral for one start: (centre, spiral reach, island report, own stock, spiral kept)."""
+        nonlocal stock
         region = Point(centre).buffer(room)
         entry = seed_entry(region, stock, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
         alone = seed_entry(region, pocket, radius=radius, top=top, depth=depth, lead_angle=lead_angle)
         if entry is None or alone is None:
-            continue
+            return None
         centre = tuple(entry.points[-1, :2])
         stock, own = entry.remaining, alone.remaining
         cleared[0] = None
         reach = Point(centre).distance(wall) - 1e-3
         island = {'centre_xy_mm': centre, 'radius_mm': reach}
-        chosen = None
+        chosen, kept = None, False
         for stepover in stepovers:
             probe = spiral_out(centre, min(reach, 1.8*radius + 3.), stepover, blend=blend)
             if cut(probe, stock, radius, sample_step, stop_above=limit)[0] <= limit:
@@ -1209,8 +1291,40 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 count(tally)
                 stock, own = trial, sweep(path, own, radius)
                 cleared[0] = None
+                kept = True
+        return centre, reach, island, own, kept
+
+    stretches = channel_stretches(allowed, seeds, radius) if len(seeds) > 1 else None
+    if stretches is not None:
+        # Several starts in one channel round a boss: open every start first, then send one front
+        # forward from each, across its own stretch of channel and into the next start's spiral.
+        # Fronts never meet head-on between starts.
+        # Open them in order round the channel; the last one opened works first. Each front ends in the
+        # next start's spiral, where the next front begins, so the fronts follow on without a lift.
+        order = sorted(range(len(seeds)), key=lambda k: stretches[k][3])
+        opened = {k: open_island(*seeds[k]) for k in order}
+        for index in order[-1:] + order[:-1]:
+            found = opened[index]
+            if found is None:
+                continue
+            centre, reach, island, own, kept = found
+            region, ahead, piece, _ = stretches[index]
+            # As in a ring with one start: the front runs straight on through the next start's spiral
+            # up to its cut, instead of closing on it from both walls in a pinch of small arcs.
+            through = pocket.difference(stock).intersection(piece.buffer(radius, quad_segs=SWEEP_SEGMENTS))
+            passes, arcs, blocked = wave(index, centre, stock.union(through.difference(
+                Point(centre).buffer(reach + radius))), shared=False, focus=ahead, region=region)
+            island.update(front_passes=passes, front_arcs=arcs, one_way=True)
+            front_passes += passes
+            any_blocked = any_blocked or blocked
+            island_reports.append(island)
+    for index, (centre, room) in enumerate(seeds if stretches is None else ()):
+        found = open_island(centre, room)
+        if found is None:
+            continue
+        centre, reach, island, own, kept = found
         focus = None
-        if len(seeds) == 1 and peak <= limit if chosen is not None else False:
+        if len(seeds) == 1 and kept:
             one_way = round_a_boss(centre, reach, rings, radius)
             if one_way is not None:
                 # The spiral fills a channel that runs round a boss. Its two sides would each send a

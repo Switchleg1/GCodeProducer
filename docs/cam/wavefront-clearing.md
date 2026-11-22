@@ -44,6 +44,14 @@ the cut.
    spiral behind is treated as still uncut and one front is followed all the
    way round; its last passes go straight through the spiral, cutting only
    the two corners beside it. Elsewhere the front nearest the cutter goes next.
+   **Several starts round a boss** (the square with a boss has one in each
+   corner): the channel is cut across at every start, from the boss to the
+   start and on to the outer wall square to the way forward. Every spiral is
+   cut first, in order round the channel. Then each start sends one front
+   forward across its own stretch and straight on through the next spiral,
+   as in the ring; the last spiral cut works first, and each front ends where
+   the next begins, so no lift is added. An outer corner beside a start falls
+   to the stretch arriving there, whose front runs straight on into it.
 6. **Ends at the wall.** A front that reaches the wall does not stop square
    against it. Depending on where it is and the angle at which it arrives, it
    does one of four things:
@@ -182,7 +190,7 @@ rates are not modelled.
 | L-shape | 142 | 4 | 0.0 mm² | 3,758 mm | 23, 69 mm | 3,081 mm | 1 | 7.3 s |
 | Cross | 202 | 25 | 0.0 mm² | 3,660 mm | 26, 88 mm | 3,312 mm | 1 | 14.9 s |
 | Slot 80×12 | 178 | 8 | 0.2 mm² | 2,451 mm | 12, 33 mm | 1,824 mm | 2 | 8.5 s |
-| Square with a 16 mm boss (4 starts) | 288 | 0 | 0.0 mm² | 5,114 mm | 25, 75 mm | 3,443 mm | 4 | 17.4 s |
+| Square with a 16 mm boss (4 starts, one way round; 0.2.12) | 283 | 7 | 0.0 mm² | 5,059 mm | 17, 55 mm | 3,007 mm | 4 | 12.3 s |
 | Ring, 48 mm across with a 20 mm boss (one way round) | 243 | 0 | 0.0 mm² | 3,919 mm | 0 | 2,323 mm | 1 | 20.5 s |
 
 The shapes are in `examples/hsm-shapes/`. On the two-lobe fixture the average
@@ -208,9 +216,14 @@ cross still spend most of their cutting distance again on links.
   space are shaped by stock that is only assumed there, and the two corners
   beside the spiral are finished by the wall finish (29 mm of cutting, nothing
   left) rather than by the fronts themselves.
-- **One way round is only used with a single start.** A square with a boss
-  has four starts, and their fronts still set off both ways and meet between
-  the corners.
+- **Several starts one way round** cost the square with a boss 7 arcs at
+  0.2 mm or less (0 before), at the turns from a side into a corner. Only one
+  channel round one boss is handled; pockets with several bosses still let
+  fronts meet.
+- **Small arcs in corners** (the cross has 25) are fronts squeezing into a
+  corner, where contact rises. Leaving such arcs to the corner creep took
+  them to none but left the creep with 2.5 times the moves and up to 150°
+  of contact; not adopted.
 - **Channels**: the first few bows after a spiral, the end of a channel, and
   the join between two islands still drop to small stepovers.
 - **Hooks on wide straight walls** swing between about 47° and 66° from pass to

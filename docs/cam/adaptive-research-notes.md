@@ -630,6 +630,7 @@ shaped it, each prompted by reviewing a preview:
 | Forward-half contact measure for a whole stretch at once, cleared region updated near each cut, polygon films dropped | The sample-by-sample replay and whole-pocket recomputation took nearly all the time | Two-lobe 145 → 10 s, ring 124 → 12 s; same angles to about 0.7° |
 | Finish along wall that still has stock | The last front of a channel leaves a skin no later front sweeps | Ring: stock left 3.5 → 0.0 mm² for 29 mm of cutting |
 | Corner creep along each wall, judged by depth (0.3 mm) | Fronts swallow a corner within a stepover; a cutter-radius corner then reads 90-115° contact however thin the crescent | Stock left 5-10 mm² → 0.0-0.2 mm² on every square-cornered shape; neck fixture 2.8 → 0.0 mm² |
+| Several starts one way round a boss: channel cut at each start, spirals first, one front per stretch running on through the next spiral | Four corner starts sent fronts both ways to meet in pinches | Square with a boss: links 3,443 → 3,007 mm, cutting 5,114 → 5,059 mm, small arcs 0 → 7, lifts 4 |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,
