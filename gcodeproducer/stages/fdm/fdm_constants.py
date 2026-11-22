@@ -51,6 +51,10 @@ FDMEMIT_PARAMS = [
         Param("travel_detour_time", "float", 0., label="Max time to avoid open spaces", unit="s",
               min=0, decimals=3, group="Travel",
               help="Maximum estimated extra time per travel to avoid gaps or shorten open-air jumps. 0 disables detours."),
+        Param("travel_order", "bool", True, label="Order paths to shorten travel", group="Travel",
+              help="Print each part island in turn: its wall groups (an outer wall with the inner walls next to "
+                   "it) nearest first, then its bridges, then all its other fill (sparse, solid, gap fill) nearest first. "
+                   "Off prints in generated order: all inner walls, all outer walls, then each fill feature."),
         Param("seam", "choice", "nearest", label="Perimeter start / stop", group="Seam",
               choices=[("nearest", "Fastest (nearest start)"), ("xy", "Toward XY point"),
                        ("origin", "Fixed (loop start)")],

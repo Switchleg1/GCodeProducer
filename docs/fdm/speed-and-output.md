@@ -38,8 +38,22 @@ request on later layers, but machine/flow caps still apply.
 
 Acceleration defaults to **0**, meaning leave firmware acceleration unchanged.
 A positive request emits `M204 S…`, capped at a positive machine maximum.
-This does not implement an acceleration-aware time estimate or per-axis
-motion planner.
+The print-time estimate follows it; with 0 it uses the machine's **Motion →
+Firmware print acceleration** (see [GUI statistics](../gui.md)).
+
+## Print order within a layer
+
+**Order paths to shorten travel** (Travel group, on by default) prints each
+part island in turn, nearest first. Inside an island the walls print as wall
+groups — each outer wall with the inner walls next to it, inner first —
+visited nearest first, so a feature such as one fan or blade opening is
+finished before the head moves on. Then the island's bridges print together
+(one fan change), then all its other fill (sparse, solid and gap fill
+together) nearest first, each line entered
+at its nearer end and each loop where it will start (respecting the seam
+setting). Skirt, brim and support print first, as before. Turn it off to get
+the generated order: all inner walls, all outer walls, then each fill
+feature across the whole layer.
 
 ## Effective speed and volumetric flow
 

@@ -137,6 +137,58 @@ def _interp(p0, p1, z):
 
 def _chain(segs, tol: float = 1e-4) -> list:
     """Join undirected edge segments into closed polygons."""
+    fast = _chain_manifold(segs, tol)
+    if fast is not None:
+        return fast
+    return _chain_general(segs, tol)
+
+
+def _chain_manifold(segs, tol):
+    """Array-based chaining when every slice point joins exactly two edges (sound meshes).
+
+    Returns None for anything else (open or branching outlines), which the
+    general dictionary walk handles.
+    """
+    seg = np.asarray(segs, float).reshape(-1, 2, 2)
+    if not len(seg):
+        return []
+    keys = np.round(seg.reshape(-1, 2) / tol).astype(np.int64)
+    _, first, inverse = np.unique(keys, axis=0, return_index=True, return_inverse=True)
+    inverse = inverse.reshape(-1, 2)
+    edges = inverse[inverse[:, 0] != inverse[:, 1]]
+    edges = np.unique(np.sort(edges, axis=1), axis=0)
+    n = len(first)
+    if not len(edges) or (np.bincount(edges.ravel(), minlength=n)[np.unique(edges)] != 2).any():
+        return None
+    coord = seg.reshape(-1, 2)[first]
+    ends = np.concatenate((edges, edges[:, ::-1]))
+    order = np.argsort(ends[:, 0], kind="stable")
+    other = ends[order, 1].reshape(-1, 2) if len(order) % 2 == 0 else None
+    used_nodes = np.unique(edges)
+    nbr = np.full((n, 2), -1)
+    nbr[used_nodes] = other
+    a, b = nbr[:, 0].tolist(), nbr[:, 1].tolist()
+    seen = bytearray(n)
+    polys = []
+    for start in used_nodes.tolist():
+        if seen[start]:
+            continue
+        loop = [start]
+        seen[start] = 1
+        prev, cur = start, a[start]
+        while cur != start:
+            if seen[cur]:
+                return None
+            seen[cur] = 1
+            loop.append(cur)
+            prev, cur = cur, (b[cur] if a[cur] == prev else a[cur])
+        if len(loop) >= 3:
+            polys.append(coord[loop])
+    return polys
+
+
+def _chain_general(segs, tol: float = 1e-4) -> list:
+    """Join undirected edge segments into closed polygons (any topology)."""
     def key(p):
         return (round(p[0] / tol), round(p[1] / tol))
 

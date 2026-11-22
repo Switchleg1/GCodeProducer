@@ -9,13 +9,13 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from gcodeproducer.core.fdm.fdm_constants import LAYER_THREADS
+from gcodeproducer.core.fdm import fdm_constants
 
 
 def layer_map(fn, items):
     """``map(fn, items)`` in order, computed on a small thread pool; yields results as they are ready."""
     items = list(items)
-    workers = max(1, min(LAYER_THREADS, os.cpu_count() or 1, len(items)))
+    workers = max(1, min(fdm_constants.LAYER_THREADS, os.cpu_count() or 1, len(items)))
     if workers == 1:
         yield from map(fn, items)
         return

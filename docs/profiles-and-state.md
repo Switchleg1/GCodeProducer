@@ -108,6 +108,9 @@ for calibrating temperature or setting valid limits.
 The schema reference lists stored fields, not a guarantee of output enforcement:
 
 - FDM machine speed/flow/temperature limits are applied by the FDM emitter.
+- FDM machine **Motion** settings (firmware print/travel acceleration,
+  junction deviation) describe the firmware for the print-time estimate; they
+  do not add `M204` commands.
   Zero flow/acceleration limits generally disable that particular cap; check
   the individual field help. Do not assume zero means a physically safe value.
 - Material `min_layer_time` is stored but the current emitter does **not**

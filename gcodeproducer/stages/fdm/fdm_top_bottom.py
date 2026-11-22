@@ -13,7 +13,7 @@ import numpy as np, gcodeproducer.core.geometry.kernel as geometry, gcodeproduce
 from gcodeproducer.core.jobs.path import Path
 from shapely import union_all
 from gcodeproducer.core.fdm.bridges import bridge_fill, exclude_bridges
-from gcodeproducer.core.fdm.wall_regions import slice_region
+from gcodeproducer.core.fdm.wall_regions import region_rings, slice_region
 from gcodeproducer.stages.base.api import AUTO, FDM
 from gcodeproducer.stages.base.slice_stage import SliceStage
 
@@ -103,13 +103,13 @@ class FDMTopBottom(SliceStage):
             return 0
         # keep solid lines only where this surface mask is set: block the rest
         block = base.like(~cell_grid)
-        inner = slice_region(layer.contours).buffer(-inset)
+        # scan the inset region itself: no line can then run along a wall
+        inner = list(region_rings(slice_region(layer.contours).buffer(-inset)))
         spacing = lw           # 100 % solid
         count = 0
         for phi, period, off in infill_gen.pattern_families(params["pattern"], layer.index, layer.z,
                                                             spacing, params["angle"]):
-            segs = infill_gen.scan_fill(regions, phi, period, off, inset, params["min_length"])
-            segs = infill_gen.clip_to_region(segs, inner, params["min_length"])
+            segs = infill_gen.scan_fill(inner, phi, period, off, 0., params["min_length"])
             if not len(segs):
                 continue
             segs = infill_gen.split_by_raster(segs, block, params["min_length"])

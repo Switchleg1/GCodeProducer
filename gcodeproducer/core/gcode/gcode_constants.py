@@ -209,3 +209,11 @@ RETRACT, UNRETRACT = 0, 1
 KIND_NAMES = {EXTRUDE: "Extrusion", TRAVEL: "Travel", CUT: "Cut", RAPID: "Rapid"}
 
 SOLID_KINDS = (EXTRUDE, CUT)
+
+# Firmware motion assumed by the time estimate when the program does not say
+# (``feed`` in mm/min for moves before any F word).
+MOTION_DEFAULTS = {"print_acceleration": 1500., "travel_acceleration": 0., "junction_deviation": .013,
+                   "feed": 1500.}
+MOTION_COMMENT = "MOTION"                # ";MOTION key=value ..." header written by the FDM output
+MOTION_KEYS = ("print_acceleration", "travel_acceleration", "junction_deviation")
+MOTION_HEADER_LINES = 200               # how far to look for the ;MOTION header

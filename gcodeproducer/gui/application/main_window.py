@@ -2495,7 +2495,8 @@ class MainWindow(QMainWindow):
                  ("Process", self.cb_process.currentText() + (" (modified)" if self.dirty[self.workflow] else ""))),
                 ("Layers", str(st.get("layers", prog.num_layers))),
                 ("Lines", f"{st.get('lines', len(prog.lines)):,}"),
-                ("Est. time (no accel.)", format_duration(st.get("est_time_s", 0)))]
+                ("Est. time" if self.workflow == wf.FDM else "Est. time (no accel.)",
+                 format_duration(st.get("est_time_s", 0)))]
         if self.workflow == wf.FDM:
             mat = self._consumable("material")
             fil = self._filament_mm

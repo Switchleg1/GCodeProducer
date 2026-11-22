@@ -20,9 +20,14 @@ from __future__ import annotations
 from gcodeproducer.stages.fdm.fdm_constants import FDMEMIT_PARAMS, _FEATURE_SPEED
 import math, numpy as np
 from gcodeproducer.core.fdm.fdm_constants import WALL_FEATURES
+from gcodeproducer.core.fdm.layer_order import order_layer
 from gcodeproducer.core.fdm.path_order import closed_loop, ordered_paths
+from gcodeproducer.core.fdm.wall_regions import slice_region
+from gcodeproducer.core.geometry.polygon_parts import polygons
 from gcodeproducer.core.fdm.travel_router import TravelRouter
 from gcodeproducer.core.geometry.decimate import decimate
+from gcodeproducer.core.gcode.gcode_constants import MOTION_DEFAULTS
+from gcodeproducer.core.gcode.time_estimate import motion_comment
 from gcodeproducer.core.settings.preferences import pref
 from gcodeproducer.core.gcode.builder import GCodeBuilder, extrusion_per_mm
 from gcodeproducer.stages.base.api import FDM
@@ -108,7 +113,11 @@ class FDMEmit(SliceStage):
             return spd * 60.0
 
         temps = self._temperatures(job, ctx)
+        motion = {"print_acceleration": job.m("print_acceleration", MOTION_DEFAULTS["print_acceleration"]),
+                  "travel_acceleration": job.m("travel_acceleration", 0.),
+                  "junction_deviation": job.m("junction_deviation", MOTION_DEFAULTS["junction_deviation"])}
         self._start_gcode(b, job, temps, params, log=ctx.log)
+        b.comment(motion_comment(motion))      # read back by the time estimate
         b.relative_e = rel_e
         b.reset_e()
         bridge = job.material.resolved() if job.material is not None else {}
@@ -143,8 +152,13 @@ class FDMEmit(SliceStage):
             first = layer.index == 0
             router = (TravelRouter(layer.outline, b.dx, simplification=simplification)
                       if route_or_classify else None)
-            paths = (ordered_paths(layer.paths, lambda: (b.x, b.y))
-                     if job.settings.get("optimize_mixed_infill", True) else layer.paths)
+            mixed = job.settings.get("optimize_mixed_infill", True)
+            if params["travel_order"]:
+                islands = router.islands if router is not None else list(polygons(slice_region(layer.outline)))
+                paths = order_layer(layer.paths, (b.x, b.y), islands, params["seam"],
+                                    (params["seam_x"], params["seam_y"]), mixed)
+            else:
+                paths = ordered_paths(layer.paths, lambda: (b.x, b.y)) if mixed else layer.paths
             for path in paths:
                 pts, widths = decimate(np.asarray(path.points, float), path.closed, min_segment, deviation,
                                        path.widths)
@@ -193,6 +207,7 @@ class FDMEmit(SliceStage):
             ctx.log(f"  speed capped: {msg}")
         job.program = b.program(path=None)
         job.program.machine = "fdm"
+        job.program.motion = motion
         job.program.layer_z = [l.z for l in job.layers]
         moves = sum(1 for ln in job.program.lines if ln.cmd in ("G0", "G1"))
         extra = f", {len(caps)} speed cap(s)" if caps else ""

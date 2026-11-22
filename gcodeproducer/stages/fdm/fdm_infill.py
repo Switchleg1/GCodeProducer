@@ -12,7 +12,7 @@ from dataclasses import replace
 from gcodeproducer.core.fdm.bridges import exclude_bridges
 from gcodeproducer.core.fdm.fdm_constants import GAP_CLIPPED_FEATURES
 from gcodeproducer.core.fdm.layer_threads import layer_map
-from gcodeproducer.core.fdm.wall_regions import slice_region
+from gcodeproducer.core.fdm.wall_regions import region_rings, slice_region
 import shapely
 from shapely.geometry import Polygon
 from gcodeproducer.core.fdm.gap_fill import clip_segments, gap_beads, gap_regions, infill_area, small_islands
@@ -56,11 +56,11 @@ class FDMInfill(SliceStage):
             segs_all = []
             if density > 0:
                 block = layer.solid_mask            # RegionMask of solid cells, or None
-                inner = slice_region(layer.contours).buffer(-inset)
+                # scan the inset region itself: no line can then run along a wall
+                inner = list(region_rings(slice_region(layer.contours).buffer(-inset)))
                 for phi, period, off in infill_gen.pattern_families(pattern, layer.index, layer.z,
                                                                     spacing, angle):
-                    s = infill_gen.scan_fill(regions, phi, period, off, inset, params["min_length"])
-                    s = infill_gen.clip_to_region(s, inner, params["min_length"])
+                    s = infill_gen.scan_fill(inner, phi, period, off, 0., params["min_length"])
                     if block is not None and len(s):
                         s = infill_gen.split_by_raster(s, block, params["min_length"])
                     s = exclude_bridges(s, layer.bridge_region, params['min_length'])

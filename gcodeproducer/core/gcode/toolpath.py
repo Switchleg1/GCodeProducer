@@ -171,17 +171,22 @@ def build_toolpath(program: GCodeProgram, sim: SimResult | None = None) -> Toolp
     tp.engagement = eng_line[seg_line] if len(seg_line) else np.zeros(0, np.float32)
     lengths = np.linalg.norm(tp.p1 - tp.p0, axis=1)
     tp.distance_ends = np.cumsum(lengths, dtype=np.float64)
-    tp.stats = compute_stats(tp, program, lengths)
+    tp.stats = compute_stats(tp, program, lengths, sim)
     return tp
 
 
-def compute_stats(tp: Toolpath, program: GCodeProgram, length=None) -> dict:
+def compute_stats(tp: Toolpath, program: GCodeProgram, length=None, sim: SimResult | None = None) -> dict:
     if length is None:
         length = np.linalg.norm(tp.p1 - tp.p0, axis=1)
     solid = np.isin(tp.kind, SOLID_KINDS)
     feed = np.where(tp.feed > 0, tp.feed, np.nan)
     with np.errstate(invalid="ignore", divide="ignore"):
-        t = np.nansum(length / feed) * 60.0
+        nominal = float(np.nansum(length / feed) * 60.0)
+    t = nominal
+    if program.machine == FDM:
+        # FDM: acceleration, cornering and extruder-only moves (see time_estimate)
+        from gcodeproducer.core.gcode.time_estimate import estimate_time
+        t = estimate_time(program, sim or simulate(program))
     lo, hi = tp.bounds()
     return {
         "lines": len(program.lines),
@@ -191,6 +196,7 @@ def compute_stats(tp: Toolpath, program: GCodeProgram, length=None) -> dict:
         "travel_length_mm": float(length[~solid].sum()),
         "retractions": int((tp.ev_kind == RETRACT).sum()),
         "est_time_s": float(t),
+        "est_time_nominal_s": nominal,
         "changed_lines": int(tp.line_changed.sum()),
         "bounds_min": [round(float(v), 3) for v in lo],
         "bounds_max": [round(float(v), 3) for v in hi],

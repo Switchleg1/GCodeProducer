@@ -85,6 +85,18 @@ def _machine_schema(workflow: str) -> list:
               help="Fastest travel (non-printing) move."),
         Param("max_acceleration", "float", 5000.0, unit="mm/s\u00b2", min=0, decimals=0, group="Speed limits",
               help="Highest acceleration the process may request (0 = no limit)."),
+        Param("print_acceleration", "float", 1500.0, unit="mm/s\u00b2", min=1, decimals=0, group="Motion",
+              label="Firmware print acceleration",
+              help="Acceleration the firmware uses for printing moves when the process does not set one (M204 P/S). "
+                   "Used for the print time estimate."),
+        Param("travel_acceleration", "float", 0.0, unit="mm/s\u00b2", min=0, decimals=0, group="Motion",
+              label="Firmware travel acceleration",
+              help="Acceleration for non-printing moves (M204 T); 0 = same as print acceleration. "
+                   "Used for the print time estimate."),
+        Param("junction_deviation", "float", 0.013, unit="mm", min=0, decimals=3, group="Motion",
+              label="Junction deviation",
+              help="Cornering setting of the firmware (Marlin default 0.013 mm). Klipper: square_corner_velocity\u00b2 "
+                   "\u00d7 0.414 / acceleration. Used for the print time estimate."),
         Param("max_flow", "float", 0.0, unit="mm\u00b3/s", min=0, decimals=1, group="Speed limits",
               help="Machine (hot-end / extruder) volumetric limit; 0 = only the nozzle's limit applies."),
         Param("max_nozzle_temp", "float", 280.0, unit="\u00b0C", min=0, decimals=0, group="Temperature limits",

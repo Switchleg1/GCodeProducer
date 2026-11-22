@@ -289,8 +289,15 @@ non-motion delays and does not use the programmed feed rates.
 - Statistics summarize lines, layers, motion bounds and time. FDM also reports
   filament length and an estimated mass using material density.
 
-Time is an idealized feed-based estimate, not an acceleration/controller-aware
-simulation. Toolpaths are not proof of extrusion quality, dimensional accuracy,
+FDM time comes from a firmware-like trapezoidal planner: every move
+accelerates and brakes at the machine's firmware print/travel acceleration
+(or the `M204` values in the file), corners are slowed by the junction
+deviation, and retract/unretract moves count. Set **Machine → Motion**
+(firmware print acceleration, travel acceleration, junction deviation) to your
+firmware's values; a saved file carries them in a `;MOTION` header so the
+estimate matches after reopening. It is still an estimate: firmware buffers,
+input shaping and extruder limits are not modelled. CAM time remains
+feed-based, without acceleration. Toolpaths are not proof of extrusion quality, dimensional accuracy,
 cutter clearance or successful workholding.
 
 ## Keyboard and mouse reference

@@ -1,5 +1,6 @@
 """Inset the complete slice, including holes, for FDM wall centre lines."""
 import numpy as np
+import shapely
 from shapely import make_valid
 from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
@@ -9,8 +10,54 @@ from gcodeproducer.core.geometry.polygon_parts import polygons
 
 def slice_region(contours):
     """Apply the same even-odd rule as the slicer's infill mask."""
+    rings = [np.asarray(ring, float)[:, :2] for ring in contours if len(ring) >= 3]
+    fast = _nested_region(rings)
+    if fast is not None:
+        return fast
+    return _symmetric_region(rings)
+
+
+def _nested_region(rings):
+    """Even-odd region built directly from ring nesting, or None when rings touch or self-intersect.
+
+    Slices of a sound mesh are disjoint simple rings, so each ring nested an even
+    number of times is a shell and each odd one a hole of its innermost container.
+    This avoids one Boolean operation per ring.
+    """
+    if not rings:
+        return Polygon()
+    polys = [Polygon(r) for r in rings]
+    polys = np.asarray(polys, dtype=object)
+    if not shapely.is_valid(polys).all():
+        return None
+    boundaries = shapely.boundary(polys)
+    tree = shapely.STRtree(boundaries)
+    a, b = tree.query(boundaries, predicate="intersects")
+    if (a != b).any():
+        return None
+    area = shapely.area(polys)
+    inside = shapely.STRtree(polys)
+    point_of = shapely.points([r[0] for r in rings])
+    pt, container = inside.query(point_of, predicate="within")
+    keep = pt != container
+    pt, container = pt[keep], container[keep]
+    depth = np.bincount(pt, minlength=len(rings))
+    parent = np.full(len(rings), -1)
+    # innermost container = the smallest one
+    order = np.argsort(-area[container], kind="stable")
+    parent[pt[order]] = container[order]
+    holes = {}
+    for i in np.flatnonzero(depth % 2 == 1):
+        holes.setdefault(int(parent[i]), []).append(rings[i])
+    shells = [Polygon(rings[i], holes.get(int(i), [])) for i in np.flatnonzero(depth % 2 == 0)]
+    if len(shells) == 1:
+        return shells[0]
+    return shapely.multipolygons(shells)
+
+
+def _symmetric_region(rings):
     region = Polygon()
-    for ring in contours:
+    for ring in rings:
         if len(ring) >= 3:
             part = Polygon(ring)
             for piece in polygons(part if part.is_valid else make_valid(part)):

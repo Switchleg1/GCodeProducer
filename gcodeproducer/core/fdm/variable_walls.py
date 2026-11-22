@@ -34,9 +34,14 @@ from gcodeproducer.core.geometry.medial_axis import chain_edges, medial_edges
 from gcodeproducer.core.geometry.polygon_parts import polygons
 
 
-def _narrow_parts(material, width):
-    """Parts of ``material`` narrower than ``2 * width`` (plus convex-corner crumbs), or None."""
-    opened = material.buffer(-width, join_style="mitre").buffer(width, quad_segs=8)
+def _narrow_parts(material, width, eroded=None):
+    """Parts of ``material`` narrower than ``2 * width`` (plus convex-corner crumbs), or None.
+
+    ``eroded`` is ``material`` already shrunk by ``width`` (the next wall level's material).
+    """
+    if eroded is None:
+        eroded = material.buffer(-width, quad_segs=8)
+    opened = eroded.buffer(width, quad_segs=8)
     narrow = [p for p in polygons(material.difference(opened)) if p.area > VARIABLE_MIN_AREA * width**2]
     if not narrow:
         return None
@@ -89,19 +94,49 @@ def _ring_normals(pts):
 
 
 def _material_widths(pts, normal, boundary, width):
-    """Distances along each normal to the near edge (outward) and the far edge (inward)."""
+    """Distances along each normal to the near edge (outward) and the far edge (inward).
+
+    Rays are intersected with the boundary's individual segments found through
+    an STRtree, so a long, detailed boundary costs no more than the segments
+    each ray actually passes.
+    """
     reach = 2 * width
-    rays = shapely.linestrings(np.stack((pts - normal * reach, pts + normal * reach), axis=1))
-    hits, index = shapely.get_coordinates(shapely.intersection(rays, boundary), return_index=True)
     near = np.full(len(pts), np.inf)
     far = np.full(len(pts), np.inf)
-    if len(hits):
-        t = ((hits - pts[index]) * normal[index]).sum(axis=1)
-        out = t > VARIABLE_RAY_START
-        np.minimum.at(near, index[out], t[out])
-        back = t < -VARIABLE_RAY_START
-        np.minimum.at(far, index[back], -t[back])
+    lines = [np.asarray(g.coords) for g in shapely.get_parts(boundary) if not g.is_empty]
+    if not lines:
+        return near, far
+    seg_a = np.concatenate([c[:-1, :2] for c in lines])
+    seg_b = np.concatenate([c[1:, :2] for c in lines])
+    tree = shapely.STRtree(shapely.linestrings(np.stack((seg_a, seg_b), axis=1)))
+    start = pts - normal * reach
+    rays = shapely.linestrings(np.stack((start, pts + normal * reach), axis=1))
+    ray, seg = tree.query(rays, predicate="intersects")
+    if not len(ray):
+        return near, far
+    # ray: start + s * (2 reach) * normal ; segment: a + u * (b - a)
+    d = normal[ray] * (2 * reach)
+    e = seg_b[seg] - seg_a[seg]
+    w = seg_a[seg] - start[ray]
+    denom = d[:, 0] * e[:, 1] - d[:, 1] * e[:, 0]
+    ok = np.abs(denom) > 1e-12
+    s_par = np.where(ok, (w[:, 0] * e[:, 1] - w[:, 1] * e[:, 0]) / np.where(ok, denom, 1.), np.nan)
+    t = s_par * 2 * reach - reach                       # signed distance from the point along the normal
+    out = ok & (t > VARIABLE_RAY_START)
+    np.minimum.at(near, ray[out], t[out])
+    back = ok & (t < -VARIABLE_RAY_START)
+    np.minimum.at(far, ray[back], -t[back])
     return near, far
+
+
+def _densify(ring, step):
+    """Closed ring with extra vertices every ``step``; also flags the original vertices."""
+    nxt = np.roll(ring, -1, axis=0)
+    count = np.maximum(1, np.ceil(np.hypot(*(nxt - ring).T) / step).astype(int))
+    t = np.concatenate([np.arange(c) / c for c in count])
+    start = np.repeat(np.arange(len(ring)), count)
+    pts = ring[start] + (nxt[start] - ring[start]) * t[:, None]
+    return pts, t == 0
 
 
 def _thinned_loop(ring, narrow, material, width, min_width, max_width, move=True):
@@ -113,8 +148,7 @@ def _thinned_loop(ring, narrow, material, width, min_width, max_width, move=True
     edge, so the two sides tile the material. Measuring along the loop's own
     normal keeps neighbouring vertices consistent at corners and stroke ends.
     """
-    line = shapely.segmentize(shapely.linearrings(ring), width * VARIABLE_DENSIFY)
-    pts = shapely.get_coordinates(line)[:-1]
+    pts, original = _densify(np.asarray(ring, float)[:, :2], width * VARIABLE_DENSIFY)
     candidate = np.flatnonzero(shapely.dwithin(narrow, shapely.points(pts), width * .5))
     if not len(candidate):
         return ring, None
@@ -131,7 +165,12 @@ def _thinned_loop(ring, narrow, material, width, min_width, max_width, move=True
     if not move:                         # walls: same path, flow follows the material
         widths = np.full(len(pts), float(width))
         widths[idx] = np.clip(across[folded] * .5, min_width, width)
-        return pts, widths
+        # extra vertices only matter where the width changes
+        keep = original.copy()
+        changed = np.flatnonzero(widths != width)
+        for shift in (-1, 0, 1):
+            keep[(changed + shift) % len(pts)] = True
+        return pts[keep], widths[keep]
     half = np.clip(across[folded] * .5, max(max_width * .5, min_width), width)
     widths = np.full(len(pts), float(width))
     widths[idx] = half
@@ -166,11 +205,12 @@ def variable_wall_levels(region, width, count, min_width, max_width=None, keep_l
     max_width = width if max_width is None else max(width, min(max_width, 2 * width))
     levels = []
     last_rings = []
+    material = region
     for k in range(count):
-        material = region.buffer(-width * k, quad_segs=8) if k else region
         if material.is_empty:
             break
-        narrow = _narrow_parts(material, width)
+        eroded = region.buffer(-width * (k + 1), quad_segs=8)       # also the next level's material
+        narrow = _narrow_parts(material, width, eroded)
         if narrow is None or keep_loops:
             inset = region.buffer(-width * (k + .5), quad_segs=8)
         else:
@@ -194,4 +234,5 @@ def variable_wall_levels(region, width, count, min_width, max_width=None, keep_l
         last_rings = rings
         if inset.is_empty:
             break
+        material = eroded
     return levels, last_rings

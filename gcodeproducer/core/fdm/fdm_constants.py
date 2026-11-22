@@ -17,7 +17,7 @@ TRAVEL_VISIBILITY_CHUNK = 16            # successors tested together by the lazy
 TRAVEL_WAYPOINT_INSET = .01              # mm inside the layer outline before G-code rounding
 
 # Variable-width walls / gap fill (multiples of the line width unless noted)
-VARIABLE_SAMPLE_STEP = .125              # boundary sample spacing for the medial axis
+VARIABLE_SAMPLE_STEP = .2                # boundary sample spacing for the medial axis
 VARIABLE_DENSIFY = .25                   # loop vertex spacing where widths may vary
 VARIABLE_PRUNE = .5                      # drop medial-axis spurs shorter than this
 VARIABLE_MIN_LENGTH = .75                # shortest open thin-wall bead
@@ -33,3 +33,5 @@ GAP_FILL_MITRE_LIMIT = 2.                # corners sharper than ~60° still coun
 VARIABLE_LOOP_MIN_AREA = 1.              # narrow-feature loop scraps smaller than this * width² become centre bead
 VARIABLE_THIN_REACH = .25                # centre beads may run this far (* width) under the loop ends they join
 VARIABLE_PRUNE_RADII = 1.6               # also drop spurs shorter than this many junction radii
+LAYER_ORDER_FILL_FEATURES = FILL_FEATURES | {"gap_fill", "bridge"}   # printed per island after its walls
+LAYER_ORDER_LOOP_SAMPLES = 48            # entry candidates per closed loop for nearest-first ordering

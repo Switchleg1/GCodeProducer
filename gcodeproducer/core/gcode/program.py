@@ -18,6 +18,7 @@ class GCodeProgram:
         self.slicer: dict = {}              # normalised settings (see readers.base)
         self.layer_z: list = []             # Z height per layer index
         self.parts: list = []               # (first line, label) per separate output file; [] = one file
+        self.motion: dict = {}              # FDM firmware motion settings for the time estimate
 
     # ------------------------------------------------------------ creation
     @classmethod
@@ -47,6 +48,7 @@ class GCodeProgram:
         p.slicer = dict(self.slicer)
         p.layer_z = list(self.layer_z)
         p.parts = list(self.parts)
+        p.motion = dict(getattr(self, "motion", {}) or {})
         return p
 
     # -------------------------------------------------------------- output

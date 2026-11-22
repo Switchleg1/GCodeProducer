@@ -69,8 +69,10 @@ def medial_edges(material, window, step, margin, window_tolerance=0.):
     t0, t1 = owner[shared], owner[shared + 1]
     edges = np.stack((centre[t0], centre[t1]), axis=1)
     radii = np.stack((radius[t0], radius[t1]), axis=1)
-    keep = shapely.covers(material, shapely.linestrings(edges))
-    return edges[keep], radii[keep]
+    # Both centres lie inside and a Voronoi edge between them only crosses the
+    # boundary where a sample spacing exceeds the local width; the radius
+    # filters of the callers drop those.
+    return edges, radii
 
 
 def _row_keys(xy):

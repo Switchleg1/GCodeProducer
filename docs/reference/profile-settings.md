@@ -21,6 +21,9 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `max_print_speed` — Max print speed | float / mm/s | `200.0` | minimum 1 | Speed limits. Fastest printing move. Process speeds above this are capped. |
 | `max_travel_speed` — Max travel speed | float / mm/s | `300.0` | minimum 1 | Speed limits. Fastest travel (non-printing) move. |
 | `max_acceleration` — Max acceleration | float / mm/s² | `5000.0` | minimum 0 | Speed limits. Highest acceleration the process may request (0 = no limit). |
+| `print_acceleration` — Firmware print acceleration | float / mm/s² | `1500.0` | minimum 1 | Motion. Acceleration the firmware uses for printing moves when the process does not set one (M204 P/S). Used for the print time estimate. |
+| `travel_acceleration` — Firmware travel acceleration | float / mm/s² | `0.0` | minimum 0 | Motion. Acceleration for non-printing moves (M204 T); 0 = same as print acceleration. Used for the print time estimate. |
+| `junction_deviation` — Junction deviation | float / mm | `0.013` | minimum 0 | Motion. Cornering setting of the firmware (Marlin default 0.013 mm). Klipper: square_corner_velocity² × 0.414 / acceleration. Used for the print time estimate. |
 | `max_flow` — Max flow | float / mm³/s | `0.0` | minimum 0 | Speed limits. Machine (hot-end / extruder) volumetric limit; 0 = only the nozzle's limit applies. |
 | `max_nozzle_temp` — Max nozzle temp | float / °C | `280.0` | minimum 0 | Temperature limits. Material nozzle temperatures above this are capped. |
 | `max_bed_temp` — Max bed temp | float / °C | `110.0` | minimum 0 | Temperature limits.  |
