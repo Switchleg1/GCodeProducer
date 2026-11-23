@@ -156,10 +156,11 @@ def test_conflict_segments_become_conflict_feature():
     path = Path("cut", np.array([[0., 0.], [1., 0.], [2., 0.]]),
                 cut_conditions=[CutCondition(.5, "cut", "climb"), CutCondition(.5, "cut", "conventional", conflict=True)])
     job = Job("cam", Profile("machine", "m", workflow="cam"), tools=[tool], layers=[Layer(0, -1, 1, paths=[path])])
+    job.preferences = {"cam_feed_smoothing": 0}   # keep one line per segment
     CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
     features = [ln.feature for ln in job.program.lines if ln.cmd == "G1" and "X" in ln.params]
     assert features == ["cut", "conflict"]
-    job.preferences = {"highlight_conflicts": False}
+    job.preferences = {"highlight_conflicts": False, "cam_feed_smoothing": 0}
     CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
     features = [ln.feature for ln in job.program.lines if ln.cmd == "G1" and "X" in ln.params]
     assert features == ["cut", "cut"]

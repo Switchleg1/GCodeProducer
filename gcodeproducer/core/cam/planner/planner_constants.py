@@ -24,6 +24,8 @@ ENGAGEMENT_FEATURES = {"slot": "slot", "high": "high_engagement", "cut": "cut", 
 # span (cut -> lead-in up to the lead-in angle, lead-in -> plunge up to vertical),
 # so successive sub-moves of nearly equal angle share one rate and still merge.
 DESCENT_FEED_STEPS = 20
+# Consecutive moves of these phases form one run for feed smoothing (FeedSmoother).
+FEED_SMOOTH_PHASES = frozenset(("cut", "link", "lead_in", "lead_out"))
 MIN_FEED = .0001             # mm/min: smaller effective feeds cannot be represented safely
 # Split sub-moves of these phases may be written as one G1. Lead-ins and
 # plunges stay separate so the replayed entry-depth checks keep their spans.

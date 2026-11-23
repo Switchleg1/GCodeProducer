@@ -248,21 +248,34 @@ def test_waterfall_varying_its_depth_works_with_every_clearing_strategy(libset, 
 
 
 def test_surface_following_heights_are_smooth_and_never_below_the_safe_grid():
-    from gcodeproducer.core.cam.operations import waterfall_generator as w
+    from gcodeproducer.core.cam.surface_paths import fill_dips, follow_heights
     surface = DropSurface(wedge_pocket(), (-2, -2), (42, 32), .3, 10**7)
-    surface.smooth = w._smooth_grid(surface.lowered(1.5))
     rng = np.random.default_rng(1)
     points = rng.uniform(-1, 41, (20000, 2))
-    safe, smooth = surface.heights(points, 1.5), w._smooth_heights(surface, points)
+    safe, smooth = surface.heights(points, 1.5), surface.follow(points, 1.5)
     assert np.all(smooth >= safe - 1e-9) and np.all(np.isfinite(smooth)[np.isfinite(safe)])
     line = np.column_stack((np.linspace(14, 26, 2000), np.full(2000, 15.)))   # down the sloped floor
-    stairs, ramp = surface.heights(line, 1.5), w._smooth_heights(surface, line)
-    assert np.all(ramp >= stairs - 1e-9) and float((ramp - stairs).max()) < 3*.3
+    stairs, ramp = surface.heights(line, 1.5), follow_heights(surface, line, 1.5, .2)
+    assert np.all(ramp >= stairs + .2 - 1e-9) and float((ramp - stairs - .2).max()) < 3*.3
     flat_runs = lambda z: int((np.abs(np.diff(z)) < 1e-12).sum())
     assert flat_runs(ramp) < flat_runs(stairs)/10          # a slope, not a staircase
     saw = np.array([0., 1, 0, 1, 0, 1, 0, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0])
-    filled = w._fill_dips(saw, 1)
+    filled = fill_dips(saw, 1)
     assert np.all(filled >= saw) and np.all(filled[:7] == 1) and np.all(filled[10:] == 0)
+    assert np.all(fill_dips(saw, 1, .25) == np.minimum(filled, saw+.25))   # a corner is not filled in
+
+
+def test_3d_contour_follows_the_same_smoothed_heights_as_waterfall():
+    """3D Contour samples its rasters with follow_heights, the rule Waterfall's lifted paths use."""
+    from gcodeproducer.core.cam.surface_paths import follow_heights
+    surface = DropSurface(wedge_pocket(), (-2, -2), (42, 32), .3, 10**7)
+    lines = surface_raster(box(14, 10, 26, 20), surface, 1.5, 1.5, -20, 0., strategy="raster_x")
+    assert lines
+    for line in lines:
+        assert np.all(line[:, 2] >= surface.follow(line[:, :2], 1.5) - 1e-9)   # the interpolated heights
+        assert np.all(line[:, 2] >= surface.heights(line[:, :2], 1.5) - 1e-9)
+        turns = np.diff(np.sign(np.round(np.diff(line[:, 2]), 6)))
+        assert int((turns != 0).sum()) <= 2                # no sawing up and down
 
 
 def test_flat_pocket_and_legacy_surface_stop_migration(libset):

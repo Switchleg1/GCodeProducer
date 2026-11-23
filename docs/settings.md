@@ -26,6 +26,7 @@ lists the current values and `--pref KEY=VALUE` overrides one for a single run.
 | 3D path tolerance (CAM planner resolution) | 0.005 mm | 3D Contour path simplification. See below. |
 | Engagement sample spacing (CAM planner resolution) | 0 = auto | Length of measured XYZ sub-moves. See below. |
 | Combine same-condition feed moves (CAM planner resolution) | On | Writes matching measured sub-moves as one G1. See below. |
+| Feed smoothing length (CAM planner resolution) | 2 mm | Short moves take the lowest feed nearby, so feeds do not flicker. See below. |
 | Colour conflicts and collisions | On | Moves flagged by the planner/stock checks are recoloured as the **Conflict** and **Collision** features in Feature colour mode. |
 | Material boundary limit (Default operation settings) | 0 mm | Initial value for new operations' *Material boundary limit* (see [Pocket](cam/operations.md#overcut-into-void-material)). |
 | Overcut (Default operation settings) | 0 mm | Initial overcut for new Pocket and 3D Waterfall operations. Existing operations keep their saved values. |
@@ -102,6 +103,7 @@ They apply to every CAM job and mark existing CAM output stale.
 | 3D path tolerance | 0.005 mm | Maximum deviation when simplifying 3D Contour paths. Larger values write fewer points; paths can deviate up to this much from the sampled surface heights, in either direction. |
 | Engagement sample spacing | 0 (auto) | Length of each XYZ sub-move measured for engagement, feed and material removal. Auto is half the tool radius (at least one material grid cell). Longer spacing plans faster but averages engagement over more distance. |
 | Combine same-condition feed moves | On | Consecutive measured sub-moves of one straight move are written as a single G1 when phase, feed and engagement band match; the merged line reports the peak engagement. Every sub-move is still measured and removes material. Lead-ins and plunges are never merged, so entry checks see the same spans. |
+| Feed smoothing length | 2 mm | Along a continuous run of cut, link and lead moves (no rapid or retract between), every move shorter than this takes the lowest feed within half this length on either side, so a rough surface or a band edge does not give a string of tiny moves jumping between feeds. Feeds are only lowered; longer moves keep their own. Collinear moves that then share phase, feature and feed are combined (when combining is on). Applies to every CAM operation. 0 turns it off. On the Mini Yoda Waterfall following the surface, tiny moves whose feed differs by over 30 % from both neighbours fell from 942 to 15, for 7 % more estimated machining time. |
 
 On a 23-pass Baby Yoda 3D Contour test, combining moves alone cut the program
 from 473,632 to 68,318 lines (10.4 MB to 2.1 MB) with identical warnings;

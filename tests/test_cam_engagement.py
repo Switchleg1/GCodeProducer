@@ -88,6 +88,7 @@ def test_emitted_slot_high_standard_feeds_and_machine_cap():
     layer=Layer(0,-1,1,paths=[path])
     layer.cam_operation="test"
     job=Job("cam",machine,tools=[tool],layers=[layer])
+    job.preferences={"cam_feed_smoothing":0}   # each band's own feed (smoothing may only lower them)
     context=StageContext()
     CAMEmit().run(job,CAMEmit.resolve({}),context)
     cuts=[ln for ln in job.program.lines if ln.cmd=="G1" and "X" in ln.params]

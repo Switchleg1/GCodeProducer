@@ -115,3 +115,12 @@ def material_parameters():
                                 help=f"Automatic {process} stepdown for {label} only (choose the machining category in Material / stock). "
                                      "Percentage of tool diameter, capped by Max depth/pass; the operation depth override takes precedence."))
     return params
+# Surface-following paths (3D Contour, Waterfall following the surface): dips narrower
+# than SURFACE_DIP_FILL are filled, by at most SURFACE_DIP_DEPTH (raise only), so
+# height-grid noise does not saw the cutter up and down while real corners are kept.
+SURFACE_DIP_FILL = .5    # mm
+SURFACE_DIP_DEPTH = .05  # mm
+# Interpolated surface heights are used where the four nearest cells differ by at
+# most this many cell sizes (slopes up to about 50 degrees); across a steeper step
+# (a wall) the cell's own height is kept, so the path does not climb the wall early.
+SURFACE_FOLLOW_SPREAD = 4.

@@ -133,9 +133,11 @@ def test_inward_waypoint_routes_around_uncut_material():
     assert links.inward_waypoint(state, a, b[:2], candidates[:1]) is None
 
 
-def emitted(libset, **fields):
+def emitted(libset, smoothing=None, **fields):
     mesh = stepped_part()
     job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    if smoothing is not None:
+        job.preferences['cam_feed_smoothing'] = smoothing
     for key, value in fields.items():
         setattr(op, key, value)
     generate(job, StageContext())
@@ -189,7 +191,8 @@ def test_chunked_planning_preserves_commands_feeds_and_checks(libset, monkeypatc
 
 
 def test_planar_lead_in_uses_measured_band_and_operation_override(libset):
-    job, op = emitted(libset, slotting_feed=30, unlock_lead_feed=True, lead_feed=300)
+    # Feed smoothing off: this checks each band's own rate (smoothing may only lower them).
+    job, op = emitted(libset, 0, slotting_feed=30, unlock_lead_feed=True, lead_feed=300)
     sim = simulate(job.program)
     slot_leads = [s for s in job.motion_plan.of("lead_in") if s.condition.regime == "slot"]
     assert slot_leads and all(s.rate == pytest.approx(90) for s in slot_leads)      # 300 x operation 30 %

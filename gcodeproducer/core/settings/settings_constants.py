@@ -58,6 +58,10 @@ SCHEMA = [
           label="Combine same-condition feed moves",
           help="Write consecutive measured sub-moves of one straight move as a single G1 when phase, feed "
                "and engagement band match. Every sub-move is still measured and removes material."),
+    Param("cam_feed_smoothing", "float", 2., min=0, max=50, unit="mm", decimals=2,
+          group="CAM planner resolution", label="Feed smoothing length",
+          help="Along a continuous cut, a move shorter than this takes the lowest feed within half this length "
+               "on either side, so short stretches do not jump between feeds. Feeds are only lowered. 0 = off."),
     Param("highlight_conflicts", "bool", True, group="Warnings", label="Colour conflicts and collisions",
           help="Recolour flagged moves as Conflict / Collision features in Feature colour mode."),
     Param("default_material_limit", "float", 0.0, min=-1000, max=1000, unit="mm", group="Default operation settings",

@@ -5,7 +5,7 @@ from .planner_constants import MOTION_CHUNK_SIZE
 
 
 class MotionPlan:
-    def __init__(self, consume=None, chunk_size=None):
+    def __init__(self, consume=None, chunk_size=None, smoother=None):
         chunk_size = MOTION_CHUNK_SIZE if chunk_size is None else chunk_size
         if chunk_size < 1:
             raise ValueError('Motion chunk size must be positive')
@@ -15,8 +15,23 @@ class MotionPlan:
         self._consume = consume
         self._chunk_size = chunk_size
         self._pending = []
+        self.smoother = smoother   # applied to each run of consecutive feed moves before it is kept
+        self._run = []
 
     def add(self, segment):
+        if self.smoother is not None:
+            if self.smoother.smoothable(segment):
+                self._run.append(segment)
+                return segment
+            self._release()
+        return self._keep(segment)
+
+    def _release(self):
+        run, self._run = self._run, []
+        for segment in (self.smoother(run) if run else ()):
+            self._keep(segment)
+
+    def _keep(self, segment):
         self.total += 1
         if self._consume is None or len(self.segments) < self._chunk_size:
             self.segments.append(segment)
@@ -34,6 +49,8 @@ class MotionPlan:
             self._pending.clear()
 
     def finish(self):
+        if self.smoother is not None:
+            self._release()
         self._flush()
         self._consume = None
 

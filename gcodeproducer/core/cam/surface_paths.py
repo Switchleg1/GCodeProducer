@@ -10,7 +10,7 @@ from shapely import BufferJoinStyle, contains_xy
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
-from .cam_constants import SURFACE_MAX_POINTS
+from .cam_constants import SURFACE_MAX_POINTS, SURFACE_DIP_FILL, SURFACE_DIP_DEPTH
 from .surface_simplifier import simplify3d
 from .paths import _polygons, orient_contour, pocket_region
 
@@ -73,6 +73,39 @@ def waterfall_paths(shadow, allowed, radius, allowance, direction):
     return result
 
 
+def follow_heights(surface, xy, radius, allowance, floors=()):
+    """Cutter heights along a path sampled every grid cell: the one rule 3D Contour and Waterfall follow.
+
+    Interpolated safe heights (``DropSurface.follow``) plus stock to leave,
+    never below a holding tab's top, with dips narrower than
+    ``SURFACE_DIP_FILL`` filled by up to ``SURFACE_DIP_DEPTH`` so grid noise
+    does not saw the cutter up and down. Never below ``DropSurface.heights``
+    + ``allowance``.
+    """
+    xy = np.asarray(xy, float)[:, :2]
+    follow = getattr(surface, 'follow', surface.heights)   # a plain height source has no interpolation
+    z = follow(xy, radius)+allowance
+    for area, roof in floors:     # retained material (holding tabs): never below its top
+        z = np.where(contains_xy(area, xy[:, 0], xy[:, 1]), np.maximum(z, roof), z)
+    return fill_dips(z, max(1, round(SURFACE_DIP_FILL/(2*surface.resolution))), SURFACE_DIP_DEPTH)
+
+
+def fill_dips(height, reach, depth=np.inf):
+    """``height`` with every dip narrower than ``2*reach+1`` samples raised by up to ``depth``; never lower.
+
+    A morphological closing (running maximum, then running minimum) along the
+    path, limited so a real corner (a floor meeting a wall) is not filled.
+    """
+    from numpy.lib.stride_tricks import sliding_window_view
+    height = np.asarray(height, float)
+    if len(height) < 3:
+        return height
+    width = 2*reach+1
+    grown = sliding_window_view(np.pad(height, reach, mode='edge'), width).max(axis=1)
+    closed = sliding_window_view(np.pad(grown, reach, mode='edge'), width).min(axis=1)
+    return np.maximum(np.minimum(closed, height+depth), height)
+
+
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
                    strategy="meander", *, simplifier=None):
     """Depth-clamped XYZ rasters, as meander or independent X/Y cutting lines.
@@ -102,10 +135,7 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
         a, b = np.asarray(a, float), np.asarray(b, float)
         n = max(1, int(math.ceil(np.linalg.norm(b-a)/step)))
         xy = a+(b-a)*np.linspace(0, 1, n+1)[:, None]
-        z = np.maximum(surface.heights(xy, radius)+allowance, floor)
-        for area, roof in floors:     # retained material (holding tabs): never below its top
-            z = np.where(contains_xy(area, xy[:, 0], xy[:, 1]), np.maximum(z, roof), z)
-        return np.column_stack((xy, z))
+        return np.column_stack((xy, np.maximum(follow_heights(surface, xy, radius, allowance, floors), floor)))
 
     paths, current, reverse = [], None, False
     cover = prep(region.buffer(1e-7))

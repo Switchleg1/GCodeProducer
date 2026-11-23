@@ -77,11 +77,8 @@ point rides at the model's height (plus stock to leave) under the cutter
 where that is above the current depth, up to the depth above: never below
 the current depth, never above the one before. Paths that stay flat are
 unchanged; a lifted closed contour is opened at its highest point so its
-lead ramps in down the slope. The heights a lifted path follows are
-interpolated between the cells of the safe-height grid (raised to each cell's
-neighbourhood first, so never below the grid) and dips shorter than 0.5 mm
-are filled, so a slope is followed as a slope rather than as a staircase of
-tiny plunges. Lifted paths are 3D moves, so they are entered
+lead ramps in down the slope. A lifted path follows the surface by the same
+rule as 3D Contour (see *Surface heights* below). Lifted paths are 3D moves, so they are entered
 and linked like 3D Contour paths rather than with stay-down links. On the
 Mini Yoda (4 mm endmill, 2 mm depths, 1 mm stock to leave, wall-parallel
 contours) the material left above the model after the Waterfall fell from
@@ -130,6 +127,14 @@ uncleared stock.
   in-region surface links. **Raster lines X / Y** cuts separate single-direction
   lines along the chosen work-coordinate axis, with retract/travel between them.
   Climb/conventional is not a selectable hand for these XYZ paths.
+- **Surface heights:** the safe-height grid holds one height per cell, which a
+  path crossing a slope would follow as a staircase of tiny plunges. 3D Contour
+  and Waterfall's *Follow the surface* share one rule (`follow_heights`):
+  heights are interpolated between cells of the grid raised to each cell's
+  neighbourhood, so never below the grid, on slopes up to about 50°; across a
+  steeper step (a wall) the cell height is kept, so the path does not climb
+  the wall early. Dips narrower than 0.5 mm are filled by up to 0.05 mm, so
+  grid noise does not saw the cutter up and down while real corners are kept.
 - **Ceiling:** stretches resting at or above the original material surface
   are omitted. Raised model surfaces and tabs still constrain every band.
 - **Feeds:** XYZ moves are classified from current height-field material as
@@ -137,7 +142,8 @@ uncleared stock.
   operation/tool/machine feed modifiers apply. A descent into material is fed by its angle,
   blending from the level rate to the lead-in rate at the lead-in angle and on
   to the plunge feed straight down; steeper than the lead-in angle it shows as
-  *Plunge*. Every feed remains machine-capped.
+  *Plunge*. Every feed remains machine-capped. Feeds are then smoothed along
+  each continuous cut (Settings → *Feed smoothing length*, below).
 - **Entries:** with **Lead-in ramp along contour** checked, an entry which
   meets remaining material ramps along the validated XYZ path within the operation’s lead-in angle. Short
   usable prefixes zigzag as needed. Already-clear entries skip the ramp and

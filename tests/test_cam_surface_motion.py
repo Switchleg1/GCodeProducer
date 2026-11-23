@@ -154,6 +154,7 @@ def test_xyz_lead_toggles_are_independent_and_disabled_entry_plunges(libset):
 def test_xyz_cutting_types_feed_modifiers_and_preview_metadata(libset):
     job, _ = motion_job(libset, parallel=True, repeat=True)
     job.preferences['skip_air_cuts'] = False    # keep the air repeat to check its feed
+    job.preferences['cam_feed_smoothing'] = 0   # exact per-band feeds (smoothing only lowers them)
     ctx = StageContext()
     CAMEmit().run(job, CAMEmit.defaults(), ctx)
     sim = simulate(job.program)
@@ -216,3 +217,29 @@ def test_xyz_all_feeds_obey_machine_cap(libset):
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     sim = simulate(job.program)
     assert all(sim.feed[i] <= 120 for i, l in enumerate(job.program.lines) if l.cmd == 'G1')
+
+
+def test_feed_smoothing_only_lowers_short_moves_and_merges_what_now_matches():
+    from gcodeproducer.core.cam.planner.feed_smoother import FeedSmoother
+    from gcodeproducer.core.cam.planner.motion_segment import MotionSegment
+
+    def run(pattern):
+        x, out = 0., []
+        for length, rate in pattern:
+            out.append(MotionSegment('cut', np.array([x, 0., 0.]), np.array([x+length, 0., 0.]), None, rate, 'cut'))
+            x += length
+        return out
+
+    # Short fast flickers between slow moves are slowed; long moves keep their feed.
+    pattern = [(10, 1000), (.2, 400), (.2, 1000), (.2, 400), (.2, 1000), (.2, 400), (10, 1000)]
+    smoothed = FeedSmoother(2., merge=False)(run(pattern))
+    rates = [s.rate for s in smoothed]
+    assert rates[0] == rates[-1] == 1000 and rates[1:-1] == [400]*5
+    assert all(s.rate <= r for s, (_, r) in zip(smoothed, pattern))
+    merged = FeedSmoother(2.)(run(pattern))
+    assert [s.rate for s in merged] == [1000, 400, 1000] and merged[1].end[0] - merged[1].start[0] == pytest.approx(1)
+    assert FeedSmoother(0.)(run(pattern))[2].rate == 1000                       # off
+    # A bend is never merged away.
+    bent = run([(.2, 400), (.2, 400)])
+    bent[1].start, bent[1].end = bent[0].end, bent[0].end + np.array([0., .2, 0.])
+    assert len(FeedSmoother(2.)(bent)) == 2

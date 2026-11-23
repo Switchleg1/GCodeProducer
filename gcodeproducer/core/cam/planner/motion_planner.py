@@ -56,7 +56,9 @@ class MotionPlanner:
         self.rpm = rpm
         self.material = MaterialModel(job, stock, log=ctx.log)
         self.policy = FeedPolicy(job.m("max_feed", 0), pref(job, "highlight_conflicts"))
-        self.plan = MotionPlan(consume)
+        from .feed_smoother import FeedSmoother
+        self.smoother = FeedSmoother(pref(job, "cam_feed_smoothing"), bool(pref(job, "cam_merge_moves")))
+        self.plan = MotionPlan(consume, smoother=self.smoother)
         self.safe_z = job.m("safe_z", 15.0)
         self.rapid_feed = job.m("rapid_xy", 3000)
         self.short_retracts = bool(pref(job, "short_retracts"))

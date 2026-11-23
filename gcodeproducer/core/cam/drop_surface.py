@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 import numpy as np
+from .cam_constants import SURFACE_FOLLOW_SPREAD
 
 
 class DropSurface:
@@ -56,6 +57,51 @@ class DropSurface:
             z = np.maximum(z, triangle[:, 2].min())
             patch = self.top[lo[0]:hi[0]+1, lo[1]:hi[1]+1]
             np.maximum(patch, np.where(inside, z, -np.inf), out=patch)
+
+    def smooth(self, radius):
+        """The cutter grid with each cell raised to the highest of its 3 x 3 neighbourhood (cached)."""
+        key = ('smooth', round(float(radius), 6))
+        if key not in self._lowered:
+            grid = self.lowered(radius)
+            padded = np.pad(grid, 1, constant_values=-np.inf)
+            nx, ny = grid.shape
+            self._lowered[key] = np.max([padded[1+dx:1+dx+nx, 1+dy:1+dy+ny]
+                                         for dx in (-1, 0, 1) for dy in (-1, 0, 1)], axis=0)
+        return self._lowered[key]
+
+    def follow(self, points, radius):
+        """Safe cutter heights at ``points``, interpolated so a slope reads as a slope, not as stairs.
+
+        ``heights`` gives one safe height per cell, which a path crossing a
+        slope follows as a staircase: flat, then a little plunge at every cell.
+        Interpolating bilinearly between the four nearest cell centres of the
+        ``smooth`` grid is continuous and never below ``heights``: each of those
+        four centres is in the 3 x 3 neighbourhood of the point's cell. The raise
+        is at most about one cell of slope. Across a step steeper than
+        ``SURFACE_FOLLOW_SPREAD`` cells of rise per cell (a wall), or where a
+        neighbour has no model below, the plain ``heights`` are kept.
+        """
+        grid = self.smooth(radius)
+        nx, ny = grid.shape
+        u = (np.asarray(points, float)[:, :2]-self.origin)/self.resolution - .5
+        cell = np.floor(u+.5).astype(int)
+        inside = np.all((cell >= 0) & (cell < np.array([nx, ny])), axis=1)   # as heights
+        base = np.floor(u).astype(int)
+        t = u-base
+        total = np.zeros(len(u))
+        low = np.full(len(u), np.inf)
+        for di, wx in ((0, 1-t[:, 0]), (1, t[:, 0])):
+            for dj, wy in ((0, 1-t[:, 1]), (1, t[:, 1])):
+                value = grid[np.clip(base[:, 0]+di, 0, nx-1), np.clip(base[:, 1]+dj, 0, ny-1)]
+                low = np.minimum(low, value)
+                total += np.where(np.isfinite(value), value, 0.)*wx*wy
+        high = np.full(len(u), -np.inf)
+        for di in (0, 1):
+            for dj in (0, 1):
+                high = np.maximum(high, grid[np.clip(base[:, 0]+di, 0, nx-1), np.clip(base[:, 1]+dj, 0, ny-1)])
+        finite = np.isfinite(low)
+        smooth = finite & (np.where(finite, high-np.where(finite, low, 0.), np.inf) <= SURFACE_FOLLOW_SPREAD*self.resolution)
+        return np.where(smooth, total, self.heights(points, radius))
 
     def lowered(self, radius):
         """Grid of maxima over a disc of ``radius`` plus one cell (cached per radius)."""
