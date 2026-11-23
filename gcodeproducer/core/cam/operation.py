@@ -31,6 +31,8 @@ class Operation:
     feed: float = 800.
     unlock_lead_feed: bool = False
     lead_feed: float = 300.
+    unlock_plunge_feed: bool = False
+    plunge_feed: float = 150.
     lead_in: bool = True
     lead_out: bool = True
     lead_length: float = 0.0            # 0 = auto: lengthens as needed to respect lead_angle

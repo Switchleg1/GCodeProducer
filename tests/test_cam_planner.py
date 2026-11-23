@@ -30,9 +30,16 @@ def test_feed_policy_phase_base_band_factor_and_cap():
     # A vertical plunge keeps its plunge rate; a verified-air approach is unscaled.
     assert policy.rate("plunge", 1000, 300, SLOT) == 300
     assert policy.rate("approach", 1000, 300, AIR) == 300
-    # Engaged steep surface descent uses the slower base before the band factor.
-    assert policy.rate("cut", 1000, 300, SLOT, steep=True) == 150
-    assert policy.rate("cut", 1000, 300, AIR, steep=True) == 1000
+    # Down into material steeper than the ramp is a plunge: plunge rate, unscaled, identified as one.
+    assert policy.rate("cut", 1000, 300, SLOT, steep=True) == 300
+    assert policy.rate("cut", 1000, 300, SLOT, steep=True, plunge_base=120) == 120
+    assert policy.rate("lead_in", 1000, 300, SLOT, steep=True, plunge_base=120) == 120
+    assert policy.rate("plunge", 1000, 300, SLOT, plunge_base=120) == 120
+    assert policy.rate("lead_in", 1000, 300, AIR, plunge_base=120) == 300  # lead-ins keep their own rate
+    assert policy.rate("cut", 100, 300, SLOT, steep=True) == 100           # never faster than cutting
+    assert policy.feature("cut", SLOT, steep=True) == policy.feature("link", HSM, steep=True) == "plunge"
+    assert policy.rate("cut", 1000, 300, AIR, steep=True) == 1000 and policy.feature("cut", AIR, steep=True) != "plunge"
+    assert policy.feature("approach", SLOT, steep=True) == "air"
     capped = FeedPolicy(400)
     assert capped.rate("cut", 1000, 300, HSM) == 400 and capped.capped == {(1100, 400)}
     with pytest.raises(ValueError, match="nonnegative"):

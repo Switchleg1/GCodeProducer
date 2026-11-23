@@ -37,14 +37,21 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
     feed = float(tool.get("feed",800))
     if automatic:
         feed = float(tool.get(f"{key}_chip_load"))*int(tool.get("flutes",2))*rpm
-    lead = feed*float(tool.get("lead_feed_percent",35))/100 if automatic else float(tool.get("plunge_feed",300))
+    if automatic:
+        lead = feed*float(tool.get("lead_feed_percent",35))/100
+        plunge = feed*float(tool.get("plunge_feed_percent",0) or 0)/100 or lead
+    else:
+        plunge = float(tool.get("plunge_feed",300))
+        lead = float(tool.get("lead_in_feed",0) or 0) or plunge
     if operation is not None and operation.unlock_feed:
         feed = float(operation.feed)
     if operation is not None and operation.unlock_lead_feed:
         lead = float(operation.lead_feed)
-    for value in (feed,lead):
+    if operation is not None and getattr(operation, "unlock_plunge_feed", False):
+        plunge = float(operation.plunge_feed)
+    for value in (feed,lead,plunge):
         if value <= 0 or not math.isfinite(value):
-            raise ValueError("Cut and lead/plunge feeds must be positive and finite")
+            raise ValueError("Cut, lead-in and plunge feeds must be positive and finite")
     kind = getattr(operation,"kind","profile")
     axial_kind = "pocket" if kind == "waterfall" else kind if kind in ("slot","pocket","profile") else "slot"
     percent = float(tool.get(f"{key}_{axial_kind}_axial",15))
@@ -61,4 +68,4 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
         step = min(step,maximum)
     if step <= 0 or not math.isfinite(step):
         raise ValueError("Depth per pass must be positive and finite")
-    return CuttingData(rpm,feed,lead,step,key,depth_source,requested_stepdown)
+    return CuttingData(rpm,feed,lead,step,key,depth_source,requested_stepdown,plunge)

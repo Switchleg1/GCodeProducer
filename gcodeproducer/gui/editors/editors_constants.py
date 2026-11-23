@@ -26,7 +26,8 @@ REFERENCE_HINTS = {
 RATE_FIELDS = {
     "rpm": ("Spindle RPM", 100000, "unlock_rpm"),
     "feed": ("Normal cut base feed", 50000, "unlock_feed"),
-    "lead_feed": ("Lead / plunge base feed", 50000, "unlock_lead_feed"),
+    "lead_feed": ("Lead-in base feed", 50000, "unlock_lead_feed"),
+    "plunge_feed": ("Plunge feed", 50000, "unlock_plunge_feed"),
 }
 
 STAGE_SUMMARY_TEMPLATES = {

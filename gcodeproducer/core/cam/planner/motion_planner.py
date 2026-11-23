@@ -78,7 +78,7 @@ class MotionPlanner:
         self._surface_cut = False
         self.layer, self.op = 0, None
         self.tool = self.config = self.name = self.model = None
-        self.feed = self.plunge = 0.0
+        self.feed = self.plunge = self.lead = 0.0
         self.radius = 0.0
         self.entries = self.links = None
 
@@ -159,10 +159,12 @@ class MotionPlanner:
             if measured and sampler is not None:
                 c = self.model.condition(sampler, self.position, q, self.radius)
             drop, run = self.position[2]-q[2], float(np.linalg.norm(q[:2]-self.position[:2]))
-            max_slope = self.entries.ramp_slope if phase == 'lead_in' and self.entries is not None else RAMP_TAN
-            steep = drop > 1e-9 and drop > max_slope*run
-            rate = self.policy.rate(phase, self.feed, self.plunge, c, steep)
-            feature = self.policy.feature(phase, c)
+            # Down into material steeper than the operation's lead-in ramp is a plunge.
+            max_slope = self.entries.ramp_slope if self.entries is not None else RAMP_TAN
+            # (Emitted Z is rounded to 0.001 mm: a ramp at exactly the lead angle must not read as steeper.)
+            steep = drop > 1e-9 and drop > max_slope*run*1.02+.002
+            rate = self.policy.rate(phase, self.feed, self.lead, c, steep, self.plunge)
+            feature = self.policy.feature(phase, c, steep)
             start = self.position.copy()
             if pending is not None and pending[3] == rate and pending[4] == feature and _same_band(pending[2], c):
                 pending[1], pending[2] = q, _wider(pending[2], c)
@@ -402,6 +404,7 @@ class MotionPlanner:
         tool = first_tool
         feed = tool.get("feed", 800) if tool else job.m("max_feed", 800)
         plunge = tool.get("plunge_feed", 300) if tool else 300
+        lead = (tool.get("lead_in_feed", 0) or plunge) if tool else plunge
         rpm = self.rpm
         data = first_data
         rate_key = None
@@ -452,11 +455,12 @@ class MotionPlanner:
                 self.command(f"M3 S{format_number(data.rpm, 0)}", "calculated / overridden RPM")
             rpm = data.rpm if data else rpm
             feed = self.feed = data.feed if data else (tool.get("feed", 800) if tool else feed)
-            plunge = self.plunge = data.lead_feed if data else (tool.get("plunge_feed", 300) if tool else plunge)
-            current = (group, name, rpm, feed, plunge)
+            plunge = self.plunge = data.plunge if data else (tool.get("plunge_feed", 300) if tool else plunge)
+            lead = self.lead = data.lead_feed if data else ((tool.get("lead_in_feed", 0) or plunge) if tool else lead)
+            current = (group, name, rpm, feed, lead, plunge)
             if current != rate_key:
                 ctx.log(f"  {name or 'CAM'}: {data.material if data else 'legacy'} • {rpm:g} rpm • "
-                        f"cut base {feed:g} • lead base {plunge:g} mm/min")
+                        f"cut base {feed:g} • lead base {lead:g} • plunge {plunge:g} mm/min")
                 rate_key = current
             if hasattr(layer, "cam_operation"):
                 self.comment(f"Operation: {layer.cam_operation}")

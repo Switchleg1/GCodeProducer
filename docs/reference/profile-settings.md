@@ -115,7 +115,8 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `length` — Length | float / mm | `20.0` | No schema bound | General. Flute / cutting length. |
 | `vangle` — V angle | float / ° | `0.0` | No schema bound | General. Included angle for v-bits / engravers. |
 | `feed` — Fixed cut feed | float / mm/min | `800.0` | No schema bound | Fixed rates (calculation off). Used with SFM calculation off; operation unlocks can override calculated or fixed bases. |
-| `plunge_feed` — Fixed lead / plunge feed | float / mm/min | `300.0` | No schema bound | Fixed rates (calculation off).  |
+| `plunge_feed` — Fixed plunge feed | float / mm/min | `300.0` | No schema bound | Fixed rates (calculation off). Moves down into material steeper than the lead-in ramp, including straight plunges. |
+| `lead_in_feed` — Fixed lead-in feed | float / mm/min | `0.0` | minimum 0 | Fixed rates (calculation off). Lead-in ramps, arcs and lead-outs; 0 uses the plunge feed. |
 | `spindle_rpm` — Fixed spindle RPM | float / rpm | `18000.0` | No schema bound | Fixed rates (calculation off).  |
 | `max_doc` — Max depth/pass | float / mm | `2.0` | minimum 0 | Engagement. Positive values cap axial depth; 0 disables this cap, not a safety recommendation. |
 | `stepover` — Stepover | float / % | `40.0` | No schema bound | Engagement. Radial engagement as a % of diameter. |
@@ -125,7 +126,8 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `slotting_feed` — Legacy slot feed (machine now owns default) | float / % | `50.0` | minimum 1; maximum 300; Hidden in GUI (compatibility/API field) | Engagement feeds. Full-width slots have no single climb/conventional hand. Percentage of base cutting feed. |
 | `auto_cutting_data` — Calculate from SFM / chip load | bool | `False` | No schema bound | Cutting calculation. Enable after calibrating the per-material data. Legacy tools retain fixed feeds/RPM. |
 | `max_spindle_rpm` — Max spindle rpm | float / rpm | `24000.0` | minimum 1 | Cutting calculation. Tool RPM ceiling, also respected for manual RPM requests. |
-| `lead_feed_percent` — Lead feed percent | float / % | `35.0` | minimum 1; maximum 100 | Cutting calculation. Automatic lead/plunge feed as a percentage of calculated normal feed. |
+| `lead_feed_percent` — Lead-in feed | float / % | `35.0` | minimum 1; maximum 100 | Cutting calculation. Automatic lead-in/ramp feed as a percentage of calculated normal feed. |
+| `plunge_feed_percent` — Plunge feed | float / % | `0.0` | minimum 0; maximum 100 | Cutting calculation. Automatic plunge feed (straight or steep moves down into material) as a percentage of calculated normal feed; 0 uses the lead-in feed. |
 | `soft_wood_sfm` — SFM | float / ft/min | `600.0` | minimum 0.1 | Cut data: Soft wood.  |
 | `soft_wood_chip_load` — Chip load | float / mm/tooth | `0.05` | minimum 0.0001 | Cut data: Soft wood.  |
 | `soft_wood_slot_axial` — Slot axial depth | float / % D | `15.0` | minimum 1; maximum 200 | Cut data: Soft wood. Automatic slot stepdown for Soft wood only (choose the machining category in Material / stock). Percentage of tool diameter, capped by Max depth/pass; the operation depth override takes precedence. |

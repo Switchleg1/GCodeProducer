@@ -129,14 +129,14 @@ def test_legacy_height_reference_appears_as_unchecked_selection(app):
     editor.close()
 
 
-def test_direction_unlock_is_below_lead_feed_and_preserves_legacy_override(app):
+def test_direction_unlock_is_below_the_feeds_and_preserves_legacy_override(app):
     from gcodeproducer.core.profiles import Profile
     from gcodeproducer.gui.cam_editor import CAMEditor
     editor = CAMEditor()
     editor.set_tools([Profile("tool", "Test cutter")])
     editor.add_tool(); editor.add_operation()
     form = editor.direction.parentWidget().layout()
-    assert form.getWidgetPosition(editor.direction)[0] == form.getWidgetPosition(editor.rate_controls["lead_feed"][1])[0] + 1
+    assert form.getWidgetPosition(editor.direction)[0] == form.getWidgetPosition(editor.rate_controls["plunge_feed"][1])[0] + 1
     assert not editor.direction_override.isChecked() and not editor.direction.isEnabled()
     editor.set_calculated({"cut_direction": "meander"})
     assert editor.direction.currentData() == "meander" and editor.operation().cut_direction == "machine"

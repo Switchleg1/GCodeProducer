@@ -59,7 +59,12 @@ SFM RPM ceiling = SFM × 304.8 / (π × diameter_mm)
 selected RPM    = floor(min(SFM RPM ceiling, machine spindle_max, tool max_spindle_rpm))
 normal feed    = chip_load_mm_per_tooth × flute_count × selected_RPM
 lead base feed = calculated normal feed × tool lead_feed_percent / 100
+plunge feed    = calculated normal feed × tool plunge_feed_percent / 100   (0: the lead base feed)
 ```
+
+With calculation off the tool's **Fixed plunge feed** is the plunge feed and
+**Fixed lead-in feed** the lead base; a lead-in feed of 0 (the value for tools
+saved before the two were separate) uses the plunge feed, as before.
 
 This chooses the fastest RPM **within all those ceilings** (whole RPM, never rounding above SFM), not the machine's
 maximum regardless of the material SFM. The conversion constant accounts for
@@ -83,7 +88,8 @@ Each operation has independent checkboxes:
   maximum and checked against machine minimum.
 - **Unlock Normal cut base feed:** replace the calculated/fixed base cutting
   feed with your own mm/min value.
-- **Unlock Lead / plunge base feed:** replace the independent entry feed.
+- **Unlock Lead-in base feed:** replace the lead-in/ramp/lead-out feed.
+- **Unlock Plunge feed:** replace the feed for moves down into material.
 
 The calculated summary names the **stock machining category**, the actual
 process percentage (for example **Non-iron metal • Pocket 25% D**), effective
@@ -91,8 +97,13 @@ RPM, requested base feeds and resolved depth/pass. A capped depth also shows
 the original request (for example `0.500 mm (capped from 1.400)`). Positive machine `max_feed` caps emitted G1 rates.
 Normal cuts and stay-down links additionally use their engagement modifiers.
 Contacting lead-in segments use the machine Slot modifier on the lead base
-feed; clear lead-out segments use lead base feed. Initial vertical approach
-uses the lead/plunge base feed. Drill uses its plunge feed, not an XY band.
+feed; clear lead-out segments use lead base feed. **Every move down into
+material steeper than the operation's lead-in angle is a plunge**: a straight
+plunge entry, and any steeper descent inside a cut, link or lead, such as a 3D
+path dropping down a slope. It is fed at the plunge feed (never faster than
+the cut base, not scaled by engagement) and shown as *Plunge* in Preview.
+A descent through verified air is an approach at the lead base. Drill uses its
+plunge feed, not an XY band.
 
 Unlocking one feed does not implicitly unlock/change the other. An automatic
 lead base is derived from the calculated chip-load feed, not from a manual

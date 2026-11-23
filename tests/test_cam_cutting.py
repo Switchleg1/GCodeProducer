@@ -1,3 +1,4 @@
+from gcodeproducer.core.cam.cutting_data import CuttingData
 """Machining materials, SFM/chip load, limits, and independent manual unlocks."""
 import math
 import pytest
@@ -73,6 +74,27 @@ def test_unlocks_independent_rates_and_rpm_remains_capped():
     assert (data.rpm,data.feed,data.lead_feed)==(12000,1200,180)
     restored=CAMSetup.from_dict(CAMSetup([ToolGroup(tool.id,[op])]).to_dict()).groups[0].operations[0]
     assert restored.unlock_feed and restored.unlock_lead_feed and restored.rpm==30000
+
+
+def test_plunge_and_lead_in_feeds_are_separate_with_older_tools_unchanged():
+    machine,tool,stock=fixture()
+    tool.values["auto_cutting_data"]=False; tool.values["plunge_feed"]=200
+    data=resolve_cutting(machine,tool,stock)
+    assert data.plunge==data.lead_feed==200                 # no lead-in feed set: as before
+    tool.values["lead_in_feed"]=450
+    data=resolve_cutting(machine,tool,stock)
+    assert (data.lead_feed,data.plunge)==(450,200)
+    tool.values["auto_cutting_data"]=True
+    data=resolve_cutting(machine,tool,stock)
+    assert data.plunge==pytest.approx(data.lead_feed)        # no plunge percentage set: the lead-in feed
+    tool.values["plunge_feed_percent"]=10
+    data=resolve_cutting(machine,tool,stock)
+    assert data.plunge==pytest.approx(data.feed*.1) and data.lead_feed==pytest.approx(data.feed*.35)
+    op=Operation(unlock_plunge_feed=True,plunge_feed=90)
+    assert resolve_cutting(machine,tool,stock,op).plunge==90
+    restored=CAMSetup.from_dict(CAMSetup([ToolGroup(tool.id,[op])]).to_dict()).groups[0].operations[0]
+    assert restored.unlock_plunge_feed and restored.plunge_feed==90
+    assert CuttingData(1,2,3,4,"soft_wood").plunge==3           # older saved data
 
 
 def test_every_material_has_per_tool_data_and_can_be_tuned():

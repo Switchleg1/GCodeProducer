@@ -150,7 +150,7 @@ proof, chip-load model or rest-machining system.
 | Meander | Alternate the hand of successive one-sided passes; neutral slots do not choose/advance it |
 
 Pocket/Profile/3D Waterfall **Unlock cutting direction**, immediately below
-the lead/plunge feed unlock, defaults to unchecked: the disabled box then shows
+the plunge feed unlock, defaults to unchecked: the disabled box then shows
 the machine's direction that will be used. Check it to choose an explicit
 direction for that operation. Unchecking restores inheritance.
 Previously saved explicit directions reopen with the checkbox checked. Changing machines or

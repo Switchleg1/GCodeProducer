@@ -102,7 +102,7 @@ Contour — uses the same entry/exit rules from the shared CAM motion planner
 - **A lead-in replaces a plunge only when the descent would enter material.**
   If the cutter column at the path start is already clear down to the cutting
   depth (for example a repeat pass in a cleared pocket), the tool descends
-  through verified air as an **approach** move (lead/plunge base feed, Preview
+  through verified air as an **approach** move (lead-in base feed, Preview
   feature *Air cut*) and no ramp is emitted. Without allocated stock the
   material is unknown: the entry is treated as entering material.
 - Planar leads ramp along the contour (helix/zigzag when short); 3D Contour

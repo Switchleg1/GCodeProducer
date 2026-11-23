@@ -130,8 +130,9 @@ uncleared stock.
   are omitted. Raised model surfaces and tabs still constrain every band.
 - **Feeds:** XYZ moves are classified from current height-field material as
   **Slot / High engagement / Cut / HSM / Air**. Machine thresholds and the
-  operation/tool/machine feed modifiers apply. Steep surface descents use the
-  lower cut/lead base before the modifier; every feed remains machine-capped.
+  operation/tool/machine feed modifiers apply. A descent into material steeper than the
+  lead-in angle is a plunge: plunge feed (capped at the cut base), no
+  modifier, Preview *Plunge*; every feed remains machine-capped.
 - **Entries:** with **Lead-in ramp along contour** checked, an entry which
   meets remaining material ramps along the validated XYZ path within the operation’s lead-in angle. Short
   usable prefixes zigzag as needed. Already-clear entries skip the ramp and

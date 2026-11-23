@@ -184,7 +184,7 @@ class CAMEmit(SliceStage):
         from gcodeproducer.core.gcode.variables import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
         extra=_tool_variables(tool)
-        if cutting:extra.update(tool=int(tool.get("tool_number",1)),spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.lead_feed,
+        if cutting:extra.update(tool=int(tool.get("tool_number",1)),spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.plunge,
                                 machining_material=cutting.material,sfm=tool.get(f"{cutting.material}_sfm",0),
                                 chip_load=tool.get(f"{cutting.material}_chip_load",0),axial_depth=cutting.stepdown)
         b.raw(render_box(job, "start_gcode", extra=extra, log=log).rstrip("\n"))
@@ -194,7 +194,7 @@ class CAMEmit(SliceStage):
         b.set_feature("retract", comment=False)
         last = job.layers[-1] if job.layers else None
         extra = _tool_variables(tool)
-        if cutting:extra.update(spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.lead_feed,
+        if cutting:extra.update(spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.plunge,
                                 machining_material=cutting.material,sfm=tool.get(f"{cutting.material}_sfm",0),
                                 chip_load=tool.get(f"{cutting.material}_chip_load",0),axial_depth=cutting.stepdown)
         if last is not None:
