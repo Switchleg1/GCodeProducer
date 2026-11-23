@@ -86,6 +86,7 @@ MAX_POINTS = 20000          # guard against absurdly many laps on a microscopic 
 
 RAMP_ANGLE = 10.0                     # default for legacy setups
 LEAD_ANGLE_RANGE = (.1, 89.)
+LEAD_OUT_ANGLE_RANGE = (0., 89.)   # 0: the lead-out stays on the path's own height
 
 RAMP_TAN=math.tan(math.radians(RAMP_ANGLE))
 

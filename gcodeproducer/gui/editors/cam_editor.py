@@ -35,7 +35,7 @@ from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, RAMP_ANGLE, SURFACE_KINDS
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, LEAD_OUT_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -234,6 +234,12 @@ class CAMEditor(QWidget):
         self.lead_angle.setToolTip("Maximum descent angle of the lead-in ramp. Shallower angles need more horizontal travel.")
         self.lead_angle.valueChanged.connect(self._edit)
         form.addRow("Lead-in angle (°)", self.lead_angle)
+        self.lead_out_angle = self.spin(*LEAD_OUT_ANGLE_RANGE, RAMP_ANGLE)
+        self.lead_out_angle.setToolTip("Climb angle of the lead-out: it follows the already-cut path back while rising "
+                                       "at this angle, lifting the cutter off the floor and wall as it leaves. "
+                                       "0 keeps the lead-out level on the path.")
+        self.lead_out_angle.valueChanged.connect(self._edit)
+        form.addRow("Lead-out angle (°)", self.lead_out_angle)
         self.stepover = self.spin(1, 100, 40)
         self.area_order = QComboBox()
         self.area_order.addItem("Each area to full depth", "area")
@@ -481,6 +487,7 @@ class CAMEditor(QWidget):
             self.lead_out.setCurrentIndex(self.lead_out.findData(Operation.lead_mode(op.lead_out)))
             self.lead_length.setValue(op.lead_length)
             self.lead_angle.setValue(op.lead_angle)
+            self.lead_out_angle.setValue(op.lead_out_angle)
             self.adaptive_engagement.setValue(op.adaptive_engagement)
             self.stepover.setValue(op.stepover)
             self.area_order.setCurrentIndex(self.area_order.findData(op.area_order))
@@ -532,6 +539,7 @@ class CAMEditor(QWidget):
         op.lead_in,op.lead_out = self.lead_in.currentData() or "every",self.lead_out.currentData() or "every"
         op.lead_length = self.lead_length.value()
         op.lead_angle = self.lead_angle.value()
+        op.lead_out_angle = self.lead_out_angle.value()
         op.adaptive_engagement = self.adaptive_engagement.value()
         if op.kind == "profile" and self.side.currentData() is not None:
             op.side = self.side.currentData()

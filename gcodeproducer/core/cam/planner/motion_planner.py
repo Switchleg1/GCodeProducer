@@ -483,7 +483,8 @@ class MotionPlanner:
             tool = self.tool = next_tool
             self.radius = float(tool.get("diameter", 0))/2 if tool else 0.
             self.entries = EntryExitPlanner(self.safe_z, self.lead_clearance, self.radius,
-                                            getattr(config, 'lead_angle', RAMP_ANGLE))
+                                            getattr(config, 'lead_angle', RAMP_ANGLE),
+                                            getattr(config, 'lead_out_angle', 0.))
             self.links = LinkPlanner(self.safe_z, self.travel_clearance, self.lead_clearance, self.short_retracts, self.radius)
             self.model = EngagementModel(config, tool, self.machine)
             if data and (li == 0 or data.rpm != rpm):

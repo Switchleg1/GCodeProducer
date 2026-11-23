@@ -155,7 +155,8 @@ def test_later_depth_entries_start_just_above_the_previous_floor(libset):
 def test_next_depth_starts_from_previous_floor_without_going_up(libset):
     from gcodeproducer.core.sim import simulate
     mesh=stepped_part()
-    job,_=job_for(mesh,[floor_ref(mesh)],libset)
+    job,op=job_for(mesh,[floor_ref(mesh)],libset)
+    op.lead_out_angle=0     # a level lead-out: this checks the links (a climbing exit rises by design)
     generate(job,StageContext())
     CAMEmit().run(job,CAMEmit.resolve({}),StageContext())
     sim=simulate(job.program)

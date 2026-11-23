@@ -155,7 +155,8 @@ uncleared stock.
   entries without a ramp plunge at the plunge feed.
 - **Exits:** **Lead-out** is *Every entry* (every exit), *Layer entry* (only
   the last exit of each depth) or *None*. A path that cut material follows a
-  short already-cut section back out. An uncertain exit is omitted in favour
+  short already-cut section back out, climbing at the **Lead-out angle**
+  (0 = level on the path). An uncertain exit is omitted in favour
   of retracting; an entirely air-only path has no lead-out.
 
 ![Contour leads and material-aware cutting features](../pictures/cam-contour-leads-engagement.png)

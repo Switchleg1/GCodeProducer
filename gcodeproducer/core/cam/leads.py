@@ -56,6 +56,20 @@ def exit_path(points,closed,distance):
     return walk(p,closed,min(max(0,float(distance)),available),False)
 
 
+def rising_exit(points,closed,distance,angle):
+    """Lead-out along the already-cut path, climbing at ``angle`` degrees from the path end.
+
+    The exit follows :func:`exit_path` and rises above it by tan(angle) times the
+    XY distance walked; never below the path. 0 keeps the path's own height.
+    """
+    path=exit_path(points,closed,distance)
+    if path is None or path.shape[1]<3 or angle<=0:return path
+    run=np.r_[0,np.cumsum(np.linalg.norm(np.diff(path[:,:2],axis=0),axis=1))]
+    path=path.copy()
+    path[:,2]=np.maximum(path[:,2],path[0,2]+np.tan(np.radians(min(float(angle),89.)))*run)
+    return path
+
+
 def _repeat_walk(cycle,distance):
     """Walk ``distance`` along ``cycle`` (closed sequence of points) repeated as often as needed."""
     seg=np.diff(cycle,axis=0)

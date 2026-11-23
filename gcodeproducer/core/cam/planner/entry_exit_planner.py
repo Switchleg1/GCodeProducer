@@ -7,15 +7,16 @@ surface path); exits follow already-cut geometry.
 """
 from __future__ import annotations
 import numpy as np
-from gcodeproducer.core.cam.leads import path_ramp, exit_path
+from gcodeproducer.core.cam.leads import path_ramp, rising_exit
 from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
 from gcodeproducer.core.cam.lead_angle import lead_slope
 from .planner_constants import SETTLE_PASSES
 
 
 class EntryExitPlanner:
-    def __init__(self, safe_z, lead_clearance, radius, lead_angle=RAMP_ANGLE):
+    def __init__(self, safe_z, lead_clearance, radius, lead_angle=RAMP_ANGLE, lead_out_angle=0.):
         self.lead_angle = lead_angle
+        self.lead_out_angle = max(0., float(lead_out_angle or 0))
         self.ramp_slope = lead_slope(lead_angle)
         self.safe_z = float(safe_z)
         self.lead_clearance = float(lead_clearance)
@@ -67,11 +68,14 @@ class EntryExitPlanner:
             raise ValueError(f"{name}: lead-in start is not clear; increase safe Z or revise the entry")
         return lead, kind
 
-    @staticmethod
-    def exit(points, closed, length):
-        """Lead-out for any path: back along as much already-cut path as exists (XYZ), or None."""
-        result = exit_path(np.asarray(points, float), closed, length)
-        return result if result is not None and len(result) > 1 else None
+    def exit(self, points, closed, length):
+        """Lead-out for any path: back along as much already-cut path as exists (XYZ), climbing at
+        the lead-out angle and never above safe Z, or None."""
+        result = rising_exit(np.asarray(points, float), closed, length, self.lead_out_angle)
+        if result is None or len(result) < 2:
+            return None
+        result[:, 2] = np.minimum(result[:, 2], np.maximum(self.safe_z, result[0, 2]))
+        return result
 
     # Former entry points, kept for callers and tests: both are the rule above.
     def planar(self, state, points, closed, z, length, top=None):

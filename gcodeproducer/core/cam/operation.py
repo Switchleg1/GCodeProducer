@@ -46,6 +46,7 @@ class Operation:
     height_references: list[Reference] = field(default_factory=list)  # picked but excluded from machining
 
     lead_angle: float = RAMP_ANGLE      # maximum lead-in descent, in degrees
+    lead_out_angle: float = RAMP_ANGLE  # lead-out climb along the cleared path, in degrees (0 = level)
 
     adaptive_engagement: float = ADAPTIVE_CAM_LIMIT * 100  # sampled width, percent of cutter diameter
 

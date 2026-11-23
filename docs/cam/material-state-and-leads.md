@@ -92,7 +92,12 @@ from a smooth-looking or warning-free display.
 ## Lead-in
 
 Operations expose **Lead-in** and **Lead-out** (*Every entry*, *Layer
-entry*, *None*), a lead length and the lead-in angle. Zero length requests an automatic lead.
+entry*, *None*), a lead length, the lead-in angle and the **lead-out angle**.
+The lead-out follows the already-cut path back while climbing at the
+lead-out angle (default 10°, never above safe Z, never below the path), so the
+cutter lifts off the floor and wall as it leaves; 0 keeps it level on the
+path, as before. A climbing exit stops early, and the tool retracts, if it
+would meet uncertain material. Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 
 Every operation — Pocket, Profile, Slot, Engrave, 3D Waterfall and 3D

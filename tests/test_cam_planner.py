@@ -290,3 +290,29 @@ def test_flat_and_surface_paths_share_one_lead_rule():
     planner = EntryExitPlanner(15., .5, 1.5)
     assert np.allclose(planner.planar_exit(square, True, -3., 2.),
                        planner.exit(np.column_stack((square, np.full(4, -3.))), True, 2.))
+
+
+@pytest.mark.parametrize("angle", [0., 10., 30.])
+def test_lead_out_climbs_at_its_angle_along_the_cleared_path(libset, angle):
+    from gcodeproducer.core.cam.leads import exit_path
+    square = np.array([[0., 0., -3.], [4., 0., -3.], [4., 4., -3.], [0., 4., -3.]])
+    planner = EntryExitPlanner(15., .5, 1.5, lead_out_angle=angle)
+    out = planner.exit(square, True, 3.)
+    level = exit_path(square, True, 3.)
+    assert np.allclose(out[:, :2], level[:, :2]) and out[0, 2] == -3.
+    run = np.r_[0., np.cumsum(np.linalg.norm(np.diff(out[:, :2], axis=0), axis=1))]
+    assert np.allclose(out[:, 2], -3. + np.tan(np.radians(angle))*run)
+    # On a surface path it never goes below the path, and never above safe Z.
+    rising = np.array([[0., 0., -5.], [10., 0., 0.]])
+    up = EntryExitPlanner(-1., .5, 1.5, lead_out_angle=angle).exit(rising[::-1], False, 8.)
+    assert np.all(up[:, 2] >= np.interp(up[:, 0], rising[:, 0], rising[:, 2]) - 1e-9) or angle == 0.
+    # In a program: every lead-out climbs (never descends) at no more than the angle.
+    job, op = emitted(libset, 0, lead_out_angle=angle)
+    sim = simulate(job.program)
+    rows = [i for i, l in enumerate(job.program.lines) if l.cmd == "G1" and l.feature == "lead_out"]
+    assert rows
+    rise = sim.z[rows] - sim.pz[rows]
+    xy = np.hypot(sim.x[rows]-sim.px[rows], sim.y[rows]-sim.py[rows])
+    assert np.all(rise >= -1e-6) and np.all(rise <= np.tan(np.radians(angle))*xy + .002)
+    assert (rise.sum() > 0) == (angle > 0)
+    assert job.warnings == []
