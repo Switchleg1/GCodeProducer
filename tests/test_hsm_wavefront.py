@@ -487,3 +487,18 @@ def test_small_pocket_is_cleared_under_the_contact_limit(tmp_path):
     assert sum(line.startswith('G0 ') for line in text.splitlines()) == report['retract_rapids'] and review.with_suffix('.svg').is_file()
     with pytest.raises(FileExistsError):
         write_review(review, pocket, strokes, residual, report)
+
+
+def test_rest_passes_finish_what_the_fronts_leave_and_report_it():
+    from pathlib import Path
+    from shapely import from_wkt
+    slot = from_wkt(Path('examples/hsm-shapes/slot.wkt').read_text())
+    _, left_alone, report = clear_pocket(slot, 2., rest_finish=False)
+    assert left_alone.area > .1 and report['rest']['pieces'] == 0
+    strokes, residual, report = clear_pocket(slot, 2.)
+    rest = report['rest']
+    assert residual.area < .05 and report['stop'] == 'front_exhausted'
+    assert rest['pieces'] > 0 and rest['stock_before_mm2'] > .1 and rest['stock_after_mm2'] < .05
+    assert 0 < rest['feed_mm'] < .02*report['cut_feed_mm']        # a few extra moves
+    assert rest['over_limit_mm'] <= rest['feed_mm'] and rest['peak'] > 0
+    assert sum(s.kind == 'rest' for s in strokes) == rest['pieces']

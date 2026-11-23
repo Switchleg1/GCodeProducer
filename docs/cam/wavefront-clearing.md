@@ -141,11 +141,25 @@ front meets the wall at a shallow angle. The planner then:
   further out, so its cut stays at the limit throughout (the Mini Yoda
   spiral fell from 9.6 to 5.8 m; the circle test shape is unchanged).
 
-Even so, at 10 % the Mini Yoda waterfall leaves 6–175 mm² at each of its
-eight depths, mostly in channels narrower than a helix between the model
-and the blank edge, and takes about 9 minutes in the application (5 minutes
-of it planning); the result is marked
-DEBUG ONLY. At 18 % it leaves 4–164 mm² and takes about 2 minutes to plan. See Known gaps.
+- **finishes what is still left with rest passes.** Stock the fronts,
+  corner creeps and wall finish could not take within the limit — mostly a
+  crescent deep in a corner between two walls that the cutter only just
+  reaches, a strip beside an island, or a neck — is taken without refusing
+  the cut: first by stepping the cleared area out into it a little at a time
+  (at most 0.5 mm, less under a narrow width limit, up to 40 rounds), as the
+  fronts do, then by following the wall over what is still left. The report
+  (`rest`) gives the passes, their length, how much of it went over the limit
+  and the highest engagement reached; in the application the engagement and
+  feed rules then slow those moves as slots or high engagement.
+
+With rest passes the Mini Yoda waterfall at 10 % (eight depths, follow the
+surface on) is **complete**, with no safety findings: before them it left
+6–270 mm² at every depth after the first and was marked DEBUG ONLY. Rest
+passes were 0–8 % of each depth's cutting (52–930 mm, most of it over the
+limit, up to full width). Planning took 473 s in the application; the
+estimated machining time at the soft-wood feeds is about 3 hours (see Known
+gaps). The test shapes are unchanged except the slot (four rest pieces,
+18 mm, its last 0.33 mm²) and the two-lobe fixture (one, 9 mm).
 
 ## Levels and Z
 
@@ -255,6 +269,14 @@ material model and the motion planner. One depth of the test shapes takes
   outline, which grew to many thousands of points.
 - **A larger stepover is retried only now and then** once a front has settled
   at 0.4 mm or more, not on every pass.
+- **The wall and the old front are measured near the point asked about.**
+  Which way along a wall the cleared area lies, and where a front's end is
+  eased to, were measured against the whole cleared area, which reaches tens
+  of thousands of points on a large part; they are now measured against the
+  part of it within 5 mm. Same results on every test shape.
+- **Cutter-centre offsets use 128 sides a circle**, not 256: the cleared
+  region's outline grew with every cut it added. The test shapes change by a
+  few arcs; one Mini Yoda depth plans in 187 s instead of 204 s.
 
 ## Running it
 
@@ -339,10 +361,15 @@ cross still spend most of their cutting distance again on links.
   space are shaped by stock that is only assumed there, and the two corners
   beside the spiral are finished by the wall finish (29 mm of cutting, nothing
   left) rather than by the fronts themselves.
-- **Narrow channels at a low limit.** Where the stock left lies in a
-  channel too narrow for a helix and the fronts cannot turn into it at the
-  limit, it stays; the result is marked incomplete. Mini Yoda waterfall at
-  10 %: 12 mm² at Z-2 (1,754 mm² before 0.2.20), up to 175 mm² further down.
+- **Rest passes go over the limit.** Narrow channels and corners the fronts
+  cannot turn into at a low limit are now finished by rest passes, which do
+  not refuse a cut (up to full width on the Mini Yoda). The feed rules slow
+  them, but the limit is not held there.
+- **Machining time at a low limit.** The Mini Yoda waterfall at 10 % takes
+  about 3 hours estimated (Wall-parallel contours: about 10 minutes). Cutting
+  feed in air (links and fronts crossing cleared space) is about as long as
+  cutting in contact, and with Follow the surface the fronts ride up and down
+  the slopes, about 8 m of it as plunges at the plunge feed.
 - **Several starts one way round** cost the square with a boss 7 arcs at
   0.2 mm or less (0 before), at the turns from a side into a corner. Only one
   channel round one boss is handled; pockets with several bosses still let

@@ -6,6 +6,7 @@ from gcodeproducer.core.cam.planar_stock import PlanarStock
 from gcodeproducer.core.cam.height_stock import HeightStock
 from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
 from gcodeproducer.core.cam.lead_angle import lead_slope
+from gcodeproducer.core.cam.planner.planner_constants import CLEARANCE_MARGIN
 import numpy as np
 
 
@@ -85,7 +86,10 @@ def simulate_material(job,program,log=None,*,sim=None):
                     kind="plunge" if horizontal<=1e-6 else f"ramp steeper than {angle:g}°"
                     warn(f"{label}: estimated uncleared entry depth {uncleared:g} mm ({kind}) exceeds tool depth/pass {doc:g}; verify prior clearing.")
         if sim.motion_cmd[i]=="G1" and spindle and line.feature in intended and line.op:
-            state.cut(a,b,radius)
+            # The planner removed material along its exact sub-moves; the program's coordinates are
+            # rounded to 0.001 mm and its collinear sub-moves merged. Removing a hair wider keeps a
+            # grid cell at the very edge of a cut from standing here when the planner cut it.
+            state.cut(a,b,radius+CLEARANCE_MARGIN)
     if last_op is not None:snapshot(last_op)
     if log:log(f"  current material: {state.nx} x {state.ny} cells, {state.resolution:g} mm, {len(snapshots)-1} operation outputs")
     return warnings,snapshots

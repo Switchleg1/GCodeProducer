@@ -2,14 +2,14 @@
 import math
 import numpy as np
 
-from shapely import distance, get_coordinates, get_parts, line_interpolate_point, points, segmentize
+from shapely import clip_by_rect, distance, get_coordinates, get_parts, line_interpolate_point, points, segmentize
 from shapely.geometry import LineString, Point, box
 from shapely.ops import nearest_points
 
 from .regions import eased, sweep
 from .links import heading
 from .polyline import stretch
-from .wavefront_constants import (WALL_TOLERANCE, CORNER_DEPTH, CORNER_TURN, CORNER_RUN_IN, CORNER_STEPS, GLANCE_TURN, GLANCE_REACH, GLANCE_ANGLE, BOW_WIDTH_FACTOR, BOW_SET_BACKS, BOW_EXCESS, BOW_PARALLEL, HOOK_SHARE, MIN_HOOK_TRIM, HOOK_SEARCH, HOOK_RADIUS_FACTOR, WALL_CORNER, CORNER_WINDOW, WALL_GAP, NEAR_WALL, WALL_REACH)
+from .wavefront_constants import (WALL_TOLERANCE, CORNER_DEPTH, CORNER_TURN, CORNER_RUN_IN, CORNER_STEPS, GLANCE_TURN, GLANCE_REACH, GLANCE_ANGLE, BOW_WIDTH_FACTOR, BOW_SET_BACKS, BOW_EXCESS, BOW_PARALLEL, HOOK_SHARE, MIN_HOOK_TRIM, HOOK_SEARCH, HOOK_RADIUS_FACTOR, WALL_CORNER, CORNER_WINDOW, WALL_GAP, NEAR_WALL, WALL_REACH, PROBE_MARGIN)
 
 
 _wall_memo = {'for': (None, None), 'found': {}}
@@ -60,7 +60,13 @@ def walk_wall(rings, xy, part, own, radius, overlap, *, at_least=0., limit=WALL_
         return [tuple(q) for q in get_coordinates(line_interpolate_point(ring, at)).tolist()]
 
     probe = min(4, steps-1) + 1
-    way = walk(min((1, -1), key=lambda sign: part.distance(ring.interpolate((here + sign*limit*probe/steps) % total))))
+    # Which way along the wall the cleared area lies: measured against the cleared area near here only.
+    # The whole of it has tens of thousands of vertices on a large pocket.
+    span = limit*probe/steps + PROBE_MARGIN
+    local = clip_by_rect(part, foot.x - span, foot.y - span, foot.x + span, foot.y + span)
+    if local.area <= 0:
+        local = part
+    way = walk(min((1, -1), key=lambda sign: local.distance(ring.interpolate((here + sign*limit*probe/steps) % total))))
     # Measure against what lies near this stretch of wall only; the whole pocket is far slower.
     xs, ys = zip(*way)
     around = box(min(xs), min(ys), max(xs), max(ys))

@@ -2,14 +2,14 @@
 import math
 
 import numpy as np
-from shapely import covers, distance, dwithin, get_coordinates, get_parts, points, prepare, segmentize, shortest_line
+from shapely import clip_by_rect, covers, distance, dwithin, get_coordinates, get_parts, points, prepare, segmentize, shortest_line
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polylabel, split, unary_union
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from .polyline import stretch
-from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK)
+from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK, PROBE_MARGIN)
 
 
 def center_regions(pocket, radius, *, margin=0.):
@@ -284,11 +284,16 @@ def eased(run, closed, clear, allowed, blend, *, ends=(True, True)):
     near = np.minimum(travelled if ends[0] else np.inf, total - travelled if ends[1] else np.inf)
     t = near/reach if reach else np.ones(len(dense))
     blend_at = np.flatnonzero(t < 1.)
-    if len(blend_at):
+    if len(blend_at) and not clear.is_empty:
         # Pull each point toward the old front, fully at the very ends and less further in.
         w = np.clip(t[blend_at], 0., 1.)
         w = w*w*(3 - 2*w)
-        foot = get_coordinates(shortest_line(points(dense[blend_at]), clear))[1::2]
+        # Against the old front near these points only: the whole cleared area is far slower.
+        lo, hi = dense[blend_at].min(axis=0) - reach - PROBE_MARGIN, dense[blend_at].max(axis=0) + reach + PROBE_MARGIN
+        near = clip_by_rect(clear, lo[0], lo[1], hi[0], hi[1])
+        foot = get_coordinates(shortest_line(points(dense[blend_at]), near))[1::2] if near.area > 0 else ()
+        if len(foot) != len(blend_at):
+            foot = get_coordinates(shortest_line(points(dense[blend_at]), clear))[1::2]
         dense[blend_at] = foot + (dense[blend_at] - foot)*w[:, None]
     keep = np.r_[True, np.any(np.diff(dense, axis=0) != 0, axis=1)]
     dense = dense[keep]

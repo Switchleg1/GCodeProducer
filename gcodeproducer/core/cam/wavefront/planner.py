@@ -16,12 +16,12 @@ from .contact import cutting_pieces, cut
 from .walls import wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading
 from .timing import machine_time
-from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX)
+from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX, PROFILE_INSETS, REST_MM2, REST_STEPOVER, REST_PASSES)
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
                  islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None,
-                 smooth_links=True, material=None, measure='angle', end_allowance=None):
+                 smooth_links=True, material=None, measure='angle', end_allowance=None, rest_finish=True):
     """Return (strokes, residual, report) for one target plane.
 
     The stock starts as the whole pocket, or as the part of it inside
@@ -417,7 +417,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     # of a channel leaves because no later front sweeps back over it. Clean wall is not passed again.
     profile = {'pieces': 0, 'over_limit': 0, 'refused_mm': 0., 'feed_mm': 0.,
                'reachable_stock_before_mm2': stock.intersection(reachable).area}
-    for inset in ((.3, 0.) if wall_profile else ()):
+    for inset in (PROFILE_INSETS if wall_profile else ()):
         # Only stock thicker than the wall tolerance sends the cutter back to a wall.
         thick = stock.buffer(-WALL_TOLERANCE/2, join_style=2).buffer(WALL_TOLERANCE/2, join_style=2)
         for part in polygons(allowed.buffer(-inset) if inset else allowed):
@@ -466,17 +466,77 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                         count(tally)
                         profile['feed_mm'] += LineString(piece).length
 
-    stop = 'time_budget' if out_of_time() else 'blocked' if any_blocked or profile['over_limit'] else 'front_exhausted'
+    # Rest: stock still left that the fronts, corners and wall finish could not take within the limit,
+    # mostly in a corner the cutter only just reaches or a neck. It is taken whatever the engagement,
+    # and the report says how far over the limit that went: the feed rules slow those moves as slots
+    # or high engagement. A few such moves finish the depth.
+    rest = {'pieces': 0, 'feed_mm': 0., 'over_limit_mm': 0., 'peak': 0.,
+            'stock_before_mm2': stock.intersection(reachable).area}
+
+    def take_rest(path, stepover):
+        """Cut path wherever it meets stock, without refusing; True if it took any."""
+        nonlocal stock
+        tally = [0., 0., 0.]
+        peak, trial = cut(path, stock, radius, sample_step, tally=tally, measure=measure)
+        if stock.area - trial.area < MIN_GAIN_MM2:
+            return False
+        commit('rest', path, stepover, peak)
+        stock, cleared[0] = trial, None
+        count(tally)
+        length = LineString(path).length
+        rest['pieces'] += 1
+        rest['feed_mm'] += length
+        rest['over_limit_mm'] += length if peak > limit else 0.
+        rest['peak'] = max(rest['peak'], peak)
+        return True
+
+    # Stock away from the wall that the fronts were stopped short of: step the cleared area out
+    # into it a little at a time, as the fronts do, but without refusing a cut.
+    step = REST_STEPOVER if measure != 'width' else min(max(limit*2*radius, .1), REST_STEPOVER)
+    for _ in range(REST_PASSES if rest_finish else 0):
+        left = stock.intersection(reachable)
+        if left.area <= REST_MM2 or out_of_time():
+            break
+        near = left.buffer(radius + step)
+        taken = False
+        for part in polygons(stock_clear()):
+            if part.area < 1e-6 or not part.intersects(near):
+                continue
+            grown = part.buffer(step, quad_segs=SWEEP_SEGMENTS).intersection(allowed)
+            for run, closed in fronts(part, grown, wall, zone=near):
+                path = eased(run, closed, part, allowed, blend)
+                if len(path) < 2:
+                    continue
+                for piece in cutting_pieces(path, stock, radius):
+                    taken = take_rest(piece, step) or taken
+        if not taken:
+            break
+    if rest_finish and stock.intersection(reachable).area > REST_MM2 and not out_of_time():
+        # What is still left lies against the wall, mostly deep in a corner: follow the wall over it.
+        thick = stock.buffer(-WALL_TOLERANCE/2, join_style=2).buffer(WALL_TOLERANCE/2, join_style=2)
+        for part in polygons(allowed):
+            if part.area < 1e-6:
+                continue
+            part = orient(part, sign=-1.)
+            for ring in (part.exterior, *part.interiors):
+                dense = list(segmentize(LineString(ring.coords), .1).coords)
+                for whole in cutting_pieces(dense, thick, radius, run_out=1.5, closed=True):
+                    take_rest(whole, 0.)
+    rest['stock_after_mm2'] = stock.intersection(reachable).area
+
+    stop = ('time_budget' if out_of_time() else
+            'blocked' if (any_blocked or profile['over_limit']) and rest['stock_after_mm2'] > REST_MM2 else
+            'front_exhausted')
     passes = front_passes
     residual = stock.intersection(reachable)
     total = start.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
-    feeds = [s for s in strokes if s.kind not in ('link', 'corner')]  # Corners are judged by depth.
+    feeds = [s for s in strokes if s.kind not in ('link', 'corner', 'rest')]  # Corners are judged by depth.
     report = {'stop': stop, 'placement': placement, 'wall_pull_back': wall_pull_back,
               'lobes': [{'widest_xy_mm': xy, 'room_mm': room, 'bounds_mm': bounds}
                         for xy, room, bounds in find_lobes(allowed, min_radius=radius)],
               'islands': island_reports, 'front_passes': passes, 'front_arcs': len(cuts),
-              'wall_profile': profile if wall_profile else None, 'corners': corners,
+              'wall_profile': profile if wall_profile else None, 'corners': corners, 'rest': rest,
               'stuck_spots': [tuple(float(v) for v in q) for q in stuck_spots],
               'reachable_stock_before_profile_mm2': profile['reachable_stock_before_mm2'],
               'reachable_mm2': total, 'reachable_residual_mm2': residual.area,

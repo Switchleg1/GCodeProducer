@@ -1,6 +1,6 @@
 """Tuning of the wavefront pocket clearing; values are in mm and degrees unless named otherwise."""
 
-CENTER_BUFFER_SEGMENTS = 64  # sides of a cutter-centre offset round a corner
+CENTER_BUFFER_SEGMENTS = 32  # sides of a cutter-centre offset round a corner
 STEPOVERS = (1., .8, .65, .5, .45, .4, .35, .3, .25, .2, .15, .12)
 SWEEP_SEGMENTS = 16
 CUT_SEGMENTS = 32  # keeps a cut's end cap within the link tolerance of a true disc
@@ -53,3 +53,8 @@ END_ALLOWANCE = (3., 1.25)  # mm at each end of a front, and how far over the wi
 RESTARTS = 12  # most fresh helix entries into stock the fronts could not reach
 RESTART_MM2 = 2.  # stock left below this is not worth a fresh entry
 SPIRAL_LARGEST = .5  # mm; widest lap spacing of a spiral (wider left a skin on the wall where a ring's front comes back)
+PROFILE_INSETS = (.3, 0.)  # mm from the wall: the wall finish passes under an angle (or wide) limit
+REST_MM2 = .05  # stock left above this after the wall finish is taken by rest passes along the wall
+REST_STEPOVER = .5  # mm; most a rest pass steps out into stock away from the wall (less under a narrow width limit)
+REST_PASSES = 40  # most rounds of rest passes
+PROBE_MARGIN = 5.  # mm round a wall point within which the cleared area is measured to find which way it lies
