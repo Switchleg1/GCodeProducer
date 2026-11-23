@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 from shapely.geometry import box, LineString, Point
 from shapely.ops import unary_union
+from gcodeproducer.core.cam.cam_constants import PLANAR_SWEEP_CHUNK
 
 class PlanarStock:
     def __init__(self, stock):
@@ -43,7 +44,10 @@ class PlanarStock:
                 sweeps.append(Point(p[0]).buffer(radius))
             else:
                 q=np.vstack((p,p[0])) if path.closed else p
-                sweeps.append(LineString(q).buffer(radius))
+                # A long chain that doubles back on itself (an adaptive path) buffers far faster in
+                # short stretches: one buffer of the whole chain resolves every self-overlap at once.
+                step=PLANAR_SWEEP_CHUNK
+                sweeps.extend(LineString(q[i:i+step+1]).buffer(radius) for i in range(0,max(len(q)-1,1),step))
             previous=p[0] if path.closed else p[-1]
         return unary_union(sweeps).normalize()
 

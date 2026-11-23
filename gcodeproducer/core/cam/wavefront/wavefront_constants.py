@@ -58,3 +58,4 @@ REST_MM2 = .05  # stock left above this after the wall finish is taken by rest p
 REST_STEPOVER = .5  # mm; most a rest pass steps out into stock away from the wall (less under a narrow width limit)
 REST_PASSES = 40  # most rounds of rest passes
 PROBE_MARGIN = 5.  # mm round a wall point within which the cleared area is measured to find which way it lies
+CLEAR_SIMPLIFY = .001  # mm; the cleared region's outline is thinned to this after each cut

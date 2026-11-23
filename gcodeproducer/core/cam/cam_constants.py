@@ -128,3 +128,4 @@ SURFACE_FOLLOW_SPREAD = 4.
 # layer (depth), or never.
 LEAD_MODES = (("every", "Every entry"), ("layer", "Layer entry"), ("none", "None"))
 LEAD_MODE_KEYS = frozenset(key for key, _ in LEAD_MODES)
+PLANAR_SWEEP_CHUNK = 200  # points per stretch when a path's swept area is built from buffers

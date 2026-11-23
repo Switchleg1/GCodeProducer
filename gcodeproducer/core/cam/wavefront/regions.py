@@ -9,7 +9,7 @@ from shapely.ops import nearest_points, polylabel, split, unary_union
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from .polyline import stretch
-from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK, PROBE_MARGIN)
+from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK, PROBE_MARGIN, CLEAR_SIMPLIFY)
 
 
 def center_regions(pocket, radius, *, margin=0.):
@@ -219,7 +219,9 @@ def grow_clearance(clear, allowed, stock, path, radius):
                 opened = opened.difference(near.buffer(radius, quad_segs=CENTER_BUFFER_SEGMENTS))
             added.append(opened)
             stretch, length = [path[i]], 0.
-    return unary_union([clear, *added])
+    # Thinned to a micron: every cut adds the arcs of its sweep to the outline, which otherwise
+    # grows to tens of thousands of points and makes each union slower than the cut itself.
+    return unary_union([clear, *added]).simplify(CLEAR_SIMPLIFY)
 
 
 def fronts(clear, grown, wall, *, zone=None):

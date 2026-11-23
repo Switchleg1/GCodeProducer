@@ -31,12 +31,30 @@ class HeightStock:
         self._last_sweep=(key,patch)
         return patch
 
-    def _sweep(self,a,b,radius):
+    def _box(self,a,b,radius):
+        """Grid slices round the sweep of a cutter of ``radius`` from a to b, or None off the grid."""
         xa=max(0,int(math.floor((min(a[0],b[0])-radius-self.stock.x)/self.dx)))
         xb=min(self.nx,int(math.ceil((max(a[0],b[0])+radius-self.stock.x)/self.dx)))
         ya=max(0,int(math.floor((min(a[1],b[1])-radius-self.stock.y)/self.dy)))
         yb=min(self.ny,int(math.ceil((max(a[1],b[1])+radius-self.stock.y)/self.dy)))
         if xa>=xb or ya>=yb:return None
+        return slice(ya,yb),slice(xa,xb)
+
+    def _clear_below(self,a,b,radius):
+        """True when nothing round the move stands above its lowest tip: no contact, nothing to cut.
+
+        Most moves of a long path run through space already cleared, and this
+        answers them without measuring the sweep cell by cell.
+        """
+        region=self._box(a,b,radius)
+        if region is None:return True
+        top=float(self.heights[region].max())
+        return top<=min(float(a[2]),float(b[2]))+1e-3 or top<=self.bottom+1e-3
+
+    def _sweep(self,a,b,radius):
+        region=self._box(a,b,radius)
+        if region is None:return None
+        (ya,yb),(xa,xb)=(region[0].start,region[0].stop),(region[1].start,region[1].stop)
         x=self.x[None,xa:xb]-a[0]
         y=self.y[ya:yb,None]-a[1]
         d=np.asarray(b[:2])-a[:2]
@@ -88,13 +106,17 @@ class HeightStock:
 
     def contact(self,a,b,radius):
         if self.tab_contact(a,b,radius):return True
-        patch=self._patch(np.asarray(a),np.asarray(b),radius)
+        a,b=np.asarray(a),np.asarray(b)
+        if self._clear_below(a,b,radius):return False
+        patch=self._patch(a,b,radius)
         if patch is None:return False
         region,distance,z=patch
         return bool(np.any((distance <= radius*radius) & (self.heights[region] > self.bottom+1e-3) & (self.heights[region] > z+1e-3)))
 
     def cut(self,a,b,radius):
-        patch=self._patch(np.asarray(a),np.asarray(b),radius)
+        a,b=np.asarray(a),np.asarray(b)
+        if self._clear_below(a,b,radius):return
+        patch=self._patch(a,b,radius)
         if patch is None:return
         region,distance,z=patch
         h=self.heights[region]

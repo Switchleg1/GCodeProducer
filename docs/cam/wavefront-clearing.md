@@ -156,7 +156,7 @@ With rest passes the Mini Yoda waterfall at 10 % (eight depths, follow the
 surface on) is **complete**, with no safety findings: before them it left
 6–270 mm² at every depth after the first and was marked DEBUG ONLY. Rest
 passes were 0–8 % of each depth's cutting (52–930 mm, most of it over the
-limit, up to full width). Planning took 473 s in the application; the
+limit, up to full width). Computing it took 310 s in the application; the
 estimated machining time at the soft-wood feeds is about 3 hours (see Known
 gaps). The test shapes are unchanged except the slot (four rest pieces,
 18 mm, its last 0.33 mm²) and the two-lobe fixture (one, 9 mm).
@@ -274,9 +274,22 @@ material model and the motion planner. One depth of the test shapes takes
   eased to, were measured against the whole cleared area, which reaches tens
   of thousands of points on a large part; they are now measured against the
   part of it within 5 mm. Same results on every test shape.
-- **Cutter-centre offsets use 128 sides a circle**, not 256: the cleared
-  region's outline grew with every cut it added. The test shapes change by a
-  few arcs; one Mini Yoda depth plans in 187 s instead of 204 s.
+- **Cutter-centre offsets use 128 sides a circle**, not 256, and **the
+  cleared region's outline is thinned to 1 µm after each cut.** Every cut
+  added the arcs of its sweep to the outline, which grew to 30,000–50,000
+  points on a Mini Yoda depth, and the union that adds a cut to it took
+  longer than the cut itself. One Mini Yoda depth now plans in 27 s instead
+  of 204 s, and the test shapes in about half the time (ring 4.6 s from
+  8.8 s, two-lobe fixture 4.6 s from 9.7 s), with a few arcs more or fewer.
+- **The application's material model skips moves through cleared space**
+  without measuring them cell by cell, and **a long adaptive path's swept
+  area is built in stretches of 200 points**: one buffer of a whole chain
+  that doubles back on itself took 7 s a depth, the stretches 0.4 s.
+
+The Mini Yoda waterfall at 10 % (eight depths, follow the surface on) now
+computes in 310 s in the application, from 473 s with the first rest passes:
+the depths plan in 4–75 s each in worker processes, and most of the rest is
+the motion planner measuring the paths that follow the surface move by move.
 
 ## Running it
 
