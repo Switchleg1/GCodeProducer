@@ -141,7 +141,8 @@ def test_tabs_split_lower_passes_and_preserve_leads(cube_stl, libset, order):
     for layer in lower:
         lines = [ln for ln in job.program.lines if ln.layer == layer.index]
         assert any(ln.feature == "lead_in" for ln in lines)
-        assert any(ln.feature == "lead_out" for ln in lines)
+    # Lead-outs carry on only where that is clear; a section ending against a tab retracts straight out.
+    assert not any("lead-out" in w for w in job.warnings)
     assert not [w for w in job.warnings if "holding tab" in w or "rapid motion" in w]
     assert len(job.material_results) == 2
     # Protected stock survives in the height field at each rail, not only in the overlay.

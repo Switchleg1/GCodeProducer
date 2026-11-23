@@ -269,7 +269,9 @@ def test_lead_modes_every_layer_none_for_flat_and_surface_paths(libset, kind):
     layer_in, layer_out, _ = leads("layer", "layer")
     assert layer_in and all(n == 1 for n in layer_in.values()) and set(layer_in) <= set(every_in)
     if kind == "surface":
-        assert sum(every_in.values()) > sum(layer_in.values()) and sum(every_out.values()) > sum(layer_out.values())
+        assert sum(every_in.values()) > sum(layer_in.values())
+        # These raster lines end at the walls: carrying on would cut, so they retract straight out.
+        assert not every_out
     assert all(n == 1 for n in layer_out.values())
     none_in, none_out, job = leads("none", "none")
     assert not none_in and not none_out
@@ -316,3 +318,44 @@ def test_lead_out_climbs_at_its_angle_along_the_cleared_path(libset, angle):
     assert np.all(rise >= -1e-6) and np.all(rise <= np.tan(np.radians(angle))*xy + .002)
     assert (rise.sum() > 0) == (angle > 0)
     assert job.warnings == []
+
+
+def test_lead_out_carries_on_forward_at_the_cutting_feed(libset):
+    from gcodeproducer.core.cam.leads import rising_exit
+    line = np.array([[0., 0., -2.], [5., 0., -2.]])
+    out = rising_exit(line, False, 3., 10.)
+    assert np.allclose(out[:, :2], [[5., 0.], [8., 0.]]) and out[-1, 2] == pytest.approx(-2.+3.*np.tan(np.radians(10.)))
+    square = np.array([[0., 0., -3.], [4., 0., -3.], [4., 4., -3.], [0., 4., -3.]])
+    around = rising_exit(square, True, 3., 0.)
+    assert np.allclose(around[:, :2], [[0., 0.], [3., 0.]])          # on past the start, the way it was cutting
+    # In a program: each lead-out leaves in the direction of the last cutting move, at the cut feed (no slow-down).
+    job, op = emitted(libset, 0)
+    plan = job.motion_plan.segments
+    checked = 0
+    for i, s in enumerate(plan):
+        if s.phase == "lead_out" and plan[i-1].phase == "cut":
+            cut = plan[i-1].end[:2]-plan[i-1].start[:2]
+            out = s.end[:2]-s.start[:2]
+            if np.linalg.norm(cut) > 1e-6 and np.linalg.norm(out) > 1e-6:
+                assert np.dot(cut, out)/np.linalg.norm(cut)/np.linalg.norm(out) > .99
+                data = job.layers[s.layer].cam_cutting
+                assert s.rate > data.lead_feed and s.rate >= min(plan[i-1].rate, data.feed) - 1e-6
+                checked += 1
+    assert checked
+
+
+def test_lead_out_is_skipped_and_the_tool_retracts_straight_up_when_carrying_on_would_cut(libset):
+    from tests.test_cam_surface import surface_job
+    job, op = surface_job(libset, kind="contour3d")
+    op.strategy = "raster_x"       # separate lines, each ending against a wall of the pocket
+    generate(job, StageContext())
+    ctx = StageContext()
+    CAMEmit().run(job, CAMEmit.resolve({}), ctx)
+    assert any("lead-outs skipped" in m for m in ctx.messages)
+    segments = [s for s in job.motion_plan.segments if s.end is not None and s.start is not None]
+    ends = 0
+    for a, b in zip(segments, segments[1:]):
+        if a.phase == "cut" and b.phase not in ("cut", "lead_out"):
+            assert np.allclose(b.end[:2], b.start[:2]) and b.end[2] > b.start[2]   # straight up
+            ends += 1
+    assert ends

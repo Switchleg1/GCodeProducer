@@ -79,6 +79,7 @@ class MotionPlanner:
         self.surface_totals = Counter()
         self._path_cut_material = False
         self._layer_entered = False
+        self.lead_outs_skipped = 0
         self._surface_cut = False
         self.layer, self.op = 0, None
         self.tool = self.config = self.name = self.model = None
@@ -323,9 +324,20 @@ class MotionPlanner:
             self.feed_move(q, "lead_in", state, comment="lead-in along the path", split=True)
 
     def lead_out(self, state, pts, closed, length):
-        """The shared exit: back along the already-cut path, stopping before uncertain material."""
+        """The shared exit: on forward from the end at the cutting feed, climbing at the lead-out angle.
+
+        Only over space already cleared: around a closed path that is its own
+        cut; straight on from an open path it must be checked. If any of the
+        exit would meet material (an open path ending at a wall - a slot), or
+        the material is unknown for an open path, there is no lead-out and the
+        tool retracts straight out.
+        """
         exit_points = self.entries.exit(pts, closed, length)
         if exit_points is None:
+            return
+        if (state is None and not closed) or (state is not None and any(
+                state.contact(a, b, self.radius) for a, b in zip(exit_points, exit_points[1:]))):
+            self.lead_outs_skipped += 1
             return
         for q in exit_points[1:]:
             if not self.feed_move(q, "lead_out", state, comment="lead-out along the cleared path", split=True,
@@ -532,6 +544,9 @@ class MotionPlanner:
             ctx.log(f"  {self.stay_count} entries moved across cleared material at depth (no retract)")
         if self.short_count:
             ctx.log(f"  {self.short_count} entries used short retracts above current material instead of safe Z")
+        if self.lead_outs_skipped:
+            ctx.log(f"  {self.lead_outs_skipped} lead-outs skipped: carrying on would meet material (e.g. a slot "
+                    "ending at a wall); retracted straight out instead")
         for kind, count in sorted(self.lead_kinds.items()):
             what = "circling the closed contour" if kind == "helix" else "back and forth along the open path"
             ctx.log(f"  {count} lead-in ramps longer than their path: {kind} ({what}) at <=10 degrees")

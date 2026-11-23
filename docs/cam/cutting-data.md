@@ -95,7 +95,7 @@ Each operation has independent checkboxes:
   maximum and checked against machine minimum.
 - **Unlock Normal cut base feed:** replace the calculated/fixed base cutting
   feed with your own mm/min value.
-- **Unlock Lead-in base feed:** replace the calculated lead-in/ramp/lead-out feed.
+- **Unlock Lead-in base feed:** replace the calculated lead-in/ramp feed.
 - **Unlock Plunge feed:** replace the calculated feed for moves straight down
   into material.
 
@@ -105,7 +105,8 @@ RPM, requested base feeds and resolved depth/pass. A capped depth also shows
 the original request (for example `0.500 mm (capped from 1.400)`). Positive machine `max_feed` caps emitted G1 rates.
 Normal cuts and stay-down links additionally use their engagement modifiers.
 Contacting lead-in segments use the machine Slot modifier on the lead base
-feed; clear lead-out segments use lead base feed. **A move down into material
+feed; lead-outs carry on at the cutting feed so the speed does not change
+where the cutter leaves the wall. **A move down into material
 is fed by its angle**: from the rate it would have level (cut, link, lead-in …
 with its engagement modifier) at 0°, blending to the lead-in rate at the
 operation's lead-in angle, then on to the plunge feed straight down (in 5 %

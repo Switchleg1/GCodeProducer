@@ -9,7 +9,8 @@ NON_MOTION = ("comment", "command", "split")  # program lines planned without mo
 
 # Phases fed from the lead-in base rate; plunges (and any engaged descent steeper
 # than the lead-in ramp) use the plunge rate; everything else uses the cut base.
-LEAD_BASE_PHASES = frozenset(("approach", "lead_in", "lead_out"))
+# A lead-out carries on at the cutting feed so the speed does not change at the wall.
+LEAD_BASE_PHASES = frozenset(("approach", "lead_in"))
 
 # Phases whose rate is scaled by the measured engagement band factor.
 # A vertical plunge keeps its plunge rate; a verified-air approach is unscaled.

@@ -69,8 +69,8 @@ class EntryExitPlanner:
         return lead, kind
 
     def exit(self, points, closed, length):
-        """Lead-out for any path: back along as much already-cut path as exists (XYZ), climbing at
-        the lead-out angle and never above safe Z, or None."""
+        """Lead-out for any path: on forward from the end (around a closed path, straight on from an
+        open one), climbing at the lead-out angle and never above safe Z, or None."""
         result = rising_exit(np.asarray(points, float), closed, length, self.lead_out_angle)
         if result is None or len(result) < 2:
             return None

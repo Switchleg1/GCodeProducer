@@ -132,7 +132,8 @@ def test_xyz_leads_replace_only_contacting_entry_and_skip_cleared_repeat(libset)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     lines = job.program.lines
     assert any(l.feature == 'lead_in' and l.layer == 0 for l in lines)
-    assert any(l.feature == 'lead_out' and l.layer == 0 for l in lines)
+    # A slot ending short of the wall: carrying on would cut, so no lead-out (straight retract).
+    assert not any(l.feature == 'lead_out' for l in lines)
     assert not any(l.feature == 'plunge' for l in lines)
     assert not any(l.cmd == 'G1' and l.feature in ('lead_in', 'lead_out') and l.layer == 1 for l in lines)
     assert any(l.feature == 'air' and l.layer == 1 for l in lines)
@@ -153,9 +154,13 @@ def test_xyz_lead_toggles_are_independent_and_disabled_entry_plunges(libset):
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert any(l.feature == 'plunge' for l in job.program.lines)
     assert not any(l.feature in ('lead_in', 'lead_out') for l in job.program.lines)
-    job, _ = motion_job(libset, lead_in=False, lead_out=True)
-    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
-    assert any(l.feature == 'lead_out' for l in job.program.lines)
+    job, op = motion_job(libset, lead_in=False, lead_out=True)
+    ctx = StageContext()
+    CAMEmit().run(job, CAMEmit.defaults(), ctx)
+    assert not any(l.feature == 'lead_in' for l in job.program.lines)
+    # A lone slot in uncut stock: carrying on would cut, so its lead-out is skipped for a straight retract.
+    assert not any(l.feature == 'lead_out' for l in job.program.lines)
+    assert any('lead-outs skipped' in m for m in ctx.messages)
 
 
 def test_xyz_cutting_types_feed_modifiers_and_preview_metadata(libset):

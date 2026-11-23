@@ -93,11 +93,15 @@ from a smooth-looking or warning-free display.
 
 Operations expose **Lead-in** and **Lead-out** (*Every entry*, *Layer
 entry*, *None*), a lead length, the lead-in angle and the **lead-out angle**.
-The lead-out follows the already-cut path back while climbing at the
-lead-out angle (default 10°, never above safe Z, never below the path), so the
-cutter lifts off the floor and wall as it leaves; 0 keeps it level on the
-path, as before. A climbing exit stops early, and the tool retracts, if it
-would meet uncertain material. Zero length requests an automatic lead.
+The lead-out carries on **forward** from the end of the cut, at the cutting
+feed, climbing at the lead-out angle (default 10°, never above safe Z; 0
+keeps it level), so the cutter neither stops nor slows where it leaves the
+wall. A closed path carries on around past its start (already cut); an open
+path carries on straight along its final direction. A lead-out only ever
+passes over space already cut: if any of it would meet material — mostly a
+slot, an open path ending at a wall, a tab or uncut stock — there is no
+lead-out and the tool retracts straight up. (Pulling sideways away from the
+wall would be the ideal exit; it is not attempted yet.) Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 
 Every operation — Pocket, Profile, Slot, Engrave, 3D Waterfall and 3D
@@ -179,8 +183,11 @@ selected path.
 
 ## Lead-out
 
-Before a required retract at the end of a contour chain, lead-out follows a
-short portion of the just-cut contour at depth, then retracts. On a short
+Before a required retract at the end of a contour chain, lead-out carries on
+forward for a short distance (around a closed contour, or straight on from an
+open path where that is already clear), climbing at the lead-out angle at the
+cutting feed, then retracts. Where carrying on would cut, the tool retracts
+straight up instead. On a short
 section (for example a path split by a holding tab), the exit is shortened to
 its available length rather than silently omitted. It is omitted
 between paths that will stay down. The current height field checks the exit

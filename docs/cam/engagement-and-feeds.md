@@ -28,7 +28,7 @@ This estimate includes actual emitted leads and prior operation removal.
 
 The engagement feed controls are enabled for Contour. Normal cuts receive
 the selected band factor; contacting lead-in moves use the lead base with that
-factor. Lead-out follows cleared XYZ geometry only. Air-only entries/exits
+factor. Lead-out carries on forward through cleared space at the cutting feed. Air-only entries/exits
 skip the corresponding leads. Slot remains hand-neutral; the selected Contour
 motion strategy is not reversed to force a climb/conventional hand.
 

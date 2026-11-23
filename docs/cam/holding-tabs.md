@@ -82,10 +82,9 @@ per operation, not per section.
 
 Each interrupted path retains the operation's lead-in/out settings. Its entry
 ramps **along the surviving section**, zigzagging along it if needed; it does
-not follow the original unbroken contour through the tab. Lead-out follows
-the cleared section before retracting; if that section is shorter than the
-requested exit length, it uses the available length instead of dropping the
-exit. Unsafe/uncertain exits still retract.
+not follow the original unbroken contour through the tab. Lead-out carries on
+forward where that is already clear; a section ending against the tab
+retracts straight up instead.
 An excessive ramp (over 20,000 segments) fails generation rather than silently
 replacing the lead with a plunge. Only a genuinely zero-length path cannot ramp.
 

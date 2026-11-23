@@ -57,16 +57,31 @@ def exit_path(points,closed,distance):
 
 
 def rising_exit(points,closed,distance,angle):
-    """Lead-out along the already-cut path, climbing at ``angle`` degrees from the path end.
+    """Lead-out that carries on forward from the path end, climbing at ``angle`` degrees.
 
-    The exit follows :func:`exit_path` and rises above it by tan(angle) times the
-    XY distance walked; never below the path. 0 keeps the path's own height.
+    The cutter keeps its direction instead of stopping and pulling back, so
+    nothing changes suddenly where it leaves the wall. A closed path carries on
+    around its start (already cut); an open path carries on straight along its
+    final direction. The exit rises by tan(angle) times the XY distance walked,
+    never below a closed path it follows. 0 keeps the end height. Whether the
+    exit passes only over cleared space is checked when it is planned: if not,
+    there is no lead-out and the tool retracts straight up.
     """
-    path=exit_path(points,closed,distance)
-    if path is None or path.shape[1]<3 or angle<=0:return path
+    p=np.asarray(points,float)
+    if len(p)<2:return None
+    if p.shape[1]<3:p=np.column_stack((p,np.zeros(len(p))))
+    if closed:
+        path=exit_path(p,True,distance)
+        if path is None:return None
+    else:
+        end=p[-1]
+        back=next((q for q in p[-2::-1] if np.linalg.norm(end[:2]-q[:2])>1e-9),None)
+        if back is None or distance<=1e-9:return None
+        heading=(end[:2]-back[:2])/np.linalg.norm(end[:2]-back[:2])
+        path=np.array([end,np.r_[end[:2]+heading*float(distance),end[2]]])
     run=np.r_[0,np.cumsum(np.linalg.norm(np.diff(path[:,:2],axis=0),axis=1))]
     path=path.copy()
-    path[:,2]=np.maximum(path[:,2],path[0,2]+np.tan(np.radians(min(float(angle),89.)))*run)
+    path[:,2]=np.maximum(path[:,2],path[0,2]+np.tan(np.radians(min(max(float(angle),0.),89.)))*run)
     return path
 
 
