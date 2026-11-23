@@ -18,6 +18,7 @@ from .cam_constants import (
 from .paths import contour_pocket
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from gcodeproducer.core.jobs.path import Path
+from gcodeproducer.core.cam.operation import Operation
 
 
 def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, cutting=None,
@@ -29,7 +30,7 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
     as a coverage reference. Finish contours are accepted only after checking
     them against progressive stock at the same engagement limit as the peels.
     """
-    if tabs or tool_type != 'endmill' or not op.lead_in or not op.stay_down:
+    if tabs or tool_type != 'endmill' or Operation.lead_mode(op.lead_in) == 'none' or not op.stay_down:
         raise ValueError(f'{op.name}: Adaptive clearing requires a flat endmill, lead-in and stay-down, '
                          'and does not support this tab-protected area. No contour fallback was generated.')
     limit = op.adaptive_engagement/100

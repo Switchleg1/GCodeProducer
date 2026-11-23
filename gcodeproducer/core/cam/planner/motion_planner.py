@@ -78,6 +78,7 @@ class MotionPlanner:
         self.stay_count = self.short_count = self.samples = 0
         self.surface_totals = Counter()
         self._path_cut_material = False
+        self._layer_entered = False
         self._surface_cut = False
         self.layer, self.op = 0, None
         self.tool = self.config = self.name = self.model = None
@@ -261,8 +262,8 @@ class MotionPlanner:
         """
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
         if not (self.skip_air and state is not None):
-            for pts in paths:
-                self._surface_run(state, pts)
+            for n, pts in enumerate(paths):
+                self._surface_run(state, pts, last=n == len(paths)-1)
             return
         runs = []
         for pts in paths:
@@ -271,47 +272,84 @@ class MotionPlanner:
                 self.air_paths += 1
                 self.air_skipped += float(np.linalg.norm(np.diff(pts[:, :2], axis=0), axis=1).sum())
             runs.extend(pieces)
-        for k in _nearest_order(runs, self.position[:2]):
-            self._surface_run(state, runs[k])
+        order = _nearest_order(runs, self.position[:2])
+        for n, k in enumerate(order):
+            self._surface_run(state, runs[k], last=n == len(order)-1)
 
-    def surface_path(self, pts):
+    def surface_path(self, pts, last=True):
         """XYZ surface path, skipping stretches already cleared by earlier moves or tools."""
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
         if not (self.skip_air and state is not None):
-            return self._surface_run(state, pts)
+            return self._surface_run(state, pts, last=last)
         runs = self._material_runs(state, pts)
         if not runs:
             self.air_paths += 1
             self.air_skipped += float(np.linalg.norm(np.diff(pts[:, :2], axis=0), axis=1).sum())
-        for run in runs:
-            self._surface_run(state, run)
+        for n, run in enumerate(runs):
+            self._surface_run(state, run, last=last and n == len(runs)-1)
 
-    def _surface_run(self, state, pts):
+    # ------------------------------------------------- leads: one rule for every path
+    def _lead_mode(self, which):
+        from gcodeproducer.core.cam.operation import Operation
+        return Operation.lead_mode(getattr(self.config, which, False)) if self.config is not None else "none"
+
+    def wants_lead_in(self):
+        """Lead-in mode: every entry, the first entry of each layer, or none."""
+        mode = self._lead_mode("lead_in")
+        return mode == "every" or (mode == "layer" and not self._layer_entered)
+
+    def wants_lead_out(self, last):
+        """Lead-out mode: every exit, the last exit of each layer, or none."""
+        mode = self._lead_mode("lead_out")
+        return mode == "every" or (mode == "layer" and last)
+
+    def lead_in(self, state, pts, closed, length, top=None):
+        """The shared lead for a flat or surface path: (N,3) ramp or None, with its warning / count."""
+        return self.lead_kind(*self.entries.entry(state, pts, closed, length, top, self.name))
+
+    def lead_kind(self, lead, kind):
+        if kind == "degenerate":
+            warning = f"{self.name}: zero-length path; vertical entry used. Confirm the tool can plunge."
+            if warning not in self.job.warnings:
+                self.job.warnings.append(warning)
+            self.ctx.log("LEAD WARNING: "+warning)
+            return None
+        if kind in ("helix", "zigzag"):
+            self.lead_kinds[kind] = self.lead_kinds.get(kind, 0)+1
+        return lead
+
+    def ramp_in(self, state, lead):
+        for q in lead[1:]:
+            self.feed_move(q, "lead_in", state, comment="lead-in along the path", split=True)
+
+    def lead_out(self, state, pts, closed, length):
+        """The shared exit: back along the already-cut path, stopping before uncertain material."""
+        exit_points = self.entries.exit(pts, closed, length)
+        if exit_points is None:
+            return
+        for q in exit_points[1:]:
+            if not self.feed_move(q, "lead_out", state, comment="lead-out along the cleared path", split=True,
+                                  cleared_only=True):
+                self.ctx.log(f"  {self.name}: lead-out crosses uncertain remaining cells; retracting instead")
+                break
+
+    def _surface_run(self, state, pts, last=True):
         """XYZ surface path: shared entry, lead-in only into material, measured cuts, cleared lead-out."""
         config = self.config
         length = (config.lead_length if config is not None else 0) or 2*self.radius
-        lead, kind = (self.entries.surface(state, pts, length, self.name)
-                      if config is not None and config.lead_in else (None, None))
-        if kind == "zigzag":
-            self.lead_kinds[kind] = self.lead_kinds.get(kind, 0)+1
+        lead = self.lead_in(state, pts, False, length) if self.wants_lead_in() else None
         approach = lead[0] if lead is not None else pts[0]
         self._path_cut_material = False
         self.enter(state, approach[:2], approach[2], lead is not None)
+        self._layer_entered = True
         if lead is not None:
-            for q in lead[1:]:
-                self.feed_move(q, "lead_in", state, comment="surface path lead-in", split=True)
+            self.ramp_in(state, lead)
         self._surface_cut = True
         for q in pts[1:]:
             self.feed_move(q, "cut", state, split=True)
         self._surface_cut = False
-        if config is not None and config.lead_out and self._path_cut_material:
-            exit_points = self.entries.surface_exit(pts, length)
-            if exit_points is not None:
-                for q in exit_points[1:]:
-                    if not self.feed_move(q, "lead_out", state, comment="cleared surface lead-out", split=True,
-                                          cleared_only=True):
-                        self.ctx.log(f"  {self.name}: surface lead-out crosses uncertain remaining cells; retracting instead")
-                        break
+        if self.wants_lead_out(last) and self._path_cut_material:
+            self.lead_out(state, pts, False, length)
 
     def planar_path(self, layer, path_index, path, previous_end):
         """XY path at the layer depth: link or entry, leads, planned cuts, cleared lead-out."""
@@ -333,52 +371,40 @@ class MotionPlanner:
             for point in route:
                 self.travel_at_depth(point)
         else:
-            want = config is not None and config.lead_in and len(pts) > 1
-            lead, kind = self.entries.planar(live, pts, path.closed, layer.z, length) if want else (None, None)
+            flat = np.column_stack((pts[:, :2], np.full(len(pts), float(layer.z))))
+            want = self.wants_lead_in() and len(pts) > 1
+            lead, kind = self.entries.entry(live, flat, path.closed, length, name=name) if want else (None, None)
             stayed = False
             if config is not None and live is not None:
                 here = self.position[2]
-                down, down_kind = (self.entries.planar(live, pts, path.closed, layer.z, length, top=here)
+                down, down_kind = (self.entries.entry(live, flat, path.closed, length, top=here, name=name)
                                    if want and layer.z+1e-9 < here < self.safe_z-1e-9 else (None, None))
                 target = down[0, :2] if down is not None else start
                 if here > floor+1e-9 and self.links.stay_at_depth(live, self.position, target, floor):
                     lead, kind, stayed = down, down_kind, True
                     self.travel_at_depth(target)
                     self.stay_count += 1
-            if kind == "degenerate":
-                lead = None
-                warning = f"{name}: zero-length path; vertical entry used. Confirm the tool can plunge."
-                if warning not in job.warnings:
-                    job.warnings.append(warning)
-                self.ctx.log("LEAD WARNING: "+warning)
-            elif kind in ("helix", "zigzag"):
-                self.lead_kinds[kind] = self.lead_kinds.get(kind, 0)+1
+            lead = self.lead_kind(lead, kind)
             approach = lead[0, :2] if lead is not None else start
             entry = lead[0, 2] if lead is not None else layer.z
             if stayed:
                 self.descend(live, approach, entry)
             else:
                 self.enter(live, approach, entry, lead is not None)
+            self._layer_entered = True
             if lead is not None:
-                for q in lead[1:]:
-                    self.feed_move(q, "lead_in", live, comment="contour lead-in", split=True)
+                self.ramp_in(live, lead)
         first_cut = not linked     # an entry always restates the cutting feed
         for i, q in enumerate(loop[1:]):
             condition = path.cut_conditions[i] if i < len(path.cut_conditions) else None
             self.feed_move(np.r_[q, self.position[2]], "cut", live, condition, measured=False, force_feed=first_cut)
             first_cut = False
         next_path = layer.paths[path_index+1] if path_index+1 < len(layer.paths) else None
-        if (config is not None and config.lead_out and len(pts) > 1 and not (next_path and next_path.stay_down)
+        if (self.wants_lead_out(next_path is None) and len(pts) > 1 and not (next_path and next_path.stay_down)
                 and (live is None or self._path_cut_material or not path.cut_conditions
                      or any(c.engagement > 1e-6 for c in path.cut_conditions))
                 and not (next_path and self.cleared_planar_route(live, layer, path_index+1, floor) is not None)):
-            exit_points = self.entries.planar_exit(pts, path.closed, self.position[2], length)
-            if exit_points is not None:
-                for q in exit_points[1:]:
-                    if not self.feed_move(q, "lead_out", live, comment="cleared contour lead-out", split=True,
-                                          cleared_only=True):
-                        self.ctx.log(f"  {name}: lead-out crosses uncertain remaining cells; retracting instead")
-                        break
+            self.lead_out(live, np.column_stack((pts[:, :2], np.full(len(pts), self.position[2]))), path.closed, length)
         return self.position[:2].copy()
 
     def cleared_planar_route(self, state, layer, index, floor):
@@ -474,6 +500,7 @@ class MotionPlanner:
             if hasattr(layer, "cam_operation"):
                 self.comment(f"Operation: {layer.cam_operation}")
             previous_end = None   # never carry stay-down permission across depth/operation/tool boundaries
+            self._layer_entered = False   # lead-in "Layer entry": only the first entry of each layer ramps
             surface = [np.asarray(p.points, float) for p in layer.paths]
             if surface and all(len(p) >= 2 and p.shape[1] == 3 for p in surface):
                 self.surface_layer(surface)
@@ -484,7 +511,7 @@ class MotionPlanner:
                 if len(pts) < (1 if path.feature == "drill" else 2):
                     continue
                 if pts.shape[1] == 3:
-                    self.surface_path(pts)
+                    self.surface_path(pts, last=path_index == len(layer.paths)-1)
                     previous_end = None
                 else:
                     previous_end = self.planar_path(layer, path_index, path, previous_end)

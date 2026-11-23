@@ -35,7 +35,7 @@ from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -211,14 +211,21 @@ class CAMEditor(QWidget):
             self.direction.addItem(label, key)
         self.direction.currentIndexChanged.connect(self._edit)
         form.addRow(self.direction_override, self.direction)
-        self.lead_in = QCheckBox("Lead-in ramp along contour")
-        self.lead_in.setToolTip("Ramp along the validated path when entering remaining material. 3D Contour skips the ramp when the entry is already clear.")
-        self.lead_out = QCheckBox("Lead-out along cleared contour")
-        self.lead_out.setToolTip("Follow an already-cut portion of the path after cutting. Retract instead if remaining material makes the exit uncertain.")
-        self.lead_in.toggled.connect(self._edit)
-        self.lead_out.toggled.connect(self._edit)
-        form.addRow(self.lead_in)
-        form.addRow(self.lead_out)
+        self.lead_in = QComboBox()
+        self.lead_out = QComboBox()
+        for box in (self.lead_in, self.lead_out):
+            for key, label in LEAD_MODES:
+                box.addItem(label, key)
+            box.currentIndexChanged.connect(self._edit)
+        self.lead_in.setToolTip("Ramp along the path (helix around a closed path, zigzag along an open one) when an entry "
+                                "meets remaining material: on every entry, only the first entry of each layer (depth), or "
+                                "never (entries then plunge at the plunge feed). Already-clear entries never ramp. "
+                                "The same rule for flat and surface-following paths.")
+        self.lead_out.setToolTip("After cutting, follow an already-cut part of the path before retracting: on every exit, "
+                                 "only the last exit of each layer, or never. Retracts instead where remaining material "
+                                 "makes the exit uncertain.")
+        form.addRow("Lead-in", self.lead_in)
+        form.addRow("Lead-out", self.lead_out)
         self.lead_length = self.spin(0,1000,0)
         self.lead_length.setSpecialValueText("Auto length")
         self.lead_length.valueChanged.connect(self._edit)
@@ -470,8 +477,8 @@ class CAMEditor(QWidget):
                 unlock.setChecked(getattr(op,flag))
                 value.setValue(getattr(op,key))
                 value.setEnabled(unlock.isChecked())
-            self.lead_in.setChecked(op.lead_in)
-            self.lead_out.setChecked(op.lead_out)
+            self.lead_in.setCurrentIndex(self.lead_in.findData(Operation.lead_mode(op.lead_in)))
+            self.lead_out.setCurrentIndex(self.lead_out.findData(Operation.lead_mode(op.lead_out)))
             self.lead_length.setValue(op.lead_length)
             self.lead_angle.setValue(op.lead_angle)
             self.adaptive_engagement.setValue(op.adaptive_engagement)
@@ -522,7 +529,7 @@ class CAMEditor(QWidget):
             setattr(op,flag,unlock.isChecked())
             setattr(op,key,value.value())
             value.setEnabled(unlock.isChecked())
-        op.lead_in,op.lead_out = self.lead_in.isChecked(),self.lead_out.isChecked()
+        op.lead_in,op.lead_out = self.lead_in.currentData() or "every",self.lead_out.currentData() or "every"
         op.lead_length = self.lead_length.value()
         op.lead_angle = self.lead_angle.value()
         op.adaptive_engagement = self.adaptive_engagement.value()

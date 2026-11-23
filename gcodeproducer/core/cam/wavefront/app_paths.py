@@ -7,6 +7,7 @@ import numpy as np
 from shapely.geometry import LineString
 
 from gcodeproducer.core.jobs.path import Path
+from gcodeproducer.core.cam.operation import Operation
 from .planner import clear_pocket
 from .wavefront_constants import END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
 
@@ -120,7 +121,7 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
     plan cannot reach is reported as an incomplete, debug-only result, never
     silently left.
     """
-    if tabs or tool_type != 'endmill' or not op.lead_in or not op.stay_down:
+    if tabs or tool_type != 'endmill' or Operation.lead_mode(op.lead_in) == 'none' or not op.stay_down:
         raise ValueError(f'{op.name}: Adaptive clearing requires a flat endmill, lead-in and stay-down, '
                          'and does not support this tab-protected area. No contour fallback was generated.')
     if direction == 'conventional':

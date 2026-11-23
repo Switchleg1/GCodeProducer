@@ -77,9 +77,16 @@ def test_surface_entry_stays_on_the_path_above_floor_and_below_ten_degrees(point
         assert kind == 'zigzag'
 
 
-def test_impossible_surface_ramp_fails_instead_of_plunging_or_gouging():
-    with pytest.raises(ValueError, match='cannot fit'):
-        surface_entry([[0, 0, -4], [5, 0, 0]], .5, 3)
+def test_surface_ramp_up_a_steep_path_follows_the_path_and_never_goes_below_it():
+    # Rising 4 mm in 5 mm from its start: no ramp at 10 degrees fits above it, so the
+    # lead follows the path where the path is higher (never below it, never a failure).
+    path = np.array([[0, 0, -4], [5, 0, 0.]])
+    lead, kind = surface_entry(path, .5, 3)
+    assert kind == 'zigzag' and np.allclose(lead[-1], path[0]) and lead[0, 2] == pytest.approx(.5)
+    floor = np.interp(lead[:, 0], path[:, 0], path[:, 2])
+    assert np.all(lead[:, 2] >= floor - 1e-9)
+    ramp = .5 - RAMP_TAN*np.r_[0., np.cumsum(np.linalg.norm(np.diff(lead[:, :2], axis=0), axis=1))]
+    assert np.allclose(lead[:-1, 2], np.maximum(ramp, floor)[:-1])
     with pytest.raises(ValueError, match='nonzero surface path'):
         surface_entry([[0, 0, -1]], .5, 3)
 

@@ -1,4 +1,4 @@
-"""EntryExitPlanner — one entry/exit rule for planar and surface (XYZ) paths.
+"""EntryExitPlanner — one entry/exit rule for flat and surface-following (XYZ) paths.
 
 A lead-in replaces a plunge only when the descent at the path start would meet
 current material. Already-clear starts are approached through verified air.
@@ -7,9 +7,8 @@ surface path); exits follow already-cut geometry.
 """
 from __future__ import annotations
 import numpy as np
-from gcodeproducer.core.cam.leads import ramp_entry, exit_path
-from gcodeproducer.core.cam.surface_leads import surface_entry, surface_exit
-from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, SURFACE_LEAD_SETTLE
+from gcodeproducer.core.cam.leads import path_ramp, exit_path
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE
 from gcodeproducer.core.cam.lead_angle import lead_slope
 from .planner_constants import SETTLE_PASSES
 
@@ -33,60 +32,58 @@ class EntryExitPlanner:
         return bool(state.contact(np.r_[np.asarray(xy, float)[:2], top],
                                   np.r_[np.asarray(xy, float)[:2], z], self.radius))
 
-    def planar(self, state, points, closed, z, length, top=None):
-        """Lead for an XY path at depth ``z``: (lead (N,3) or None, kind).
+    def entry(self, state, points, closed, length, top=None, name=""):
+        """Lead for any path - flat (XY at its depth) or surface-following (XYZ): (lead (N,3) or None, kind).
 
-        kind is None (no lead needed or possible), 'linear', 'helix', 'zigzag' or
-        'degenerate' (a lead was needed but the path has no length to ramp along).
+        One rule for every operation: no lead where the descent at the path
+        start would not meet material; otherwise a ramp along the path itself
+        (helix around a closed path, zigzag along an open one) from just above
+        the local material (lead clearance, settled over the ramp start, which
+        moves with the ramp length), or from ``top`` when the tool is already
+        down there. kind is None, 'linear', 'helix', 'zigzag' or 'degenerate'
+        (a lead was needed but the path has no length to ramp along).
         """
-        points = np.asarray(points, float)
-        start = points[0, :2]
-        if state is None or not self.enters_material(state, start, z, top):
+        p = np.asarray(points, float)
+        start = p[0]
+        if state is None or not self.enters_material(state, start[:2], start[2], top):
             return None, None
-        if len(points) < 2:
+        if len(p) < 2:
             return None, "degenerate"
         if top is not None:
-            lead, kind = ramp_entry(points, closed, z, float(top), length, self.lead_angle)
+            lead, kind = path_ramp(p, closed, float(top), length, self.lead_angle)
             return lead, kind or "degenerate"
-        surface = state.height_at(start, self.radius)
+        surface = state.height_at(start[:2], self.radius)
         lead = kind = None
         for _ in range(SETTLE_PASSES):
-            # The ramp starts just above the local material (lead clearance), settled over
-            # both the path start and the ramp start, which moves with the ramp length.
-            entry_z = min(self.safe_z, max(surface, z)+self.lead_clearance)
-            lead, kind = ramp_entry(points, closed, z, entry_z, length, self.lead_angle)
+            entry_z = min(self.safe_z, max(surface, start[2])+self.lead_clearance)
+            lead, kind = path_ramp(p, closed, entry_z, length, self.lead_angle)
             if lead is None:
                 return None, "degenerate"
             above = state.height_at(lead[0, :2], self.radius)
             if above <= surface+1e-6:
                 break
             surface = above
+        if state.contact(np.r_[lead[0, :2], self.safe_z], lead[0], self.radius):
+            raise ValueError(f"{name}: lead-in start is not clear; increase safe Z or revise the entry")
         return lead, kind
+
+    @staticmethod
+    def exit(points, closed, length):
+        """Lead-out for any path: back along as much already-cut path as exists (XYZ), or None."""
+        result = exit_path(np.asarray(points, float), closed, length)
+        return result if result is not None and len(result) > 1 else None
+
+    # Former entry points, kept for callers and tests: both are the rule above.
+    def planar(self, state, points, closed, z, length, top=None):
+        p = np.asarray(points, float)[:, :2]
+        return self.entry(state, np.column_stack((p, np.full(len(p), float(z)))), closed, length, top)
 
     def surface(self, state, points, length, name=""):
-        """Lead for an XYZ surface path: (lead (N,3) or None, kind)."""
-        points = np.asarray(points, float)
-        first = points[0]
-        if not self.enters_material(state, first[:2], first[2]):
-            return None, None
-        surface = state.height_at(first[:2], self.radius)
-        lead = kind = None
-        for _ in range(SURFACE_LEAD_SETTLE):
-            entry_z = min(self.safe_z, max(surface, first[2])+self.lead_clearance)
-            lead, kind = surface_entry(points, entry_z, length, self.lead_angle)
-            above = state.height_at(lead[0, :2], self.radius)
-            if above <= surface+1e-6:
-                break
-            surface = above
-        if state.contact(np.r_[lead[0, :2], self.safe_z], lead[0], self.radius):
-            raise ValueError(f"{name}: 3D Contour lead start is not clear; increase safe Z or revise the entry")
-        return lead, kind
+        return self.entry(state, points, False, length, name=name)
 
-    @staticmethod
-    def planar_exit(points, closed, z, length):
-        xy = exit_path(points, closed, length)
-        return None if xy is None else np.column_stack((xy, np.full(len(xy), float(z))))
+    def planar_exit(self, points, closed, z, length):
+        p = np.asarray(points, float)[:, :2]
+        return self.exit(np.column_stack((p, np.full(len(p), float(z)))), closed, length)
 
-    @staticmethod
-    def surface_exit(points, length):
-        return surface_exit(points, length)
+    def surface_exit(self, points, length):
+        return self.exit(points, False, length)

@@ -242,3 +242,51 @@ def test_lead_out_follows_only_cleared_geometry(libset):
     job, _ = emitted(libset)
     outs = job.motion_plan.of("lead_out")
     assert outs and all(s.condition is not None and s.condition.regime == "air" for s in outs)
+
+
+@pytest.mark.parametrize("kind", ["planar", "surface"])
+def test_lead_modes_every_layer_none_for_flat_and_surface_paths(libset, kind):
+    from tests.test_cam_surface import surface_job
+
+    def leads(mode_in, mode_out):
+        if kind == "planar":
+            job, op = emitted(libset, lead_in=mode_in, lead_out=mode_out)
+        else:
+            job, op = surface_job(libset, kind="contour3d")
+            op.lead_in, op.lead_out, op.strategy = mode_in, mode_out, "raster_x"   # separate lines: many entries
+            generate(job, StageContext())
+            CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
+        entries, exits, segments = {}, {}, job.motion_plan.segments
+        for i, s in enumerate(segments):
+            previous = segments[i-1].phase if i else None
+            if s.phase == "lead_in" and previous != "lead_in":
+                entries[s.layer] = entries.get(s.layer, 0) + 1
+            if s.phase == "lead_out" and previous != "lead_out":
+                exits[s.layer] = exits.get(s.layer, 0) + 1
+        return entries, exits, job
+
+    every_in, every_out, job = leads("every", "every")
+    layer_in, layer_out, _ = leads("layer", "layer")
+    assert layer_in and all(n == 1 for n in layer_in.values()) and set(layer_in) <= set(every_in)
+    if kind == "surface":
+        assert sum(every_in.values()) > sum(layer_in.values()) and sum(every_out.values()) > sum(layer_out.values())
+    assert all(n == 1 for n in layer_out.values())
+    none_in, none_out, job = leads("none", "none")
+    assert not none_in and not none_out
+    if kind == "surface":
+        from tests.test_cam_surface import assert_program_clear
+        assert_program_clear(job.program)
+    # Saved booleans (older files) read as every / none.
+    assert Operation(lead_in=True, lead_out=False).lead_in == "every"
+    assert Operation(lead_in=True, lead_out=False).lead_out == "none"
+
+
+def test_flat_and_surface_paths_share_one_lead_rule():
+    from gcodeproducer.core.cam.leads import path_ramp, ramp_entry
+    square = np.array([[0., 0.], [4., 0.], [4., 4.], [0., 4.]])
+    flat, kind = ramp_entry(square, True, -3., 1., 2.)
+    same, same_kind = path_ramp(np.column_stack((square, np.full(4, -3.))), True, 1., 2.)
+    assert kind == same_kind == "helix" and np.allclose(flat, same)
+    planner = EntryExitPlanner(15., .5, 1.5)
+    assert np.allclose(planner.planar_exit(square, True, -3., 2.),
+                       planner.exit(np.column_stack((square, np.full(4, -3.))), True, 2.))

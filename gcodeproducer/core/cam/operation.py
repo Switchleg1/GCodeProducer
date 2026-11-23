@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, RAMP_ANGLE
+from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, RAMP_ANGLE, LEAD_MODE_KEYS
 
 @dataclass
 class Operation:
@@ -35,8 +35,8 @@ class Operation:
     lead_feed: float = 300.
     unlock_plunge_feed: bool = False
     plunge_feed: float = 150.
-    lead_in: bool = True
-    lead_out: bool = True
+    lead_in: str = "every"              # every entry / first entry of each layer / none (LEAD_MODES)
+    lead_out: str = "every"             # every exit / last exit of each layer / none
     lead_length: float = 0.0            # 0 = auto: lengthens as needed to respect lead_angle
     overcut: float = 0.0                # Pocket/Waterfall: grow the removal region into void material
     material_limit: float = 0.0         # cutter edge vs blank edge: 0 touch, <0 leave material, >0 pass beyond
@@ -49,7 +49,15 @@ class Operation:
 
     adaptive_engagement: float = ADAPTIVE_CAM_LIMIT * 100  # sampled width, percent of cutter diameter
 
+    @staticmethod
+    def lead_mode(value):
+        """'every', 'layer' or 'none'; saved booleans (older files) read as every / none."""
+        if isinstance(value, str) and value in LEAD_MODE_KEYS:
+            return value
+        return "every" if value is True or (value and not isinstance(value, str)) else "none"
+
     def __post_init__(self):
+        self.lead_in, self.lead_out = self.lead_mode(self.lead_in), self.lead_mode(self.lead_out)
         if self.kind == "pocket" and self.protect_model:
             self.kind = "waterfall"
             self.protect_model = False

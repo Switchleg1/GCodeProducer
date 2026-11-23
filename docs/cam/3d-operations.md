@@ -144,13 +144,19 @@ uncleared stock.
   to the plunge feed straight down; steeper than the lead-in angle it shows as
   *Plunge*. Every feed remains machine-capped. Feeds are then smoothed along
   each continuous cut (Settings → *Feed smoothing length*, below).
-- **Entries:** with **Lead-in ramp along contour** checked, an entry which
-  meets remaining material ramps along the validated XYZ path within the operation’s lead-in angle. Short
-  usable prefixes zigzag as needed. Already-clear entries skip the ramp and
-  descend through verified air. Unchecking retains an explicit plunge entry.
-- **Exits:** with **Lead-out along cleared contour** checked, a path that cut
-  material follows a short already-cut XYZ section back out. An uncertain exit
-  is omitted in favour of retracting; an entirely air-only path has no lead-out.
+- **Entries:** **Lead-in** is *Every entry*, *Layer entry* (only the first
+  entry of each depth) or *None*. An entry which meets remaining material
+  ramps along the path within the operation's lead-in angle, zigzagging along
+  a short path, by the same rule as every flat path (see
+  [Material state and leads](material-state-and-leads.md)). The ramp never goes
+  below the path: where the path rises away from its start faster than the
+  lead-in angle allows, the lead follows the path there instead of failing.
+  Already-clear entries skip the ramp and descend through verified air;
+  entries without a ramp plunge at the plunge feed.
+- **Exits:** **Lead-out** is *Every entry* (every exit), *Layer entry* (only
+  the last exit of each depth) or *None*. A path that cut material follows a
+  short already-cut section back out. An uncertain exit is omitted in favour
+  of retracting; an entirely air-only path has no lead-out.
 
 ![Contour leads and material-aware cutting features](../pictures/cam-contour-leads-engagement.png)
 

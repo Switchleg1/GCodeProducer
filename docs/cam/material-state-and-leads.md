@@ -91,8 +91,8 @@ from a smooth-looking or warning-free display.
 
 ## Lead-in
 
-Operations expose **Lead-in ramp along contour**, **Lead-out along
-cleared contour**, and a lead length. Zero length requests an automatic lead.
+Operations expose **Lead-in** and **Lead-out** (*Every entry*, *Layer
+entry*, *None*), a lead length and the lead-in angle. Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 
 Every operation — Pocket, Profile, Slot, Engrave, 3D Waterfall and 3D
@@ -105,9 +105,17 @@ Contour — uses the same entry/exit rules from the shared CAM motion planner
   through verified air as an **approach** move (lead-in base feed, Preview
   feature *Air cut*) and no ramp is emitted. Without allocated stock the
   material is unknown: the entry is treated as entering material.
-- Planar leads ramp along the contour (helix/zigzag when short); 3D Contour
-  leads ramp along the validated XYZ surface path, never below it. A surface
-  ramp that cannot fit safely fails explicitly instead of silently plunging.
+- **One lead rule for flat and surface paths** (`leads.path_ramp`, used by
+  `EntryExitPlanner.entry`): the ramp walks back along the path itself —
+  around a closed path (a helix) or back and forth along an open one (a
+  zigzag) — descending at the lead-in angle and never below the path, so a
+  flat Pocket contour, a 3D Waterfall path following the surface and a 3D
+  Contour line all enter the same way. Exits (`EntryExitPlanner.exit`) follow
+  the already-cut path back by the same rule.
+- **Lead-in** and **Lead-out** are each *Every entry*, *Layer entry* (lead-in
+  only on the first entry of each layer/depth, lead-out only on its last exit)
+  or *None* (entries plunge at the plunge feed; exits retract). Files saved
+  with the former checkboxes open as *Every entry* (checked) or *None*.
 - Exits follow already-cut geometry only, and are skipped after a path that
   removed no material. See [Contour leads and engagement](3d-operations.md#3d-contour).
 

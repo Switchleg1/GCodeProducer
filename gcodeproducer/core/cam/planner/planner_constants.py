@@ -42,4 +42,4 @@ INWARD_ROUTE_SAMPLES = 16
 INWARD_ROUTE_DETOUR_DIAMETERS = 4.
 MOTION_CHUNK_SIZE = 4096     # flush serialized motion without keeping the full plan in RAM
 ENGAGED = 1e-6               # engagement above this counts as material contact
-SETTLE_PASSES = 3            # planar lead start-height settling iterations
+SETTLE_PASSES = 8            # lead start-height settling iterations (flat and surface paths)

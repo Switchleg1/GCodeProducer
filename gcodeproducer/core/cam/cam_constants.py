@@ -32,7 +32,6 @@ SURFACE_ENGAGEMENT_FORWARD = (0., .25, .5, .75)
 SURFACE_CHORD_SAMPLES_MIN = 16
 SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
-SURFACE_LEAD_SETTLE = 8
 
 ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS = 4.
 
@@ -124,3 +123,7 @@ SURFACE_DIP_DEPTH = .05  # mm
 # most this many cell sizes (slopes up to about 50 degrees); across a steeper step
 # (a wall) the cell's own height is kept, so the path does not climb the wall early.
 SURFACE_FOLLOW_SPREAD = 4.
+# Lead-in / lead-out: on every entry or exit, only the first entry / last exit of each
+# layer (depth), or never.
+LEAD_MODES = (("every", "Every entry"), ("layer", "Layer entry"), ("none", "None"))
+LEAD_MODE_KEYS = frozenset(key for key, _ in LEAD_MODES)
