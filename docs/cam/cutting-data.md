@@ -97,12 +97,19 @@ RPM, requested base feeds and resolved depth/pass. A capped depth also shows
 the original request (for example `0.500 mm (capped from 1.400)`). Positive machine `max_feed` caps emitted G1 rates.
 Normal cuts and stay-down links additionally use their engagement modifiers.
 Contacting lead-in segments use the machine Slot modifier on the lead base
-feed; clear lead-out segments use lead base feed. **Every move down into
-material steeper than the operation's lead-in angle is a plunge**: a straight
-plunge entry, and any steeper descent inside a cut, link or lead, such as a 3D
-path dropping down a slope. It is fed at the plunge feed (never faster than
-the cut base, not scaled by engagement) and shown as *Plunge* in Preview.
-A descent through verified air is an approach at the lead base. Drill uses its
+feed; clear lead-out segments use lead base feed. **A move down into material
+is fed by its angle**: from the rate it would have level (cut, link, lead-in …
+with its engagement modifier) at 0°, blending to the lead-in rate at the
+operation's lead-in angle, then on to the plunge feed straight down (in 5 %
+steps of each span, so it never gets faster as it gets steeper). A descent
+steeper than the lead-in angle (a straight plunge entry, or a 3D path dropping
+down a slope) is shown as *Plunge* in Preview; its feed is never above the
+cut base. A descent through verified air is an approach at the lead base.
+
+```text
+0° … lead-in angle:   level rate  →  lead base × modifier
+lead-in angle … 90°:  lead base × modifier  →  plunge feed
+``` Drill uses its
 plunge feed, not an XY band.
 
 Unlocking one feed does not implicitly unlock/change the other. An automatic

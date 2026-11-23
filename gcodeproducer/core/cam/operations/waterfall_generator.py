@@ -179,6 +179,7 @@ class WaterfallGenerator(OperationGenerator):
         from shapely.geometry import box
         from .surface_common import drop_surface
         surface = drop_surface(run, region.buffer(run.radius), planning)
+        surface.smooth = _smooth_grid(surface.lowered(run.radius))
         floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(run.radius+run.op.stock+surface.resolution),
                    math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in planning.tabs]
         return surface, floors
@@ -199,6 +200,7 @@ class WaterfallGenerator(OperationGenerator):
         from shapely.geometry import LineString
         from gcodeproducer.core.jobs.path import Path
         from gcodeproducer.core.cam.surface_simplifier import simplify3d
+        from .operations_constants import FOLLOW_SMOOTH
         surface, floors = follow
         xy = np.asarray(path.points, float)[:, :2]
         if len(xy) < 2 or ceiling <= z+1e-6:
@@ -206,10 +208,10 @@ class WaterfallGenerator(OperationGenerator):
         if path.closed:
             xy = np.vstack((xy, xy[:1]))
         dense = np.asarray(segmentize(LineString(xy), surface.resolution).coords)[:, :2]
-        height = surface.heights(dense, run.radius) + run.op.stock
+        height = _smooth_heights(surface, dense) + run.op.stock
         for area, roof in floors:   # retained material (holding tabs): never below its top
             height = np.where(contains_xy(area, dense[:, 0], dense[:, 1]), np.maximum(height, roof), height)
-        depth = np.clip(height, z, ceiling)
+        depth = np.clip(_fill_dips(height, max(1, round(FOLLOW_SMOOTH/surface.resolution))), z, ceiling)
         if depth.max() <= z+1e-6:
             return path
         points = np.column_stack((dense, depth))
@@ -218,6 +220,63 @@ class WaterfallGenerator(OperationGenerator):
             points = np.vstack((points[top:-1], points[:top+1]))
         lifted = Path(path.feature, simplify3d(points), width=path.width, speed=path.speed)
         return lifted
+
+
+def _smooth_grid(grid):
+    """Each cell raised to the highest of its 3 x 3 neighbourhood (see _smooth_heights)."""
+    import numpy as np
+    padded = np.pad(grid, 1, constant_values=-np.inf)
+    nx, ny = grid.shape
+    return np.max([padded[1+dx:1+dx+nx, 1+dy:1+dy+ny] for dx in (-1, 0, 1) for dy in (-1, 0, 1)], axis=0)
+
+
+def _smooth_heights(surface, points):
+    """Safe cutter heights at ``points``, interpolated so a slope reads as a slope, not as stairs.
+
+    The height grid holds one safe height per cell, which a path crossing a
+    slope follows as a staircase: flat, then a little plunge at every cell.
+    Interpolating bilinearly between the four nearest cell centres of the grid
+    raised to each cell's 3 x 3 neighbourhood is smooth, and never below the
+    height of the cell a point lies in: each of those four centres is in that
+    neighbourhood. The raise is at most about one cell of slope.
+    """
+    import numpy as np
+    grid = surface.smooth
+    nx, ny = grid.shape
+    u = (np.asarray(points, float)[:, :2]-surface.origin)/surface.resolution - .5
+    cell = np.floor(u+.5).astype(int)
+    inside = np.all((cell >= 0) & (cell < np.array([nx, ny])), axis=1)   # as DropSurface.heights
+    base = np.floor(u).astype(int)
+    t = u-base
+    total = np.zeros(len(u))
+    low = np.full(len(u), np.inf)
+    for di, wx in ((0, 1-t[:, 0]), (1, t[:, 0])):
+        for dj, wy in ((0, 1-t[:, 1]), (1, t[:, 1])):
+            value = grid[np.clip(base[:, 0]+di, 0, nx-1), np.clip(base[:, 1]+dj, 0, ny-1)]
+            low = np.minimum(low, value)
+            total += np.where(np.isfinite(value), value, 0.)*wx*wy
+    # Where a neighbour has no model below, interpolation would reach into the void: use the
+    # cell's own neighbourhood maximum instead (the old staircase, always safe).
+    own = grid[np.clip(cell[:, 0], 0, nx-1), np.clip(cell[:, 1], 0, ny-1)]
+    result = np.where(np.isfinite(low), total, own)
+    return np.where(inside, result, -np.inf)
+
+
+def _fill_dips(height, reach):
+    """``height`` with every dip narrower than ``2*reach+1`` samples filled; never lower anywhere.
+
+    A morphological closing (running maximum, then running minimum) along the
+    path: noise in the height grid otherwise saws a surface-following pass up
+    and down, each little descent a plunge into material.
+    """
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+    if len(height) < 3:
+        return height
+    width = 2*reach+1
+    grown = sliding_window_view(np.pad(height, reach, mode='edge'), width).max(axis=1)
+    closed = sliding_window_view(np.pad(grown, reach, mode='edge'), width).min(axis=1)
+    return np.maximum(closed, height)
 
 def _same(one, other):
     """Two material regions (or None) are the same, to well under a square micron."""

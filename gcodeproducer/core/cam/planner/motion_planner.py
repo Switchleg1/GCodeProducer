@@ -7,6 +7,7 @@ sampler, feed policy and the material update. The G-code writer serializes the
 resulting segments and makes no decisions.
 """
 from __future__ import annotations
+import math
 import numpy as np
 from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, RAMP_TAN
 from gcodeproducer.core.gcode.parsing import format_number
@@ -159,11 +160,17 @@ class MotionPlanner:
             if measured and sampler is not None:
                 c = self.model.condition(sampler, self.position, q, self.radius)
             drop, run = self.position[2]-q[2], float(np.linalg.norm(q[:2]-self.position[:2]))
-            # Down into material steeper than the operation's lead-in ramp is a plunge.
+            # Down into material steeper than the operation's lead-in ramp is a plunge;
+            # the feed follows the descent angle (see FeedPolicy.rate).
             max_slope = self.entries.ramp_slope if self.entries is not None else RAMP_TAN
             # (Emitted Z is rounded to 0.001 mm: a ramp at exactly the lead angle must not read as steeper.)
             steep = drop > 1e-9 and drop > max_slope*run*1.02+.002
-            rate = self.policy.rate(phase, self.feed, self.lead, c, steep, self.plunge)
+            angle = 0. if drop <= 1e-9 else (90. if steep and run < 1e-9 else
+                                             math.degrees(math.atan2(drop, run)))
+            if drop > 1e-9 and not steep:   # within rounding of the lead-in angle: at most that angle
+                angle = min(angle, math.degrees(math.atan(max_slope)))
+            rate = self.policy.rate(phase, self.feed, self.lead, c, steep, self.plunge, angle,
+                                    math.degrees(math.atan(max_slope)))
             feature = self.policy.feature(phase, c, steep)
             start = self.position.copy()
             if pending is not None and pending[3] == rate and pending[4] == feature and _same_band(pending[2], c):

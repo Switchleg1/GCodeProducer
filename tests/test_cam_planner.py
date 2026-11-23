@@ -48,6 +48,20 @@ def test_feed_policy_phase_base_band_factor_and_cap():
         policy.rate("cut", 0, 300)
 
 
+def test_descent_feed_blends_by_angle_from_level_to_lead_in_to_plunge():
+    policy = FeedPolicy(0)
+    rate = lambda angle, phase="cut", c=HSM: policy.rate(phase, 1000, 300, c, plunge_base=100, angle=angle, ramp=10)
+    # Level: the cut rate (HSM 1100); at the lead-in angle: the lead-in rate (300 x 1.1); straight down: plunge.
+    assert rate(0) == 1100 and rate(10) == pytest.approx(330) and rate(90) == 100
+    assert rate(5) == pytest.approx((1100+330)/2) and rate(50) == pytest.approx((330+100)/2)
+    rates = [rate(a) for a in range(0, 91)]
+    assert all(b <= a + 1e-9 for a, b in zip(rates, rates[1:]))        # never faster as it gets steeper
+    assert max(abs(b-a) for a, b in zip(rates, rates[1:])) < .1*1100    # no jumps
+    assert rate(30, c=AIR) == 1000                                      # descending through air is not a descent into material
+    assert rate(5, "lead_in", SLOT) == 150 and rate(50, "lead_in", SLOT) == pytest.approx(125)
+    assert policy.rate("plunge", 1000, 300, SLOT, plunge_base=100, angle=0) == 100
+
+
 def test_feed_policy_features_keep_phase_and_engagement_apart():
     policy = FeedPolicy(0)
     assert policy.feature("lead_in", SLOT) == "lead_in"

@@ -77,7 +77,11 @@ point rides at the model's height (plus stock to leave) under the cutter
 where that is above the current depth, up to the depth above: never below
 the current depth, never above the one before. Paths that stay flat are
 unchanged; a lifted closed contour is opened at its highest point so its
-lead ramps in down the slope. Lifted paths are 3D moves, so they are entered
+lead ramps in down the slope. The heights a lifted path follows are
+interpolated between the cells of the safe-height grid (raised to each cell's
+neighbourhood first, so never below the grid) and dips shorter than 0.5 mm
+are filled, so a slope is followed as a slope rather than as a staircase of
+tiny plunges. Lifted paths are 3D moves, so they are entered
 and linked like 3D Contour paths rather than with stay-down links. On the
 Mini Yoda (4 mm endmill, 2 mm depths, 1 mm stock to leave, wall-parallel
 contours) the material left above the model after the Waterfall fell from
@@ -130,9 +134,10 @@ uncleared stock.
   are omitted. Raised model surfaces and tabs still constrain every band.
 - **Feeds:** XYZ moves are classified from current height-field material as
   **Slot / High engagement / Cut / HSM / Air**. Machine thresholds and the
-  operation/tool/machine feed modifiers apply. A descent into material steeper than the
-  lead-in angle is a plunge: plunge feed (capped at the cut base), no
-  modifier, Preview *Plunge*; every feed remains machine-capped.
+  operation/tool/machine feed modifiers apply. A descent into material is fed by its angle,
+  blending from the level rate to the lead-in rate at the lead-in angle and on
+  to the plunge feed straight down; steeper than the lead-in angle it shows as
+  *Plunge*. Every feed remains machine-capped.
 - **Entries:** with **Lead-in ramp along contour** checked, an entry which
   meets remaining material ramps along the validated XYZ path within the operation’s lead-in angle. Short
   usable prefixes zigzag as needed. Already-clear entries skip the ramp and

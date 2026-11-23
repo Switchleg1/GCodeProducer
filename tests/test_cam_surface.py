@@ -247,6 +247,24 @@ def test_waterfall_varying_its_depth_works_with_every_clearing_strategy(libset, 
     assert_program_clear(job.program)
 
 
+def test_surface_following_heights_are_smooth_and_never_below_the_safe_grid():
+    from gcodeproducer.core.cam.operations import waterfall_generator as w
+    surface = DropSurface(wedge_pocket(), (-2, -2), (42, 32), .3, 10**7)
+    surface.smooth = w._smooth_grid(surface.lowered(1.5))
+    rng = np.random.default_rng(1)
+    points = rng.uniform(-1, 41, (20000, 2))
+    safe, smooth = surface.heights(points, 1.5), w._smooth_heights(surface, points)
+    assert np.all(smooth >= safe - 1e-9) and np.all(np.isfinite(smooth)[np.isfinite(safe)])
+    line = np.column_stack((np.linspace(14, 26, 2000), np.full(2000, 15.)))   # down the sloped floor
+    stairs, ramp = surface.heights(line, 1.5), w._smooth_heights(surface, line)
+    assert np.all(ramp >= stairs - 1e-9) and float((ramp - stairs).max()) < 3*.3
+    flat_runs = lambda z: int((np.abs(np.diff(z)) < 1e-12).sum())
+    assert flat_runs(ramp) < flat_runs(stairs)/10          # a slope, not a staircase
+    saw = np.array([0., 1, 0, 1, 0, 1, 0, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0])
+    filled = w._fill_dips(saw, 1)
+    assert np.all(filled >= saw) and np.all(filled[:7] == 1) and np.all(filled[10:] == 0)
+
+
 def test_flat_pocket_and_legacy_surface_stop_migration(libset):
     rim = ReferenceShape("rectangle", "edge", (10, 8), (30, 22), z=0)
     ref = [Reference("drawing", [rim.id])]

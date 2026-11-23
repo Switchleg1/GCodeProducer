@@ -110,9 +110,9 @@ High 75%=600, Slot 50%=400. Increasing Cut does not increase Slot. Contacting
 every lead-in (planar or 3D) uses the independent lead base times its measured
 band factor — normally Slot, so the operation's Slot override or the machine
 Slot modifier. Normal cutting/link moves use their estimated band. A move down
-into material steeper than the operation's lead-in angle (a vertical plunge,
-or a steep descent inside a 3D path) is a plunge: the plain plunge feed,
-capped at the cut base, shown as *Plunge*.
+into material is fed by its angle: level rate at 0°, lead-in rate at the
+lead-in angle, plunge feed straight down, blended in between; steeper than
+the lead-in angle it is shown as *Plunge*.
 
 The rule is one function for every operation (`FeedPolicy` in
 `core/cam/planner/`): *rate = base(motion phase) × factor(engagement band)*,
