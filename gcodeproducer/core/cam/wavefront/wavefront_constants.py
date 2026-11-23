@@ -59,3 +59,4 @@ REST_STEPOVER = .5  # mm; most a rest pass steps out into stock away from the wa
 REST_PASSES = 40  # most rounds of rest passes
 PROBE_MARGIN = 5.  # mm round a wall point within which the cleared area is measured to find which way it lies
 CLEAR_SIMPLIFY = .001  # mm; the cleared region's outline is thinned to this after each cut
+MIRROR_FOR_CLIMB = True  # the planner keeps stock on the left (conventional for M3); the app plans the mirror image

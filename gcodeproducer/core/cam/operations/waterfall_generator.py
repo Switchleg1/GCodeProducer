@@ -58,7 +58,8 @@ class WaterfallGenerator(OperationGenerator):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, active = self.level_free(run, region, limit, z, above, planning, edge, follow)
+            # Adaptive plans the flat area only; the slope up to the depth above is a band of its own.
+            free, active = self.level_free(run, region, limit, z, above, planning, edge, None)
             above = z
             if active or free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
                 continue
@@ -73,8 +74,13 @@ class WaterfallGenerator(OperationGenerator):
         from gcodeproducer.core.cam.paths import machining_areas
         from .pocket_generator import pocket_paths
         op = run.op
-        free, active = self.level_free(run, region, limit, z, run.start if above is None else above,
-                                       planning, edge, follow)
+        above = run.start if above is None else above
+        # Adaptive engagement is planned in the plane: a front that rode up a slope would leave the next
+        # front below it to cut under its whole width. So adaptive clears the flat area only, and the
+        # slope up to the depth above is taken afterwards by passes stepping up it (slope_band).
+        band_follow = follow if op.strategy == 'adaptive' else None
+        free, active = self.level_free(run, region, limit, z, above, planning, edge,
+                                       None if band_follow is not None else follow)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
@@ -94,7 +100,59 @@ class WaterfallGenerator(OperationGenerator):
             if "too small" not in str(exc):
                 raise
             return free, []
-        return free, machining_areas(paths, "pocket", free) if paths else []
+        areas = machining_areas(paths, "pocket", free) if paths else []
+        if band_follow is not None and above > z+1e-6:
+            wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow)
+            band = self.slope_band(run, free, wide)
+            if band:
+                areas.append(band)
+        return free, areas
+
+    @staticmethod
+    def slope_band(run, flat, wide):
+        """Passes up the slope between this depth and the one above, for adaptive clearing.
+
+        The flat area is cleared first. Its cutter-centre region is then grown
+        by one step at a time, each step a width the engagement limit allows,
+        and the new edge inside the wider region (free at the depth above) is
+        one pass: lifted onto the model, every pass is higher than the one
+        before, so it takes only the step beside it and never cuts under a
+        pass already made. Edges keep the stock on their right (climb).
+        """
+        import numpy as np
+        from shapely.geometry import LineString
+        from shapely.geometry.polygon import orient
+        from gcodeproducer.core.jobs.path import Path
+        from gcodeproducer.core.geometry.polygon_parts import polygons
+        from .operations_constants import SLOPE_PASSES, SLOPE_STEP_MIN
+        op = run.op
+        offset = run.radius + op.stock
+        inner, outer = flat.buffer(-offset), wide.buffer(-offset)
+        if inner.is_empty or outer.difference(inner).area < 1e-3:
+            return []
+        step = max(SLOPE_STEP_MIN, run.diameter*op.adaptive_engagement/100)
+        width = outer.hausdorff_distance(inner)
+        paths = []
+        for k in range(1, min(SLOPE_PASSES, int(width/step) + 2) + 1):
+            grown = inner.buffer(k*step, quad_segs=8)
+            for part in polygons(grown):
+                part = orient(part, sign=1.)
+                for ring in (part.exterior, *part.interiors):
+                    line = LineString(ring.coords)
+                    inside = line.intersection(outer)
+                    if inside.is_empty:
+                        continue
+                    if inside.geom_type == 'LineString' and inside.equals(line):
+                        paths.append(Path('cut', np.asarray(line.coords, float)[:-1], closed=True, width=run.diameter))
+                        continue
+                    for piece in getattr(inside, 'geoms', [inside]):
+                        if piece.geom_type != 'LineString' or piece.length < run.radius:
+                            continue
+                        # GEOS keeps the line's direction in its pieces: still stock on the right.
+                        paths.append(Path('cut', np.asarray(piece.coords, float), width=run.diameter))
+            if outer.difference(grown).area < 1e-3:
+                break
+        return paths
 
     def generate(self, run, selection, planning):
         from shapely.geometry import box

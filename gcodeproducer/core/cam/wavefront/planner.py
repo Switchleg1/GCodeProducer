@@ -369,6 +369,8 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             break
         left = stock.intersection(reachable)
         room = allowed.intersection(left.buffer(-radius, quad_segs=SWEEP_SEGMENTS))
+        # The overlay can come back as a collection with slivers of line among the polygons.
+        room = unary_union([g for g in polygons(room) if g.area > 1e-9])
         if left.area < RESTART_MM2 or room.is_empty:
             break
         fresh = choose_seeds(room, 1, min_radius=radius, placement='widest')

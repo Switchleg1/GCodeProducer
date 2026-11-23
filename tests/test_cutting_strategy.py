@@ -188,3 +188,32 @@ def test_old_strategy_names_preserve_existing_behaviour():
     assert Operation(kind='contour3d').strategy == 'meander'
     assert Operation(kind='contour3d', strategy='raster').strategy == 'meander'
     assert Operation(kind='pocket', protect_model=True, strategy='raster').strategy == 'raster_y'
+
+
+def test_adaptive_cuts_climb_with_stock_on_the_right_and_its_orbit_turns_the_same_way():
+    """M3 spindle: climb keeps uncut stock on the right of the cutter's travel, like G41."""
+    from shapely.geometry import LineString
+    from gcodeproducer.core.cam.engagement import measure_segments
+    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
+
+    area = box(0, 0, 30, 20)
+    op = Operation(kind='waterfall', strategy='adaptive')
+    paths = pocket_paths(op, [], area, 4., 'climb', material=area)
+    stock, left, right = area, 0., 0.
+    for path in paths:
+        q = np.asarray(path.points, float)
+        if path.closed:
+            q = np.vstack((q, q[:1]))
+        for a, b in zip(q, q[1:]):
+            l, r, e, lengths = measure_segments(np.array([a, b]), False, stock, 2.)
+            if 1e-6 < e[0] < .9:                            # one-sided cuts only, not slots or air
+                left += float(lengths[0])*(l[0] > r[0])
+                right += float(lengths[0])*(r[0] > l[0])
+            stock = stock.difference(LineString([a, b]).buffer(2.))
+    assert right > 5*left                                   # climb, not conventional
+    from shapely.geometry import LinearRing
+    assert paths[0].closed and LinearRing(paths[0].points).is_ccw     # the orbit the helix ramps down on
+    centre = np.asarray(paths[0].points, float).mean(axis=0)
+    spiral = np.asarray(paths[1].points, float)[:60] - centre
+    turned = np.unwrap(np.arctan2(spiral[:, 1], spiral[:, 0]))
+    assert turned[-1] > turned[0]                                     # the spiral carries on the same way

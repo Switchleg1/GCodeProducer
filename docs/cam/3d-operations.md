@@ -86,6 +86,18 @@ contours) the material left above the model after the Waterfall fell from
 18 s more compute. A wall that is vertical or overhangs is unchanged: a flat
 cutter cannot reach it from above.
 
+With **Adaptive** clearing the slope is worked differently. Adaptive plans
+its engagement in the plane; a front that rode up the slope and the next
+front, staying lower, would cut under the whole width of the one before —
+a slot. So each depth first clears its flat area (the area free at that
+depth) adaptively, and then the slope up to the depth above as passes of
+its own: the flat area's cutter-centre region grown one step at a time, each
+step the engagement limit's width, every new edge one pass lifted onto the
+model. Each pass is higher than the one before and takes only the step
+beside it; edges keep the stock on their right (climb). The Preview shows
+these as a second layer at each depth. On the Mini Yoda at 10 % the slot and
+high-engagement moves that change height fell to 0–22 mm a depth.
+
 Nested selected outlines alternate between boundary and island. Overlapping
 outlines merge. Exact projected upper triangles protect overhangs; undercuts
 are left uncut. Model material within 0.001 mm above a level counts as floor.

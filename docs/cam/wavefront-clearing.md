@@ -17,6 +17,15 @@ the cut.
 
 ## How a pocket is planned
 
+The planner keeps the stock on the left of every cut, spiral and helix. With
+an M3 (clockwise) spindle that is conventional milling, so the application
+plans the mirror image of each depth and mirrors the result back: every cut
+then keeps the stock on its right (climb), and the helix's orbit turns the
+same way as the spiral after it. Before 0.2.33 the application's adaptive
+paths were conventional (Mini Yoda, Z-4: 17,791 mm conventional, 48 mm
+climb; now 17,718 mm climb, 36 mm conventional), which also made the turns
+at the end of each cut and back to the next run the wrong way round.
+
 1. **Cutter-centre region.** The pocket is shrunk by the cutter radius. A
    cutter centre anywhere inside that region keeps the cutter inside the
    pocket.
@@ -150,7 +159,10 @@ front meets the wall at a shallow angle. The planner then:
   fronts do, then by following the wall over what is still left. The report
   (`rest`) gives the passes, their length, how much of it went over the limit
   and the highest engagement reached; in the application the engagement and
-  feed rules then slow those moves as slots or high engagement.
+  feed rules then slow those moves as slots or high engagement. A fresh
+  helix entry is tried first wherever one fits (the area it may use is now
+  taken from the polygons of the overlay only; a stray line in it made the
+  search find no place, and a 14 × 7 mm corner was left to rest passes).
 
 With rest passes the Mini Yoda waterfall at 10 % (eight depths, follow the
 surface on) is **complete**, with no safety findings: before them it left

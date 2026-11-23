@@ -4,12 +4,14 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from shapely.geometry import LineString
+from shapely.geometry import LinearRing, LineString
 
 from gcodeproducer.core.jobs.path import Path
 from gcodeproducer.core.cam.operation import Operation
+from shapely.affinity import scale
 from .planner import clear_pocket
-from .wavefront_constants import END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
+from .stroke import Stroke
+from .wavefront_constants import MIRROR_FOR_CLIMB, END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
 
 
 def engagement_width(op):
@@ -42,9 +44,19 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
     # The setting is a width, as the old generator measured it: across the cutter, square to its
     # travel. A thin crescent in a corner or a wedge where a front meets the wall touches a wide
     # angle but little width, and an angle limit refused those at every stepover.
-    strokes, residual, report = clear_pocket(pocket, radius, limit=limit, measure='width', material=material,
+    # The planner keeps the stock on the left of each cut. With an M3 (clockwise) spindle that is
+    # conventional milling; climb keeps it on the right. Planning the mirror image and mirroring
+    # the result back turns every cut, spiral and helix the other way and keeps all its geometry.
+    flip = (lambda g: scale(g, xfact=-1., yfact=1., origin=(0., 0.))) if MIRROR_FOR_CLIMB else (lambda g: g)
+    strokes, residual, report = clear_pocket(flip(pocket), radius, limit=limit, measure='width',
+                                             material=None if material is None else flip(material),
                                              top=0., depth=-(depth_step or op.stepdown), lead_angle=op.lead_angle,
                                              end_allowance=END_ALLOWANCE)
+    if MIRROR_FOR_CLIMB:
+        strokes = [Stroke(s.kind, [(-q[0], q[1]) for q in s.points], s.stepover_mm, s.peak_deg) for s in strokes]
+        for entry in report['entries']:
+            entry['helix_xyz'] = [(-q[0], q[1], *q[2:]) for q in entry['helix_xyz']]
+        residual = flip(residual)
     leads = {entry['stroke']: np.asarray(entry['helix_xyz'], float) for entry in report['entries']}
     paths, chain, after = [], [], [None]
 
@@ -70,6 +82,10 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
                 if len(lap) > 2 and math.dist(lap[0], lap[-1]) < 1e-6:
                     lap = lap[:-1]
                 if len(lap) > 2:
+                    # Round the same way as the spiral that follows (counter-clockwise for climb), so the
+                    # cutter carries straight on from the orbit into the spiral instead of reversing.
+                    if LinearRing(lap).is_ccw != MIRROR_FOR_CLIMB:
+                        lap = np.vstack((lap[:1], lap[:0:-1]))
                     paths.append(Path('cut', np.asarray(lap, float), closed=True, width=diameter))
                     after[0] = tuple(float(v) for v in lap[0])
                     if math.dist(lap[0], points[0]) > 1e-6:

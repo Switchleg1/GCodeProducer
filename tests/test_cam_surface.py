@@ -555,3 +555,25 @@ def test_surface_operation_reports_when_nothing_is_reachable(libset):
     job.machine.values["safe_z"] = 30
     with pytest.raises(ValueError, match="End Z is below the surface"):
         generate(job, StageContext())
+
+
+def test_adaptive_follows_the_slope_with_passes_stepping_up_it_not_under_each_other(libset):
+    import re
+    from gcodeproducer.core.gcode.simulation import simulate
+    job, op = surface_job(libset, follow_surface=True, strategy='adaptive')
+    ctx = StageContext()
+    generate(job, ctx)
+    assert_clear_of_model(job)
+    band = [layer for layer in job.layers if layer.paths and all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
+    assert band                                           # the slope is its own set of passes at each depth
+    for layer in band:
+        tops = [float(np.asarray(p.points)[:, 2].max()) for p in layer.paths]
+        assert max(tops) > layer.z + .1                   # they ride up the slope
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert_program_clear(job.program)
+    sim = simulate(job.program)
+    heavy = sum(sim.dist_xy[i] for i, line in enumerate(job.program.lines)
+                if line.cmd == 'G1' and line.feature in ('slot', 'high_engagement') and abs(sim.z[i]-sim.pz[i]) > 1e-6)
+    assert heavy < 1.                                     # no pass cuts under the one beside it
+    hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
+    assert hands.count('climb') > 5*hands.count('conventional')
