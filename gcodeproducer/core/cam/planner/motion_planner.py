@@ -9,7 +9,7 @@ resulting segments and makes no decisions.
 from __future__ import annotations
 import math
 import numpy as np
-from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, RAMP_TAN
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, RAMP_TAN, PLUNGE_FEED_FIELD
 from gcodeproducer.core.gcode.parsing import format_number
 from .motion_segment import MotionSegment
 from .motion_plan import MotionPlan
@@ -413,7 +413,7 @@ class MotionPlanner:
         tool = first_tool
         feed = tool.get("feed", 800) if tool else job.m("max_feed", 800)
         plunge = tool.get("plunge_feed", 300) if tool else 300
-        lead = (tool.get("lead_in_feed", 0) or plunge) if tool else plunge
+        lead = plunge
         rpm = self.rpm
         data = first_data
         rate_key = None
@@ -464,8 +464,8 @@ class MotionPlanner:
                 self.command(f"M3 S{format_number(data.rpm, 0)}", "calculated / overridden RPM")
             rpm = data.rpm if data else rpm
             feed = self.feed = data.feed if data else (tool.get("feed", 800) if tool else feed)
-            plunge = self.plunge = data.plunge if data else (tool.get("plunge_feed", 300) if tool else plunge)
-            lead = self.lead = data.lead_feed if data else ((tool.get("lead_in_feed", 0) or plunge) if tool else lead)
+            plunge = self.plunge = data.plunge if data else feed*float(self.machine.get(*PLUNGE_FEED_FIELD))/100
+            lead = self.lead = data.lead_feed if data else (tool.get("plunge_feed", 300) if tool else lead)
             current = (group, name, rpm, feed, lead, plunge)
             if current != rate_key:
                 ctx.log(f"  {name or 'CAM'}: {data.material if data else 'legacy'} • {rpm:g} rpm • "

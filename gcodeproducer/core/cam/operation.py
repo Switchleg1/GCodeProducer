@@ -24,6 +24,8 @@ class Operation:
     standard_engagement_feed: float = 0.0
     high_engagement_feed: float = 0.0
     slotting_feed: float = 0.0
+    lead_in_feed_modifier: float = 0.0  # percent of tool feed; 0 = the tool's lead-in feed
+    plunge_feed_modifier: float = 0.0   # percent of tool feed; 0 = the machine's plunge feed modifier
     auto_stepdown: bool = False         # new GUI operations use per-material axial defaults
     unlock_rpm: bool = False
     rpm: float = 18000.

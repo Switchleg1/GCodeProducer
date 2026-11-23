@@ -899,6 +899,11 @@ def test_cam_tree_depth_picking_and_persistence(win, cube_stl, app):
     op = ed.operation()
     assert op.kind == "pocket"
     assert ed.feed_controls["standard_engagement_feed"].specialValueText() == "Tool default"
+    assert ed.feed_controls["lead_in_feed_modifier"].specialValueText() == "Tool default"
+    assert ed.feed_controls["plunge_feed_modifier"].specialValueText() == "Machine default"
+    ed.feed_controls["plunge_feed_modifier"].setValue(20)
+    assert ed.operation().plunge_feed_modifier == 20
+    ed.feed_controls["plunge_feed_modifier"].setValue(0)
     ed.feed_controls["standard_engagement_feed"].setValue(150)
     assert op.standard_engagement_feed == 150
     ed.pick.setCurrentIndex(ed.pick.findData("face"))

@@ -9,6 +9,7 @@ from .editors_constants import (
     CUTTING_STRATEGIES,
     CUT_DIRECTIONS,
     ENGAGEMENT_CONTROLS,
+    MACHINE_FEED_DEFAULTS,
     RATE_FIELDS,
     DEPTH_SOURCES,
     SECTION_BODY_MARGINS,
@@ -282,10 +283,15 @@ class CAMEditor(QWidget):
         for key, label in ENGAGEMENT_CONTROLS:
             sb = self.spin(0, 300, 0)
             sb.setDecimals(0)
-            sb.setSpecialValueText("Machine default" if key in ("high_engagement_feed","slotting_feed") else "Tool default")
+            sb.setSpecialValueText("Machine default" if key in MACHINE_FEED_DEFAULTS else "Tool default")
             sb.setSuffix(" %")
             sb.setToolTip(("HSM = low horizontal (radial) engagement. " if key == "low_engagement_feed" else "")
-                          + "0 inherits the tool profile. 100% is base tool feed; values above 100% increase it, subject to machine max feed.")
+                          + ("Lead-in ramps, arcs and lead-outs. " if key == "lead_in_feed_modifier" else "")
+                          + ("Straight down into material; steeper descents blend toward it. "
+                             if key == "plunge_feed_modifier" else "")
+                          + f"0 inherits the {'machine' if key in MACHINE_FEED_DEFAULTS else 'tool'} default. "
+                          "100% is base tool feed; values above 100% increase it, subject to machine max feed. "
+                          "Unlocked lead-in / plunge feeds above override these.")
             sb.valueChanged.connect(self._edit)
             self.feed_controls[key] = sb
             ff.addRow(label, sb)

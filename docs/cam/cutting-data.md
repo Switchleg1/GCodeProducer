@@ -59,12 +59,19 @@ SFM RPM ceiling = SFM × 304.8 / (π × diameter_mm)
 selected RPM    = floor(min(SFM RPM ceiling, machine spindle_max, tool max_spindle_rpm))
 normal feed    = chip_load_mm_per_tooth × flute_count × selected_RPM
 lead base feed = calculated normal feed × tool lead_feed_percent / 100
-plunge feed    = calculated normal feed × tool plunge_feed_percent / 100   (0: the lead base feed)
+plunge feed    = calculated normal feed × machine Plunge feed modifier / 100
 ```
 
-With calculation off the tool's **Fixed plunge feed** is the plunge feed and
-**Fixed lead-in feed** the lead base; a lead-in feed of 0 (the value for tools
-saved before the two were separate) uses the plunge feed, as before.
+With calculation off the tool's **Fixed lead-in feed** is the lead base, and
+the plunge feed is the fixed tool feed × the machine's **Plunge feed modifier**
+(default 30 %, in the machine's Engagement settings below the Slot feed
+modifier).
+
+Order: these defaults are calculated first; the operation's **Engagement
+feeds** *Lead-in* (blank = tool default) and *Plunge* (blank = machine
+default) then replace them with a percentage of the tool feed; finally the
+**Unlock Lead-in base feed** / **Unlock Plunge feed** values above override
+whatever was calculated.
 
 This chooses the fastest RPM **within all those ceilings** (whole RPM, never rounding above SFM), not the machine's
 maximum regardless of the material SFM. The conversion constant accounts for
@@ -88,8 +95,9 @@ Each operation has independent checkboxes:
   maximum and checked against machine minimum.
 - **Unlock Normal cut base feed:** replace the calculated/fixed base cutting
   feed with your own mm/min value.
-- **Unlock Lead-in base feed:** replace the lead-in/ramp/lead-out feed.
-- **Unlock Plunge feed:** replace the feed for moves down into material.
+- **Unlock Lead-in base feed:** replace the calculated lead-in/ramp/lead-out feed.
+- **Unlock Plunge feed:** replace the calculated feed for moves straight down
+  into material.
 
 The calculated summary names the **stock machining category**, the actual
 process percentage (for example **Non-iron metal • Pocket 25% D**), effective

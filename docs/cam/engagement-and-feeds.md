@@ -97,9 +97,13 @@ general local curve-splitting/re-routing guarantee.
 
 An operation's **Engagement feeds (% of tool feed)** can override each band:
 
-- HSM and Cut at 0 inherit the tool.
-- High engagement and Slot at 0 inherit the machine.
-- Explicit values 1–300% override only that band.
+- HSM, Cut and Lead-in at 0 inherit the tool.
+- High engagement, Slot and Plunge at 0 inherit the machine.
+- Explicit values 1–300% override only that one.
+
+Lead-in and Plunge set the lead-in and plunge feeds as a percentage of the
+tool feed. They are calculated before the operation's **Unlock Lead-in base
+feed** / **Unlock Plunge feed** above, which override them.
 
 The base feed comes from tool SFM/chip-load calculation or an unlocked manual
 request. [Cutting data](cutting-data.md) explains units, material tables, RPM

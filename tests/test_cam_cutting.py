@@ -76,24 +76,25 @@ def test_unlocks_independent_rates_and_rpm_remains_capped():
     assert restored.unlock_feed and restored.unlock_lead_feed and restored.rpm==30000
 
 
-def test_plunge_and_lead_in_feeds_are_separate_with_older_tools_unchanged():
+def test_plunge_from_machine_lead_in_from_tool_operation_percent_then_unlock_overrides():
     machine,tool,stock=fixture()
-    tool.values["auto_cutting_data"]=False; tool.values["plunge_feed"]=200
     data=resolve_cutting(machine,tool,stock)
-    assert data.plunge==data.lead_feed==200                 # no lead-in feed set: as before
-    tool.values["lead_in_feed"]=450
+    assert data.lead_feed==pytest.approx(data.feed*.35)        # tool lead-in default
+    assert data.plunge==pytest.approx(data.feed*.30)           # machine plunge default
+    machine.values["plunge_feed_modifier"]=20
+    assert resolve_cutting(machine,tool,stock).plunge==pytest.approx(data.feed*.2)
+    tool.values["auto_cutting_data"]=False; tool.values.update(feed=1000,plunge_feed=250)
     data=resolve_cutting(machine,tool,stock)
-    assert (data.lead_feed,data.plunge)==(450,200)
-    tool.values["auto_cutting_data"]=True
-    data=resolve_cutting(machine,tool,stock)
-    assert data.plunge==pytest.approx(data.lead_feed)        # no plunge percentage set: the lead-in feed
-    tool.values["plunge_feed_percent"]=10
-    data=resolve_cutting(machine,tool,stock)
-    assert data.plunge==pytest.approx(data.feed*.1) and data.lead_feed==pytest.approx(data.feed*.35)
-    op=Operation(unlock_plunge_feed=True,plunge_feed=90)
-    assert resolve_cutting(machine,tool,stock,op).plunge==90
+    assert (data.feed,data.lead_feed,data.plunge)==(1000,250,200)   # fixed lead-in; machine plunge %
+    # Operation engagement feeds: percentages of the tool feed, 0 = the defaults above.
+    op=Operation(lead_in_feed_modifier=40,plunge_feed_modifier=15)
+    data=resolve_cutting(machine,tool,stock,op)
+    assert (data.lead_feed,data.plunge)==(400,150)
+    # Unlocked feeds override what was calculated.
+    op.unlock_lead_feed,op.lead_feed,op.unlock_plunge_feed,op.plunge_feed=True,321,True,90
+    assert (resolve_cutting(machine,tool,stock,op).lead_feed,resolve_cutting(machine,tool,stock,op).plunge)==(321,90)
     restored=CAMSetup.from_dict(CAMSetup([ToolGroup(tool.id,[op])]).to_dict()).groups[0].operations[0]
-    assert restored.unlock_plunge_feed and restored.plunge_feed==90
+    assert (restored.lead_in_feed_modifier,restored.plunge_feed_modifier,restored.plunge_feed)==(40,15,90)
     assert CuttingData(1,2,3,4,"soft_wood").plunge==3           # older saved data
 
 

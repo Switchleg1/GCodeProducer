@@ -69,7 +69,11 @@ CUT_DIRECTIONS = (("Climb", "climb"), ("Conventional", "conventional"), ("Meande
 ENGAGEMENT_CONTROLS = (("low_engagement_feed", "HSM"),
                            ("standard_engagement_feed", "Cut"),
                            ("high_engagement_feed", "High engagement"),
-                           ("slotting_feed", "Slot"))
+                           ("slotting_feed", "Slot"),
+                           ("lead_in_feed_modifier", "Lead-in"),
+                           ("plunge_feed_modifier", "Plunge"))
+# Engagement feeds whose blank (0) value is the machine's default; the rest inherit the tool's.
+MACHINE_FEED_DEFAULTS = ("high_engagement_feed", "slotting_feed", "plunge_feed_modifier")
 
 TAB_DIRECTIONS = (("Outward from side wall", "auto"), ("To +X edge", "+x"), ("To -X edge", "-x"),
                            ("To +Y edge", "+y"), ("To -Y edge", "-y"))

@@ -80,6 +80,8 @@ FEED_FIELDS = {
     "high": ("high_engagement_feed", 75.0),
     "slot": ("slotting_feed", 50.0),
 }
+# Plunge (moves down into material) as a % of the tool feed: machine default, operation override.
+PLUNGE_FEED_FIELD = ("plunge_feed_modifier", 30.0)
 
 MAX_POINTS = 20000          # guard against absurdly many laps on a microscopic contour
 
@@ -100,10 +102,8 @@ def material_parameters():
               Param("max_spindle_rpm", "float", 24000., min=1, unit="rpm", group="Cutting calculation",
                     help="Tool RPM ceiling, also respected for manual RPM requests."),
               Param("lead_feed_percent", "float", 35., min=1, max=100, unit="%", group="Cutting calculation",
-                    label="Lead-in feed", help="Automatic lead-in/ramp feed as a percentage of calculated normal feed."),
-              Param("plunge_feed_percent", "float", 0., min=0, max=100, unit="%", group="Cutting calculation",
-                    label="Plunge feed", help="Automatic plunge feed (straight or steep moves down into material) as a "
-                    "percentage of calculated normal feed; 0 uses the lead-in feed.")]
+                    label="Lead-in feed", help="Automatic lead-in/ramp feed as a percentage of calculated normal feed. "
+                    "The plunge feed is the machine's Plunge feed modifier.")]
     for key, label, sfm, chip in MATERIALS:
         group = f"Cut data: {label}"
         params += [Param(f"{key}_sfm", "float", sfm, min=.1, unit="ft/min", group=group, label="SFM"),

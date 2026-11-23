@@ -5,7 +5,7 @@ illustrative, NOT manufacturer-qualified machining recommendations.
 """
 
 from gcodeproducer.core.cam.cutting_data import CuttingData
-from gcodeproducer.core.cam.cam_constants import MATERIALS, MATERIAL_KEYS
+from gcodeproducer.core.cam.cam_constants import MATERIALS, MATERIAL_KEYS, PLUNGE_FEED_FIELD
 import math
 
 
@@ -37,12 +37,16 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
     feed = float(tool.get("feed",800))
     if automatic:
         feed = float(tool.get(f"{key}_chip_load"))*int(tool.get("flutes",2))*rpm
-    if automatic:
-        lead = feed*float(tool.get("lead_feed_percent",35))/100
-        plunge = feed*float(tool.get("plunge_feed_percent",0) or 0)/100 or lead
-    else:
-        plunge = float(tool.get("plunge_feed",300))
-        lead = float(tool.get("lead_in_feed",0) or 0) or plunge
+    # Calculated first (tool / machine defaults, then the operation's engagement-feed
+    # percentages of the tool feed); the operation's unlocked feeds then override them.
+    lead = feed*float(tool.get("lead_feed_percent",35))/100 if automatic else float(tool.get("plunge_feed",300))
+    field, default = PLUNGE_FEED_FIELD
+    percent = float(machine.get(field, default) if machine is not None else default)
+    if operation is not None and float(getattr(operation, "lead_in_feed_modifier", 0) or 0) > 0:
+        lead = feed*float(operation.lead_in_feed_modifier)/100
+    if operation is not None and float(getattr(operation, field, 0) or 0) > 0:
+        percent = float(getattr(operation, field))
+    plunge = feed*percent/100
     if operation is not None and operation.unlock_feed:
         feed = float(operation.feed)
     if operation is not None and operation.unlock_lead_feed:
