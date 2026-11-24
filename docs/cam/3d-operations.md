@@ -94,8 +94,20 @@ depth) adaptively, and then the slope up to the depth above as passes of
 its own: the flat area's cutter-centre region grown one step at a time, each
 step the engagement limit's width, every new edge one pass lifted onto the
 model. Each pass is higher than the one before and takes only the step
-beside it; edges keep the stock on their right (climb). The Preview shows
-these as a second layer at each depth. On the Mini Yoda at 10 % the slot and
+beside it; edges keep the stock on their right (climb). Each pass is cut
+only where it lies on the slope, below the depth above (elsewhere it would
+ride through air the pass above cleared), and the passes are taken one
+stretch of slope at a time: a pass goes once every pass a step below it
+beside it is done, the nearest free one next, and passes that start close to
+where the last ended join it in one path; passes that run the same way are
+joined by riding back along the pass before last (all cut beside it) and
+half-turning onto the next one's start, or, against a wall, coming onto it
+at a slant a little way along. The cutter climbs one patch of slope and then
+moves to the next, instead of going all round the model for each pass and
+lifting off between the patches (Mini Yoda, Z-2 to Z-5: 12, 8 and 8 entries
+at the three slope layers, from 2, 25 and 28 — the first had been one long
+pass round the head through air — and no slot or high-engagement moves). The Preview shows these as
+a second layer at each depth. On the Mini Yoda at 10 % the slot and
 high-engagement moves that change height fell to 0–22 mm a depth.
 
 Nested selected outlines alternate between boundary and island. Overlapping

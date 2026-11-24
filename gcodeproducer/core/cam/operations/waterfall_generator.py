@@ -103,13 +103,13 @@ class WaterfallGenerator(OperationGenerator):
         areas = machining_areas(paths, "pocket", free) if paths else []
         if band_follow is not None and above > z+1e-6:
             wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow)
-            band = self.slope_band(run, free, wide)
+            band = self.slope_band(run, free, wide, band_follow, z, above)
             if band:
                 areas.append(band)
         return free, areas
 
     @staticmethod
-    def slope_band(run, flat, wide):
+    def slope_band(run, flat, wide, follow=None, z=None, ceiling=None):
         """Passes up the slope between this depth and the one above, for adaptive clearing.
 
         The flat area is cleared first. Its cutter-centre region is then grown
@@ -132,7 +132,7 @@ class WaterfallGenerator(OperationGenerator):
             return []
         step = max(SLOPE_STEP_MIN, run.diameter*op.adaptive_engagement/100)
         width = outer.hausdorff_distance(inner)
-        paths = []
+        pieces = []   # (step number, points, closed)
         for k in range(1, min(SLOPE_PASSES, int(width/step) + 2) + 1):
             grown = inner.buffer(k*step, quad_segs=8)
             for part in polygons(grown):
@@ -143,15 +143,154 @@ class WaterfallGenerator(OperationGenerator):
                     if inside.is_empty:
                         continue
                     if inside.geom_type == 'LineString' and inside.equals(line):
-                        paths.append(Path('cut', np.asarray(line.coords, float)[:-1], closed=True, width=run.diameter))
+                        pieces.append((k, np.asarray(line.coords, float)[:-1], True))
                         continue
                     for piece in getattr(inside, 'geoms', [inside]):
                         if piece.geom_type != 'LineString' or piece.length < run.radius:
                             continue
                         # GEOS keeps the line's direction in its pieces: still stock on the right.
-                        paths.append(Path('cut', np.asarray(piece.coords, float), width=run.diameter))
+                        pieces.append((k, np.asarray(piece.coords, float), False))
             if outer.difference(grown).area < 1e-3:
                 break
+        if follow is not None:
+            pieces = WaterfallGenerator.on_the_slope(pieces, run, follow, ceiling)
+        return WaterfallGenerator.chain_band(pieces, outer.difference(inner), step, run.diameter, outer)
+
+    @staticmethod
+    def on_the_slope(pieces, run, follow, ceiling):
+        """Only the stretches of each pass that lie on the slope, below the depth above.
+
+        Where the model rises past the depth above, a lifted pass would ride at
+        that depth through air the pass above has already cleared. A pass round
+        a part of the model crosses several such patches of slope; cut whole,
+        every pass would visit each patch in turn, lifting off and entering
+        again between them. Split there, each patch is climbed and finished
+        before the cutter moves on.
+        """
+        import numpy as np
+        from shapely import segmentize
+        from shapely.geometry import LineString
+        from gcodeproducer.core.cam.surface_paths import follow_heights
+        from .operations_constants import SLOPE_AIR
+        surface, floors = follow
+        kept = []
+        for k, points, closed in pieces:
+            line = np.vstack((points, points[:1])) if closed else points
+            dense = np.asarray(segmentize(LineString(line), surface.resolution).coords)[:, :2]
+            low = follow_heights(surface, dense, run.radius, run.op.stock, floors) < ceiling - SLOPE_AIR
+            if low.all():
+                kept.append((k, points, closed))
+                continue
+            edges = np.flatnonzero(np.diff(np.r_[False, low, False].astype(int)))
+            for first, last in zip(edges[::2], edges[1::2]):
+                stretch = dense[first:last]
+                if len(stretch) > 1 and LineString(stretch).length >= run.radius:
+                    kept.append((k, stretch, False))
+        return kept
+
+    @staticmethod
+    def chain_band(pieces, band, step, diameter, room=None):
+        """Order the slope passes so the cutter finishes one stretch of slope before the next.
+
+        A pass may be cut once every pass one step below it beside it is cut
+        (it must never cut under a pass not yet made). Among the passes free
+        to go, the nearest to where the cutter is goes next, so the cutter
+        climbs the slope in one place and then moves on, instead of making
+        each pass all round the model before the next. Each pass joins the last
+        by a short step out where they are that close, so a stretch of slope is
+        one path - one lead-in and one lead-out. Passes that run the same way
+        (stretches of slope, not loops) are joined by riding back along the pass
+        before last, which has cleared everything beside it, and stepping up.
+        """
+        import numpy as np
+        from shapely import STRtree
+        from shapely.geometry import LineString, Point
+        from gcodeproducer.core.jobs.path import Path
+        from .operations_constants import SLOPE_JOIN_STEPS, SLOPE_SLANT
+        if not pieces:
+            return []
+        lines = [LineString(np.vstack((points, points[:1])) if closed else points) for _, points, closed in pieces]
+        tree = STRtree(lines)
+        below = []
+        for i, (k, _, _) in enumerate(pieces):
+            near = tree.query(lines[i], predicate='dwithin', distance=1.5*step)
+            below.append({int(j) for j in near if pieces[int(j)][0] == k - 1})
+        done, order, at = set(), [], None
+        while len(done) < len(pieces):
+            free = [i for i in range(len(pieces)) if i not in done and below[i] <= done]
+            if not free:   # cannot happen with a well-formed band; take the lowest left rather than loop
+                free = [min((i for i in range(len(pieces)) if i not in done), key=lambda i: pieces[i][0])]
+            if at is None:
+                pick = min(free, key=lambda i: (pieces[i][0], i))
+            else:
+                pick = min(free, key=lambda i: lines[i].distance(Point(at)))
+            done.add(pick)
+            k, points, closed = pieces[pick]
+            if closed and at is not None:   # start a loop where it is nearest the cutter
+                first = int(np.argmin(np.linalg.norm(points - np.asarray(at), axis=1)))
+                points = np.vstack((points[first:], points[:first]))
+            if closed:
+                points = np.vstack((points, points[:1]))
+            order.append(points)
+            at = points[-1]
+        reach = SLOPE_JOIN_STEPS*step
+
+        def turn_into(here, points, room):
+            """A half turn from the ride back into the next pass, so it meets the stock tangentially.
+
+            Stepping straight across into it would drive the cutter's side into the
+            face the pass is to cut; turning round behind its start, it comes onto it
+            along its own way. Left out where the turn would leave the pocket.
+            """
+            start = points[0]
+            ahead = points[min(len(points)-1, 1)] - start
+            gap = start - here
+            size, run_ = float(np.linalg.norm(gap)), float(np.linalg.norm(ahead))
+            if size < 1e-6 or run_ < 1e-9:
+                return []
+            u, bulge = gap/size, -ahead/run_
+            centre, rho = (here + start)/2, size/2
+            turn = [centre + rho*(-u*np.cos(t) + bulge*np.sin(t)) for t in np.linspace(0., np.pi, 9)[1:-1]]
+            if room is not None:
+                from shapely.geometry import LineString as _Line
+                if not room.buffer(1e-6).covers(_Line([here, *turn, start])):
+                    return []
+            return turn
+
+        paths, chain, made = [], [], []
+        for points in order:
+            if chain and np.linalg.norm(points[0] - chain[-1]) <= reach:
+                chain.extend(points)
+                made.append(points)
+                continue
+            if chain and made:
+                # Back to the start along the pass before last: everything beside it is cut, so the
+                # cutter rides back through cleared slope and steps up into the next pass. After the
+                # first pass of a stretch there is none yet; that pass itself is cut on both sides
+                # but the stock it left, which the cutter only grazes going back.
+                back = made[-2] if len(made) >= 2 else made[-1]
+                a = int(np.argmin(np.linalg.norm(back - chain[-1], axis=1)))
+                b = int(np.argmin(np.linalg.norm(back - points[0], axis=1)))
+                if (a > b and np.linalg.norm(back[a] - chain[-1]) <= reach
+                        and np.linalg.norm(back[b] - points[0]) <= reach):
+                    chain.extend(back[b:a+1][::-1])
+                    turn = turn_into(back[b], points, room)
+                    if turn:
+                        chain.extend(turn)
+                        chain.extend(points)
+                    else:
+                        # No room to turn round behind it (it starts against a wall): come onto it at a
+                        # slant a little way along, leaving its very start beside the wall.
+                        along = np.r_[0., np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))]
+                        j = min(int(np.searchsorted(along, SLOPE_SLANT*step)), len(points)-1)
+                        chain.extend(points[j:])
+                    made.append(points)
+                    continue
+            if len(chain) > 1:
+                paths.append(Path('cut', np.asarray(chain, float), width=diameter))
+            chain, made = list(points), [points]
+        if len(chain) > 1:
+            paths.append(Path('cut', np.asarray(chain, float), width=diameter))
         return paths
 
     def generate(self, run, selection, planning):

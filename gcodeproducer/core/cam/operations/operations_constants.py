@@ -12,3 +12,6 @@ GENERATORS = {
 # Adaptive Waterfall following the surface: passes stepping up the slope between depths.
 SLOPE_STEP_MIN = .1  # mm; least step between them
 SLOPE_PASSES = 200  # most of them at one depth
+SLOPE_JOIN_STEPS = 3.  # a slope pass joins the one before when it starts within this many steps of its end
+SLOPE_AIR = .01  # mm; a slope pass riding this close to the depth above is in air the pass above cleared
+SLOPE_SLANT = 3.  # steps along the next slope pass it is joined at when there is no room to turn round onto its start

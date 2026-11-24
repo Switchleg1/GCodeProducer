@@ -577,3 +577,23 @@ def test_adaptive_follows_the_slope_with_passes_stepping_up_it_not_under_each_ot
     assert heavy < 1.                                     # no pass cuts under the one beside it
     hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
     assert hands.count('climb') > 5*hands.count('conventional')
+
+
+def test_slope_passes_finish_one_patch_before_moving_to_the_next():
+    from shapely.geometry import box
+    from gcodeproducer.core.cam.operations.waterfall_generator import WaterfallGenerator
+    step = .4
+    pieces = []
+    for k in (1, 2, 3, 4):                      # each step's pass crosses both patches, as round a model
+        for x0 in (0., 30.):
+            y = k*step
+            pieces.append((k, np.array([[x0, y], [x0 + 5., y]]), False))
+    band = box(-1, 0, 6, 2).union(box(29, 0, 36, 2))
+    paths = WaterfallGenerator.chain_band(pieces, band, step, 3.)
+    assert len(paths) == 2                      # one path per patch: one lead-in, one lead-out each
+    for path in paths:
+        xs = np.asarray(path.points)[:, 0]
+        assert xs.max() - xs.min() < 10        # never crosses to the other patch
+        q = np.asarray(path.points)
+        forward = [(a[1] + b[1])/2 for a, b in zip(q, q[1:]) if b[0] - a[0] > 4.]   # the passes themselves
+        assert forward == sorted(forward) and len(forward) == 4                  # climbs it step by step
