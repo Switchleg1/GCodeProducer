@@ -134,6 +134,44 @@ at the end of each cut and back to the next run the wrong way round.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Walls: roll off short of them (the application)
+
+A pocket's walls — the part's, and the edge of the zone (the blank edge
+with its material boundary) — are walls the cutter does not cross. In the
+application each front now **turns off short of the wall** instead of
+hooking along it: a cutter radius before the wall it leaves its course on a
+quarter circle of a cutter radius curving away from the stock, and stops
+where that circle would leave the pocket. It finishes running beside the
+wall, toward cleared ground, so the link carries straight on from it. The
+crescent each front leaves against the wall stays; it is reported as
+*mm² along the walls* in the log. At the blank edge **Overcut** removes it;
+on the part, the finishing operation does.
+
+So that the planner does not chase those crescents, stock within a cutter
+radius of the pocket's edge no longer counts as left: there are no corner
+creeps, no wall finish, and rest passes and fresh helix entries only go
+after stock off that band. Only where stock off the band would still be left
+— a channel too narrow for a helix or a front — do rest passes follow the
+wall, as the only way in. `clear_pocket(wall_pull_back=False,
+wall_profile=False, leave_wall_crescents=True)` plans this way; the
+command-line tool and the earlier hook behaviour are unchanged.
+
+| Test shape (60 × 30 class, 4 mm cutter) | Left along the walls | Link turns over 90° |
+|---|---|---|
+| Rectangle | 29.8 mm² | 0 |
+| L-shape | 35.1 mm² | 0 |
+| Cross | 30.0 mm² | 0 |
+| Square with a boss | 56.0 mm² | 0 |
+| Ring | 71.5 mm² | 0 |
+| Slot | 37.3 mm² | 0 |
+| Two-lobe fixture | 70.3 mm² | 0 |
+
+None needed rest passes, so nothing went over the limit. On the Mini Yoda
+(session now Z0 to Z-5, 10 %), the program's turns of more than 120° fell to
+4, 3 and 24 at the three depths (from 776, 746 and 889 with hooks), with
+14–20 mm² left along the walls per depth; complete, no safety findings,
+151 s to compute, about 3,900 s estimated machining.
+
 ## Links: leaving and joining the cuts
 
 A cut that ends against a wall finishes with a hook along the wall, heading

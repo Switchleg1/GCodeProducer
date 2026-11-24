@@ -540,3 +540,32 @@ def test_links_leave_and_join_the_cuts_without_reversing(name):
     # cut ends or starts against a wall and no curve could join it tangentially.
     assert (turns > 150).mean() < .01
     assert (turns < 30).mean() > .9            # almost all leave and join along the cut
+
+
+@pytest.mark.parametrize('name', ['rectangle', 'l-shape', 'boss'])
+def test_fronts_roll_off_short_of_the_wall_and_leave_its_crescents(name):
+    """As the application plans: no hooks along the wall, no wall finish; fronts turn off before it."""
+    from pathlib import Path
+    from shapely import from_wkt
+    from gcodeproducer.core.cam.wavefront.links import heading
+    pocket = from_wkt(Path(f'examples/hsm-shapes/{name}.wkt').read_text())
+    strokes, residual, report = clear_pocket(pocket, 2., wall_pull_back=False, wall_profile=False,
+                                             leave_wall_crescents=True)
+    assert residual.area < .05 and report['stop'] == 'front_exhausted'
+    assert 0 < report['wall_crescents_mm2'] < .03*pocket.area       # small crescents, left by design
+    assert report['rest']['pieces'] == 0 and report['corners']['visits'] == 0
+    # Nothing runs along the wall: no cut stays within a few microns of the cutter-centre limit for long.
+    limit = pocket.buffer(-2.).boundary
+    for stroke in strokes:
+        if stroke.kind == 'link' or len(stroke.points) < 2:
+            continue
+        along = LineString(stroke.points).intersection(limit.buffer(.01))
+        assert max((piece.length for piece in getattr(along, 'geoms', [along])), default=0.) < 1.5
+    turns = []
+    for before, link, after in zip(strokes, strokes[1:], strokes[2:]):
+        if link.kind != 'link':
+            continue
+        for a, b in ((heading(before.points, True), heading(link.points, False)),
+                     (heading(link.points, True), heading(after.points, False))):
+            turns.append(math.degrees(math.acos(max(-1., min(1., a[0]*b[0] + a[1]*b[1])))))
+    assert turns and max(turns) <= 90.                                 # no hard turns at all

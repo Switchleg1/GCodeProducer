@@ -11,7 +11,7 @@ from gcodeproducer.core.cam.operation import Operation
 from shapely.affinity import scale
 from .planner import clear_pocket
 from .stroke import Stroke
-from .wavefront_constants import MIRROR_FOR_CLIMB, END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
+from .wavefront_constants import WALL_HOOKS, MIRROR_FOR_CLIMB, END_ALLOWANCE, MATERIAL_REACH, WAVEFRONT_LEFT_MM2, WAVEFRONT_SIMPLIFY
 
 
 def engagement_width(op):
@@ -51,7 +51,8 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
     strokes, residual, report = clear_pocket(flip(pocket), radius, limit=limit, measure='width',
                                              material=None if material is None else flip(material),
                                              top=0., depth=-(depth_step or op.stepdown), lead_angle=op.lead_angle,
-                                             end_allowance=END_ALLOWANCE)
+                                             end_allowance=END_ALLOWANCE, wall_pull_back=WALL_HOOKS,
+                                             wall_profile=WALL_HOOKS, leave_wall_crescents=not WALL_HOOKS)
     if MIRROR_FOR_CLIMB:
         strokes = [Stroke(s.kind, [(-q[0], q[1]) for q in s.points], s.stepover_mm, s.peak_deg) for s in strokes]
         for entry in report['entries']:
@@ -94,7 +95,7 @@ def plan_level(op, region, diameter, material=None, depth_step=None):
             points = points[1:]
         chain.extend(points)
     flush()
-    summary = {'left_mm2': report['reachable_residual_mm2'], 'stop': report['stop'],
+    summary = {'left_mm2': report['reachable_residual_mm2'], 'wall_mm2': report['wall_crescents_mm2'], 'stop': report['stop'],
                'fronts': report['front_arcs'], 'corner_moves': report['corners']['visits'],
                'width_limit': limit, 'seconds': report['seconds']}
     return paths, summary
@@ -161,5 +162,7 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
         log(f'  {op.name}: Adaptive (wavefront) clearing{where}: {summary["fronts"]} fronts, '
             f'{summary["corner_moves"]} corner moves, {len(paths)} entries or lifts, '
             f'width limit {100*summary["width_limit"]:g} % of the cutter, {left:.2f} mm² left, '
+            + (f'{summary["wall_mm2"]:.1f} mm² along the walls (Overcut clears it at the blank edge), '
+               if summary.get('wall_mm2') else '') +
             f'planned in {summary["seconds"]:.1f} s')
     return paths

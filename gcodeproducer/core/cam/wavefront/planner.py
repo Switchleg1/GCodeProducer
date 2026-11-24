@@ -11,7 +11,7 @@ from shapely.ops import nearest_points, unary_union
 from gcodeproducer.core.cam.adaptive_entry import seed_entry
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from .stroke import Stroke
-from .regions import spiral_pitch, clear_of, center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
+from .regions import roll_off_walls, spiral_pitch, clear_of, center_regions, find_lobes, choose_seeds, spiral_out, clearance, grow_clearance, fronts, eased, without_slivers, sweep, round_a_boss, channel_stretches
 from .contact import cutting_pieces, cut
 from .walls import wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading
@@ -22,7 +22,8 @@ from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_L
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
                  islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None,
-                 smooth_links=True, material=None, measure='angle', end_allowance=None, rest_finish=True):
+                 smooth_links=True, material=None, measure='angle', end_allowance=None, rest_finish=True,
+                 leave_wall_crescents=False):
     """Return (strokes, residual, report) for one target plane.
 
     The stock starts as the whole pocket, or as the part of it inside
@@ -36,6 +37,15 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     wall = allowed.boundary
     rings = [LineString(r.coords) for g in polygons(allowed) for r in (g.exterior, *g.interiors)]
     reachable = allowed.buffer(radius, quad_segs=SWEEP_SEGMENTS)
+    # Leaving the wall alone: stock within a cutter radius of the pocket wall is what only a cutter
+    # running along the wall takes - the crescents fronts leave when they roll off short of it.
+    # It is reported, not chased; Overcut takes it where the wall is not the part's.
+    wall_band = pocket.boundary.buffer(radius, quad_segs=8) if leave_wall_crescents else None
+
+    def open_stock(geometry):
+        """Stock that still has to be taken: all of it, or what lies off the wall band."""
+        left = geometry.intersection(reachable)
+        return left if wall_band is None else left.difference(wall_band)
     start = pocket if material is None else pocket.intersection(material)
     stock = start
     strokes, island_reports = [], []
@@ -200,6 +210,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                   *others]
                         if stepover <= ROLL_STEPOVER or level == len(stepovers)-1:
                             shapes.append(lambda run=run, closed=closed: eased(run, closed, part, allowed, blend))
+                    elif not closed:
+                        # No hooks: leave the wall alone; the front turns off short of it toward
+                        # cleared ground and the crescent there is left.
+                        shapes = [roll_off_walls(eased(run, closed, part, allowed, blend), part, allowed, wall, radius)]
                     else:
                         shapes = [eased(run, closed, part, allowed, blend)]
                     done, skip, near_stuck, before = None, False, None, len(peaks)
@@ -437,8 +451,10 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     for extra in range(RESTARTS):
         if out_of_time():
             break
-        left = stock.intersection(reachable)
-        room = allowed.intersection(left.buffer(-radius, quad_segs=SWEEP_SEGMENTS))
+        left = open_stock(stock)
+        # Room for a helix is judged on all the stock, the wall band too: in a channel only a few
+        # cutters wide the band is most of it.
+        room = allowed.intersection(stock.intersection(reachable).buffer(-radius, quad_segs=SWEEP_SEGMENTS))
         # The overlay can come back as a collection with slivers of line among the polygons.
         room = unary_union([g for g in polygons(room) if g.area > 1e-9])
         if left.area < RESTART_MM2 or room.is_empty:
@@ -460,8 +476,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     # Corners: the fronts swallow a corner once it is within a stepover, so the cutter centre never
     # reaches it. Creep into each corner along one wall in steps no deeper than CORNER_DEPTH.
     corners = {'visits': 0, 'refused': 0, 'no_link': 0, 'feed_mm': 0., 'peak_deg': 0.}
-    creeps = [(ring, vertex, along) for ring in rings for vertex, along in convex_corners(ring)]
-    for spot in stuck_spots:
+    creeps = ([] if leave_wall_crescents else
+              [(ring, vertex, along) for ring in rings for vertex, along in convex_corners(ring)])
+    for spot in (() if leave_wall_crescents else stuck_spots):
         # A spot the fronts left is usually a wedge against the wall nearby: creep in along the wall
         # there from both sides, the same way as into a corner.
         ring = min(rings, key=lambda r: r.distance(Point(spot)))
@@ -543,7 +560,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     # and the report says how far over the limit that went: the feed rules slow those moves as slots
     # or high engagement. A few such moves finish the depth.
     rest = {'pieces': 0, 'feed_mm': 0., 'over_limit_mm': 0., 'peak': 0.,
-            'stock_before_mm2': stock.intersection(reachable).area}
+            'stock_before_mm2': open_stock(stock).area}
 
     def take_rest(path, stepover):
         """Cut path wherever it meets stock, without refusing; True if it took any."""
@@ -566,7 +583,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
     # into it a little at a time, as the fronts do, but without refusing a cut.
     step = REST_STEPOVER if measure != 'width' else min(max(limit*2*radius, .1), REST_STEPOVER)
     for _ in range(REST_PASSES if rest_finish else 0):
-        left = stock.intersection(reachable)
+        left = open_stock(stock)
         if left.area <= REST_MM2 or out_of_time():
             break
         near = left.buffer(radius + step)
@@ -583,7 +600,9 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     taken = take_rest(piece, step) or taken
         if not taken:
             break
-    if rest_finish and stock.intersection(reachable).area > REST_MM2 and not out_of_time():
+    # Leaving the walls alone, this runs only where stock off the wall band is still left - a channel
+    # too narrow for a helix or a front - and is then the only way in.
+    if rest_finish and open_stock(stock).area > REST_MM2 and not out_of_time():
         # What is still left lies against the wall, mostly deep in a corner: follow the wall over it.
         thick = stock.buffer(-WALL_TOLERANCE/2, join_style=2).buffer(WALL_TOLERANCE/2, join_style=2)
         for part in polygons(allowed):
@@ -594,13 +613,14 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                 dense = list(segmentize(LineString(ring.coords), .1).coords)
                 for whole in cutting_pieces(dense, thick, radius, run_out=1.5, closed=True):
                     take_rest(whole, 0.)
-    rest['stock_after_mm2'] = stock.intersection(reachable).area
+    rest['stock_after_mm2'] = open_stock(stock).area
 
     stop = ('time_budget' if out_of_time() else
             'blocked' if (any_blocked or profile['over_limit']) and rest['stock_after_mm2'] > REST_MM2 else
             'front_exhausted')
     passes = front_passes
-    residual = stock.intersection(reachable)
+    residual = open_stock(stock)
+    crescents = stock.intersection(reachable).area - residual.area
     total = start.intersection(reachable).area
     cuts = [s for s in strokes if s.kind == 'front']
     feeds = [s for s in strokes if s.kind not in ('link', 'corner', 'rest')]  # Corners are judged by depth.
@@ -626,6 +646,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
               'front_stepover_histogram': {str(v): sum(s.stepover_mm == v for s in cuts) for v in stepovers},
               'seconds': time.time()-started}
     report['entries'] = entries
+    report['wall_crescents_mm2'] = crescents if leave_wall_crescents else 0.
     report['top_mm'], report['depth_mm'] = top, depth
     report['machine_time'] = machine_time(strokes, report['islands'], top=top, depth=depth)
     return strokes, residual, report

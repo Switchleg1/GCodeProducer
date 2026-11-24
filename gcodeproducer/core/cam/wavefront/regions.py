@@ -9,7 +9,7 @@ from shapely.ops import nearest_points, polylabel, split, unary_union
 
 from gcodeproducer.core.geometry.polygon_parts import polygons
 from .polyline import stretch
-from .wavefront_constants import (CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK, PROBE_MARGIN, CLEAR_SIMPLIFY)
+from .wavefront_constants import (ROLL_TURN, ROLL_BACK, ROLL_STEPS, NEAR_WALL_ROLL, CENTER_BUFFER_SEGMENTS, CUT_SEGMENTS, WALL_TOLERANCE, SLIVER, ELONGATED_ASPECT, NECK_RATIO, HOLED_NECK_RATIO, SPAN_SLACK, PROBE_MARGIN, CLEAR_SIMPLIFY)
 
 
 def center_regions(pocket, radius, *, margin=0.):
@@ -434,3 +434,61 @@ def clear_of(runs, zone):
             if piece.geom_type == 'LineString' and piece.length >= .3:
                 kept.append((list(piece.coords), False))
     return kept
+
+
+def roll_off_walls(path, clear, allowed, wall, radius, *, turn=None, back=None):
+    """The path with each end that runs into the wall turned off short of it, toward cleared ground.
+
+    Instead of meeting the wall square (or hooking along it), the cut leaves
+    its course a little way before the wall on a circle that curves away
+    from the stock, up to a quarter turn, and stops where the circle would
+    leave the pocket: it finishes running beside the wall rather than into
+    it, and a link can carry on from it. The crescent it leaves against the
+    wall is left there. Ends not on the wall are unchanged.
+    """
+    turn = ROLL_TURN*radius if turn is None else turn
+    back = ROLL_BACK*radius if back is None else back
+    pts = [tuple(q) for q in path]
+    if len(pts) < 3:
+        return pts
+    inside = allowed.buffer(1e-3)
+    prepare(inside)
+
+    def rolled(seq):
+        """seq runs toward the end to roll off; returns it rolled, same direction."""
+        end = Point(seq[-1])
+        if wall.distance(end) > NEAR_WALL_ROLL:
+            return seq
+        line = LineString(seq)
+        if line.length < 2*back:
+            return seq
+        cut_at = line.length - back
+        keep = stretch(line, 0., cut_at)
+        p = keep[-1]
+        q = stretch(line, max(0., cut_at - .3), cut_at)
+        hx, hy = q[-1][0] - q[0][0], q[-1][1] - q[0][1]
+        size = math.hypot(hx, hy)
+        if size < 1e-9:
+            return seq
+        hx, hy = hx/size, hy/size
+        # Turn toward the side the cleared ground is on.
+        probe = .5*radius
+        left = clear.distance(Point(p[0] - probe*hy, p[1] + probe*hx))
+        right = clear.distance(Point(p[0] + probe*hy, p[1] - probe*hx))
+        side = 1. if left < right else -1.
+        cx, cy = p[0] - side*turn*hy, p[1] + side*turn*hx
+        a0 = math.atan2(p[1]-cy, p[0]-cx)
+        arc = []
+        for k in range(1, ROLL_STEPS+1):
+            a = a0 + side*(math.pi/2)*k/ROLL_STEPS
+            point = (cx + turn*math.cos(a), cy + turn*math.sin(a))
+            if not inside.covers(Point(point)):
+                break
+            arc.append(point)
+        if not arc:
+            return seq
+        return list(keep) + arc
+
+    pts = rolled(pts)
+    pts = rolled(pts[::-1])[::-1]
+    return pts
