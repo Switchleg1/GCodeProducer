@@ -16,15 +16,19 @@ from .contact import cutting_pieces, cut
 from .walls import wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading
 from .timing import machine_time
-from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX, PROFILE_INSETS, REST_MM2, REST_STEPOVER, REST_PASSES, FRONT_RUN_OUT,
+from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX, PROFILE_INSETS, REST_MM2, REST_STEPOVER, REST_PASSES, FRONT_RUN_OUT, BOTH_WAYS_GAIN,
                                   LINK_RUN_MIN, LINK_RUN_POINTS, LINK_TOLERANCE, LINK_WALL_NEAR, LINK_WALL_RUN, LINK_WALL_TURN)
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
                  islands=None, placement='lobes', wall_pull_back=True, wall_profile=True, trace=None, top=0., depth=-2., lead_angle=2.5, time_budget=None,
                  smooth_links=True, material=None, measure='angle', end_allowance=None, rest_finish=True,
-                 leave_wall_crescents=False):
+                 leave_wall_crescents=False, both_ways=False):
     """Return (strokes, residual, report) for one target plane.
+
+    both_ways: cut an open front from whichever end is nearer the cutter
+    (stock on the left from one end, on the right from the other), so it is
+    never travelled back over cut ground just to start from the same end.
 
     The stock starts as the whole pocket, or as the part of it inside
     material where earlier cuts or levels already removed some. limit is
@@ -202,6 +206,12 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                     else:
                         pick = min(range(len(runs)), key=lambda k: LineString(runs[k][0]).distance(Point(focus)))
                     run, closed = runs.pop(pick)
+                    if both_ways and not closed and strokes:
+                        # Cut it from whichever end is nearer: the far end would mean travelling the
+                        # whole front back over cut ground first. Against its run that is conventional.
+                        cutter = strokes[-1].points[-1]
+                        if math.dist(cutter, run[-1]) + BOTH_WAYS_GAIN*radius < math.dist(cutter, run[0]):
+                            run = run[::-1]
                     # Sweep the wall at the arc ends; only at ROLL_STEPOVER or below fall back to
                     # rolling off before the wall, so a lighter cut gets to try the wall first.
                     if wall_pull_back and not closed:

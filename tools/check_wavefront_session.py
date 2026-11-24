@@ -29,7 +29,7 @@ def model_key(kind, path):
     return f'{kind}/' + hashlib.md5(str(Path(path).resolve()).lower().encode()).hexdigest()
 
 
-def run(path, settings, library, strategy, follow_surface=None, material_limit=None):
+def run(path, settings, library, strategy, follow_surface=None, material_limit=None, direction=None):
     placement_raw = None
     if path == 'session':
         # The desktop's current work session: its single model, setup and placement.
@@ -53,6 +53,9 @@ def run(path, settings, library, strategy, follow_surface=None, material_limit=N
             if follow_surface is not None and op.get('kind') == 'waterfall':
                 op['follow_surface'] = follow_surface
                 changed.append(f"{op.get('name')}: follow the surface within each depth {'on' if follow_surface else 'off'}")
+            if direction is not None and op.get('kind') in ('pocket', 'waterfall'):
+                changed.append(f"{op.get('name')}: cutting direction {op.get('cut_direction')} → {direction}")
+                op['cut_direction'] = direction
             if material_limit is not None and op.get('kind') in ('pocket', 'waterfall'):
                 changed.append(f"{op.get('name')}: material boundary {op.get('material_limit')} → {material_limit:g} mm")
                 op['material_limit'] = material_limit
@@ -120,12 +123,15 @@ def main():
                         help='clearing strategy to try (repeatable); "saved" keeps the saved one')
     parser.add_argument('--follow-surface', choices=('on', 'off'), help='override Waterfall "Follow the surface within each depth"')
     parser.add_argument('--material-limit', type=float, help='override Pocket/Waterfall "Material boundary" (mm)')
+    parser.add_argument('--direction', choices=('machine', 'climb', 'conventional', 'meander'),
+                        help='override Pocket/Waterfall cutting direction')
     args = parser.parse_args()
     settings = QSettings('GCodeProducer', 'GCodeProducer')
     library = LibrarySet().load()
     for strategy in args.strategy or ['saved']:
         report = run(args.model, settings, library, None if strategy == 'saved' else strategy,
-                     None if args.follow_surface is None else args.follow_surface == 'on', args.material_limit)
+                     None if args.follow_surface is None else args.follow_surface == 'on', args.material_limit,
+                     args.direction)
         print(json.dumps(report, ensure_ascii=False), flush=True)
 
 

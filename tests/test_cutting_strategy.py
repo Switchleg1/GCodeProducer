@@ -190,15 +190,9 @@ def test_old_strategy_names_preserve_existing_behaviour():
     assert Operation(kind='pocket', protect_model=True, strategy='raster').strategy == 'raster_y'
 
 
-def test_adaptive_cuts_climb_with_stock_on_the_right_and_its_orbit_turns_the_same_way():
-    """M3 spindle: climb keeps uncut stock on the right of the cutter's travel, like G41."""
+def _hands(paths, area):
     from shapely.geometry import LineString
     from gcodeproducer.core.cam.engagement import measure_segments
-    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
-
-    area = box(0, 0, 30, 20)
-    op = Operation(kind='waterfall', strategy='adaptive')
-    paths = pocket_paths(op, [], area, 4., 'climb', material=area)
     stock, left, right = area, 0., 0.
     for path in paths:
         q = np.asarray(path.points, float)
@@ -210,10 +204,44 @@ def test_adaptive_cuts_climb_with_stock_on_the_right_and_its_orbit_turns_the_sam
                 left += float(lengths[0])*(l[0] > r[0])
                 right += float(lengths[0])*(r[0] > l[0])
             stock = stock.difference(LineString([a, b]).buffer(2.))
-    assert right > 5*left                                   # climb, not conventional
+    return left, right
+
+
+@pytest.mark.parametrize('direction', ['climb', 'conventional'])
+def test_adaptive_follows_the_cutting_direction_and_its_orbit_turns_the_same_way(direction):
+    """M3 spindle: climb keeps uncut stock on the right of the cutter's travel, like G41."""
     from shapely.geometry import LinearRing
-    assert paths[0].closed and LinearRing(paths[0].points).is_ccw     # the orbit the helix ramps down on
+    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
+
+    area = box(0, 0, 30, 20)
+    op = Operation(kind='waterfall', strategy='adaptive')
+    paths = pocket_paths(op, [], area, 4., direction, material=area)
+    left, right = _hands(paths, area)
+    assert (right > 5*left) if direction == 'climb' else (left > 5*right)
+    ccw = direction == 'climb'
+    assert paths[0].closed and LinearRing(paths[0].points).is_ccw == ccw   # the orbit the helix ramps down on
     centre = np.asarray(paths[0].points, float).mean(axis=0)
     spiral = np.asarray(paths[1].points, float)[:60] - centre
     turned = np.unwrap(np.arctan2(spiral[:, 1], spiral[:, 0]))
-    assert turned[-1] > turned[0]                                     # the spiral carries on the same way
+    assert (turned[-1] > turned[0]) == ccw                            # the spiral carries on the same way
+
+
+def test_adaptive_meander_cuts_fronts_from_the_nearer_end_instead_of_travelling_back():
+    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
+    area = box(0, 0, 60, 30)
+    op = Operation(kind='waterfall', strategy='adaptive')
+    travel = {}
+    for direction in ('climb', 'meander'):
+        paths = pocket_paths(op, [], area, 4., direction, material=area)
+        left, right = _hands(paths, area)
+        travel[direction] = (left, right)
+    assert travel['meander'][0] > .05*sum(travel['meander'])          # both hands
+    assert travel['climb'][0] < .02*sum(travel['climb'])              # climb stays climb
+    from shapely import from_wkt
+    from pathlib import Path
+    from gcodeproducer.core.cam.wavefront.planner import clear_pocket
+    pocket = from_wkt(Path('examples/hsm-shapes/l-shape.wkt').read_text())
+    one, both = (clear_pocket(pocket, 2., wall_pull_back=False, wall_profile=False, leave_wall_crescents=True,
+                              both_ways=b)[2] for b in (False, True))
+    assert both['link_feed_mm'] < .5*one['link_feed_mm']              # far less travel back over cut ground
+    assert both['reachable_residual_mm2'] < .05

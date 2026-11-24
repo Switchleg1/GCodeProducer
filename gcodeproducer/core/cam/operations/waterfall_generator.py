@@ -66,7 +66,8 @@ class WaterfallGenerator(OperationGenerator):
             jobs.append((z, free, planning.material.planar_at(z), min(run.step, run.start-z)))
         if len(jobs) < 2:
             return {}
-        plans = plan_levels(op, [(free, material, step) for _, free, material, step in jobs], run.diameter)
+        plans = plan_levels(op, [(free, material, step) for _, free, material, step in jobs], run.diameter,
+                            run.direction)
         return {z: (material, plan) for (z, _, material, _), plan in zip(jobs, plans)}
 
     def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None, above=None, follow=None):

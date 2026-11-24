@@ -78,3 +78,4 @@ ROLL_TURN = 1.  # cutter radii: radius of the turn a front rolls off on short of
 ROLL_BACK = 1.  # cutter radii before the wall where it leaves its course
 ROLL_STEPS = 12  # points on that quarter turn
 NEAR_WALL_ROLL = .05  # mm; a front end this close to the wall is rolled off short of it
+BOTH_WAYS_GAIN = 2.  # cutter radii: cutting both ways, a front is reversed only if its far end is this much nearer

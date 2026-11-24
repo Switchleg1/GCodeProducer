@@ -18,10 +18,21 @@ the cut.
 ## How a pocket is planned
 
 The planner keeps the stock on the left of every cut, spiral and helix. With
-an M3 (clockwise) spindle that is conventional milling, so the application
-plans the mirror image of each depth and mirrors the result back: every cut
-then keeps the stock on its right (climb), and the helix's orbit turns the
-same way as the spiral after it. Before 0.2.33 the application's adaptive
+an M3 (clockwise) spindle that is conventional milling, so for **Climb** the
+application plans the mirror image of each depth and mirrors the result
+back: every cut then keeps the stock on its right, and the helix's orbit
+turns the same way as the spiral after it. The operation's cutting direction
+(or the machine's) is followed:
+
+- **Climb**: every cut climb. A front is always cut from the same end, so
+  after a long front the cutter travels back over cut ground to start the
+  next (on the Mini Yoda about 70 % of the link feed).
+- **Conventional**: every cut conventional (planned as is).
+- **Meander**: each front is cut from whichever end is nearer the cutter
+  (`clear_pocket(both_ways=True)`), climb one way and conventional the
+  other. Link feed on the test shapes fell by 36–88 % and estimated time by
+  7–28 %; the Mini Yoda session went from 3,374 to 2,339 s. Not for metals
+  that gall when cut conventionally. Before 0.2.33 the application's adaptive
 paths were conventional (Mini Yoda, Z-4: 17,791 mm conventional, 48 mm
 climb; now 17,718 mm climb, 36 mm conventional), which also made the turns
 at the end of each cut and back to the next run the wrong way round.
