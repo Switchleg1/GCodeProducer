@@ -134,6 +134,43 @@ at the end of each cut and back to the next run the wrong way round.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Links: leaving and joining the cuts
+
+A cut that ends against a wall finishes with a hook along the wall, heading
+back toward cleared ground; the next cut often starts square off the wall.
+Before 0.2.35 the stay-down link between them could rarely be made tangent
+to either, so the cutter stopped and reversed — on the test shapes 1–10 % of
+link ends turned back by more than 150°, on a Mini Yoda depth over 500. Now:
+
+- **The link leaves along the hook.** A front's cut keeps 1.5 cutter radii
+  of its own shape after it leaves the stock (it was 1 mm), so the hook's
+  turn off the wall is part of the cut and the link carries on from it.
+- **The route walks round the cleared area away from its edge** (half, then
+  a quarter of a cutter radius in) where it can. Along the very edge it ran
+  a cutter radius from the stock, where no curve can bend without touching it.
+- **Arc, straight, arc.** If no curve through the route's corners fits, the
+  link turns round on the widest circle that fits (a cutter radius, a half,
+  a quarter): along the cuts' own headings if it can, otherwise off them by
+  30°, 60° or 90° at most — a rounded corner instead of a reversal. It is
+  checked against the pocket's centre region and the live stock, not the
+  cleared region alone (a cut ends against the stock it has just left, so a
+  tangent curve always started outside that).
+- **A cut that starts square to a wall is joined along the wall.** The link
+  arrives along up to 3 mm of clean wall and turns into the cut: a corner of
+  90–125° instead of 180°. It also uses the cut's own run-in where the cut
+  was trimmed to the stock it meets.
+- A cut's heading at its ends is taken over 0.2 mm, not its first step
+  (which can be a few points closer than a micron, with no direction).
+
+On every test shape no link end now turns back by more than 150° (rectangle
+from 9.5 %, cross from 7 %), and over 95 % leave and join within 30°. The
+links are longer on some shapes (rectangle 1,643 to 1,722 mm, cross 1,957
+to 2,382 mm) and shorter on others (square with a boss 3,407 to 3,333 mm). On the Mini Yoda the turns of more than 120° in
+the program fell from 776 to 255 at Z-2, 746 to 88 at Z-4 and 889 to 548 at
+Z-6; most left are along the material boundary in the overcut, where a cut
+starts square to it. Estimated machining rose 3 % (9,404 to 9,726 s);
+complete, no safety findings.
+
 ## Low limits and complex parts
 
 At a low limit on a part with narrow necks (the Mini Yoda waterfall at 10 %)

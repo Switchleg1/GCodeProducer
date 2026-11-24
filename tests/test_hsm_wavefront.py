@@ -502,3 +502,41 @@ def test_rest_passes_finish_what_the_fronts_leave_and_report_it():
     assert 0 < rest['feed_mm'] < .02*report['cut_feed_mm']        # a few extra moves
     assert rest['over_limit_mm'] <= rest['feed_mm'] and rest['peak'] > 0
     assert sum(s.kind == 'rest' for s in strokes) == rest['pieces']
+
+
+@pytest.mark.parametrize('ends', [((0., 0.), (1., 0.), (0., -3.), (-1., 0.)), ((0., 0.), (1., 0.), (5., 5.), (0., 1.)),
+                                  ((0., 0.), (0., 1.), (1., 0.), (0., -1.))])
+def test_turn_round_leaves_and_joins_along_the_headings_without_a_corner(ends):
+    from gcodeproducer.core.cam.wavefront.links import turn_round
+    start, leaving, end, arriving = ends
+    paths = turn_round(start, leaving, end, arriving, 1.)
+    assert paths
+    for path in paths:
+        q = np.asarray(path, float)
+        steps = np.diff(q, axis=0)
+        unit = steps/np.linalg.norm(steps, axis=1)[:, None]
+        assert np.allclose(q[0], start) and np.allclose(q[-1], end)
+        assert unit[0] @ np.asarray(leaving) > .9 and unit[-1] @ np.asarray(arriving) > .9
+        assert (unit[:-1]*unit[1:]).sum(axis=1).min() > math.cos(math.radians(20))   # no kink anywhere
+
+
+@pytest.mark.parametrize('name', ['rectangle', 'cross'])
+def test_links_leave_and_join_the_cuts_without_reversing(name):
+    from pathlib import Path
+    from shapely import from_wkt
+    from gcodeproducer.core.cam.wavefront.links import heading
+    pocket = from_wkt(Path(f'examples/hsm-shapes/{name}.wkt').read_text())
+    strokes, _, _ = clear_pocket(pocket, 2.)
+    turns = []
+    for before, link, after in zip(strokes, strokes[1:], strokes[2:]):
+        if link.kind != 'link':
+            continue
+        for a, b in ((heading(before.points, True), heading(link.points, False)),
+                     (heading(link.points, True), heading(after.points, False))):
+            turns.append(math.degrees(math.acos(max(-1., min(1., a[0]*b[0] + a[1]*b[1])))))
+    turns = np.asarray(turns)
+    assert len(turns) > 50
+    # Before 0.2.35 a tenth of these turned back on themselves (rectangle 9.5 %, cross 7 %), where a
+    # cut ends or starts against a wall and no curve could join it tangentially.
+    assert (turns > 150).mean() < .01
+    assert (turns < 30).mean() > .9            # almost all leave and join along the cut

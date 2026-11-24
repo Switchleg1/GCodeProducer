@@ -16,7 +16,8 @@ from .contact import cutting_pieces, cut
 from .walls import wall_ends, convex_corners, corner_pecks
 from .links import stay_down_link, smooth_link, heading
 from .timing import machine_time
-from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX, PROFILE_INSETS, REST_MM2, REST_STEPOVER, REST_PASSES)
+from .wavefront_constants import (CORNER_RUN_IN, RESTARTS, RESTART_MM2, SPIRAL_LARGEST, STEPOVERS, SPIRAL_SCALES, STUCK_SPOT, SWEEP_SEGMENTS, WALL_TOLERANCE, MIN_GAIN_MM2, PROFILE_CHUNK, ROLL_STEPOVER, STEADY_STEPOVER, RAISE_PATIENCE, RAISE_PATIENCE_MAX, PROFILE_INSETS, REST_MM2, REST_STEPOVER, REST_PASSES, FRONT_RUN_OUT,
+                                  LINK_RUN_MIN, LINK_RUN_POINTS, LINK_TOLERANCE, LINK_WALL_NEAR, LINK_WALL_RUN, LINK_WALL_TURN)
 
 
 def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVERS, blend=3.,
@@ -54,21 +55,86 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
             cleared[0] = clearance(allowed, stock, radius)
         return cleared[0]
 
-    def commit(kind, path, stepover, peak):
-        """Join the cut to the previous one through cleared space, else count a retract and rapid."""
+    run_off = [None]  # the air the last front's own shape ran on into after its cut was trimmed
+
+    def clear_run(points):
+        """The stretch, if it is long enough to turn on and clear of live stock."""
+        if points is None or len(points) < 2 or LineString(points).length < LINK_RUN_MIN:
+            return None
+        return points if LineString(points).distance(stock) >= radius - 5*LINK_TOLERANCE else None
+
+    def worst_turn(link, before, after):
+        """Largest change of heading, in degrees, where the link leaves one cut and joins the next."""
+        def angle(a, b):
+            return math.degrees(math.acos(max(-1., min(1., a[0]*b[0] + a[1]*b[1]))))
+        return max(angle(heading(before, True), heading(link, False)),
+                   angle(heading(link, True), heading(after, False)))
+
+    def along_the_wall(point, onward):
+        """A stretch of clean wall ending at a cut that starts on the wall, to come in along; or None.
+
+        A cut that starts square to a wall cannot be met from behind; coming
+        along the wall into it turns a reversal into a quarter turn. The side
+        whose last step turns least into the cut's heading is used.
+        """
+        if not rings:
+            return None
+        ring = min(rings, key=lambda r: r.distance(Point(point)))
+        if ring.distance(Point(point)) > LINK_WALL_NEAR:
+            return None
+        here, best = ring.project(Point(point)), None
+        for sign in (1, -1):
+            run = [tuple(ring.interpolate((here - sign*d) % ring.length).coords[0])
+                   for d in np.linspace(LINK_WALL_RUN, 0., 13)]
+            run[-1] = tuple(point)
+            if clear_run(run) is None:
+                continue
+            into = heading(run, True)
+            turn = into[0]*onward[0] + into[1]*onward[1]
+            if best is None or turn > best[0]:
+                best = (turn, run)
+        return None if best is None or best[0] < LINK_WALL_TURN else best[1]
+
+    def commit(kind, path, stepover, peak, run_in=None):
+        """Join the cut to the previous one through cleared space, else count a retract and rapid.
+
+        run_in is the air the cut's own shape runs in from before it was trimmed to the stock it
+        meets (a hook along a wall, a roll-on from the old front). A link that cannot join the cut
+        along its heading - a cut that starts square to a wall cannot be met from behind - joins
+        that run-in instead and follows it in; likewise it may leave along the last front's run-off.
+        """
         if strokes:
-            route = stay_down_link(stock_clear(), stock, radius, strokes[-1].points[-1], path[0],
-                                  why=refused)
+            start, end = strokes[-1].points[-1], path[0]
+            route = stay_down_link(stock_clear(), stock, radius, start, end, why=refused)
             if route is None:
                 travel['rapids'] += 1
             else:
                 travel['links'] += 1
                 if smooth_links:
-                    route = smooth_link(route, heading(strokes[-1].points, True), heading(path, False),
-                                        stock_clear(), stock, radius)
+                    smooth = smooth_link(route, heading(strokes[-1].points, True), heading(path, False),
+                                         allowed, stock, radius)
+                    tail, lead = clear_run(run_off[0]), clear_run(run_in)
+                    if smooth is route and lead is None:
+                        lead = along_the_wall(end, heading(path, False))
+                    if smooth is route and (tail is not None or lead is not None):
+                        a = tail[-1] if tail is not None else start
+                        b = lead[0] if lead is not None else end
+                        detour = stay_down_link(stock_clear(), stock, radius, a, b)
+                        if detour is not None:
+                            out = heading(tail if tail is not None else strokes[-1].points, True)
+                            into = heading(lead if lead is not None else path, False)
+                            curve = smooth_link(detour, out, into, allowed, stock, radius)
+                            joined = ((tail[:-1] if tail is not None else [])
+                                      + list(curve) + (lead[1:] if lead is not None else []))
+                            # Keep the way round by the run-in/off if it turns less sharply where it
+                            # joins and leaves the cuts than the direct route does.
+                            if worst_turn(joined, strokes[-1].points, path) < worst_turn(route, strokes[-1].points, path):
+                                smooth = joined
+                    route = smooth
                 strokes.append(Stroke('link', route, 0., 0.))
         else:
             travel['rapids'] += 1
+        run_off[0] = None
         strokes.append(Stroke(kind, path, stepover, peak))
 
     started = time.time()
@@ -150,7 +216,7 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                             continue
                         if len(path) < 2:
                             continue
-                        pieces = cutting_pieces(path, stock, radius)
+                        pieces = cutting_pieces(path, stock, radius, run_out=FRONT_RUN_OUT*radius, run_in=1.)
                         if shared and pieces:
                             points = [q for piece in pieces for q in piece]
                             if sum(owner(q) == index for q in points) < len(points)/2:
@@ -199,7 +265,11 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                       'run_start_xy': run[0], 'run_end_xy': run[-1], 'pieces': len(done), 'path_mm': LineString(path).length,
                                       'path_end_xy': path[-1], 'outcome': 'cut' if done else 'air'})
                     for piece, peak, tally in done:
-                        commit('front', piece, stepover, peak)
+                        at = path.index(piece[0]) if piece[0] in path else None
+                        ahead = path[max(0, at - LINK_RUN_POINTS):at+1] if at is not None and at > 0 else None
+                        commit('front', piece, stepover, peak, run_in=ahead)
+                        to = path.index(piece[-1]) if piece[-1] in path else None
+                        run_off[0] = path[to:to + LINK_RUN_POINTS + 1] if to is not None and to < len(path)-1 else None
                         count(tally)
                     if done:
                         trial = without_slivers(trial)

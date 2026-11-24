@@ -10,8 +10,12 @@ from .links import heading
 from .wavefront_constants import (CUT_SEGMENTS)
 
 
-def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
-    """Keep the stretches of a dense path that touch stock, with a short run in and out through air."""
+def cutting_pieces(path, stock, radius, *, run_out=1., closed=False, run_in=None):
+    """Keep the stretches of a dense path that touch stock, with a short run in and out through air.
+
+    run_in, if given, is the run in through air before each stretch; otherwise run_out.
+    """
+    run_in = run_out if run_in is None else run_in
     if stock.is_empty or len(path) < 2:
         return []
     xy = np.asarray(path, float)[:, :2]
@@ -46,7 +50,7 @@ def cutting_pieces(path, stock, radius, *, run_out=1., closed=False):
             j = i
             while j+1 < len(path) and touching[j+1]:
                 j += 1
-            lo, hi = along[i]-run_out, along[j]+run_out
+            lo, hi = along[i]-run_in, along[j]+run_out
             if spans and lo <= spans[-1][1]:
                 spans[-1][1] = hi
             else:
