@@ -22,17 +22,19 @@ def engagement_width(op):
     return width
 
 
-def plan_level(op, region, diameter, material=None, depth_step=None, direction='climb'):
+def plan_level(op, region, diameter, material=None, depth_step=None, direction='climb', stock_applied=False):
     """Plan one depth: (paths, summary). A plain function of picklable arguments, for worker processes.
 
     Every stay-down chain of cuts and links is one path. A path that begins at
     a start leads with the last lap of its helix orbit as a closed contour, so
     the lead planner ramps down on the orbit the plan's contact checks
     assumed, and the chain follows it without lifting. Stock to leave
-    (op.stock) is kept from every wall.
+    (op.stock) is kept from every wall, unless stock_applied: the caller has
+    already kept it from the part only, and the region's other edges are walls
+    the cutter's edge may come right up to.
     """
     radius = diameter/2
-    pocket = region.buffer(-op.stock) if op.stock else region
+    pocket = region.buffer(-op.stock) if op.stock and not stock_applied else region
     if material is not None and not material.is_empty:
         # Where the pocket reaches past the material (an overcut past the blank edge), work only
         # up to where the cutter just leaves it: the cutter centre may go a cutter radius past the
@@ -105,7 +107,7 @@ def plan_level(op, region, diameter, material=None, depth_step=None, direction='
     return paths, summary
 
 
-def plan_levels(op, levels, diameter, direction='climb'):
+def plan_levels(op, levels, diameter, direction='climb', stock_applied=False):
     """plan_level for each (region, material, depth step) in levels, in worker processes when there are several.
 
     Returns the results in order; an exception is returned in place of a
@@ -113,7 +115,7 @@ def plan_levels(op, levels, diameter, direction='climb'):
     """
     from functools import partial
     from gcodeproducer.core.fdm.layer_threads import process_pool
-    work = partial(_plan_level_safely, op, diameter, direction)
+    work = partial(_plan_level_safely, op, diameter, direction, stock_applied)
     pool = process_pool() if len(levels) > 1 else None
     if pool is None:
         return [work(level) for level in levels]
@@ -123,16 +125,17 @@ def plan_levels(op, levels, diameter, direction='climb'):
         return [work(level) for level in levels]  # a broken pool: plan here instead
 
 
-def _plan_level_safely(op, diameter, direction, level):
+def _plan_level_safely(op, diameter, direction, stock_applied, level):
     region, material, depth_step = level
     try:
-        return plan_level(op, region, diameter, material, depth_step, direction)
+        return plan_level(op, region, diameter, material, depth_step, direction, stock_applied)
     except ValueError as exc:
         return exc
 
 
 def wavefront_paths(op, region, diameter, direction, log=None, *, material=None, cutting=None,
-                    tool_type='endmill', tabs=False, depth_step=None, warn=None, depth_label='', planned=None):
+                    tool_type='endmill', tabs=False, depth_step=None, warn=None, depth_label='', planned=None,
+                    stock_applied=False):
     """XY cut paths for one planar region, for the normal CAM lead, feed and depth planner.
 
     See plan_level. planned, if given, is plan_level's result for exactly these
@@ -147,7 +150,7 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
                          'and does not support this tab-protected area. No contour fallback was generated.')
     engagement_width(op)
     if planned is None:
-        planned = plan_level(op, region, diameter, material, depth_step, direction)
+        planned = plan_level(op, region, diameter, material, depth_step, direction, stock_applied)
     if isinstance(planned, Exception):
         raise planned
     paths, summary = planned

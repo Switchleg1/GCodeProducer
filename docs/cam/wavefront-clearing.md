@@ -145,6 +145,19 @@ at the end of each cut and back to the next run the wrong way round.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## The selected area is a wall
+
+The selected area, grown by **Overcut**, is a boundary the cutter does not
+cross, whether there is material beyond it or not: Adaptive's cutter centre
+stays a cutter radius inside it and its edge comes right up to it,
+everywhere along it. **Stock to leave** is kept from the part only (its
+shadow at each depth and the holding tabs), not from that boundary. Before
+0.2.40 the area was first pulled in by the stock to leave and then pushed
+back out at the blank's edge by the material boundary, so the distance from
+the paths to the edge changed along it. Now, with a 3 mm Overcut, no path point is ever closer than
+a cutter radius (2.0 mm) to the area's edge at any depth of the Mini Yoda.
+Contour and raster clearing keep their earlier rule.
+
 ## Walls: roll off short of them (the application)
 
 A pocket's walls — the part's, and the edge of the zone (the blank edge

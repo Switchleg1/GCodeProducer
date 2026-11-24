@@ -245,3 +245,22 @@ def test_adaptive_meander_cuts_fronts_from_the_nearer_end_instead_of_travelling_
                               both_ways=b)[2] for b in (False, True))
     assert both['link_feed_mm'] < .5*one['link_feed_mm']              # far less travel back over cut ground
     assert both['reachable_residual_mm2'] < .05
+
+
+def test_adaptive_walks_up_to_a_cutter_radius_from_the_area_edge_whatever_the_stock_to_leave():
+    """The selected area (plus overcut) is a wall: the cutter's edge comes up to it, never past it.
+
+    Stock to leave belongs to the part; the generator keeps it from the part's shadow and passes
+    stock_applied, so the area's own edge is not pulled in by it.
+    """
+    from shapely import distance, points
+    from gcodeproducer.core.cam.wavefront.app_paths import wavefront_paths
+    area = box(0, 0, 40, 25)
+    op = Operation(kind='waterfall', strategy='adaptive', stock=1.)
+    paths = wavefront_paths(op, area, 4., 'climb', material=area, stock_applied=True)
+    xy = np.vstack([np.asarray(p.points, float)[:, :2] for p in paths])
+    gap = distance(area.exterior, points(xy))
+    assert area.buffer(-2. + 1e-6).covers(points(xy)).all()     # never past a cutter radius from the edge
+    assert gap.min() == pytest.approx(2., abs=.02)               # and right up to it
+    shrunk = wavefront_paths(op, area, 4., 'climb', material=area)   # the old rule: stock from every wall
+    assert distance(area.exterior, points(np.vstack([np.asarray(p.points)[:, :2] for p in shrunk]))).min() > 2.9

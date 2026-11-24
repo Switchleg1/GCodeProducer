@@ -26,21 +26,38 @@ class WaterfallGenerator(OperationGenerator):
         free = free.buffer(0)
         return free, active
 
-    def level_free(self, run, region, limit, z, above, planning, edge=None, follow=None):
+    def level_free(self, run, region, limit, z, above, planning, edge=None, follow=None, part_stock=False):
         """(free region, active tabs) of the depth at ``z``.
 
         Following the surface, the depth works the area free at the depth
         above: where the model rises between the two depths the cutter rides up
         it instead of stopping at its shadow (see lift).
+
+        part_stock: keep the stock to leave from the part (its shadow and the
+        tabs) here, not from the selected area's edge. That edge is a wall the
+        cutter does not cross, whether there is material beyond it or not: the
+        cutter's edge may come up to it (plus Overcut), and no closer to the
+        part than the stock to leave.
         """
+        from shapely.ops import unary_union
         free, active = self.free_at(run, region, limit, z, planning, edge)
+        if part_stock and run.op.stock > 0:
+            free = free.difference(self.blocked(z, active, planning).buffer(run.op.stock)).buffer(0)
         if follow is None or above <= z+1e-6:
             return free, active
-        from shapely.ops import unary_union
         wider, _ = self.free_at(run, region, limit, above, planning, edge)
         if active:
             wider = wider.difference(unary_union(active))
+        if part_stock and run.op.stock > 0:
+            wider = wider.difference(self.blocked(above, active, planning).buffer(run.op.stock))
         return wider.union(free).buffer(0), active
+
+    @staticmethod
+    def blocked(z, active, planning):
+        """The part's shadow at ``z`` and the tabs active there."""
+        from shapely.ops import unary_union
+        shadow = planning.shadow.at(z)
+        return unary_union([shadow, *active]) if active else shadow
 
     def plan_ahead(self, run, region, limit, surface_top, planning, edge=None, follow=None):
         """Adaptive clearing: plan every depth at once, in worker processes; {z: (material, plan)}.
@@ -59,7 +76,7 @@ class WaterfallGenerator(OperationGenerator):
             if z >= surface_top-1e-6:
                 continue
             # Adaptive plans the flat area only; the slope up to the depth above is a band of its own.
-            free, active = self.level_free(run, region, limit, z, above, planning, edge, None)
+            free, active = self.level_free(run, region, limit, z, above, planning, edge, None, part_stock=True)
             above = z
             if active or free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
                 continue
@@ -67,7 +84,7 @@ class WaterfallGenerator(OperationGenerator):
         if len(jobs) < 2:
             return {}
         plans = plan_levels(op, [(free, material, step) for _, free, material, step in jobs], run.diameter,
-                            run.direction)
+                            run.direction, stock_applied=True)
         return {z: (material, plan) for (z, _, material, _), plan in zip(jobs, plans)}
 
     def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None, above=None, follow=None):
@@ -80,8 +97,9 @@ class WaterfallGenerator(OperationGenerator):
         # front below it to cut under its whole width. So adaptive clears the flat area only, and the
         # slope up to the depth above is taken afterwards by passes stepping up it (slope_band).
         band_follow = follow if op.strategy == 'adaptive' else None
+        adaptive = op.strategy == 'adaptive'
         free, active = self.level_free(run, region, limit, z, above, planning, edge,
-                                       None if band_follow is not None else follow)
+                                       None if band_follow is not None else follow, part_stock=adaptive)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
@@ -90,7 +108,7 @@ class WaterfallGenerator(OperationGenerator):
                 material = planning.material.planar_at(z)
                 options = dict(material=material, cutting=run.cutting,
                                tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
-                               depth_step=min(run.step, run.start-z), warn=planning.mark_partial, depth_label=f'Z{z:g}')
+                               depth_step=min(run.step, run.start-z), warn=planning.mark_partial, depth_label=f'Z{z:g}', stock_applied=True)
                 early = (ahead or {}).get(z)
                 if early is not None and _same(early[0], material):
                     options['planned'] = early[1]
@@ -103,7 +121,7 @@ class WaterfallGenerator(OperationGenerator):
             return free, []
         areas = machining_areas(paths, "pocket", free) if paths else []
         if band_follow is not None and above > z+1e-6:
-            wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow)
+            wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow, part_stock=True)
             band = self.slope_band(run, free, wide, band_follow, z, above)
             if band:
                 for path in band:
@@ -129,7 +147,7 @@ class WaterfallGenerator(OperationGenerator):
         from gcodeproducer.core.geometry.polygon_parts import polygons
         from .operations_constants import SLOPE_PASSES, SLOPE_STEP_MIN
         op = run.op
-        offset = run.radius + op.stock
+        offset = run.radius   # stock to leave is already kept from the part (level_free)
         inner, outer = flat.buffer(-offset), wide.buffer(-offset)
         if inner.is_empty or outer.difference(inner).area < 1e-3:
             return []
@@ -319,7 +337,7 @@ class WaterfallGenerator(OperationGenerator):
         if op.overcut > 0:
             # Expand the selected boundary, not the per-depth holes left by part shadow or tabs.
             region = apply_overcut(region, op, clearing_part_section(run, planning), limit, ctx)
-        if setup.stock.allocated and grow > 1e-12:
+        if setup.stock.allocated and grow > 1e-12 and op.strategy != 'adaptive':
             # Clearing paths are offset by radius + stock to leave from every boundary. Stock
             # to leave protects the part, not the blank: where the region reaches the blank
             # edge, extend it by the same amount so the cutter edge still meets that edge
