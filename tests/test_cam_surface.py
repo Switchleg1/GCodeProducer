@@ -566,6 +566,10 @@ def test_adaptive_follows_the_slope_with_passes_stepping_up_it_not_under_each_ot
     assert_clear_of_model(job)
     band = [layer for layer in job.layers if layer.paths and all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
     assert band                                           # the slope is its own set of passes at each depth
+    flat = [layer for layer in job.layers if layer not in band]
+    # The flat area's own paths stay flat: lifting them over grid round-off at the model's edge made
+    # 3D moves that the motion planner split and entered again one by one.
+    assert flat and all(np.asarray(p.points).shape[1] == 2 for layer in flat for p in layer.paths)
     for layer in band:
         tops = [float(np.asarray(p.points)[:, 2].max()) for p in layer.paths]
         assert max(tops) > layer.z + .1                   # they ride up the slope

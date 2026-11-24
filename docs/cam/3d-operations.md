@@ -107,7 +107,11 @@ moves to the next, instead of going all round the model for each pass and
 lifting off between the patches (Mini Yoda, Z-2 to Z-5: 12, 8 and 8 entries
 at the three slope layers, from 2, 25 and 28 — the first had been one long
 pass round the head through air — and no slot or high-engagement moves). The Preview shows these as
-a second layer at each depth. On the Mini Yoda at 10 % the slot and
+a second layer at each depth. The flat area's own paths are not lifted at
+all: lifting them only turned grid round-off at the model's edge into 3D
+moves, which the motion planner then split into pieces and entered one by one
+(Mini Yoda: 401 rapid moves at Z-2 and 220 at Z-5 fell to 12 and 30). On the
+Mini Yoda at 10 % the slot and
 high-engagement moves that change height fell to 0–22 mm a depth.
 
 Nested selected outlines alternate between boundary and island. Overlapping

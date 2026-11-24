@@ -105,6 +105,8 @@ class WaterfallGenerator(OperationGenerator):
             wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow)
             band = self.slope_band(run, free, wide, band_follow, z, above)
             if band:
+                for path in band:
+                    path.slope = True
                 areas.append(band)
         return free, areas
 
@@ -343,7 +345,12 @@ class WaterfallGenerator(OperationGenerator):
             remaining = material.planar_at(z)
             for ai, planned in enumerate(areas):
                 if follow is not None:
-                    planned = [self.lift(path, z, ceiling, follow, run) for path in planned]
+                    # Adaptive's own paths are planned in the flat area, where the model is below this
+                    # depth: lifting them would only turn grid round-off at the model's edge into 3D moves,
+                    # each split off and entered again on its own. Only its slope passes ride up.
+                    planned = [self.lift(path, z, ceiling, follow, run)
+                               if op.strategy != 'adaptive' or getattr(path, 'slope', False) else path
+                               for path in planned]
                     lifted += sum(np.asarray(path.points).shape[1] == 3 for path in planned)
                 planned[0].stay_down, planned[0].stay_down_from = False, None
                 # Adaptive paths were planned against this same material and only cut where it is;
