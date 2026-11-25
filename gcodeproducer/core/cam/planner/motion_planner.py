@@ -77,6 +77,7 @@ class MotionPlanner:
         self.lead_kinds = {}
         self.stay_count = self.short_count = self.samples = 0
         self.surface_totals = Counter()
+        self.air_bound = None
         self._path_cut_material = False
         self._layer_entered = False
         self.lead_outs_skipped = 0
@@ -138,6 +139,23 @@ class MotionPlanner:
         from .planner_constants import MERGE_PHASES
         target = np.asarray(target, float)
         sampler = self.sampler(state)
+        bounded = state is not None and getattr(self.config, 'strategy', None) == 'adaptive'
+        if bounded:
+            if self.air_bound is None or self.air_bound[0] is not state:
+                from copy import copy
+                upper = copy(state)
+                upper.heights = np.full_like(state.heights, state.stock.top)
+                upper._last_sweep = None
+                self.air_bound = state, upper
+            upper = self.air_bound[1]
+            # Half the cell diagonal encloses every point in the cell; allow
+            # for XY rounding too. Credit only cells fully under the disk.
+            margin = .5*math.hypot(state.dx, state.dy) + .002
+        track = (state is not None and self.tool is not None and not state.tabs
+                 and self.tool.get('type', 'endmill') == 'endmill')
+        if track and not hasattr(state, 'hybrid'):
+            from ..hybrid_stock import HybridStock
+            state.hybrid = HybridStock.for_height_state(state)
         split = split and state is not None
         steps = (split_move(self.position, target, self.radius, state.resolution, self.sample_spacing)
                  if split else (target,))
@@ -163,6 +181,12 @@ class MotionPlanner:
             c = cond
             if measured and sampler is not None:
                 c = self.model.condition(sampler, self.position, q, self.radius)
+            if bounded and c is not None and c.regime == 'air':
+                if upper.contact(self.position, q, self.radius + margin):
+                    if cleared_only:
+                        flush()
+                        return False
+                    c = self.model.condition(self.sampler(upper), self.position, q, self.radius + margin)
             drop, run = self.position[2]-q[2], float(np.linalg.norm(q[:2]-self.position[:2]))
             # Down into material steeper than the operation's lead-in ramp is a plunge;
             # the feed follows the descent angle (see FeedPolicy.rate).
@@ -190,6 +214,12 @@ class MotionPlanner:
             force_feed = False
             if sampler is not None:
                 sampler.remove_move(start, q, self.radius)
+            if bounded and self.radius > margin:
+                upper.cut(start, q, self.radius - margin)
+            if track and min(start[2], q[2]) < state.stock.top and self.radius > .002:
+                # Under-credit to account for XY post rounding. Unrecorded paths
+                # leave excess stock in this veto-only clearance model.
+                state.hybrid.cut(start, q, self.radius - .002)
             self.samples += 1
         flush()
         return True

@@ -25,6 +25,14 @@ class LinkPlanner:
         return bool(path.stay_down and previous_end is not None and path.stay_down_from is not None
                     and np.allclose(previous_end, path.stay_down_from, atol=1e-7, rtol=0))
 
+    def _clear(self, state, a, b):
+        if state.contact(a,b,self.reach):
+            return False
+        detail = getattr(state,'hybrid',None)
+        z = a[2]
+        return (detail is None or z >= detail.top or
+                (z >= detail.bottom and detail.clear_at_depth(a[:2],b[:2],self.reach,z)))
+
     def stay_at_depth(self, state, position, target_xy, floor):
         """Move at the current Z if it is at/above the entry floor and the sweep is clear."""
         here = float(position[2])
@@ -32,7 +40,7 @@ class LinkPlanner:
             return False
         target_xy = np.asarray(target_xy, float)[:2]
         return bool(state.height_at(target_xy, self.reach) <= here+1e-6
-                    and not state.contact(position, np.r_[target_xy, here], self.reach))
+                    and self._clear(state, position, np.r_[target_xy, here]))
 
     def inward_waypoint(self, state, position, target_xy, candidates):
         """One short dogleg via a prior cut, if both full cutter sweeps are clear."""
@@ -48,8 +56,8 @@ class LinkPlanner:
             if lengths[i] > limit:
                 break
             via = np.r_[candidates[i], z]
-            if (not state.contact(position, via, self.reach)
-                    and not state.contact(via, np.r_[target_xy, z], self.reach)):
+            if (self._clear(state, position, via)
+                    and self._clear(state, via, np.r_[target_xy, z])):
                 return candidates[i]
         return None
 

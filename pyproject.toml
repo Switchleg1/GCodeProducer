@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gcodeproducer"
-version = "0.2.40"
+version = "0.2.60"
 description = "Slicer / CAM app that produces G-code through a stage pipeline (Qt6 GUI + CLI)"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
 requires-python = ">=3.10"
-dependencies = ["PyQt6>=6.5", "PyOpenGL>=3.1", "numpy>=1.24", "shapely>=2.0"]
+dependencies = ["PyQt6>=6.5", "PyOpenGL>=3.1", "numpy>=1.24", "shapely>=2.1"]
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",

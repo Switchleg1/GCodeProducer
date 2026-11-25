@@ -93,13 +93,10 @@ class WaterfallGenerator(OperationGenerator):
         from .pocket_generator import pocket_paths
         op = run.op
         above = run.start if above is None else above
-        # Adaptive engagement is planned in the plane: a front that rode up a slope would leave the next
-        # front below it to cut under its whole width. So adaptive clears the flat area only, and the
-        # slope up to the depth above is taken afterwards by passes stepping up it (slope_band).
-        band_follow = follow if op.strategy == 'adaptive' else None
+        # Adaptive's engagement checks apply only at the planned Z.
         adaptive = op.strategy == 'adaptive'
         free, active = self.level_free(run, region, limit, z, above, planning, edge,
-                                       None if band_follow is not None else follow, part_stock=adaptive)
+                                       None if adaptive else follow, part_stock=adaptive)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         try:
@@ -120,13 +117,6 @@ class WaterfallGenerator(OperationGenerator):
                 raise
             return free, []
         areas = machining_areas(paths, "pocket", free) if paths else []
-        if band_follow is not None and above > z+1e-6:
-            wide, _ = self.level_free(run, region, limit, z, above, planning, edge, band_follow, part_stock=True)
-            band = self.slope_band(run, free, wide, band_follow, z, above)
-            if band:
-                for path in band:
-                    path.slope = True
-                areas.append(band)
         return free, areas
 
     @staticmethod
@@ -348,7 +338,12 @@ class WaterfallGenerator(OperationGenerator):
         if op.area_order == "area":
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
         produced = reachable = lifted = 0
-        follow = self.follow_setup(run, region, planning) if op.follow_surface else None
+        follow = None
+        if op.follow_surface:
+            if op.strategy == 'adaptive':
+                ctx.log(f'  {op.name}: Adaptive roughs at fixed depths; use a separate finishing operation for slopes.')
+            else:
+                follow = self.follow_setup(run, region, planning)
         ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge, follow)
         above = run.start
         for i in range(run.count):

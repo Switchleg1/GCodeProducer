@@ -108,10 +108,15 @@ def measure_segments(points, closed, material, radius):
     engagement = np.clip((left+right)/(2*radius), 0, 1)
     # Sampling must not call a grazing leading-cap contact an air move.
     for i in np.flatnonzero((engagement <= 1e-6) & (lengths > 1e-9)):
-        fresh = material.intersection(LineString((a[i], b[i])).buffer(radius)).area
-        if fresh > max(1e-9, radius*radius*1e-8):
-            engagement[i] = max(.01, min(1., fresh/(2*radius*lengths[i])))
-            left[i] = right[i] = engagement[i]*radius
+        line = LineString((a[i], b[i]))
+        # A polygonal buffer is inscribed in the true round end cap. Even
+        # an empty overlay cannot certify air: test centreline distance first,
+        # allowing for independent 0.001 mm XY rounding of both sweeps.
+        if material.is_empty or line.distance(material) > radius + .002:
+            continue
+        fresh = material.intersection(line.buffer(radius)).area
+        engagement[i] = max(.01, min(1., fresh/(2*radius*lengths[i])))
+        left[i] = right[i] = engagement[i]*radius
     return left, right, engagement, lengths
 
 
@@ -190,7 +195,10 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
             sampler.remove_path(np.array([previous, p[0]]), False, radius)
             totals[condition.regime] += 1
         spiral = operation.strategy == 'adaptive' and not path.closed
-        if spiral and len(p) > 1:
+        # A lifted pass does not clear its XY projection at the nominal floor.
+        # Without depth-resolved history, never use it to certify a later air move.
+        lifted = full.shape[1] == 3
+        if spiral and len(p) > 1 and not lifted:
             # Measure successive short stretches against stock left by the earlier
             # turns, rather than classifying the whole uncut pocket as a slot.
             distance = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
@@ -245,7 +253,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                            f"Segments cutting the other hand are highlighted as Conflict.")
                 if message not in warnings:
                     warnings.append(message)
-        if not spiral or len(p) < 2:
+        if not lifted and (not spiral or len(p) < 2):
             sampler.remove_path(p, path.closed, radius)
         loop = np.vstack((p, p[0])) if path.closed else p
         previous = loop[-1]

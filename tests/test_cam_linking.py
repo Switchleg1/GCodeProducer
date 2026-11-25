@@ -152,7 +152,16 @@ def test_later_depth_entries_start_just_above_the_previous_floor(libset):
                for i,ln in enumerate(job.program.lines))
 
 
-def test_next_depth_starts_from_previous_floor_without_going_up(libset):
+def test_next_depth_stays_only_when_hybrid_stock_certifies_the_link(libset, monkeypatch):
+    from gcodeproducer.core.cam.hybrid_stock import HybridStock
+    original = HybridStock.clear_at_depth
+    denied = []
+    def check(state, a, b, r, z):
+        clear = original(state,a,b,r,z)
+        if not clear:
+            denied.append(z)
+        return clear
+    monkeypatch.setattr(HybridStock, 'clear_at_depth', check)
     from gcodeproducer.core.sim import simulate
     mesh=stepped_part()
     job,op=job_for(mesh,[floor_ref(mesh)],libset)
@@ -164,9 +173,10 @@ def test_next_depth_starts_from_previous_floor_without_going_up(libset):
     lines=job.program.lines
     for i,ln in enumerate(lines):
         if ln.layer>0 and sim.motion[i] and ln.feature!="retract":
-            assert sim.z[i]<=sim.pz[i]+1e-9          # after the first pass the tool never goes up
+            if sim.z[i] > sim.pz[i]+1e-9:
+                assert ln.cmd == 'G0' and z_of[ln.layer-1] in denied
     stays=[ln for ln in lines if ln.comment and "stay at depth" in ln.comment]
-    assert len(stays)==len(job.layers)-1
+    assert len(stays) + len(set(denied)) == len(job.layers)-1
     for ln in stays:
         i=lines.index(ln)
         assert ln.cmd=="G1" and sim.z[i]==pytest.approx(z_of[ln.layer-1])     # moved at the previous floor

@@ -145,6 +145,29 @@ at the end of each cut and back to the next run the wrong way round.
    the skin the last front of a channel leaves because no later front sweeps
    back over it. Clean wall is not passed again. `--no-wall-finish` skips it.
 
+## Offline stock comparison
+
+`python tools/compare_yoda_stock.py Mini_Yoda.nc overlay.svg` compares layer 0
+of the supplied linear NC against its saved rectangular blank, at Z−2 with a
+4 mm flat cutter. The [overlay](../pictures/yoda-stock-overlay.svg) shows remaining stock:
+grey in both models, blue in 0.2 mm grid cells only, red in the sweep section
+only (0.005 mm arc tolerance). This compares stock before Preview decimation;
+it is not an engagement or safety check. The tool also times hybrid stock queries:
+0.5 mm blocks store lower/upper height bounds, with unresolved queries delegated
+to local cutter sweeps. Whole-cutter checks at a fixed depth inspect every
+potentially occupied block under the buffered move. NC planning across clearing strategies uses
+this check as an additional veto on direct or dogleg travel at depth; it never
+overrides an existing rejection. Material Preview for untabbed jobs with linear
+flat-endmill cuts uses the same stock representation regardless of strategy.
+Operation snapshots use up to 12 representative depths (prioritizing flat floors,
+then sampling ramp depths; 0.005 mm XY section tolerance). Ramps
+are terraced in Z. Preview preserves protected tab roofs and follows XY G2/G3
+arcs (incremental I/J or signed R, including helical Z). Ball noses and pointed
+V-bits/engravers with a specified included angle use 12 inscribed cutter bands:
+this can show slightly more stock, not a flat-bottom groove. Unsupported profiles
+and arc modes revert to grid Preview. Sampled height statistics, feed selection
+and motion checks do not use these display approximations.
+
 ## The selected area is a wall
 
 The selected area, grown by **Overcut**, is a boundary the cutter does not
@@ -154,8 +177,14 @@ everywhere along it. **Stock to leave** is kept from the part only (its
 shadow at each depth and the holding tabs), not from that boundary. Before
 0.2.40 the area was first pulled in by the stock to leave and then pushed
 back out at the blank's edge by the material boundary, so the distance from
-the paths to the edge changed along it. Now, with a 3 mm Overcut, no path point is ever closer than
-a cutter radius (2.0 mm) to the area's edge at any depth of the Mini Yoda.
+the paths to the edge changed along it. Measure clearance from the intended
+edge: with zero Overcut a 4 mm cutter centre must stay 2 mm inside the
+selection; with 3 mm Overcut it may travel 1 mm outside the selection.
+An air move at cutting depth is subject to the same boundary. With allocated
+stock the adaptive feed planner checks air classifications against a second
+height grid: it credits a cell only when the cutter covers the whole cell,
+and tests every cell the cutter could touch. A borderline cut gets a cutting
+feed rather than an air feed. This does not check holders or cutting loads.
 Contour and raster clearing keep their earlier rule.
 
 ## Walls: roll off short of them (the application)

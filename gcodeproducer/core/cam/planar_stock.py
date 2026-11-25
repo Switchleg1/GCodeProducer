@@ -52,7 +52,18 @@ class PlanarStock:
         return unary_union(sweeps).normalize()
 
     def remove(self,paths,z,radius):
-        swept=self.sweep(paths,radius)
+        # The projection of a surface-following pass is fully cleared only at
+        # its highest tip Z, not at the nominal layer floor. Do not credit the
+        # links either when a batch contains lifted moves of unknown link Z.
+        if any(np.asarray(p.points).shape[1] == 3 for p in paths):
+            for path in paths:
+                points = np.asarray(path.points)
+                depth = float(points[:, 2].max()) if points.shape[1] == 3 else z
+                self._record(self.sweep([path], radius), depth)
+            return
+        self._record(self.sweep(paths, radius), z)
+
+    def _record(self, swept, z):
         key=swept.wkb
         old=self.removed.get(key)
         self.removed[key]=(min(z,old[0]) if old else z,swept)

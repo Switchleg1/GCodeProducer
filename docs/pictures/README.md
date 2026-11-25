@@ -75,6 +75,9 @@ and Preview. Captures use isolated settings/library state and are cropped for
 readability. They are not synthetic
 renderings or evidence of safe hardware execution.
 
+- [sweep-stock-ridge.svg](sweep-stock-ridge.svg): simulated thin ridge before and after a plunge.
+- [yoda-stock-overlay.svg](yoda-stock-overlay.svg): grid versus sweep residual on Mini Yoda.
+
 ## Adding pictures for a feature
 
 1. Capture the real implemented UI/result; use an isolated settings/library

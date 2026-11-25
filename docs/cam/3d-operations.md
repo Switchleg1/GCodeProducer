@@ -86,33 +86,9 @@ contours) the material left above the model after the Waterfall fell from
 18 s more compute. A wall that is vertical or overhangs is unchanged: a flat
 cutter cannot reach it from above.
 
-With **Adaptive** clearing the slope is worked differently. Adaptive plans
-its engagement in the plane; a front that rode up the slope and the next
-front, staying lower, would cut under the whole width of the one before —
-a slot. So each depth first clears its flat area (the area free at that
-depth) adaptively, and then the slope up to the depth above as passes of
-its own: the flat area's cutter-centre region grown one step at a time, each
-step the engagement limit's width, every new edge one pass lifted onto the
-model. Each pass is higher than the one before and takes only the step
-beside it; edges keep the stock on their right (climb). Each pass is cut
-only where it lies on the slope, below the depth above (elsewhere it would
-ride through air the pass above cleared), and the passes are taken one
-stretch of slope at a time: a pass goes once every pass a step below it
-beside it is done, the nearest free one next, and passes that start close to
-where the last ended join it in one path; passes that run the same way are
-joined by riding back along the pass before last (all cut beside it) and
-half-turning onto the next one's start, or, against a wall, coming onto it
-at a slant a little way along. The cutter climbs one patch of slope and then
-moves to the next, instead of going all round the model for each pass and
-lifting off between the patches (Mini Yoda, Z-2 to Z-5: 12, 8 and 8 entries
-at the three slope layers, from 2, 25 and 28 — the first had been one long
-pass round the head through air — and no slot or high-engagement moves). The Preview shows these as
-a second layer at each depth. The flat area's own paths are not lifted at
-all: lifting them only turned grid round-off at the model's edge into 3D
-moves, which the motion planner then split into pieces and entered one by one
-(Mini Yoda: 401 rapid moves at Z-2 and 220 at Z-5 fell to 12 and 30). On the
-Mini Yoda at 10 % the slot and
-high-engagement moves that change height fell to 0–22 mm a depth.
+**Adaptive roughing stays at fixed depths.** Follow the surface does not add
+intermediate slope passes to an Adaptive operation. Material between depth
+steps is left for a separate finishing operation with its own depth and feed.
 
 Nested selected outlines alternate between boundary and island. Overlapping
 outlines merge. Exact projected upper triangles protect overhangs; undercuts

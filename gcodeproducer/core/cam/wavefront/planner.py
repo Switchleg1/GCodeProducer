@@ -142,7 +142,11 @@ def clear_pocket(pocket, radius, *, limit=60., sample_step=.1, stepovers=STEPOVE
                                       + list(curve) + (lead[1:] if lead is not None else []))
                             # Keep the way round by the run-in/off if it turns less sharply where it
                             # joins and leaves the cuts than the direct route does.
-                            if worst_turn(joined, strokes[-1].points, path) < worst_turn(route, strokes[-1].points, path):
+                            direct_turn = worst_turn(route, strokes[-1].points, path)
+                            # A small heading improvement is not worth a long loop. Preserve
+                            # the tangent approach when the alternative is a sharp reversal.
+                            if ((direct_turn > 90 or LineString(joined).length <= LineString(route).length + radius)
+                                    and worst_turn(joined, strokes[-1].points, path) < direct_turn):
                                 smooth = joined
                     route = smooth
                 strokes.append(Stroke('link', route, 0., 0.))

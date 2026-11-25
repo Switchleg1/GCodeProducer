@@ -238,11 +238,12 @@ def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
 
 
 @pytest.mark.parametrize("strategy", ["raster_x", "adaptive"])
-def test_waterfall_varying_its_depth_works_with_every_clearing_strategy(libset, strategy):
+def test_waterfall_varies_depth_for_raster_but_not_adaptive(libset, strategy):
     job, op = surface_job(libset, follow_surface=True, strategy=strategy)
     generate(job, StageContext())
     assert_clear_of_model(job)
-    assert any(np.asarray(p.points).shape[1] == 3 for layer in job.layers for p in layer.paths)
+    lifted = any(np.asarray(p.points).shape[1] == 3 for layer in job.layers for p in layer.paths)
+    assert lifted == (strategy == 'raster_x')
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
 
@@ -557,7 +558,7 @@ def test_surface_operation_reports_when_nothing_is_reachable(libset):
         generate(job, StageContext())
 
 
-def test_adaptive_follows_the_slope_with_passes_stepping_up_it_not_under_each_other(libset):
+def test_adaptive_with_follow_enabled_only_roughs_at_fixed_depths(libset):
     import re
     from gcodeproducer.core.gcode.simulation import simulate
     job, op = surface_job(libset, follow_surface=True, strategy='adaptive')
@@ -565,14 +566,8 @@ def test_adaptive_follows_the_slope_with_passes_stepping_up_it_not_under_each_ot
     generate(job, ctx)
     assert_clear_of_model(job)
     band = [layer for layer in job.layers if layer.paths and all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
-    assert band                                           # the slope is its own set of passes at each depth
-    flat = [layer for layer in job.layers if layer not in band]
-    # The flat area's own paths stay flat: lifting them over grid round-off at the model's edge made
-    # 3D moves that the motion planner split and entered again one by one.
-    assert flat and all(np.asarray(p.points).shape[1] == 2 for layer in flat for p in layer.paths)
-    for layer in band:
-        tops = [float(np.asarray(p.points)[:, 2].max()) for p in layer.paths]
-        assert max(tops) > layer.z + .1                   # they ride up the slope
+    assert not band
+    assert job.layers and all(np.asarray(p.points).shape[1] == 2 for layer in job.layers for p in layer.paths)
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
     sim = simulate(job.program)

@@ -41,8 +41,25 @@ def simulate_material(job,program,log=None,*,sim=None):
         if len(warnings)<100 and text not in warnings:warnings.append(text)
     if state.coarsened:
         warn(f"Material grid coarsened from {state.requested:g} to {state.resolution:g} mm by the global cell limit; raise it in Settings for finer checks.")
+    from .hybrid_stock import HybridStock
+    from .cam_constants import HYBRID_SECTION_TOLERANCE, HYBRID_DISPLAY_LEVELS
+    # A swept flat cutter has the same geometry for every CAM strategy.
+    from .preview_sweeps import arc_segments, profile
+    detail = HybridStock.for_height_state(state)
+    profiles = {}
+    plane, incremental_centres = 'G17', True
+    floors, tip_levels = set(), set()
     def snapshot(label):
-        snapshots.append({"label":label,"last_layer":last_layer,"positions":state.surface(),
+        if detail is None:
+            positions = state.surface()
+        else:
+            from .sweep_surface import surface
+            levels = []
+            for candidates in (sorted(floors), sorted(tip_levels - floors)):
+                count = min(len(candidates), HYBRID_DISPLAY_LEVELS-len(levels))
+                levels.extend(candidates[k] for k in np.linspace(0,len(candidates)-1,count,dtype=int))
+            positions = surface(detail,levels,HYBRID_SECTION_TOLERANCE,state.tabs)
+        snapshots.append({"label":label,"last_layer":last_layer,"positions":positions,
                           "resolution":state.resolution,"heights":state.heights.copy()})
     for i,line in enumerate(program.lines):
         if line.op and line.op!=last_op:
@@ -51,6 +68,8 @@ def simulate_material(job,program,log=None,*,sim=None):
         if line.op:last_layer=max(last_layer,line.layer)
         if line.cmd in ("M3","M4"):spindle=line.params.get("S",1)>0
         elif line.cmd=="M5":spindle=False
+        if line.cmd in ('G17','G18','G19'): plane = line.cmd
+        if line.cmd in ('G90.1','G91.1'): incremental_centres = line.cmd == 'G91.1'
         if not sim.motion[i] or not sim.moved[i]:continue
         tool=(layer_tools.get(line.layer) if line.op else None) or tools.get(int(sim.tool[i]),fallback)
         if tool is None:continue
@@ -59,6 +78,7 @@ def simulate_material(job,program,log=None,*,sim=None):
             warn("Tool diameter is below twice the material grid resolution; small contacts/removal may be missed. Use a finer grid.")
         a=np.array([sim.px[i],sim.py[i],sim.pz[i]])
         b=np.array([sim.x[i],sim.y[i],sim.z[i]])
+        arc = sim.motion_cmd[i] in ('G2','G3')
         contact=state.contact(a,b,radius)
         up=np.linalg.norm(a[:2]-b[:2])<1e-6 and b[2]>a[2]
         label=f"Line {i+1}"
@@ -90,6 +110,23 @@ def simulate_material(job,program,log=None,*,sim=None):
             # rounded to 0.001 mm and its collinear sub-moves merged. Removing a hair wider keeps a
             # grid cell at the very edge of a cut from standing here when the planner cut it.
             state.cut(a,b,radius+CLEARANCE_MARGIN)
+        if (detail is not None and (arc or sim.motion_cmd[i]=='G1') and spindle and line.feature in intended
+                and line.op and min(a[2],b[2]) < stock.top):
+            key = tool.get('type','endmill'),radius,tool.get('vangle',0)
+            if key not in profiles: profiles[key] = profile(tool,radius)
+            bands = profiles[key]
+            segments = [(a,b,0.)] if not arc else (arc_segments(a,b,line.params,sim.motion_cmd[i]=='G2',sim.scale[i])
+                                                    if plane=='G17' and incremental_centres else None)
+            if not bands or segments is None:
+                detail = None
+                warn('Material Preview uses the grid: cutter profile or arc format not modeled.')
+                continue
+            for start,end,error in segments:
+                for h,r in bands:
+                    zmin = min(start[2],end[2])+h
+                    if r<=error or zmin>=stock.top: continue
+                    detail.cut((*start[:2],start[2]+h),(*end[:2],end[2]+h),r-error)
+                    (floors if start[2]==end[2] else tip_levels).add(float(zmin))
     if last_op is not None:snapshot(last_op)
     if log:log(f"  current material: {state.nx} x {state.ny} cells, {state.resolution:g} mm, {len(snapshots)-1} operation outputs")
     return warnings,snapshots
