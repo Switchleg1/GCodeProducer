@@ -286,8 +286,9 @@ class MotionPlanner:
     def skips_air(self, state):
         """Whether surface paths may be cut short where they cross cleared ground.
 
-        Only 3D Pocket (waterfall) paths may lift, travel and be optimized: a 3D
-        Contour band is one unbroken path the cutter follows from end to end.
+        Only 3D Pocket (waterfall) paths may be cut short, reordered or sent to a
+        new place: 3D Contour lines are followed from end to end, in order (it
+        may lift at the end of a line to go back to the start of the next).
         """
         return self.skip_air and state is not None and getattr(self.config, 'kind', None) != 'contour3d'
 

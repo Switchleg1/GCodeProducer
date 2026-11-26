@@ -6,6 +6,7 @@
 
 - Operator: rename 3D Waterfall to 3D Pocket (display only; kind stays `waterfall`). 3D Contour strategies X/Y only; Meander is the cutting direction (unlock enabled for 3D Contour); same for Pocket/3D Pocket raster lines. 3D Contour lines run the whole width as one unbroken path per depth, no lifting; only 3D Pocket may lift/travel/optimize. Area order hidden.
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
+- 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
 ## Depth of cut along walls (0.2.64)
 

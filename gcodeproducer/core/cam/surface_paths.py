@@ -108,7 +108,7 @@ def fill_dips(height, reach, depth=np.inf):
 
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
                    strategy="raster_x", *, simplifier=None, direction="climb"):
-    """One depth band of 3D Contour: XYZ raster lines along X or Y, as one unbroken path.
+    """One depth band of 3D Contour: XYZ raster lines along X or Y, in order across the area.
 
     Every line runs the whole width of the selected area, from where it first
     enters the area to where it last leaves it, following the model under the
@@ -119,10 +119,11 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
     outside the selection is cut; it rises and descends vertically there.
 
     ``direction``: Meander cuts the lines alternately one way and the other,
-    each joined to the next by a move along the edge of the area. Climb and
-    Conventional cut every line the same way (climb keeps the uncut lines on
-    the cutter's right with an M3 spindle) and come back along the line just
-    cut, over cut ground, to step over to the next. Returns ``[path]``.
+    each joined to the next by a move along the edge of the area: one path.
+    Climb and Conventional cut every line the same way (climb keeps the uncut
+    lines on the cutter's right with an M3 spindle): one path per line, in
+    order, the cutter lifting at the end of each and going back to the start
+    of the next. The order is never changed and nothing is skipped.
     """
     if region.is_empty or spacing <= 0:
         return []
@@ -205,24 +206,24 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
         if direction == "meander" and cutting[0] % 2:
             rows = [(b, a) for a, b in rows]
             cuts = [cut[::-1] for cut in cuts]
+    reduce = simplifier if simplifier is not None else (lambda paths: [simplify3d(p) for p in paths])
+    if direction != "meander":
+        lines = [line for line in reduce(cuts) if len(line) >= 2]
+        if log:
+            log(f"    {len(lines)} raster lines, each cut one way, lifting back to the start of the next")
+        return lines
     joins = []
     for k in range(len(rows)-1):
-        # Meander joins the end of a line to the start of the next; one way comes back along the
-        # line just cut and joins its start to the next one's.
-        start = rows[k][1] if direction == "meander" else rows[k][0]
-        joins.append(sample(start, rows[k+1][0]))
-    reduce = simplifier if simplifier is not None else (lambda paths: [simplify3d(p) for p in paths])
+        # Meander joins the end of a line to the start of the next along the edge of the area.
+        joins.append(sample(rows[k][1], rows[k+1][0]))
     reduced = reduce(cuts + joins)
     cuts, joins = reduced[:len(cuts)], reduced[len(cuts):]
     pieces = []
     for k, cut in enumerate(cuts):
         pieces.append(cut)
         if k < len(joins):
-            if direction != "meander":
-                pieces.append(cut[::-1][1:])     # back over the line just cut: exactly the same points
             pieces.append(joins[k][1:])
     path = np.vstack(pieces)
     if log:
-        log(f"    {len(rows)} raster lines in one path of {len(path)} points"
-            + ("" if direction == "meander" else ", each line cut one way and travelled back over"))
+        log(f"    {len(rows)} raster lines in one Meander path of {len(path)} points")
     return [path] if len(path) >= 2 else []

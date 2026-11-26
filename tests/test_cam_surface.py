@@ -362,7 +362,8 @@ def test_contour3d_clears_in_depth_limited_passes_then_follows_the_surface(libse
     # The last pass follows the whole reachable floor, including its high end, and rides over the rim at
     # the top of the material where the cutter overlaps the walls, instead of stopping and lifting there.
     assert points[:, 2].min() >= -10-1e-9 and points[:, 2].max() <= 1e-9
-    assert len(paths) == 1                                     # one unbroken path per depth
+    starts = [float(p[0, 1]) for p in paths]
+    assert len(paths) > 3 and np.all(np.diff(starts) > 0)    # one line per path, in order (climb: no Meander)
     assert points[:, 1].min() > 8+RADIUS-.3 and points[:, 1].max() < 22-RADIUS+.3
     # Passes are stepover apart across the short side of the area.
     ys = np.unique(np.round(points[:, 1], 3))
@@ -503,7 +504,7 @@ def test_contour3d_raises_floor_over_retained_areas_and_leaves_stock():
     assert surface_raster(Polygon(), surface, RADIUS, 1.2, -10, 0.) == []
     # The lines cross the whole area even where the cutter rides at or above the ceiling (on material
     # an earlier depth already traced): a 3D Contour band does not stop and lift there.
-    whole, = surface_raster(region, surface, RADIUS, 1.2, -10, 0., ceiling=-5)
+    whole = np.vstack(surface_raster(region, surface, RADIUS, 1.2, -10, 0., ceiling=-5))
     assert whole[:, 0].min() < 12.01 and whole[:, 0].max() > 27.99 and whole[:, 2].max() > -5
 
 

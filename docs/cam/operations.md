@@ -313,15 +313,16 @@ finish their wall boundaries.
 the selected area, from where it enters it to where it leaves it, following
 the model under the cutter and never below the depth of the current pass. It
 does not stop, lift or skip where it crosses ground an earlier pass already
-cut: a depth band is one unbroken path. With Climb or Conventional the cutter
-comes back along the line it has just cut (exactly the same points, over cut
-ground) and steps over to the next one; with Meander it steps over at the end
-of each line. Where a line crosses a gap in the selection it rides at the top
+cut. With Meander a depth band is one unbroken path, stepping over at the end
+of each line. With Climb or Conventional every line is cut the same way; at
+its end the cutter lifts and goes back to the start of the next line. The
+lines are always cut in order, one after the next across the area: the cutter
+never skips ahead or jumps to another place. Where a line crosses a gap in the selection it rides at the top
 of the material, rising and descending vertically, so nothing outside the
 selection is cut; up a steep wall it also rises vertically. Lines at the
 start or end of a band that ride entirely on the top of the material are left
-out. Only 3D Pocket paths may lift, travel to other places and be optimized
-(Remove air cutting applies to them, not to 3D Contour).
+out. Only 3D Pocket paths may be reordered, cut short over cleared ground or
+sent to other places (Remove air cutting applies to them, not to 3D Contour).
 
 **Adaptive clearing** grows the cleared area by an even, contact-checked
 stepover from helical starts and marks the result incomplete if it cannot

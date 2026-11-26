@@ -106,26 +106,20 @@ def test_planar_clearing_raster_axis(libset, kind, strategy, axis):
 
 @pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
 @pytest.mark.parametrize('direction', ['climb', 'conventional'])
-def test_contour_one_way_lines_cut_the_same_way_and_return_over_the_cut_line(strategy, axis, direction):
-    """One unbroken path: each line cut one way, travelled back over exactly, then a step over."""
+def test_contour_one_way_lines_cut_the_same_way_in_order_across_the_whole_width(strategy, axis, direction):
+    """One path per line (the cutter lifts back to the start of the next), never reordered."""
     surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
     paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction=direction)
-    assert len(paths) == 1
-    p = paths[0]
-    p = p[np.r_[True, np.any(np.abs(np.diff(p, axis=0)) > 1e-9, axis=1)]]   # no repeated points
-    across = p[:, 1-axis]
-    rows = np.unique(np.round(across, 6))
-    assert len(rows) > 5 and np.all(np.diff(across) >= -1e-9)           # steps over one way only
+    assert len(paths) > 5
+    across = [float(p[0, 1-axis]) for p in paths]
+    assert np.all(np.diff(across) > 0)                                  # in order, stepping one way
     # Climb keeps the uncut lines on the right (M3): along X that is travelling -X, along Y +Y.
     climb_sign = -1 if axis == 0 else 1
     sign = climb_sign if direction == 'climb' else -climb_sign
-    for row in rows[:-1]:
-        on = p[np.isclose(across, row)]
-        travel = np.diff(on[:, axis])
-        first_turn = np.flatnonzero(np.sign(travel) == -sign)[0]
-        assert np.all(np.sign(travel[:first_turn]) == sign)              # the cut: one way
-        assert np.allclose(on[:first_turn+1][::-1], on[first_turn:2*first_turn+1])   # back over exactly
-        assert np.ptp(on[:first_turn+1, axis]) > (10 if axis == 0 else 6) - .01   # the whole width
+    for p in paths:
+        assert np.ptp(p[:, 1-axis]) < 1e-9                             # a straight line
+        assert np.all(np.sign(np.diff(p[:, axis])) == sign)             # cut one way
+        assert np.ptp(p[:, axis]) > (10 if axis == 0 else 6) - .01      # the whole width
 
 
 @pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])

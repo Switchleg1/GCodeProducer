@@ -39,7 +39,8 @@ depth band are visited nearest-first (each keeps its cutting direction). The
 log reports the skipped length. Material only decreases, so skipping cannot
 leave material uncut. **3D Contour is never cut short** (0.2.65): each depth
 band is one unbroken path the cutter follows from end to end, over cleared
-ground or not; only 3D Pocket lifts, travels and optimizes its paths.
+ground or not, line after line in order; only 3D Pocket reorders its paths,
+cuts them short or sends the cutter to other places.
 
 Every depth is visited across all reachable areas before descending: the
 reachable area changes with depth, so surface operations do not use
@@ -168,12 +169,12 @@ uncleared stock.
 - **Stepover:** raster spacing as a percentage of cutter diameter.
 - **Cutting strategy:** **Raster lines X** or **Raster lines Y**. Every line
   runs the whole width of the area and traces the model under the cutter down
-  to the depth of the current pass, without lifting; the whole depth band is
-  one path. See [Cutting strategy](operations.md#cutting-strategy).
+  to the depth of the current pass, without lifting or stopping along it. The
+  lines are cut in order across the area, never reordered or skipped. See [Cutting strategy](operations.md#cutting-strategy).
 - **Cutting direction** (the machine's, or *Unlock cutting direction*):
   **Meander** cuts the lines both ways, stepping over at the end of each.
-  **Climb** / **Conventional** cut every line one way and come back along the
-  line just cut, over cut ground, to step over at its start (no lifting).
+  **Climb** / **Conventional** cut every line one way, lifting at its end and
+  going back to the start of the next line.
 - **Surface heights:** the safe-height grid holds one height per cell, which a
   path crossing a slope would follow as a staircase of tiny plunges. 3D Contour
   and 3D Pocket's *Follow the surface* share one rule (`follow_heights`):
