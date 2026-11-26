@@ -17,6 +17,40 @@ class Contour3dGenerator(OperationGenerator):
                               planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier,
                               direction=run.direction, stay_down=op.stay_down_lines)
 
+    @staticmethod
+    def centre_region(run, region, planning):
+        """Where the cutter's centre may go: the selected area, set back by the cutter's radius.
+
+        The selection bounds what is cut, so the cutter's edge comes up to it
+        and the centre stays a radius inside (as for Pocket and 3D Pocket).
+        Where the selection reaches the edge of the blank, the cutter's edge
+        goes to that edge plus the operation's Material boundary: 0 touches
+        it, -1 leaves 1 mm of material, +1 passes 1 mm beyond.
+        """
+        from shapely import BufferJoinStyle
+        from shapely.geometry import box
+        op, setup = run.op, planning.setup
+        if not math.isfinite(op.material_limit):
+            raise ValueError(f"{op.name}: material boundary limit must be finite")
+        if setup.stock.allocated and abs(op.material_limit) > 1e-12:
+            lo, hi = setup.stock.bounds
+            blank = box(lo[0], lo[1], hi[0], hi[1])
+            limit = blank.buffer(op.material_limit, join_style=BufferJoinStyle.mitre)
+            if limit.is_empty:
+                raise ValueError(f"{op.name}: material boundary limit removes the whole blank")
+            if op.material_limit > 0:
+                # Only where the selection itself reaches the blank's edge.
+                beyond = limit.difference(blank).intersection(
+                    region.buffer(op.material_limit+1e-6, join_style=BufferJoinStyle.mitre))
+                region = region.union(beyond).buffer(0)
+            else:
+                region = region.intersection(limit)
+        centre = region.buffer(-run.radius, join_style=BufferJoinStyle.mitre)
+        if centre.is_empty:
+            raise ValueError(f"{op.name}: the selected area is too small for this tool "
+                             "(the cutter's edge stays inside the selection)")
+        return centre
+
     def generate(self, run, selection, planning):
         from shapely.geometry import box
         from gcodeproducer.core.jobs.path import Path
@@ -25,6 +59,7 @@ class Contour3dGenerator(OperationGenerator):
         from .surface_common import drop_surface, prepare_surface
         op, ctx, job = run.op, planning.ctx, planning.job
         region, surface_top = prepare_surface(run, selection, planning)
+        region = self.centre_region(run, region, planning)
         surface = drop_surface(run, region, planning)
         floors = [(box(lo[0], lo[1], hi[0], hi[1]).buffer(run.radius+op.stock+surface.resolution),
                    math.ceil(float(hi[2])*1000-1e-9)/1000) for lo, hi in planning.tabs]

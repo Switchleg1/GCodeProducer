@@ -262,7 +262,7 @@ class CAMEditor(QWidget):
                                 "at the sampled pass depths, within the material boundary limit. "
                                 "Use this to overlap the next operation and avoid leaving a thin wall.")
         self.material_limit = self.spin(-1000, 1000, 0)
-        self.material_limit.setToolTip("Pocket / 3D Pocket, where the region reaches the blank edge: how far the cutter's outer edge may go "
+        self.material_limit.setToolTip("Pocket / 3D Pocket / 3D Contour, where the region reaches the blank edge: how far the cutter's outer edge may go "
                                        "relative to that edge. 0 touches it, -1 leaves 1 mm of material, +1 passes 1 mm beyond. "
                                        "Default comes from Settings → Default operation settings.")
         self.strategy = QComboBox()
@@ -503,7 +503,7 @@ class CAMEditor(QWidget):
             self.stock.setValue(op.stock)
             self.overcut.setValue(op.overcut)
             self.material_limit.setValue(op.material_limit)
-            self.material_limit.setEnabled(op.kind in ("pocket", "waterfall"))
+            self.material_limit.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
             self.strategy.setCurrentIndex(self.strategy.findData(cutting_strategy(op.kind, op.strategy)))
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))

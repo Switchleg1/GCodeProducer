@@ -676,3 +676,38 @@ def test_a_full_width_first_cut_goes_the_way_the_following_passes_do(libset):
         assert all(LinearRing(np.asarray(p.points)).is_ccw != clockwise for p in rings)       # all the same way
     square = np.array([[0., 0.], [10, 0], [10, 10], [0, 10]])
     assert _side_of(square, True, square*.5 + 2.5) > 0 > _side_of(square, True, square*2 - 5.)   # ccw: inside is left
+
+
+def test_3d_contour_keeps_the_cutters_edge_inside_the_selection_and_follows_the_material_boundary(libset):
+    """The selection bounds what is cut: the centre stays a radius inside it, as for Pocket.
+
+    Where the selection reaches the blank's edge, the cutter's edge goes to
+    that edge plus Material boundary (0 touches, negative leaves material,
+    positive passes beyond). Elsewhere the boundary is the selection itself.
+    """
+    from types import SimpleNamespace
+    from gcodeproducer.core.cam.operations.contour3d_generator import Contour3dGenerator
+    job, op = surface_job(libset, kind="contour3d")
+    generate(job, StageContext())
+    xy = np.vstack([np.asarray(p.points)[:, :2] for layer in job.layers for p in layer.paths])
+    assert xy[:, 0].min() >= 10+RADIUS-1e-6 and xy[:, 0].max() <= 30-RADIUS+1e-6      # the rim is x 10..30, y 8..22
+    assert xy[:, 1].min() >= 8+RADIUS-1e-6 and xy[:, 1].max() <= 22-RADIUS+1e-6
+    assert xy[:, 0].min() < 10+RADIUS+.01 and xy[:, 1].max() > 22-RADIUS-1.3            # and right up to it
+
+    lo, hi = job.cam_setup.stock.bounds
+    blank = box(lo[0], lo[1], hi[0], hi[1])
+    planning = SimpleNamespace(setup=job.cam_setup)
+
+    def centre(region, limit):
+        run = SimpleNamespace(op=SimpleNamespace(name="c", material_limit=limit), radius=2.)
+        return Contour3dGenerator.centre_region(run, region, planning)
+
+    for limit in (0., -1., 1.5):
+        assert centre(blank, limit).bounds == pytest.approx(blank.buffer(limit-2., join_style=2).bounds)
+    inner = box(lo[0]+5, lo[1]+5, lo[0]+15, lo[1]+15)                # nowhere near the blank's edge
+    for limit in (0., -1., 1.5):
+        assert centre(inner, limit).bounds == pytest.approx(inner.buffer(-2., join_style=2).bounds)
+    half = box(lo[0], lo[1]+5, lo[0]+15, lo[1]+15)                   # reaches the blank's edge on one side only
+    assert centre(half, 1.5).bounds == pytest.approx((lo[0]-1.5+2, lo[1]+7, lo[0]+13, lo[1]+13))
+    with pytest.raises(ValueError, match="too small"):
+        centre(box(lo[0]+5, lo[1]+5, lo[0]+8, lo[1]+8), 0.)

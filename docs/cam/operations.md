@@ -37,7 +37,7 @@ boundaries, or can be retained as per-selection height-only references.
 | Profile side | Outside | Outside or Inside; row visible only for Profile |
 | Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Pocket; for 3D Contour it is left above the surface (axial) |
 | Overcut (mm) | 0 mm (global default) | Pocket and 3D Pocket only: extends the removal region outward into stock clear of the model at the sampled pass depths, so adjacent operations can overlap without leaving a thin wall |
-| Material boundary (mm) | 0 mm (global default) | Pocket / 3D Pocket: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
+| Material boundary (mm) | 0 mm (global default) | Pocket / 3D Pocket / 3D Contour: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
 
 Choose realistic end depths explicitly; an automatically created operation
 is not a safe default machining plan. For stepdown `s`, generation uses up to

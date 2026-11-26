@@ -165,7 +165,12 @@ clamp that height upward to each successive depth floor. With 0.5 mm depth/pass,
 no intermediate band starts directly at a surface several millimetres below
 uncleared stock.
 
-- **Area:** selected closed XY outlines; the cutter centre stays inside them.
+- **Area:** selected closed XY outlines. The cutter's edge stays inside them: the
+  centre keeps a cutter radius back from the outline (0.2.69; before, the centre
+  ran up to the outline and the cutter cut a radius past it). Where the
+  selection reaches the edge of the blank, the cutter's edge goes to that edge
+  plus **Material boundary**: 0 touches it, −1 leaves 1 mm of material, +1
+  passes 1 mm beyond.
 - **Stepover:** raster spacing as a percentage of cutter diameter.
 - **Cutting strategy:** **Raster lines X** or **Raster lines Y**. Every line
   runs the whole width of the area and traces the model under the cutter down

@@ -8,6 +8,10 @@
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
 - 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
+## 0.2.69
+
+- Operator: 3D Contour limited the cutter's centre, not its edge, to the selection, overcutting by a radius. `Contour3dGenerator.centre_region`: selection set back by the radius; at the blank edge the cutter's edge goes to edge + Material boundary (spinbox enabled for 3D Contour).
+
 ## 0.2.68
 
 - Operator: the first move is sometimes called a slot though one side is cleared, and then goes the wrong way; a real slot should take its direction from the way it advances. (1) `plan_engagement(floor=)`: a path following the surface now clears the planar sampler along its stretches at the pass depth (Mini Yoda Z-4: the flat ring after three lifted ones read slot 100 % over all 241 segments; now 40 %, climb). (2) Neutral paths under Climb/Conventional take the hand of the advance: stock within `SLOT_ADVANCE_REACH` radii, else the side of the next path (`_side_of`). First ring at the blank edge: was CCW against CW rings, now CW. (3) A lifted ring riding at the depth above throughout is dropped (it only rubbed the wall; same material left, checked on the Mini Yoda).
