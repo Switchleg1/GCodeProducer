@@ -59,6 +59,26 @@ class WaterfallGenerator(OperationGenerator):
         shadow = planning.shadow.at(z)
         return unary_union([shadow, *active]) if active else shadow
 
+    def adaptive_free(self, run, region, limit, z, above, planning, edge=None):
+        """(free region, active tabs) Adaptive works at depth ``z`` under the depth ``above``.
+
+        Stock the cutter could not reach at the depth above (the fillet a round
+        cutter leaves in a concave corner of that depth's walls) still stands
+        there at full height. Where this depth's wall has moved out by less
+        than that fillet, cutting it here would cut two depths at once, so it
+        is kept out of this depth's area as a wall. It depends only on the two
+        areas, not on the paths, so depths can still be planned ahead.
+        """
+        from .operations_constants import STEP_UP_TALL_MARGIN
+        free, active = self.level_free(run, region, limit, z, above, planning, edge, None, part_stock=True)
+        if above < run.start-1e-6 and not free.is_empty:
+            upper, _ = self.level_free(run, region, limit, above, above, planning, edge, None, part_stock=True)
+            reached = upper.buffer(-run.radius).buffer(run.radius+1e-3, quad_segs=16)
+            fillets = upper.difference(reached).intersection(free)
+            if fillets.area > 1e-6:
+                free = free.difference(fillets.buffer(STEP_UP_TALL_MARGIN)).buffer(0)
+        return free, active
+
     def plan_ahead(self, run, region, limit, surface_top, planning, edge=None, follow=None):
         """Adaptive clearing: plan every depth at once, in worker processes; {z: (material, plan)}.
 
@@ -76,7 +96,7 @@ class WaterfallGenerator(OperationGenerator):
             if z >= surface_top-1e-6:
                 continue
             # Adaptive plans the flat area only; the slope up to the depth above is a band of its own.
-            free, active = self.level_free(run, region, limit, z, above, planning, edge, None, part_stock=True)
+            free, active = self.adaptive_free(run, region, limit, z, above, planning, edge)
             above = z
             if active or free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
                 continue
@@ -96,12 +116,26 @@ class WaterfallGenerator(OperationGenerator):
         """
         from gcodeproducer.core.cam.paths import machining_areas
         from .pocket_generator import pocket_paths
+        from .operations_constants import DEEP_CUT_MM2, STEP_UP_TALL_MARGIN
         op = run.op
         above = run.start if above is None else above
         # Adaptive's engagement checks apply only at the planned Z.
         adaptive = op.strategy == 'adaptive'
-        free, active = self.level_free(run, region, limit, z, above, planning, edge,
-                                       None if adaptive else follow, part_stock=adaptive)
+        if adaptive and step_up is None:
+            free, active = self.adaptive_free(run, region, limit, z, above, planning, edge)
+        else:
+            free, active = self.level_free(run, region, limit, z, above, planning, edge,
+                                           None if adaptive else follow, part_stock=adaptive)
+        if adaptive and step_up is None and above < run.start-1e-6 and not free.is_empty:
+            # Stock the depth above actually left standing in this depth's area (what its wall
+            # passes could not take) would be cut here at two depths' height. Beyond a trace,
+            # it is kept out as a wall, and the depth is planned now instead of from the plan
+            # made ahead, which did not know of it.
+            standing = planning.material.planar_at(above)
+            standing = None if standing is None else standing.intersection(free)
+            if standing is not None and standing.area > DEEP_CUT_MM2:
+                free = free.difference(standing.buffer(STEP_UP_TALL_MARGIN)).buffer(0)
+                ahead = None
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
         if step_up is not None:
@@ -140,7 +174,7 @@ class WaterfallGenerator(OperationGenerator):
         that depth (left there by the depth above) is treated as a wall and
         not approached.
         """
-        from .operations_constants import STEP_UP_TALL_MARGIN
+        from .operations_constants import STEP_UP_TALL_MARGIN, STEP_UP_SHORTEST, STEP_UP_CLEAR
         ceiling = step_up[1]
         material = planning.material.planar_at(z)
         if material is None:
@@ -151,13 +185,14 @@ class WaterfallGenerator(OperationGenerator):
         outer = free.buffer(-run.radius)
         if outer.is_empty:
             return []
-        inner = outer.difference(material.intersection(free.buffer(run.radius)).buffer(run.radius, quad_segs=16))
+        # (A little further than the cutter's radius: a pass must not begin grazing the stock.)
+        inner = outer.difference(material.intersection(free.buffer(run.radius)).buffer(run.radius+STEP_UP_CLEAR, quad_segs=32))
         if inner.is_empty:
             return []
-        return self.slope_band(run, None, free, inner=inner)
+        return self.slope_band(run, None, free, inner=inner, shortest=STEP_UP_SHORTEST)
 
     @staticmethod
-    def slope_band(run, flat, wide, follow=None, z=None, ceiling=None, inner=None):
+    def slope_band(run, flat, wide, follow=None, z=None, ceiling=None, inner=None, shortest=None):
         """Passes up the slope between this depth and the one above, for adaptive clearing.
 
         The flat area is cleared first. Its cutter-centre region is then grown
@@ -172,7 +207,8 @@ class WaterfallGenerator(OperationGenerator):
         from shapely.geometry.polygon import orient
         from gcodeproducer.core.jobs.path import Path
         from gcodeproducer.core.geometry.polygon_parts import polygons
-        from .operations_constants import SLOPE_PASSES, SLOPE_STEP_MIN
+        from shapely.ops import linemerge
+        from .operations_constants import SLOPE_PASSES, SLOPE_STEP_MIN, SLOPE_SAME
         op = run.op
         offset = run.radius   # stock to leave is already kept from the part (level_free)
         inner, outer = (flat.buffer(-offset) if inner is None else inner), wide.buffer(-offset)
@@ -181,23 +217,32 @@ class WaterfallGenerator(OperationGenerator):
         step = max(SLOPE_STEP_MIN, run.diameter*op.adaptive_engagement/100)
         width = outer.hausdorff_distance(inner)
         pieces = []   # (step number, points, closed)
+        least = run.radius if shortest is None else shortest
+        previous = inner
         for k in range(1, min(SLOPE_PASSES, int(width/step) + 2) + 1):
-            grown = inner.buffer(k*step, quad_segs=8)
+            # The cutter-centre area after this pass: a step further out, but never past the wall.
+            # Its edge is the pass, less the stretches the pass before already ran (along a wall
+            # it had reached); the last pass runs along the wall itself, over less than a step.
+            grown = inner.buffer(k*step, quad_segs=8).intersection(outer)
+            done = previous.boundary.buffer(SLOPE_SAME)
             for part in polygons(grown):
                 part = orient(part, sign=1.)
                 for ring in (part.exterior, *part.interiors):
                     line = LineString(ring.coords)
-                    inside = line.intersection(outer)
-                    if inside.is_empty:
+                    fresh = line.difference(done)
+                    if fresh.is_empty:
                         continue
-                    if inside.geom_type == 'LineString' and inside.equals(line):
+                    if fresh.geom_type == 'LineString' and fresh.equals(line):
                         pieces.append((k, np.asarray(line.coords, float)[:-1], True))
                         continue
-                    for piece in getattr(inside, 'geoms', [inside]):
-                        if piece.geom_type != 'LineString' or piece.length < run.radius:
+                    if fresh.geom_type == 'MultiLineString':
+                        fresh = linemerge(fresh)
+                    for piece in getattr(fresh, 'geoms', [fresh]):
+                        if piece.geom_type != 'LineString' or piece.length < least:
                             continue
                         # GEOS keeps the line's direction in its pieces: still stock on the right.
                         pieces.append((k, np.asarray(piece.coords, float), False))
+            previous = grown
             if outer.difference(grown).area < 1e-3:
                 break
         if follow is not None:
@@ -349,7 +394,7 @@ class WaterfallGenerator(OperationGenerator):
         from gcodeproducer.core.cam.planner.pass_scheduler import drop_air_paths
         from .clearing_region import apply_overcut, clearing_part_section, validate_overcut
         from .surface_common import prepare_surface
-        from .operations_constants import SLOPE_STEP_MIN
+        from .operations_constants import SLOPE_STEP_MIN, DEEP_CUT_MM2
         op, ctx, material = run.op, planning.ctx, planning.material
         validate_overcut(op)
         region, surface_top = prepare_surface(run, selection, planning)
@@ -415,7 +460,24 @@ class WaterfallGenerator(OperationGenerator):
             raised += bool(areas) and step_up is not None
             reachable += len(areas)
             remaining = material.planar_at(z)
-            for ai, planned in enumerate(areas):
+            adaptive_depth = op.strategy == 'adaptive' and step_up is None
+            # Stock the depth above left standing (crescents along its walls): cutting it here
+            # would cut deeper than the step.
+            tall = material.planar_at(above) if adaptive_depth else None
+            deep = 0.
+
+            def batches(z=z, above=above, free=free, areas=areas):
+                yield from enumerate(areas)
+                if adaptive_depth and run.direction != 'conventional' and not planning.debug_partial:
+                    # Adaptive fronts turn off short of the walls and leave crescents along them. Taken
+                    # now, they are one step high; left, the next depth meets them at twice that. Passes
+                    # step in to the wall over what is actually left (see step_up_paths).
+                    band = self.step_up_paths(run, region, limit, z, planning, edge, free, (z, above))
+                    if band:
+                        yield len(areas), band
+
+            for ai, planned in batches():
+                remaining = material.planar_at(z) if ai >= len(areas) else remaining
                 if follow is not None:
                     # Adaptive's own paths are planned in the flat area, where the model is below this
                     # depth: lifting them would only turn grid round-off at the model's edge into 3D moves,
@@ -432,10 +494,15 @@ class WaterfallGenerator(OperationGenerator):
                     if not planned:
                         continue
                 planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining))
-                material.remove_planar(planned, z, run.radius)
+                swept = material.remove_planar(planned, z, run.radius)
+                if tall is not None and swept is not None and not tall.is_empty:
+                    deep += swept.intersection(tall).area
                 run.add_layer(planning, planned, z,
                               min(run.step, run.start-z) if step_up is None else step_up[1]-z, ai)
                 produced += 1
+            if deep > DEEP_CUT_MM2:
+                planning.add_warnings([f"{op.name}: Z{z:g} cuts {deep:.1f} mm² of stock the depth above left standing "
+                                       f"above Z{above:g} (along its walls): deeper there than the depth of cut."])
             if planning.debug_partial:
                 break
         if not produced and reachable:

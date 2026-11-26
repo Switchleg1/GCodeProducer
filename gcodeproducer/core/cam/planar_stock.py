@@ -60,8 +60,10 @@ class PlanarStock:
                 points = np.asarray(path.points)
                 depth = float(points[:, 2].max()) if points.shape[1] == 3 else z
                 self._record(self.sweep([path], radius), depth)
-            return
-        self._record(self.sweep(paths, radius), z)
+            return None
+        swept = self.sweep(paths, radius)
+        self._record(swept, z)
+        return swept
 
     def _record(self, swept, z):
         key=swept.wkb

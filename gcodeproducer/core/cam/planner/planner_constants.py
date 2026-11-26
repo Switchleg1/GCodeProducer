@@ -44,3 +44,5 @@ INWARD_ROUTE_DETOUR_DIAMETERS = 4.
 MOTION_CHUNK_SIZE = 4096     # flush serialized motion without keeping the full plan in RAM
 ENGAGED = 1e-6               # engagement above this counts as material contact
 SETTLE_PASSES = 8            # lead start-height settling iterations (flat and surface paths)
+SWEEP_GRAZE = .01  # mm; the recorded-sweep clearance check tests a cutter this much smaller in radius
+DESCENT_SIDE_CLEAR = .02  # mm beside the cutter that a rapid descent keeps clear of standing stock

@@ -98,6 +98,24 @@ upper depth left along a wall) is treated as a wall and not approached. The
 passes are cut climb; with Conventional no step-up levels are added. Turn
 **Follow the surface** off to rough at the fixed depths only.
 
+**No depth cuts stock taller than its step.** Adaptive fronts turn off short
+of the walls and leave crescents along them; a round cutter also leaves a
+fillet in every concave corner of a depth's wall. Left standing, the next
+depth met them at twice its height (Mini Yoda with Overcut 0: 234 mm of feed
+through columns 4 mm tall at Z-4, 120 mm through columns 5 mm tall at Z-5).
+Now, after each Adaptive depth, passes step in to the walls over what is
+actually left there, one engagement-limit width at a time, the last along
+the wall itself (climb only). Fillets the depth above could not reach, and
+anything else it left standing beyond a trace, are kept out of the next
+depth's area as a wall; if a depth still sweeps such stock the job warns.
+On the Mini Yoda the deepest stock cut at every level now equals its step
+(2, 2 and 1 mm), replayed from the emitted program.
+
+A rapid descent now stops clear of the highest stock the recorded cutter
+sweeps still show under the cutter (the height grid cannot see a skin
+thinner than one of its cells), and a short retract becomes a full one
+where those sweeps do not show the way clear.
+
 Mini Yoda (4 mm cutter, 10 % width, depths Z-2, Z-4, Z-5): 9 step-up levels,
 110-320 mm of cutting each, 5-9 entries each; about 250 mm³ of stair removed
 (the stairs fall to a quarter of the step); estimated machining 3,008

@@ -592,8 +592,8 @@ def test_adaptive_following_the_surface_adds_flat_step_up_levels_on_the_slope(li
     lo, hi = job.cam_setup.stock.bounds
     tool = job.tools[0].resolved()
     hits, worst, deepest = audit(nc, (lo[0], lo[1], hi[0], hi[1]), float(hi[2]), float(tool['diameter']), .05)
-    assert not hits                                       # no air-feed or rapid move meets stock
-    for layer in steps:
+    assert not hits, (hits, worst)                        # no air-feed or rapid move meets stock
+    for layer in job.layers:
         assert deepest.get(layer.index, 0.) <= layer.height + .02   # never deeper than up to the depth above
     hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
     assert hands.count('climb') > 5*hands.count('conventional')

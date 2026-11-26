@@ -11,7 +11,7 @@ from collections import Counter
 import numpy as np
 
 
-def audit(path, bounds, top, diameter, pitch, axial_limit=None):
+def audit(path, bounds, top, diameter, pitch, axial_limit=None, width_limit=None, wide=None):
     x0, y0, x1, y1 = bounds
     xs = np.arange(x0 + pitch/2, x1, pitch)
     ys = np.arange(y0 + pitch/2, y1, pitch)
@@ -57,8 +57,24 @@ def audit(path, bounds, top, diameter, pitch, axial_limit=None):
             tag = 'rapid' if words[0]=='G0' else kind
             if words[0] == 'G1' and layer is not None:
                 axial[layer] = max(axial.get(layer, 0.), float(delta.max(initial=0)))
+                if width_limit is not None and wide is not None and length:
+                    # Width of the stock this move removes, measured square to its travel.
+                    fresh = delta > .01
+                    if fresh.any():
+                        across = ((u*dy - v*dx)/math.sqrt(length))[fresh]
+                        span = float(across.max() - across.min()) + pitch
+                        if span > width_limit:
+                            entry = wide.setdefault((layer, kind), [0., 0., n, 0.])
+                            entry[0] += math.sqrt(length)
+                            if span > entry[1]:
+                                entry[1], entry[2] = span, n
+                            entry[3] += float(fresh.sum())*pitch*pitch
                 if axial_limit is not None and delta.max(initial=0) > axial_limit:
-                    entry = over.setdefault(layer, [0., 0., n, kind])
+                    entry = over.setdefault(layer, [0., 0., n, kind, []])
+                    row, col = np.unravel_index(delta.argmax(), delta.shape)
+                    spot = (round(float(xs[i+col]), 1), round(float(ys[k+row]), 1))
+                    if all(math.dist(spot, other) > 3. for other in entry[4]):
+                        entry[4].append(spot)
                     entry[0] += math.sqrt(length)
                     entry[1] += float((delta > axial_limit).sum())*pitch*pitch
             if tag in ('air','rapid') and delta.max(initial=0) > .001:
@@ -76,11 +92,20 @@ if __name__ == '__main__':
     p.add_argument('path'); p.add_argument('--bounds',nargs=4,type=float,required=True)
     p.add_argument('--top',type=float,default=0.); p.add_argument('--diameter',type=float,required=True)
     p.add_argument('--pitch',type=float,default=.2)
+    p.add_argument('--width-limit',type=float,help='report feed moves removing stock wider than this across their travel (mm)')
     p.add_argument('--axial-limit',type=float,help='report feed moves cutting stock that stands more than this above the tip (mm)')
-    result = audit(**vars(p.parse_args()))
+    args = vars(p.parse_args())
+    wide = {} if args.get('width_limit') else None
+    result = audit(**args, wide=wide)
     hits, worst, axial = result[:3]
     print((hits, worst))
     print('deepest cut per layer (mm):', {k: round(v, 3) for k, v in axial.items()})
     if len(result) > 3:
         print('feed cutting deeper than the limit, per layer [mm of feed, mm2 of stock, first line, type]:',
               {k: [round(v[0], 1), round(v[1], 2), v[2], v[3]] for k, v in result[3].items()})
+        print('where (spots at least 3 mm apart):', {k: v[4] for k, v in result[3].items()})
+    if wide is not None:
+        print('feed removing stock wider than the limit, per (layer, type) [mm of feed, widest mm, its line, mm2 removed]:')
+        for key in sorted(wide, key=lambda k: (k[0] if k[0] is not None else -1, k[1])):
+            v = wide[key]
+            print(' ', key, [round(v[0], 1), round(v[1], 2), v[2], round(v[3], 2)])

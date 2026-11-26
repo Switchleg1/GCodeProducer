@@ -52,8 +52,10 @@ class MaterialModel:
         return self.planar.at(z) if self.planar is not None else None
 
     def remove_planar(self, paths, z, radius):
+        """Record the paths' sweep at ``z``; returns it (None for paths that change height, or no stock)."""
         if self.planar is not None:
-            self.planar.remove(paths, z, radius)
+            return self.planar.remove(paths, z, radius)
+        return None
 
     def top_within(self, geom, start, end):
         return self.planar.top_within(geom, start, end) if self.planar is not None else start

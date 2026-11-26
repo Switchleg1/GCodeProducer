@@ -6,7 +6,7 @@ height: one rule set for planar and surface paths.
 """
 from __future__ import annotations
 import numpy as np
-from .planner_constants import (CLEARANCE_MARGIN, INWARD_ROUTE_CANDIDATES,
+from .planner_constants import (CLEARANCE_MARGIN, SWEEP_GRAZE, DESCENT_SIDE_CLEAR, INWARD_ROUTE_CANDIDATES,
                                 INWARD_ROUTE_DETOUR_DIAMETERS)
 
 
@@ -18,6 +18,10 @@ class LinkPlanner:
         self.short_retracts = bool(short_retracts)
         self.radius = float(radius)
         self.reach = self.radius + CLEARANCE_MARGIN   # rapid checks include emitted-coordinate rounding
+        # The recorded cutter sweeps are credited a hair under the cutter's radius, so a cutter going
+        # back along its own pass would never read as clear at its full radius. The sweep check
+        # therefore tests a cutter a graze smaller: it misses only stock touching the outermost rim.
+        self.probe = max(self.radius - SWEEP_GRAZE, self.radius/2)
 
     @staticmethod
     def linked(path, previous_end):
@@ -31,7 +35,7 @@ class LinkPlanner:
         detail = getattr(state,'hybrid',None)
         z = a[2]
         return (detail is None or z >= detail.top or
-                (z >= detail.bottom and detail.clear_at_depth(a[:2],b[:2],self.reach,z)))
+                (z >= detail.bottom and detail.clear_at_depth(a[:2],b[:2],self.probe,z)))
 
     def stay_at_depth(self, state, position, target_xy, floor):
         """Move at the current Z if it is at/above the entry floor and the sweep is clear."""
@@ -68,12 +72,32 @@ class LinkPlanner:
         target_xy = np.asarray(target_xy, float)[:2]
         top = max(state.max_height_along(position[:2], target_xy, self.reach),
                   state.height_at(target_xy, self.reach))
-        return max(min(self.safe_z, top+self.travel_clearance), float(entry_z))
+        height = max(min(self.safe_z, top+self.travel_clearance), float(entry_z))
+        # The height grid cannot see a skin thinner than a cell along a wall. If the recorded sweeps
+        # do not show the whole cutter clear along the way at that height, retract fully.
+        detail = getattr(state, 'hybrid', None)
+        if (detail is not None and detail.bottom <= height < detail.top and height < self.safe_z
+                and not detail.clear_at_depth(np.asarray(position, float)[:2], target_xy, self.probe, height)):
+            return max(self.safe_z, float(entry_z))
+        return height
 
     def descent_height(self, state, current_z, target_xy, entry_z, lead):
         """Rapid-descent target above the entry: lead clearance over a ramp start, travel clearance otherwise."""
         if state is None or not self.short_retracts:
             return float(current_z)
         clearance = self.lead_clearance if lead else self.travel_clearance
-        local = state.height_at(np.asarray(target_xy, float)[:2], self.reach)+clearance
-        return max(float(entry_z), min(float(current_z), local))
+        xy = np.asarray(target_xy, float)[:2]
+        local = state.height_at(xy, self.reach)+clearance
+        target = max(float(entry_z), min(float(current_z), local))
+        # The height grid cannot see stock thinner than a cell (a skin along a wall, the edge of the
+        # cut the entry is about to take). The blocks of the recorded cutter sweeps keep an upper
+        # bound of the stock's height that only comes down where a cutter covered the whole block:
+        # rapid no lower than clear of the highest of them under the cutter, and feed the rest.
+        detail = getattr(state, 'hybrid', None)
+        if detail is not None and target < detail.top:
+            reach = self.reach + DESCENT_SIDE_CLEAR
+            rows, columns = detail._span((xy[0]-reach, xy[1]-reach, xy[0]+reach, xy[1]+reach))
+            under = detail.high[rows, columns]
+            if under.size:
+                target = max(target, min(float(current_z), float(under.max())+clearance))
+        return target

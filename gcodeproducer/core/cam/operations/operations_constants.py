@@ -17,3 +17,7 @@ SLOPE_AIR = .01  # mm; a slope pass riding this close to the depth above is in a
 SLOPE_SLANT = 3.  # steps along the next slope pass it is joined at when there is no room to turn round onto its start
 ADAPTIVE_STEP_UPS = 3  # adaptive step-up levels between two depths when following the surface (stairs a quarter of the step)
 STEP_UP_TALL_MARGIN = .05  # mm kept from stock that stands above the depth above a step-up level
+DEEP_CUT_MM2 = 1.  # warn when a depth sweeps more than this of stock still standing at the depth above
+STEP_UP_SHORTEST = .2  # mm; shorter stretches of a step-in pass are not cut
+SLOPE_SAME = 1e-4  # mm; a stretch of a step-in pass this close to the pass before is the same stretch
+STEP_UP_CLEAR = .02  # mm; the step-in passes start this clear of the stock

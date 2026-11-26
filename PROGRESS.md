@@ -2,6 +2,15 @@
 
 - Goal: finish the saved Stormtrooper CAM session with verified adaptive coverage, then improve cutting and slicing time without relaxing engagement or clearance.
 
+## Depth of cut along walls (0.2.64)
+
+- Pinned fixture: `%TEMP%/yoda_pinned_session.json` (the operator's session changed mid-run: Waterfall is now disabled there, raster, Overcut 0). Pinned as Waterfall adaptive, Overcut 0, material boundary 0, step 2, follow on. It reproduces the 0.2.63 finding exactly (631 fronts; 234.4 mm / 24.89 mm² at Z-4, 119.9 mm / 7.9 mm² at Z-5). With Overcut 3 the finding almost vanishes (6.5 mm of feed): the crescents are at the blank edge.
+- Fix: wall passes after every Adaptive depth (`step_up_paths` at the depth itself; `slope_band` now ends with the pass along the wall and skips stretches the pass before ran); `adaptive_free` keeps the upper depth's concave-corner fillets out (plan-ahead still valid); stock still standing beyond `DEEP_CUT_MM2` is walled off and the depth planned in place; a warning if a depth sweeps such stock.
+- Result (0.05 mm replay): deepest cut per level 2/2/1.5/1/0.5, 2/2/1.5/1/0.5, 1/1/0.75/0.5/0.25 mm, none over the step; 15 layers; 3,277 s (3,178 s); 77 rapids (79); stock above model 9,436 -> 9,370 mm³; compute 448 s (337 s).
+- Found on the way: (1) the wall passes exposed rapid moves touching skins thinner than a height-grid cell (3 rapids on the Mini Yoda, 1 on the wedge fixture). `LinkPlanner.descent_height` now stops clear of the hybrid blocks' upper bound under the cutter; `travel_height` retracts fully where the sweeps do not show the way clear. No rapid contact left. (2) Since 0.2.54 the sweep check had refused nearly every stay-at-depth move (sweeps credited radius-0.002, tested at radius+0.002): 4 on the Mini Yoda. It now tests a cutter `SWEEP_GRAZE` (0.01 mm) smaller: 46.
+- Left: one entry plunge at lead feed (363.8 mm/min), rated slot by the planner but typed `air` in the NC, with the rim 0.001 mm inside sampled stock. The `--width-limit` span in `audit_linear_air.py` overstates width (it is the spread of removed cells, not a contiguous width).
+- "Travels through material where fronts meet" (operator): replay of layer 0 finds no air-feed or rapid move touching stock; the grey moves are returns over cut ground (climb cuts every front from the same end): 15.0 m of 35.6 m of feed in the first depth. Picture: `Downloads/yoda_first_depth_fronts_meet.png`.
+
 ## Step-up levels (0.2.63)
 
 - Adaptive + Follow the surface now adds planar step-up levels on slopes (`WaterfallGenerator.step_up_paths`, `ADAPTIVE_STEP_UPS = 3`): passes start where the cutter is clear of the true material at that height and step in one engagement width at a time (`slope_band(inner=)`, kept flat). Stock standing at the depth above is a wall (`STEP_UP_TALL_MARGIN`). Climb only.
