@@ -315,7 +315,10 @@ the model under the cutter and never below the depth of the current pass. It
 does not stop, lift or skip where it crosses ground an earlier pass already
 cut. With Meander a depth band is one unbroken path, stepping over at the end
 of each line. With Climb or Conventional every line is cut the same way; at
-its end the cutter lifts and goes back to the start of the next line. The
+its end the cutter lifts and goes back to the start of the next line, or, with
+**Stay down between contours** checked (off by default for 3D Contour), comes
+back along the line it has just cut, over exactly the same points, and steps
+over without lifting (slower: about 30 % more machining on the Mini Yoda). The
 lines are always cut in order, one after the next across the area: the cutter
 never skips ahead or jumps to another place. Where a line crosses a gap in the selection it rides at the top
 of the material, rising and descending vertically, so nothing outside the

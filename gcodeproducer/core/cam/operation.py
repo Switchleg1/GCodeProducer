@@ -20,6 +20,7 @@ class Operation:
     strategy: str = "contour"          # Pocket/3D Pocket: contour, raster_x/y, adaptive; 3D Contour: raster_x/y
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
+    stay_down_lines: bool = False      # 3D Contour cut one way: come back along the line just cut instead of lifting
     low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults
     standard_engagement_feed: float = 0.0
     high_engagement_feed: float = 0.0

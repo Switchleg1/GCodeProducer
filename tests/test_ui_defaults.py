@@ -300,6 +300,12 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
         assert editor.stepover.isEnabled()
         assert editor.direction_override.isEnabled()          # 3D Contour too: Meander is a direction
         assert editor.area_order.isHidden()
+        assert editor.stay_down.isEnabled() and editor.stay_down.isChecked() == (kind != "contour3d")
+        if kind == "contour3d":                     # its own flag: off by default, set by the same checkbox
+            editor.stay_down.setChecked(True)
+            assert op.stay_down_lines and op.stay_down
+            editor.stay_down.setChecked(False)
+            assert not op.stay_down_lines and op.stay_down
         assert editor.strategy.isEnabled()
         assert not hasattr(editor, "protect_model")
         assert not op.protect_model

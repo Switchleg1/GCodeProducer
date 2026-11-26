@@ -8,6 +8,13 @@
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
 - 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
+## 0.2.67
+
+- 3D Contour: `Operation.stay_down_lines` (the Stay down between contours checkbox for this kind, off by default; its own field because every saved operation carries `stay_down=True`): one way lines come back over the cut line instead of lifting.
+- 3D Pocket contours following the surface cut "meander": lifted rings are kept out of the planar material history, so each was measured as a full slot in untouched stock, read neutral and kept its planned winding (Mini Yoda: 277 conventional / 178 climb segment labels; 1,770 mm conventional of 5,400 mm). `plan_engagement` now keeps a second sampler, for the cutting hand only, that the lifted paths do clear: 445 climb / 2 conventional.
+- Found with the operator's 3D Pocket contour export: 5 feed moves typed `air` over stock up to 2 mm tall (12 after the hand fix). The second, whole-cell grid that vets air moves applied to Adaptive only; outside Adaptive, level cut and link moves are now also settled by the recorded cutter sweeps: 3 left, each with the rim 0.002 mm inside sampled stock (the sweep check tests a cutter 0.01 mm smaller so that a cutter retracing its own pass still reads clear). (Air and cut share the base feed, so this was a label and feed-class error, not a faster move.) Not fixed: the last depth of that job (step 1 mm) cuts stock 3 mm tall where its rings ride up the slope.
+- Operator again: adaptive travel "blows through stock". Not reproduced: regenerated from the session (adaptive), every air move of the first depth replayed in order with a cutter 0.03 mm oversize on a 0.04 mm grid: 14,979 mm of air travel, 0 mm over stock standing at that moment. Pictures in Downloads (`yoda_adaptive_travel_check*.png`). Need a line number or position from the Preview.
+
 ## Depth of cut along walls (0.2.64)
 
 - Pinned fixture: `%TEMP%/yoda_pinned_session.json` (the operator's session changed mid-run: Waterfall is now disabled there, raster, Overcut 0). Pinned as Waterfall adaptive, Overcut 0, material boundary 0, step 2, follow on. It reproduces the 0.2.63 finding exactly (631 fronts; 234.4 mm / 24.89 mm² at Z-4, 119.9 mm / 7.9 mm² at Z-5). With Overcut 3 the finding almost vanishes (6.5 mm of feed): the crescents are at the blank edge.

@@ -174,7 +174,9 @@ uncleared stock.
 - **Cutting direction** (the machine's, or *Unlock cutting direction*):
   **Meander** cuts the lines both ways, stepping over at the end of each.
   **Climb** / **Conventional** cut every line one way, lifting at its end and
-  going back to the start of the next line.
+  going back to the start of the next line. With **Stay down between
+  contours** checked (off by default here) the cutter instead comes back
+  along the line just cut and steps over without lifting.
 - **Surface heights:** the safe-height grid holds one height per cell, which a
   path crossing a slope would follow as a staircase of tiny plunges. 3D Contour
   and 3D Pocket's *Follow the surface* share one rule (`follow_heights`):

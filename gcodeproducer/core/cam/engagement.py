@@ -163,6 +163,11 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
     flipped = slots = handed = conflicts = 0
     previous = None
     warnings = []
+    # Material for choosing the cutting hand of paths that follow the surface. They are kept out of
+    # the main sampler (it must not certify later air moves through what they did not clear at the
+    # floor), but each one has cut its own band beside the next: measured against the main sampler,
+    # every following ring read as a full slot and kept whatever hand it was planned with.
+    hand = None
 
     def measure_link(link):
         left, right, engagement, _ = sampler.measure_path(link, False, radius)
@@ -198,6 +203,10 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         # A lifted pass does not clear its XY projection at the nominal floor.
         # Without depth-resolved history, never use it to certify a later air move.
         lifted = full.shape[1] == 3
+        if lifted and hand is None:
+            from gcodeproducer.core.cam.planner.planar_sampler import PlanarSampler
+            hand = PlanarSampler(sampler.material)
+        measurer = hand if lifted else sampler
         if spiral and len(p) > 1 and not lifted:
             # Measure successive short stretches against stock left by the earlier
             # turns, rather than classifying the whole uncut pocket as a slot.
@@ -212,7 +221,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                 sampler.remove_path(stretch, False, radius)
             measured = [np.concatenate(parts) for parts in measured]
         else:
-            measured = sampler.measure_path(p, path.closed, radius)
+            measured = measurer.measure_path(p, path.closed, radius)
         left, right, engagement, lengths = measured
         slot_limit = float(machine_data.get("slot_engagement_threshold",95))/100-1e-9
         neutral = float(lengths[engagement >= slot_limit].sum()) >= .75*max(float(lengths.sum()), 1e-12)
@@ -235,7 +244,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                     path.stay_down = False
                     path.stay_down_from = None
                     path.link_condition = None
-                measured = sampler.measure_path(p, path.closed, radius)
+                measured = measurer.measure_path(p, path.closed, radius)
                 flipped += 1
             handed += 1
         slots += int(neutral)
@@ -255,8 +264,13 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
                            f"Segments cutting the other hand are highlighted as Conflict.")
                 if message not in warnings:
                     warnings.append(message)
-        if not lifted and (not spiral or len(p) < 2):
-            sampler.remove_path(p, path.closed, radius)
+        if not spiral or len(p) < 2:
+            if not lifted:
+                sampler.remove_path(p, path.closed, radius)
+            if hand is not None:
+                hand.remove_path(p, path.closed, radius)
+        elif hand is not None:
+            hand.remove_path(p, path.closed, radius)
         loop = np.vstack((p, p[0])) if path.closed else p
         previous = loop[-1]
     if log:

@@ -139,7 +139,11 @@ class MotionPlanner:
         from .planner_constants import MERGE_PHASES
         target = np.asarray(target, float)
         sampler = self.sampler(state)
-        bounded = state is not None and getattr(self.config, 'strategy', None) == 'adaptive'
+        # Every flat-endmill operation: a move the height grid reads as air is checked against a second
+        # grid that only credits cells a cutter covered whole, and is fed as a cut where that one
+        # still shows stock (a skin thinner than a cell beside a wall, the edge of a ring).
+        bounded = (state is not None and self.config is not None and self.tool is not None
+                   and self.tool.get('type', 'endmill') == 'endmill')
         if bounded:
             if self.air_bound is None or self.air_bound[0] is not state:
                 from copy import copy
@@ -156,6 +160,7 @@ class MotionPlanner:
         if track and not hasattr(state, 'hybrid'):
             from ..hybrid_stock import HybridStock
             state.hybrid = HybridStock.for_height_state(state)
+        adaptive = getattr(self.config, 'strategy', None) == 'adaptive'
         split = split and state is not None
         steps = (split_move(self.position, target, self.radius, state.resolution, self.sample_spacing)
                  if split else (target,))
@@ -181,8 +186,18 @@ class MotionPlanner:
             c = cond
             if measured and sampler is not None:
                 c = self.model.condition(sampler, self.position, q, self.radius)
-            if bounded and c is not None and c.regime == 'air':
-                if upper.contact(self.position, q, self.radius + margin):
+            if bounded and c is not None and c.regime == 'air' and (adaptive or phase in ('cut', 'link')):
+                doubtful = upper.contact(self.position, q, self.radius + margin)
+                if doubtful and not adaptive:
+                    # The whole-cell grid also reads a cutter retracing its own pass as touching the
+                    # walls of that pass. Outside Adaptive, settle a level move by the recorded
+                    # sweeps themselves; a move that changes height keeps the grid's reading (air).
+                    detail = getattr(state, 'hybrid', None)
+                    z = float(q[2])
+                    level = abs(float(self.position[2])-z) < 1e-9
+                    doubtful = (level and detail is not None and detail.bottom <= z < detail.top
+                                and not detail.clear_at_depth(self.position[:2], q[:2], self.links.probe, z))
+                if doubtful:
                     if cleared_only:
                         flush()
                         return False

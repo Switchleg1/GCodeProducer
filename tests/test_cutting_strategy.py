@@ -123,6 +123,25 @@ def test_contour_one_way_lines_cut_the_same_way_in_order_across_the_whole_width(
 
 
 @pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
+def test_contour_one_way_staying_down_returns_over_the_cut_line_without_lifting(strategy, axis):
+    """Stay down between contours: one path, each line cut one way and travelled back over exactly."""
+    surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
+    lifting = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction='climb')
+    p, = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction='climb', stay_down=True)
+    p = p[np.r_[True, np.any(np.abs(np.diff(p, axis=0)) > 1e-9, axis=1)]]
+    across = p[:, 1-axis]
+    assert np.all(np.diff(across) >= -1e-9)                             # same order, stepping one way
+    assert len(np.unique(np.round(across, 6))) == len(lifting)
+    sign = -1 if axis == 0 else 1
+    for line in lifting[:-1]:
+        on = p[np.isclose(across, line[0, 1-axis])]
+        turn = np.flatnonzero(np.sign(np.diff(on[:, axis])) == -sign)[0]
+        assert np.allclose(on[:turn+1][[0, -1]], line[[0, -1]])         # the same cut as when lifting
+        assert np.allclose(on[:turn+1][::-1], on[turn:2*turn+1])        # and back over it exactly
+    assert not Operation(kind='contour3d').stay_down_lines              # off unless chosen; old files too
+
+
+@pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
 def test_contour_meander_alternates_and_links_without_lifting(strategy, axis):
     surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
     paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction='meander')

@@ -628,3 +628,21 @@ def test_slope_passes_finish_one_patch_before_moving_to_the_next():
         q = np.asarray(path.points)
         forward = [(a[1] + b[1])/2 for a, b in zip(q, q[1:]) if b[0] - a[0] > 4.]   # the passes themselves
         assert forward == sorted(forward) and len(forward) == 4                  # climbs it step by step
+
+
+def test_3d_pocket_contours_that_follow_the_surface_keep_the_requested_hand(libset):
+    """Wall-parallel rings riding up the slope are cut climb when Climb is asked, not alternately.
+
+    Paths that change height are kept out of the planar material history, so
+    each ring used to be measured as a full slot in untouched stock and kept
+    the winding it was planned with: half of them conventional.
+    """
+    import re
+    for direction, wanted, other in (('climb', 'climb', 'conventional'), ('conventional', 'conventional', 'climb')):
+        job, op = surface_job(libset, strategy='contour', follow_surface=True, cut_direction=direction)
+        generate(job, StageContext())
+        assert any(np.asarray(p.points).shape[1] == 3 for layer in job.layers for p in layer.paths)
+        CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+        hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
+        assert hands.count(wanted) > 5*max(1, hands.count(other))
+        assert_program_clear(job.program)

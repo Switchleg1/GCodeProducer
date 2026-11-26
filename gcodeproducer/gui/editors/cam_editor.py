@@ -282,7 +282,9 @@ class CAMEditor(QWidget):
         self.adaptive_engagement.valueChanged.connect(self._edit)
         form.addRow("Adaptive engagement (%)", self.adaptive_engagement)
         self.stay_down = QCheckBox("Stay down between contours")
-        self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists.")
+        self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists. "
+                                  "3D Contour cut one way (Climb/Conventional): come back along the line just cut instead of "
+                                  "lifting back to the start of the next (off by default).")
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
         self.follow_surface = QCheckBox("Follow the surface within each depth")
@@ -505,7 +507,8 @@ class CAMEditor(QWidget):
             self.strategy.setCurrentIndex(self.strategy.findData(cutting_strategy(op.kind, op.strategy)))
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
-            self.stay_down.setChecked(op.stay_down)
+            # (3D Contour keeps its own flag, off by default: the saved clearing flag was never its choice.)
+            self.stay_down.setChecked(op.stay_down_lines if op.kind == "contour3d" else op.stay_down)
             self.follow_surface.setChecked(op.follow_surface)
             self._update_stay_down(op)
             for key, sb in self.feed_controls.items():
@@ -521,7 +524,8 @@ class CAMEditor(QWidget):
 
     def _update_stay_down(self, op):
         self.operation_form.setRowVisible(self.adaptive_engagement, op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive')
-        self.stay_down.setEnabled(op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "adaptive"))
+        self.stay_down.setEnabled((op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "adaptive"))
+                                  or op.kind == "contour3d")
 
     def _edit(self, *_):
         if self._loading:
@@ -560,7 +564,10 @@ class CAMEditor(QWidget):
             self.direction.blockSignals(False)
         op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
         self.direction.setEnabled(op.kind in DIRECTED_KINDS and self.direction_override.isChecked())
-        op.stay_down = self.stay_down.isChecked()
+        if op.kind == "contour3d":
+            op.stay_down_lines = self.stay_down.isChecked()
+        else:
+            op.stay_down = self.stay_down.isChecked()
         op.follow_surface = self.follow_surface.isChecked()
         for key, sb in self.feed_controls.items():
             setattr(op, key, sb.value())

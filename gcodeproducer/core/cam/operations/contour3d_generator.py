@@ -15,7 +15,7 @@ class Contour3dGenerator(OperationGenerator):
         op = run.op
         return surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, z, op.stock,
                               planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier,
-                              direction=run.direction)
+                              direction=run.direction, stay_down=op.stay_down_lines)
 
     def generate(self, run, selection, planning):
         from shapely.geometry import box
