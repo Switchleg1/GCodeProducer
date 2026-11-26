@@ -163,15 +163,29 @@ new constant-engagement machining strategy or a synonym for a spiral.
 ### Winding convention: clockwise spindle
 
 With `M3`, **uncut material on the right of travel is climb**, and on the
-left is conventional. A full-width slot has no unique hand. The planner now
-subtracts completed cutter sweeps and selects subsequent direction from the
-remaining material—not from the winding of that first slot.
+left is conventional. The planner subtracts completed cutter sweeps and
+selects each path's direction from the remaining material.
+
+A full-width slot has stock on both flanks, so its own engagement names no
+hand. With Climb or Conventional it is cut **the way the passes that follow
+it will be cut** (0.2.68): with the stock it advances into on the climb (or
+conventional) side. That side is where more stock lies within three cutter
+radii of the path; where both sides are alike (a wall of the part on one),
+it is the side the next path lies on. So the first ring along the edge of
+the blank goes the same way round as the rings inside it, instead of the
+other way as before. (Meander leaves slots as planned.)
+
+3D Pocket paths that follow the surface clear the plane only along their
+stretches at the depth of the pass; those stretches now count as cut for the
+paths after them, so a flat ring beside one is no longer read, and fed, as a
+slot. A ring that would ride at the depth above all the way round cuts
+nothing and is left out.
 
 A finishing pass against an outside retained island is normally CW for climb;
 a finishing pass inside an outer retained wall is normally CCW. Those wall
 examples must **not** be blindly applied to intermediate clearing loops.
-For the annular outside-to-inside case, uncut material lies inward after the
-neutral first slot, so subsequent climb passes are **CW**. Meander alternates
+For the annular outside-to-inside case, uncut material lies inward, so the
+first slot and the climb passes after it are all **CW**. Meander alternates
 one-sided hands, not a slot-index-based CW/CCW rule.
 
 See [remaining-material direction and engagement feeds](engagement-and-feeds.md)

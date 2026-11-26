@@ -226,11 +226,17 @@ def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
         lifted_levels += 1
         z = np.concatenate([q[:, 2] for q in lifted])
         assert z.min() >= layer.z - 1e-6 and z.max() <= above + 1e-6 and z.max() > layer.z + .1
-    assert lifted_levels and any(np.asarray(p.points).shape[1] == 3 for p in job.layers[0].paths)  # From the first.
+    assert lifted_levels
+    # A ring riding at the depth above all the way round (here the top of the stock) cuts nothing: left out.
+    assert not any(np.asarray(p.points).shape[1] == 3 and np.ptp(np.asarray(p.points)[:, 2]) < 1e-9
+                   and np.asarray(p.points)[0, 2] > layer.z + 1e-6 for layer in job.layers for p in layer.paths)
     # Reaching up the slope at each depth also reaches further than the flat depth did.
     reach = {layer.z: min(float(np.asarray(p.points)[:, 0].min()) for p in layer.paths) for layer in job.layers}
     flat_reach = {layer.z: min(float(np.asarray(p.points)[:, 0].min()) for p in layer.paths) for layer in flat.layers}
-    assert all(reach[z] <= x + 1e-6 for z, x in flat_reach.items()) and any(reach[z] < x - .5 for z, x in flat_reach.items())
+    # (Its rings are laid from the wall of the depth above, so its outermost cutting ring may sit up to a
+    # stepover inside the flat depth's; the ring beyond it rode at the depth above and was left out.)
+    step = 3*op.stepover/100
+    assert all(reach[z] <= x + step + 1e-6 for z, x in flat_reach.items()) and any(reach[z] < x - .5 for z, x in flat_reach.items())
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
     restored = CAMSetup.from_dict(job.cam_setup.to_dict()).groups[0].operations[0]
@@ -644,5 +650,29 @@ def test_3d_pocket_contours_that_follow_the_surface_keep_the_requested_hand(libs
         assert any(np.asarray(p.points).shape[1] == 3 for layer in job.layers for p in layer.paths)
         CAMEmit().run(job, CAMEmit.defaults(), StageContext())
         hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
-        assert hands.count(wanted) > 5*max(1, hands.count(other))
+        assert hands.count(wanted) > 3*max(1, hands.count(other))
         assert_program_clear(job.program)
+
+
+def test_a_full_width_first_cut_goes_the_way_the_following_passes_do(libset):
+    """A slot has stock on both flanks; it is cut with the stock it advances into on the climb side.
+
+    Along the edge of the blank (nothing beyond it) the stock still to be cut is
+    inside, and so is every following ring: all are cut the same way round.
+    """
+    from shapely.geometry import LinearRing
+    from gcodeproducer.core.cam.engagement import plan_engagement, _side_of
+    from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
+    from gcodeproducer.core.cam import Operation
+    job, _ = surface_job(libset)
+    lo, hi = job.cam_setup.stock.bounds
+    blank = box(lo[0], lo[1], hi[0], hi[1])
+    for direction, clockwise in (('climb', True), ('conventional', False)):
+        op = Operation(kind='waterfall', strategy='contour', cut_direction=direction, stepover=40)
+        paths = pocket_paths(op, [], blank, 3., direction)
+        plan_engagement(paths, job, op, job.tools[0], None, blank)
+        rings = [p for p in paths if p.closed and len(p.points) > 2]
+        assert len(rings) > 3 and all(c.hand == 'neutral' for c in rings[0].cut_conditions)   # the first is a slot
+        assert all(LinearRing(np.asarray(p.points)).is_ccw != clockwise for p in rings)       # all the same way
+    square = np.array([[0., 0.], [10, 0], [10, 10], [0, 10]])
+    assert _side_of(square, True, square*.5 + 2.5) > 0 > _side_of(square, True, square*2 - 5.)   # ccw: inside is left

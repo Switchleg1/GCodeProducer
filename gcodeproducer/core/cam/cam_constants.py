@@ -36,6 +36,9 @@ SURFACE_CHORD_SAMPLES_MAX = 64
 SURFACE_MOVE_STEP_RADIUS = .5
 
 ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS = 4.
+SLOT_ADVANCE_REACH = 3.     # cutter radii to each side searched for the stock a full-width cut advances into
+SLOT_ADVANCE_SHARE = .2     # least imbalance between the sides (or of the next path's points) that decides it
+SLOT_ADVANCE_SAMPLES = 48   # points of the next path asked which side of the slot they lie on
 HYBRID_BLOCK_MM = .5
 HYBRID_TILE_MM = 4.
 HYBRID_SECTION_TOLERANCE = .005

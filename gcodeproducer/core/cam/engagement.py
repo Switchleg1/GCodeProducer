@@ -8,7 +8,8 @@ axial engagement, holders and fixtures are not modelled.
 """
 from __future__ import annotations
 
-from gcodeproducer.core.cam.cam_constants import FEED_FIELDS, ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS
+from gcodeproducer.core.cam.cam_constants import (FEED_FIELDS, ADAPTIVE_ENGAGEMENT_BATCH_DIAMETERS,
+                                                  SLOT_ADVANCE_REACH, SLOT_ADVANCE_SHARE, SLOT_ADVANCE_SAMPLES)
 from collections import Counter
 import math, numpy as np
 from shapely import covers, intersection, intersects, length, linestrings, prepare, total_bounds
@@ -132,6 +133,29 @@ def _hand(left, right, engagement, machine=None):
     return "climb" if difference > 0 else "conventional"
 
 
+def _side_of(points, closed, others):
+    """Which side of a path other points lie on: positive left of its travel, negative right, 0 unclear."""
+    q = np.vstack((points, points[0])) if closed else np.asarray(points, float)
+    a, b = q[:-1], q[1:]
+    d = b-a
+    size = np.einsum('ij,ij->i', d, d)
+    keep = size > 1e-18
+    a, d, size = a[keep], d[keep], size[keep]
+    if not len(a) or not len(others):
+        return 0.
+    sample = others[np.linspace(0, len(others)-1, min(len(others), SLOT_ADVANCE_SAMPLES), dtype=int)]
+    votes = 0.
+    for point in sample:
+        w = point-a
+        t = np.clip(np.einsum('ij,ij->i', w, d)/size, 0, 1)
+        off = w-t[:, None]*d
+        k = int(np.argmin(np.einsum('ij,ij->i', off, off)))
+        cross = d[k, 0]*off[k, 1]-d[k, 1]*off[k, 0]
+        if abs(cross) > 1e-9:
+            votes += 1. if cross > 0 else -1.
+    return votes/len(sample) if abs(votes) > SLOT_ADVANCE_SHARE*len(sample) else 0.
+
+
 def _conditions(measured, operation, tool, neutral=False, machine=None):
     """Compatibility wrapper: the shared EngagementModel classifies every sampler's measurement."""
     from gcodeproducer.core.cam.planner.engagement_model import EngagementModel
@@ -139,11 +163,16 @@ def _conditions(measured, operation, tool, neutral=False, machine=None):
     return EngagementModel(operation, tool, machine or {}).classify(left, right, engagement, neutral)
 
 
-def plan_engagement(paths, job, operation, tool, log=None, initial_material=None):
+def plan_engagement(paths, job, operation, tool, log=None, initial_material=None, floor=None):
     """Orient/annotate operation paths using incremental planar material removal.
 
     Measurement is the material model's planar sampler; classification is the
     shared :class:`EngagementModel` used by every operation and the XYZ sampler.
+
+    floor: the depth of this pass. A path that follows the surface clears the
+    plane only along its stretches at that depth; given it, those stretches are
+    taken out of the material the later paths are measured against (without it
+    such a path clears nothing there, and a flat pass beside it reads as a slot).
     """
     from gcodeproducer.core.cam.planner.engagement_model import EngagementModel
     from gcodeproducer.core.cam.planner.material_model import MaterialModel
@@ -180,7 +209,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
     def allowed(condition):
         return mode not in ('climb', 'conventional') or condition.hand in (mode, 'air', 'neutral')
 
-    for path in paths:
+    for index, path in enumerate(paths):
         full = np.asarray(path.points, float)
         p = full[:, :2]  # measured in plan; a path that follows the surface keeps its own Z
         path.link_condition = None
@@ -233,7 +262,19 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         if mode == "meander" and not neutral and abs(vote) > 1e-9 and not both_ways:
             # (An adaptive chain, or Meander raster lines, are cut both ways by design: nothing to alternate.)
             desired = "climb" if handed % 2 == 0 else "conventional"
-        if mode and not neutral and abs(vote) > 1e-9:
+        if neutral and mode in ("climb", "conventional") and not spiral and len(p) > 1:
+            # A full-width cut has stock on both flanks, so its own engagement names no hand. It is
+            # the first move of an advance, though: cut it as the passes that follow will be cut,
+            # with the stock still to be taken (the side it advances into) on the climb side.
+            wide = measurer.measure_path(p, path.closed, SLOT_ADVANCE_REACH*radius)
+            beside = float(((wide[1]-wide[0])*wide[3]).sum())
+            total = float(((wide[1]+wide[0])*wide[3]).sum())
+            if abs(beside) <= SLOT_ADVANCE_SHARE*max(total, 1e-12):
+                # Stock on both sides alike (a wall of the part on one): go by where the next path lies.
+                following = paths[index+1] if index+1 < len(paths) else None
+                beside = -_side_of(p, path.closed, np.asarray(following.points, float)[:, :2])                     if following is not None else 0.
+            vote = beside
+        if mode and (not neutral or mode in ("climb", "conventional")) and abs(vote) > 1e-9:
             reverse = (desired == "climb" and vote < 0) or (desired == "conventional" and vote > 0)
             # A spiral must enter at its already chosen inner start, not run wall-in.
             if reverse and not spiral:
@@ -267,6 +308,12 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         if not spiral or len(p) < 2:
             if not lifted:
                 sampler.remove_path(p, path.closed, radius)
+            elif floor is not None:
+                low = full[:, 2] <= floor+1e-6
+                both = low[:-1] & low[1:]
+                edges = np.flatnonzero(np.diff(np.r_[False, both, False].astype(int)))
+                for first, last in zip(edges[::2], edges[1::2]):
+                    sampler.remove_path(p[first:last+1], False, radius)
             if hand is not None:
                 hand.remove_path(p, path.closed, radius)
         elif hand is not None:

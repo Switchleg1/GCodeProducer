@@ -485,6 +485,9 @@ class WaterfallGenerator(OperationGenerator):
                     planned = [self.lift(path, z, ceiling, follow, run)
                                if op.strategy != 'adaptive' or getattr(path, 'slope', False) else path
                                for path in planned]
+                    planned = [path for path in planned if path is not None]
+                    if not planned:
+                        continue
                     lifted += sum(np.asarray(path.points).shape[1] == 3 for path in planned)
                 planned[0].stay_down, planned[0].stay_down_from = False, None
                 # Adaptive paths were planned against this same material and only cut where it is;
@@ -493,7 +496,7 @@ class WaterfallGenerator(OperationGenerator):
                     planned = drop_air_paths(planned, remaining, run.radius, op.name, ctx.log)
                     if not planned:
                         continue
-                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining))
+                planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining, floor=z))
                 swept = material.remove_planar(planned, z, run.radius)
                 if tall is not None and swept is not None and not tall.is_empty:
                     deep += swept.intersection(tall).area
@@ -555,6 +558,10 @@ class WaterfallGenerator(OperationGenerator):
         depth = np.clip(follow_heights(surface, dense, run.radius, run.op.stock, floors), z, ceiling)
         if depth.max() <= z+1e-6:
             return path
+        if depth.min() >= ceiling-1e-6:
+            # Riding at the depth above all the way (along a wall the model stands above): that
+            # depth's own pass cleared it, so this one would only rub the wall. Left out.
+            return None
         points = np.column_stack((dense, depth))
         if path.closed:
             top = int(np.argmax(points[:-1, 2]))
