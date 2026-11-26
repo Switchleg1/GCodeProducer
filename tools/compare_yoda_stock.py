@@ -16,11 +16,11 @@ from gcodeproducer.core.cam.sweep_stock import SweepStock
 from gcodeproducer.core.cam.hybrid_stock import HybridStock
 
 
-def moves(path):
+def moves(path, through_layer=0):
     p = [np.nan]*3
     with path.open() as f:
         for line in f:
-            if line.startswith(';LAYER:1'):
+            if line.startswith(';LAYER:') and int(line.split(':')[1])>through_layer:
                 break
             words = line.partition(';')[0].split()
             if not words or words[0] in ('G21','G90') or not words[0].startswith('G'):

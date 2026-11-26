@@ -87,8 +87,13 @@ class WaterfallGenerator(OperationGenerator):
                             run.direction, stock_applied=True)
         return {z: (material, plan) for (z, _, material, _), plan in zip(jobs, plans)}
 
-    def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None, above=None, follow=None):
-        """(free region, areas) the cutter can clear at ``z``."""
+    def level_paths(self, run, region, limit, z, planning, edge=None, ahead=None, above=None, follow=None,
+                    step_up=None):
+        """(free region, areas) the cutter can clear at ``z``.
+
+        step_up: (level below, depth above) for an Adaptive step-up level
+        between two depths: see step_up_paths.
+        """
         from gcodeproducer.core.cam.paths import machining_areas
         from .pocket_generator import pocket_paths
         op = run.op
@@ -99,13 +104,17 @@ class WaterfallGenerator(OperationGenerator):
                                        None if adaptive else follow, part_stock=adaptive)
         if free.is_empty or free.buffer(-(run.radius+op.stock)).is_empty:
             return free, None
+        if step_up is not None:
+            band = self.step_up_paths(run, region, limit, z, planning, edge, free, step_up)
+            return free, [band] if band else []
         try:
             options = {}
             if op.strategy == 'adaptive':
                 material = planning.material.planar_at(z)
                 options = dict(material=material, cutting=run.cutting,
                                tool_type=run.tool.get('type', 'endmill'), tabs=bool(active),
-                               depth_step=min(run.step, run.start-z), warn=planning.mark_partial, depth_label=f'Z{z:g}', stock_applied=True)
+                               depth_step=min(run.step, run.start-z), warn=planning.mark_partial,
+                               depth_label=f'Z{z:g}', stock_applied=True)
                 early = (ahead or {}).get(z)
                 if early is not None and _same(early[0], material):
                     options['planned'] = early[1]
@@ -119,8 +128,36 @@ class WaterfallGenerator(OperationGenerator):
         areas = machining_areas(paths, "pocket", free) if paths else []
         return free, areas
 
+    def step_up_paths(self, run, region, limit, z, planning, edge, free, step_up):
+        """Planar passes at ``z`` over the stair a deeper level left beside the part.
+
+        The level below cleared its own free area; this level's free area
+        reaches further in to the model. Starting from where the cutter is
+        clear of the material actually left at ``z``, passes step in to the
+        model one engagement-limit width at a time (slope_band, kept flat),
+        so each takes the step beside it. The cutter never works deeper than
+        the distance to the depth above (step_up[1]): stock still standing at
+        that depth (left there by the depth above) is treated as a wall and
+        not approached.
+        """
+        from .operations_constants import STEP_UP_TALL_MARGIN
+        ceiling = step_up[1]
+        material = planning.material.planar_at(z)
+        if material is None:
+            return []
+        tall = planning.material.planar_at(ceiling)
+        if tall is not None and not tall.is_empty:
+            free = free.difference(tall.intersection(free).buffer(STEP_UP_TALL_MARGIN)).buffer(0)
+        outer = free.buffer(-run.radius)
+        if outer.is_empty:
+            return []
+        inner = outer.difference(material.intersection(free.buffer(run.radius)).buffer(run.radius, quad_segs=16))
+        if inner.is_empty:
+            return []
+        return self.slope_band(run, None, free, inner=inner)
+
     @staticmethod
-    def slope_band(run, flat, wide, follow=None, z=None, ceiling=None):
+    def slope_band(run, flat, wide, follow=None, z=None, ceiling=None, inner=None):
         """Passes up the slope between this depth and the one above, for adaptive clearing.
 
         The flat area is cleared first. Its cutter-centre region is then grown
@@ -138,7 +175,7 @@ class WaterfallGenerator(OperationGenerator):
         from .operations_constants import SLOPE_PASSES, SLOPE_STEP_MIN
         op = run.op
         offset = run.radius   # stock to leave is already kept from the part (level_free)
-        inner, outer = flat.buffer(-offset), wide.buffer(-offset)
+        inner, outer = (flat.buffer(-offset) if inner is None else inner), wide.buffer(-offset)
         if inner.is_empty or outer.difference(inner).area < 1e-3:
             return []
         step = max(SLOPE_STEP_MIN, run.diameter*op.adaptive_engagement/100)
@@ -312,6 +349,7 @@ class WaterfallGenerator(OperationGenerator):
         from gcodeproducer.core.cam.planner.pass_scheduler import drop_air_paths
         from .clearing_region import apply_overcut, clearing_part_section, validate_overcut
         from .surface_common import prepare_surface
+        from .operations_constants import SLOPE_STEP_MIN
         op, ctx, material = run.op, planning.ctx, planning.material
         validate_overcut(op)
         region, surface_top = prepare_surface(run, selection, planning)
@@ -339,22 +377,42 @@ class WaterfallGenerator(OperationGenerator):
             ctx.log(f"  {op.name}: the reachable area changes with depth; machining each depth across all areas")
         produced = reachable = lifted = 0
         follow = None
+        step_ups = 0
         if op.follow_surface:
             if op.strategy == 'adaptive':
-                ctx.log(f'  {op.name}: Adaptive roughs at fixed depths; use a separate finishing operation for slopes.')
+                # Adaptive's engagement is planned in a plane. So the slope between two depths is taken
+                # by step-up levels: after each depth, planar adaptive passes at heights between it and
+                # the depth above, each against the material left there (a band beside the model).
+                from .operations_constants import ADAPTIVE_STEP_UPS
+                if run.direction == 'conventional':
+                    ctx.log(f'  {op.name}: step-up levels on slopes are cut climb only; none added.')
+                else:
+                    step_ups = ADAPTIVE_STEP_UPS
             else:
                 follow = self.follow_setup(run, region, planning)
         ahead = self.plan_ahead(run, region, limit, surface_top, planning, edge, follow)
-        above = run.start
+        levels, above = [], run.start
         for i in range(run.count):
             z = run.depth(i)
             if z >= surface_top-1e-6:
                 continue
-            free, areas = self.level_paths(run, region, limit, z, planning, edge, ahead, above, follow)
-            ceiling, above = above, z
-            if areas is None:
-                ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
+            levels.append((z, above, None))
+            rise = (above-z)/(step_ups+1)
+            if step_ups and rise >= SLOPE_STEP_MIN:
+                heights = [z] + [round(z+k*rise, 3) for k in range(1, step_ups+1)]
+                levels.extend((u, above, (lower, above)) for lower, u in zip(heights, heights[1:]))
+            above = z
+        raised = 0
+        for z, above, step_up in levels:
+            if step_up is not None and z >= surface_top-1e-6:
                 continue
+            free, areas = self.level_paths(run, region, limit, z, planning, edge, ahead, above, follow, step_up)
+            ceiling = above
+            if areas is None:
+                if step_up is None:
+                    ctx.log(f"  {op.name}: Z{z:g} has no area the cutter can reach above the model surface; pass skipped")
+                continue
+            raised += bool(areas) and step_up is not None
             reachable += len(areas)
             remaining = material.planar_at(z)
             for ai, planned in enumerate(areas):
@@ -375,7 +433,8 @@ class WaterfallGenerator(OperationGenerator):
                         continue
                 planning.add_warnings(plan_engagement(planned, planning.job, op, run.tool, None, remaining))
                 material.remove_planar(planned, z, run.radius)
-                run.add_layer(planning, planned, z, min(run.step, run.start-z), ai)
+                run.add_layer(planning, planned, z,
+                              min(run.step, run.start-z) if step_up is None else step_up[1]-z, ai)
                 produced += 1
             if planning.debug_partial:
                 break
@@ -388,7 +447,8 @@ class WaterfallGenerator(OperationGenerator):
                              "(link it to a lower edge/face) and that the cutter fits.")
         ctx.log(f"  {op.name}: 3D Waterfall limited by the model surface, {produced} area/depth passes, "
                 f"Z{run.start:g} to Z{run.end:g}" + (f"; {lifted} paths follow the surface up to the depth above"
-                                                      if follow else ""))
+                                                      if follow else "")
+                + (f"; {raised} adaptive step-up levels on the slopes" if raised else ""))
 
     @staticmethod
     def follow_setup(run, region, planning):

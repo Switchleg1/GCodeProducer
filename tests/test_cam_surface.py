@@ -238,7 +238,7 @@ def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
 
 
 @pytest.mark.parametrize("strategy", ["raster_x", "adaptive"])
-def test_waterfall_varies_depth_for_raster_but_not_adaptive(libset, strategy):
+def test_waterfall_varies_depth_for_raster_and_adaptive_stays_planar(libset, strategy):
     job, op = surface_job(libset, follow_surface=True, strategy=strategy)
     generate(job, StageContext())
     assert_clear_of_model(job)
@@ -558,22 +558,43 @@ def test_surface_operation_reports_when_nothing_is_reachable(libset):
         generate(job, StageContext())
 
 
-def test_adaptive_with_follow_enabled_only_roughs_at_fixed_depths(libset):
+def test_adaptive_following_the_surface_adds_flat_step_up_levels_on_the_slope(libset, tmp_path):
+    """Between two depths, flat passes step in to the model over the stair the lower depth left.
+
+    They stay planar (the engagement is measured in the plane), never cut
+    deeper than the distance to the depth above, take only light cuts, and
+    the emitted program touches no stock on an air or rapid move.
+    """
     import re
     from gcodeproducer.core.gcode.simulation import simulate
+    from tools.audit_linear_air import audit
+    plain, _ = surface_job(libset, follow_surface=False, strategy='adaptive')
+    generate(plain, StageContext())
+    depths = sorted({round(float(layer.z), 3) for layer in plain.layers})
     job, op = surface_job(libset, follow_surface=True, strategy='adaptive')
-    ctx = StageContext()
-    generate(job, ctx)
+    generate(job, StageContext())
     assert_clear_of_model(job)
-    band = [layer for layer in job.layers if layer.paths and all(np.asarray(p.points).shape[1] == 3 for p in layer.paths)]
-    assert not band
     assert job.layers and all(np.asarray(p.points).shape[1] == 2 for layer in job.layers for p in layer.paths)
+    steps = [layer for layer in job.layers if round(float(layer.z), 3) not in depths]
+    assert steps                                          # levels between the depths
+    assert sorted({round(float(layer.z), 3) for layer in job.layers if layer not in steps}) == depths
     CAMEmit().run(job, CAMEmit.defaults(), StageContext())
     assert_program_clear(job.program)
     sim = simulate(job.program)
+    indices = {layer.index for layer in steps}
+    cut = sum(sim.dist_xy[i] for i, line in enumerate(job.program.lines)
+              if line.cmd == 'G1' and line.layer in indices and line.feature in ('hsm', 'cut', 'slot', 'high_engagement'))
     heavy = sum(sim.dist_xy[i] for i, line in enumerate(job.program.lines)
-                if line.cmd == 'G1' and line.feature in ('slot', 'high_engagement') and abs(sim.z[i]-sim.pz[i]) > 1e-6)
-    assert heavy < 1.                                     # no pass cuts under the one beside it
+                if line.cmd == 'G1' and line.layer in indices and line.feature in ('slot', 'high_engagement'))
+    assert cut > 10. and heavy < .05*cut                  # they cut, and lightly
+    nc = tmp_path / 'step.nc'
+    nc.write_text(job.program.to_text(), encoding='utf8')
+    lo, hi = job.cam_setup.stock.bounds
+    tool = job.tools[0].resolved()
+    hits, worst, deepest = audit(nc, (lo[0], lo[1], hi[0], hi[1]), float(hi[2]), float(tool['diameter']), .05)
+    assert not hits                                       # no air-feed or rapid move meets stock
+    for layer in steps:
+        assert deepest.get(layer.index, 0.) <= layer.height + .02   # never deeper than up to the depth above
     hands = re.findall(r'engagement; (climb|conventional)', job.program.to_text())
     assert hands.count('climb') > 5*hands.count('conventional')
 

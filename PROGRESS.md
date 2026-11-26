@@ -2,6 +2,22 @@
 
 - Goal: finish the saved Stormtrooper CAM session with verified adaptive coverage, then improve cutting and slicing time without relaxing engagement or clearance.
 
+## Step-up levels (0.2.63)
+
+- Adaptive + Follow the surface now adds planar step-up levels on slopes (`WaterfallGenerator.step_up_paths`, `ADAPTIVE_STEP_UPS = 3`): passes start where the cutter is clear of the true material at that height and step in one engagement width at a time (`slope_band(inner=)`, kept flat). Stock standing at the depth above is a wall (`STEP_UP_TALL_MARGIN`). Climb only.
+- Tried first and discarded: planning the step-up band with the wavefront planner. With the band as its only material it left 25-71 mm² per level (wall passes refused in cascades; the thin pocket round the band made the inset rings vanish), and planning against a subset of the material produced 2 air-feed contacts of 0.5 mm in the emitted NC. Reverted.
+- Mini Yoda, read-only session: complete, no safety findings, 12 layers, 3,178 s (3,008 s fixed-depth). `tools/audit_linear_air.py` at 0.05 mm: no air-feed or rapid contact; deepest cut per step-up level 1.5/1.0/0.5, 1.5/1.0/0.5, 0.75/0.5/0.25 mm. Stock above the model 9,688 -> 9,436 mm³ (about 250 mm³ of stair was there to take). 2-25 % of step-up cutting reads conventional.
+- **Finding, not fixed (present before this change):** `--axial-limit 2.05` shows fixed-depth Adaptive cutting stock that stands higher than the step: at Z-4, 234 mm of feed through 24.9 mm² of columns up to 4 mm tall; at Z-5, 120 mm through 7.9 mm² up to 5 mm tall. These are the crescents each depth leaves along the walls, met again by the next depth at full height. Radially thin (classified hsm), axially up to 2-5 times the step.
+- The XYZ (true 3D) experiment below stays offline; it did not reach coverage.
+
+## XYZ experiment (0.2.62)
+
+`tools/check_yoda_xyz.py --all-depths --targeted-passes 8` projects each legal sampled tool centre's feasible height across its disk to obtain a target stock-column height and witness centre. It includes permitted overcut centres and flat-floor placements. Trials carry earlier XYZ removal forward and page past unsuccessful target batches. Sampled excess before/after at Z−2: 184.709/158.605 mm³; Z−4: 220.559/207.507; Z−5: 200.774/183.546. These values use different depth bands and are not additive or comparable to the earlier slope proxy. All depths made cuts; peak width 0.39963 mm; no sampled trial entry/link hits. This is geometric placement accessibility, not a proven path to each placement. Substantial residual remains; no production change or machine qualification.
+
+## XYZ experiment (0.2.61)
+
+`tools/check_yoda_xyz.py --layer 0|1|2` branches independently from the end of each fixed-depth layer in the Mini Yoda NC. A residual-targeted cut can now raise its tip until the entry disk and the part of the capsule outside the permitted engagement strip clear the live stock. The final quantized junction checks are unchanged. First layer: slope-excess proxy 1.5242 → 0.4304 mm³ (four front plus four targeted passes); second: 0.5056 → 0.4210 mm³, then no proposals accepted; third: no positive excess in the slope mask. No sampled entry/link contact on these branches. The proxy compares column heights with a cutter-centre surface bound; it is not full reachable residual volume. Results do not yet demonstrate exhaustive coverage, a single chronological multi-depth XYZ program, or emitted-NC equivalence. Not enabled for production.
+
 ## Current state (0.2.20)
 
 - **Adaptive clearing in the application uses the wavefront** (`gcodeproducer/core/cam/wavefront/`), for Pocket and 3D Waterfall, now limited by engaged width (the setting's own definition).

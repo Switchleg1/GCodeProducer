@@ -86,9 +86,27 @@ contours) the material left above the model after the Waterfall fell from
 18 s more compute. A wall that is vertical or overhangs is unchanged: a flat
 cutter cannot reach it from above.
 
-**Adaptive roughing stays at fixed depths.** Follow the surface does not add
-intermediate slope passes to an Adaptive operation. Material between depth
-steps is left for a separate finishing operation with its own depth and feed.
+With **Adaptive** clearing the slope is taken by **step-up levels**, not by
+lifting paths. Adaptive plans its engagement in a plane, so every one of its
+paths stays at one height. After each depth, three flat levels are added
+between it and the depth above (a quarter of the step apart). At each, passes
+start where the cutter is clear of the material actually left at that height
+and step in towards the model, one engagement-limit width per pass, over the
+stair the lower depth left. A level never cuts deeper than the distance up
+to the depth above: stock that still stands at the depth above (crescents the
+upper depth left along a wall) is treated as a wall and not approached. The
+passes are cut climb; with Conventional no step-up levels are added. Turn
+**Follow the surface** off to rough at the fixed depths only.
+
+Mini Yoda (4 mm cutter, 10 % width, depths Z-2, Z-4, Z-5): 9 step-up levels,
+110-320 mm of cutting each, 5-9 entries each; about 250 mm³ of stair removed
+(the stairs fall to a quarter of the step); estimated machining 3,008
+to 3,178 s. Replayed from the emitted program on a 0.05 mm grid: no stock
+met on an air-feed or rapid move, and the deepest stock cut at the step-up
+levels is 1.5, 1.0, 0.5 mm (0.75, 0.5, 0.25 mm at the last depth), exactly
+the distance to the depth above. Of their cutting moves 2-25 % read as
+conventional (mostly the joins between passes) and are highlighted as
+Conflict. This is a geometric replay, not a qualification for a machine.
 
 Nested selected outlines alternate between boundary and island. Overlapping
 outlines merge. Exact projected upper triangles protect overhangs; undercuts

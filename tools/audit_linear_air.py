@@ -11,7 +11,7 @@ from collections import Counter
 import numpy as np
 
 
-def audit(path, bounds, top, diameter, pitch):
+def audit(path, bounds, top, diameter, pitch, axial_limit=None):
     x0, y0, x1, y1 = bounds
     xs = np.arange(x0 + pitch/2, x1, pitch)
     ys = np.arange(y0 + pitch/2, y1, pitch)
@@ -21,8 +21,13 @@ def audit(path, bounds, top, diameter, pitch):
     hits = Counter()
     worst = {}
     kind = ''
+    layer = None
+    over = {}    # layer: [feed mm cutting deeper than axial_limit, sampled mm2 of such stock, first line]
+    axial = {}   # layer: deepest stock any feed move of that layer cut through (mm above the cutter's tip)
     with open(path) as src:
         for n, raw in enumerate(src, 1):
+            if raw.startswith(';LAYER:'):
+                layer = int(raw.split(':')[1])
             if raw.startswith(';TYPE:'):
                 kind = raw.strip()[6:]
             words = raw.partition(';')[0].split()
@@ -50,6 +55,12 @@ def audit(path, bounds, top, diameter, pitch):
                 mask = u*u+v*v<=r*r; floor = min(c,z)
             delta = np.where(mask,h-floor,0.)
             tag = 'rapid' if words[0]=='G0' else kind
+            if words[0] == 'G1' and layer is not None:
+                axial[layer] = max(axial.get(layer, 0.), float(delta.max(initial=0)))
+                if axial_limit is not None and delta.max(initial=0) > axial_limit:
+                    entry = over.setdefault(layer, [0., 0., n, kind])
+                    entry[0] += math.sqrt(length)
+                    entry[1] += float((delta > axial_limit).sum())*pitch*pitch
             if tag in ('air','rapid') and delta.max(initial=0) > .001:
                 hits[tag]+=1
                 peak = float(delta.max())
@@ -57,7 +68,7 @@ def audit(path, bounds, top, diameter, pitch):
                     row,col = np.unravel_index(delta.argmax(),delta.shape)
                     worst[tag]=(peak,n,float(xs[i+col]),float(ys[k+row]))
             np.minimum(h,floor,out=h,where=mask)
-    return dict(hits),worst
+    return (dict(hits),worst,axial) if axial_limit is None else (dict(hits),worst,axial,over)
 
 
 if __name__ == '__main__':
@@ -65,4 +76,11 @@ if __name__ == '__main__':
     p.add_argument('path'); p.add_argument('--bounds',nargs=4,type=float,required=True)
     p.add_argument('--top',type=float,default=0.); p.add_argument('--diameter',type=float,required=True)
     p.add_argument('--pitch',type=float,default=.2)
-    print(audit(**vars(p.parse_args())))
+    p.add_argument('--axial-limit',type=float,help='report feed moves cutting stock that stands more than this above the tip (mm)')
+    result = audit(**vars(p.parse_args()))
+    hits, worst, axial = result[:3]
+    print((hits, worst))
+    print('deepest cut per layer (mm):', {k: round(v, 3) for k, v in axial.items()})
+    if len(result) > 3:
+        print('feed cutting deeper than the limit, per layer [mm of feed, mm2 of stock, first line, type]:',
+              {k: [round(v[0], 1), round(v[1], 2), v[2], v[3]] for k, v in result[3].items()})
