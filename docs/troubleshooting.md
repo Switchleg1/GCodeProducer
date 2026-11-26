@@ -72,14 +72,14 @@ works. CPU tests passing does not validate your graphics driver.
   face boundary. One cube edge is not a closed profile. Use Engrave for a
   suitable open line, not to bypass an unsafe profile plan.
 - **Horizontal/constant-Z error:** Profile, Slot, Engrave and Drill require
-  horizontal faces or constant-Z edge chains, as does Pocket. 3D Waterfall and
+  horizontal faces or constant-Z edge chains, as does Pocket. 3D Pocket and
   3D Contour accept sloped edges and stop at the model surface instead; see
   [3D operations](cam/3d-operations.md). A height reference may be nonhorizontal.
 - **Pocket cut a flat floor through a contoured bottom:** the selected rim is
-  level, so the Pocket used End Z everywhere. Use **3D Waterfall** to clear
+  level, so the Pocket used End Z everywhere. Use **3D Pocket** to clear
   the full reachable region in depth-limited bands down to the model surface.
 - **Staircase left on a slope:** expected after level roughing. Finish with 3D
-  Waterfall (steep) or 3D Contour (shallow), or reduce the depth of cut.
+  3D Pocket (steep) or 3D Contour (shallow), or reduce the depth of cut.
 - **"No machinable paths between the selection and the model surface":** End Z
   is not below the surface (a flat selection gives Start = End) or the cutter
   does not fit. Link End Z to a lower edge/face.

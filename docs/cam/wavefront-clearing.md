@@ -3,7 +3,7 @@
 # Wavefront clearing
 
 > **Adaptive clearing in the application uses this planner** for Pocket and
-> 3D Waterfall (see [Adaptive clearing](toolpaths.md#adaptive-clearing)).
+> 3D Pocket (see [Adaptive clearing](toolpaths.md#adaptive-clearing)).
 > The command line tool `tools/hsm_wavefront.py` also writes XY previews and
 > XYZ programs for a viewer; those are marked incomplete and are **never to
 > be run on a machine**.
@@ -366,7 +366,7 @@ stop at the joins (ring 238.7 → 229.8 s, boss 329.0 → 322.7 s, L-shape
 
 ## Speed
 
-On the saved Stormtrooper setup (3D Waterfall, two depths) Adaptive clearing
+On the saved Stormtrooper setup (3D Pocket, two depths) Adaptive clearing
 takes 58 s to compute in the application, from 151 s in 0.2.17; contours
 take 5 s. Each depth plans in about 22 s of processor time (from 37 s), and
 the depths are planned at the same time in worker processes. The rest is the
@@ -374,7 +374,7 @@ application's own work on the long paths: engagement and feed classes, the
 material model and the motion planner. One depth of the test shapes takes
 0.4–10.5 s (two-lobe fixture 10.5 s, ring 8.8 s). What made the difference:
 
-- **Waterfall depths are planned at once in worker processes.** A depth's plan
+- **3D Pocket depths are planned at once in worker processes.** A depth's plan
   needs only its own free region and the material there, and cutting one
   depth never changes the material below it, so the depths are independent.
   The plans are made before the depth loop; each is used only if the
@@ -548,9 +548,9 @@ cross still spend most of their cutting distance again on links.
   to reach them.
 - **Not built:** tabs, the conventional direction and replay of rounded
   output coordinates. In the application, stock to leave is kept from every
-  wall and each Waterfall depth starts from the stock earlier passes left.
+  wall and each 3D Pocket depth starts from the stock earlier passes left.
 - **Slower than wall-parallel contours at the same feed.** On the saved
-  Stormtrooper setup (3D Waterfall, 4 mm endmill, two depths to Z-2.5, soft
+  Stormtrooper setup (3D Pocket, 4 mm endmill, two depths to Z-2.5, soft
   wood, cutting at 2,000 mm/min) the application estimates 1,553 s against
   236 s for wall-parallel contours at 40 % stepover and 495 s for raster
   lines; all three complete with no safety findings. Per depth the wavefront

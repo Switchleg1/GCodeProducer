@@ -128,7 +128,7 @@ def test_cam_overrides_lists_and_operation_deletion(win):
     assert len(ed.setup.groups[0].operations) == 0
 
 
-@pytest.mark.parametrize('kind,default', [('pocket', 'contour'), ('waterfall', 'contour'), ('contour3d', 'meander')])
+@pytest.mark.parametrize('kind,default', [('pocket', 'contour'), ('waterfall', 'contour'), ('contour3d', 'raster_x')])
 def test_cutting_strategy_changes_undo_redo_across_rebuilt_forms(win, kind, default):
     ed = cam(win)
     if kind != 'pocket':

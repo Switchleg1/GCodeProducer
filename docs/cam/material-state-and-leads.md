@@ -104,7 +104,7 @@ lead-out and the tool retracts straight up. (Pulling sideways away from the
 wall would be the ideal exit; it is not attempted yet.) Zero length requests an automatic lead.
 Drill/one-point paths keep their vertical drilling entry.
 
-Every operation — Pocket, Profile, Slot, Engrave, 3D Waterfall and 3D
+Every operation — Pocket, Profile, Slot, Engrave, 3D Pocket and 3D
 Contour — uses the same entry/exit rules from the shared CAM motion planner
 ([architecture](architecture.md)):
 
@@ -118,7 +118,7 @@ Contour — uses the same entry/exit rules from the shared CAM motion planner
   `EntryExitPlanner.entry`): the ramp walks back along the path itself —
   around a closed path (a helix) or back and forth along an open one (a
   zigzag) — descending at the lead-in angle and never below the path, so a
-  flat Pocket contour, a 3D Waterfall path following the surface and a 3D
+  flat Pocket contour, a 3D Pocket path following the surface and a 3D
   Contour line all enter the same way. Exits (`EntryExitPlanner.exit`) follow
   the already-cut path back by the same rule.
 - **Lead-in** and **Lead-out** are each *Every entry*, *Layer entry* (lead-in

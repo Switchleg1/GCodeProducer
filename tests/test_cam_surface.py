@@ -1,4 +1,4 @@
-"""Depth-limited 3D Waterfall clearing and 3D Contour surface passes."""
+"""Depth-limited 3D Pocket (kind "waterfall") clearing and 3D Contour surface passes."""
 import numpy as np
 import pytest
 from shapely.geometry import Point, Polygon, box
@@ -96,7 +96,7 @@ def assert_program_clear(program, tolerance=.02):
 def test_kind_tables_cover_the_new_operations():
     assert {"waterfall", "contour3d"} <= set(KINDS) and set(SURFACE_KINDS) == {"waterfall", "contour3d"}
     assert set(KIND_LABELS) == set(KINDS)
-    assert KIND_LABELS["waterfall"] == "3D Waterfall" and KIND_LABELS["contour3d"] == "3D Contour"
+    assert KIND_LABELS["waterfall"] == "3D Pocket" and KIND_LABELS["contour3d"] == "3D Contour"
 
 
 def test_clip_band_and_shadow_levels():
@@ -270,8 +270,10 @@ def test_3d_contour_follows_the_same_smoothed_heights_as_waterfall():
     """3D Contour samples its rasters with follow_heights, the rule Waterfall's lifted paths use."""
     from gcodeproducer.core.cam.surface_paths import follow_heights
     surface = DropSurface(wedge_pocket(), (-2, -2), (42, 32), .3, 10**7)
-    lines = surface_raster(box(14, 10, 26, 20), surface, 1.5, 1.5, -20, 0., strategy="raster_x")
-    assert lines
+    path, = surface_raster(box(14, 10, 26, 20), surface, 1.5, 1.5, -20, 0., strategy="raster_x", direction="meander")
+    rows = np.flatnonzero(np.abs(np.diff(path[:, 1])) > 1e-9)
+    lines = [line for line in np.split(path, rows+1) if len(line) > 1]
+    assert len(lines) > 3
     for line in lines:
         assert np.all(line[:, 2] >= surface.follow(line[:, :2], 1.5) - 1e-9)   # the interpolated heights
         assert np.all(line[:, 2] >= surface.heights(line[:, :2], 1.5) - 1e-9)
@@ -357,8 +359,10 @@ def test_contour3d_clears_in_depth_limited_passes_then_follows_the_surface(libse
     assert inside.sum() > 100
     assert np.all(dense[inside, 2] >= exact-.01)              # never below the true floor
     assert np.all(dense[inside, 2] <= exact+.15)              # and close to it
-    # The last pass follows the whole reachable floor, including its high end.
-    assert points[:, 2].min() >= -10-1e-9 and points[:, 2].max() <= -2+1e-9
+    # The last pass follows the whole reachable floor, including its high end, and rides over the rim at
+    # the top of the material where the cutter overlaps the walls, instead of stopping and lifting there.
+    assert points[:, 2].min() >= -10-1e-9 and points[:, 2].max() <= 1e-9
+    assert len(paths) == 1                                     # one unbroken path per depth
     assert points[:, 1].min() > 8+RADIUS-.3 and points[:, 1].max() < 22-RADIUS+.3
     # Passes are stepover apart across the short side of the area.
     ys = np.unique(np.round(points[:, 1], 3))
@@ -396,12 +400,13 @@ def test_merged_feed_moves_keep_measurement_material_and_checks(libset):
 
 
 def test_second_tool_skips_3d_moves_through_material_already_removed(libset):
+    """3D Pocket paths that follow the surface may be cut short over cleared ground (3D Contour may not)."""
     import copy
     from gcodeproducer.core.cam import ToolGroup
     from gcodeproducer.core.gcode.simulation import simulate
 
-    def emitted(skip):
-        job, op = surface_job(libset, kind="contour3d")
+    def emitted(skip, kind="waterfall"):
+        job, op = surface_job(libset, kind=kind, strategy="raster_x", follow_surface=True)
         finish = copy.deepcopy(op)
         finish.name = "Finish"
         job.cam_setup.groups.append(ToolGroup(job.tools[0].id, [finish]))
@@ -427,6 +432,10 @@ def test_second_tool_skips_3d_moves_through_material_already_removed(libset):
     sim = simulate(skipped.program)
     cuts = [i for i in skipped_feeds if skipped.program.lines[i].feature not in ("air", "lead_out", "approach")]
     assert all(sim.moved[i] for i in cuts)
+    # 3D Contour follows every line from end to end, cleared ground or not.
+    _, contour_kept, _ = emitted(False, "contour3d")
+    _, contour_skipped, _ = emitted(True, "contour3d")
+    assert len(contour_skipped) == len(contour_kept)
 
 
 def test_xyz_pieces_are_visited_nearest_first_without_reversing():
@@ -492,9 +501,10 @@ def test_contour3d_raises_floor_over_retained_areas_and_leaves_stock():
         checked += int(over.sum())
     assert checked
     assert surface_raster(Polygon(), surface, RADIUS, 1.2, -10, 0.) == []
-    trimmed = np.vstack(surface_raster(region, surface, RADIUS, 1.2, -10, 0., ceiling=-5))
-    assert trimmed[:, 2].max() < -5 and trimmed[:, 0].min() > 17
-    assert surface_raster(region, surface, RADIUS, 1.2, -10, 0., ceiling=-11) == []
+    # The lines cross the whole area even where the cutter rides at or above the ceiling (on material
+    # an earlier depth already traced): a 3D Contour band does not stop and lift there.
+    whole, = surface_raster(region, surface, RADIUS, 1.2, -10, 0., ceiling=-5)
+    assert whole[:, 0].min() < 12.01 and whole[:, 0].max() > 27.99 and whole[:, 2].max() > -5
 
 
 def test_rough_then_finish_sequence_shares_one_setup(libset):
@@ -515,7 +525,7 @@ def test_rough_then_finish_sequence_shares_one_setup(libset):
 @pytest.mark.parametrize("kind", ["profile", "slot", "engrave", "pocket"])
 def test_planar_operations_still_reject_sloped_edges_clearly(libset, kind):
     job, op = surface_job(libset, kind=kind)
-    with pytest.raises(ValueError, match="constant-Z edges; 3D Waterfall"):
+    with pytest.raises(ValueError, match="constant-Z edges; 3D Pocket"):
         generate(job, StageContext())
 
 

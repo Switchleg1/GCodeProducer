@@ -17,7 +17,7 @@ class Operation:
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
-    strategy: str = "contour"          # Pocket/Waterfall: contour, raster_x/y, adaptive
+    strategy: str = "contour"          # Pocket/3D Pocket: contour, raster_x/y, adaptive; 3D Contour: raster_x/y
     cut_direction: str = "machine"     # inherit machine default, climb/conventional/meander
     stay_down: bool = True             # pocket contours: region-validated same-depth feed links
     low_engagement_feed: float = 0.0   # percent of tool feed; 0 = inherit tool defaults
@@ -63,4 +63,8 @@ class Operation:
             self.kind = "waterfall"
             self.protect_model = False
         from .strategy import cutting_strategy
+        if self.kind == "contour3d" and self.strategy in ("contour", "raster", "meander")                 and self.cut_direction == "machine":
+            # Saved before Meander moved from the 3D Contour strategy to the cutting direction:
+            # keep cutting it both ways.
+            self.cut_direction = "meander"
         self.strategy = cutting_strategy(self.kind, self.strategy)

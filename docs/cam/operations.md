@@ -6,7 +6,7 @@ These are tree operations (`core.cam.Operation`), not independent pipeline
 stage presets. They share a tool group, selection system, start/end depth
 sources and execution order. Geometry is generated from the placed STL;
 cutting faces must be horizontal and selected edge chains constant-Z, except
-for 3D Waterfall and 3D Contour, which accept sloped boundaries and are
+for 3D Pocket and 3D Contour, which accept sloped boundaries and are
 then limited by the model surface; see [3-axis surface operations](3d-operations.md).
 [Drawn reference outlines](reference-geometry.md) are also selectable constant-Z
 boundaries, or can be retained as per-selection height-only references.
@@ -15,29 +15,29 @@ boundaries, or can be retained as per-selection height-only references.
 
 | Field | New-operation behaviour | Meaning |
 |---|---|---|
-| Kind | Chosen in Add operation menu | Pocket, Profile, Drill, Engrave, Slot, 3D Waterfall or 3D Contour |
+| Kind | Chosen in Add operation menu | Pocket, Profile, Drill, Engrave, Slot, 3D Pocket or 3D Contour |
 | Name | Kind's title | Human-readable tree/log/output label; rename for clarity |
 | Enabled | On | Off skips the operation |
 | Geometry | Empty | Operation-owned face/edge references; generation requires a selection |
 | Selection list | New picks checked | One row per pick: uncheck to keep it height-only, outside machining boundaries; select a row to link Start/End or **Remove** it |
-| Start | Pocket, 3D Waterfall, 3D Contour: machining selection maximum Z + 0; others: Model top + 0 | A flat Pocket selection falls back to material surface (model top without allocated stock); not safe approach height |
-| End | Pocket, 3D Waterfall, 3D Contour: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
-| Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter (Waterfall uses Pocket; Drill, Engrave and Contour use Slot); on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
+| Start | Pocket, 3D Pocket, 3D Contour: machining selection maximum Z + 0; others: Model top + 0 | A flat Pocket selection falls back to material surface (model top without allocated stock); not safe approach height |
+| End | Pocket, 3D Pocket, 3D Contour: machining selection minimum Z + 0; Profile/Slot/Drill: Model bottom + 0 | **Engrave defaults to Model top - 0.2 mm** |
+| Unlock depth of cut | Off for new GUI operations | Beside the normal-feed override. Off inherits material-specific Slot 15%, Pocket 25%, Profile 40% of diameter (3D Pocket uses Pocket; Drill, Engrave and Contour use Slot); on requests an independent operation depth in mm/pass. Tool Max depth/pass still caps it |
 | Depth of cut (mm/pass) | Calculated while locked; editable while unlocked | Existing manual stepdowns reopen unlocked; automatic depths reopen locked |
-| Area order | Each area to full depth | Finish one area before moving to the next, or visit all areas at each depth. New-operation default is in Settings → Default operation settings; saved operations own their choice |
+| Area order | Each area to full depth | Hidden in the operation editor since 0.2.65; saved operations keep their value. 3D Pocket always works each depth across all areas |
 | RPM / normal feed / lead feed unlocks | Off | Calculated or legacy tool bases unless independently unlocked |
 | Lead-in / lead-out | On | Ramp along the path itself — repeated laps (helix) on short closed contours, back-and-forth (zigzag) on short open paths — and a cleared exit; checked against current material |
 | Lead-in angle | 10° | Maximum ramp descent angle for this operation |
 | Lead length | 0 (auto) | The ramp length increases as needed to stay within the lead-in angle |
-| Clearing / 3D Contour stepover | 40% | Pocket / Waterfall: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
-| Cutting strategy | Pocket / Waterfall: Wall-parallel contours; 3D Contour: Meander | Pocket / Waterfall also offer Raster lines X/Y and Adaptive clearing. Contour offers Meander or Raster lines X/Y. Hidden for Profile and other operations |
-| Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation |
+| Clearing / 3D Contour stepover | 40% | Pocket / 3D Pocket: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
+| Cutting strategy | Pocket / 3D Pocket: Wall-parallel contours; 3D Contour: Raster lines X | Pocket / 3D Pocket also offer Raster lines Y and Adaptive clearing. 3D Contour offers Raster lines X or Y; whether its lines are cut both ways is the cutting direction. Hidden for Profile and other operations |
+| Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation (Pocket, Profile, 3D Pocket and 3D Contour). For raster lines, Meander cuts them both ways, each joined to the next without lifting |
 | Stay down between contours | On | Wall-parallel and Adaptive clearing: nearby paths use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
 | Profile side | Outside | Outside or Inside; row visible only for Profile |
-| Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Waterfall; for 3D Contour it is left above the surface (axial) |
-| Overcut (mm) | 0 mm (global default) | Pocket and 3D Waterfall only: extends the removal region outward into stock clear of the model at the sampled pass depths, so adjacent operations can overlap without leaving a thin wall |
-| Material boundary (mm) | 0 mm (global default) | Pocket / Waterfall: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
+| Roughing clearance (mm) | 0 mm | Radial allowance left on every selected wall/island by Pocket/Profile/3D Pocket; for 3D Contour it is left above the surface (axial) |
+| Overcut (mm) | 0 mm (global default) | Pocket and 3D Pocket only: extends the removal region outward into stock clear of the model at the sampled pass depths, so adjacent operations can overlap without leaving a thin wall |
+| Material boundary (mm) | 0 mm (global default) | Pocket / 3D Pocket: where the region reaches the blank edge, the cutter's outer edge goes to blank edge + this value. 0 touches the edge, −1 leaves 1 mm of material, +1 passes 1 mm beyond it |
 
 Choose realistic end depths explicitly; an automatically created operation
 is not a safe default machining plan. For stepdown `s`, generation uses up to
@@ -77,7 +77,9 @@ it is not a generated or qualified cutting recipe.
 
 ## Multiple machining areas
 
-Choose **Area order** on the operation:
+The **Area order** field is hidden in the operation editor (0.2.65); saved
+operations keep the value they had, and new ones take the default from
+Settings. It chooses:
 
 - **Each area to full depth** (default): machine area A at every depth to End,
   then area B at every depth, and so on. This avoids repeatedly travelling
@@ -128,9 +130,9 @@ one horizontal material edge can identify the whole blank rim. Mixed picking
 is the default. Use height-only picks if a part reference should provide just
 End Z rather than another retained boundary.
 
-Pocket is a flat-floor operation. Use **3D Waterfall** for depth-limited
+Pocket is a flat-floor operation. Use **3D Pocket** for depth-limited
 clearing down to a sloped/curved model surface. The old Pocket surface-stop
-checkbox is gone; saved operations with it enabled migrate to Waterfall.
+checkbox is gone; saved operations with it enabled migrate to 3D Pocket.
 See [3D clearing and migration](3d-operations.md#pocket-migration).
 
 **Purpose:** clear a selected closed XY region to an end depth.
@@ -232,10 +234,10 @@ set End to -5.8 if that is required.
 
 ### Overcut into void material
 
-**Overcut** works the same way in Pocket and 3D Waterfall. It grows the
+**Overcut** works the same way in Pocket and 3D Pocket. It grows the
 selected removal region outward by the given distance, excludes part
 cross-sections sampled just above each pass depth from the added area, and
-clips the growth to the material boundary limit. Waterfall still protects
+clips the growth to the material boundary limit. 3D Pocket still protects
 model shadows and active tabs at each depth. The expanded region uses the
 operation's own cutting strategy and settings; there is no separate overcut
 path. Profile does not use or show Overcut.
@@ -286,17 +288,40 @@ The operation's **Cutting strategy** field has operation-specific choices:
 
 | Operation | Choices |
 |---|---|
-| Pocket, 3D Waterfall | Wall-parallel contours, Raster lines X, Raster lines Y, Adaptive clearing |
-| 3D Contour | Meander, Raster lines X, Raster lines Y |
+| Pocket, 3D Pocket | Wall-parallel contours, Raster lines X, Raster lines Y, Adaptive clearing |
+| 3D Contour | Raster lines X, Raster lines Y |
 | Profile, Slot, Drill, Engrave | Row hidden (no strategy control) |
 
-X/Y means the cutting-line axis in CAM work coordinates. Pocket/Waterfall
-rasters still use remaining-material hand/feed planning and finish their wall
-boundaries. Contour X/Y runs separate lines in +X/+Y, retracting/travelling
-between them. Contour **Meander** alternates along the area's longer axis and
-uses validated surface links. This motion pattern is distinct from the machine's
-Meander *cutting direction*, which alternates one-sided cutting hands.
-All Contour strategies retain the same depth bands and model protection.
+X/Y means the cutting-line axis in CAM work coordinates. The **cutting
+direction** (the machine's, or the operation's with *Unlock cutting
+direction*) decides how raster lines are cut, for Pocket, 3D Pocket and 3D
+Contour alike:
+
+- **Meander**: the lines are cut alternately one way and the other, each
+  joined to the next by a short move along the edge of the area without
+  lifting (Pocket / 3D Pocket: when that move stays inside the cutter's
+  area and the next line starts within 2.5 stepovers; otherwise it enters
+  again).
+- **Climb** / **Conventional**: every line is cut the same way. Climb keeps
+  the uncut lines (the next ones) on the cutter's right with an M3 spindle:
+  lines along X step to +Y and run −X, lines along Y step to +X and run +Y.
+
+Pocket/3D Pocket rasters still use remaining-material hand/feed planning and
+finish their wall boundaries.
+
+**3D Contour lines are complete contours.** Each line runs the whole width of
+the selected area, from where it enters it to where it leaves it, following
+the model under the cutter and never below the depth of the current pass. It
+does not stop, lift or skip where it crosses ground an earlier pass already
+cut: a depth band is one unbroken path. With Climb or Conventional the cutter
+comes back along the line it has just cut (exactly the same points, over cut
+ground) and steps over to the next one; with Meander it steps over at the end
+of each line. Where a line crosses a gap in the selection it rides at the top
+of the material, rising and descending vertically, so nothing outside the
+selection is cut; up a steep wall it also rises vertically. Lines at the
+start or end of a band that ride entirely on the top of the material are left
+out. Only 3D Pocket paths may lift, travel to other places and be optimized
+(Remove air cutting applies to them, not to 3D Contour).
 
 **Adaptive clearing** grows the cleared area by an even, contact-checked
 stepover from helical starts and marks the result incomplete if it cannot
@@ -309,8 +334,11 @@ Historical captures (the clearing menu predates Adaptive clearing):
 ![Contour strategy choices](../pictures/cam-cutting-strategy-contour.png)
 
 Old saved clearing `raster` strategies reopen as **Raster lines Y**, preserving
-the old scan-line axis. Old Contour `contour`/`raster` values reopen as **Meander**,
-which was its previous surface-raster behaviour.
+the old scan-line axis. Old 3D Contour `meander`/`contour`/`raster` strategies
+reopen as **Raster lines X** with the cutting direction unlocked and set to
+**Meander** (when it was inheriting the machine's), so they are still cut both
+ways. (The old Meander strategy ran along the area's longer side; choose Raster
+lines Y if that was Y.)
 
 ## Profile
 
@@ -413,7 +441,7 @@ selecting a whole face engraves all its boundary loops.
 Not implemented: text/font import, projected curves over 3D surfaces,
 variable-Z engraving, ballnose surface following or collision-aware linking.
 
-## 3D Waterfall
+## 3D Pocket
 
 **Purpose:** clear the full reachable region at each depth while protecting
 all model material above that level. This replaces surface-limited Pocket and
@@ -423,7 +451,7 @@ Select closed outlines, set Start/End and depth per pass (automatic: the tool's
 Pocket axial percentage). Stepover, wall-parallel/raster strategy, stay-down
 links, material limit, overcut, cutting direction and leads apply.
 Material above a lower selected Start is cleared first. Full description:
-[3D Waterfall](3d-operations.md#3d-waterfall).
+[3D Pocket](3d-operations.md#3d-pocket).
 
 ## 3D Contour
 

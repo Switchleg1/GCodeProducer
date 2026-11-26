@@ -14,7 +14,7 @@
 | Placement | Translation, rotation, scale, Z anchor | Per-model Qt settings, separately for FDM and CAM |
 | CAM machine | Work area, safe Z, rapid/feed/spindle fields, default cutting direction, allowed tools, templates | Machine JSON |
 | CAM tool | T number, cutter dimensions/type, fixed feeds/RPM, SFM calculation settings, per-machining-material SFM/chip-load/axial tables, maximum depth/pass | Tool JSON |
-| CAM setup | Ordered tool groups/operations (including 3D Waterfall / 3D Contour), per-operation selection lists with machining or height-only purpose, linked depth references, allocated stock | Per-model Qt settings |
+| CAM setup | Ordered tool groups/operations (including 3D Pocket / 3D Contour), per-operation selection lists with machining or height-only purpose, linked depth references, allocated stock | Per-model Qt settings |
 | CAM stock | Material description/density, margin, position and blank dimensions | Inside CAM setup, not the FDM material library |
 | CAM holding tabs | Triangle/barycentric side anchors, width, height above stock bottom, XY edge direction, enabled | Inside model CAM setup; shared protection across all operations, not tool/process settings |
 | CAM reference geometry | Circle/rectangle method, two construction points, Z and stable ID | Inside model CAM setup; fixed work coordinates, independent of tool/process and later placement changes |
@@ -122,7 +122,7 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   cutting length and V angle still do not provide full cutter-shape/holder
   collision geometry or automatic V-carving depth. Per-material cutting tables
   need calibration; see [cutting data](cam/cutting-data.md).
-- CAM machine `cut_direction` defaults to Climb; Pocket/Profile/3D Waterfall
+- CAM machine `cut_direction` defaults to Climb; Pocket/Profile/3D Pocket
   inherit it unless **Unlock cutting direction** is ticked on the operation. Operation-driven paths now choose the hand from estimated
   remaining material, not a neutral first slot. Meander alternates one-sided
   passes; the convention assumes M3. See [direction and engagement](cam/engagement-and-feeds.md).

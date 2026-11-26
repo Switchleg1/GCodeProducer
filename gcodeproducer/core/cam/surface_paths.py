@@ -10,7 +10,7 @@ from shapely import BufferJoinStyle, contains_xy
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
-from .cam_constants import SURFACE_MAX_POINTS, SURFACE_DIP_FILL, SURFACE_DIP_DEPTH
+from .cam_constants import SURFACE_MAX_POINTS, SURFACE_DIP_FILL, SURFACE_DIP_DEPTH, SURFACE_WALL_SLOPE
 from .surface_simplifier import simplify3d
 from .paths import _polygons, orient_contour, pocket_region
 
@@ -107,38 +107,71 @@ def fill_dips(height, reach, depth=np.inf):
 
 
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
-                   strategy="meander", *, simplifier=None):
-    """Depth-clamped XYZ rasters, as meander or independent X/Y cutting lines.
+                   strategy="raster_x", *, simplifier=None, direction="climb"):
+    """One depth band of 3D Contour: XYZ raster lines along X or Y, as one unbroken path.
 
-    Meander alternates along the longer side and joins neighbouring passes
-    along the surface when the joining move stays inside the region. X/Y
-    raster lines run in one direction and retract between cutting lines.
-    Stretches where the cutter would sit at or above ``ceiling`` (it rests on
-    material that is not being machined, e.g. the top face beside a wall) are
-    left out instead of being traced in the air.
+    Every line runs the whole width of the selected area, from where it first
+    enters the area to where it last leaves it, following the model under the
+    cutter and never below ``floor`` (the depth of this pass): it traces the
+    whole contour of the model and does not lift or stop where it crosses
+    ground an earlier pass already cut. Where a line crosses a gap in the
+    selection it rides at ``ceiling`` (the top of the material), so nothing
+    outside the selection is cut; it rises and descends vertically there.
+
+    ``direction``: Meander cuts the lines alternately one way and the other,
+    each joined to the next by a move along the edge of the area. Climb and
+    Conventional cut every line the same way (climb keeps the uncut lines on
+    the cutter's right with an M3 spindle) and come back along the line just
+    cut, over cut ground, to step over to the next. Returns ``[path]``.
     """
     if region.is_empty or spacing <= 0:
         return []
     from .strategy import cutting_strategy
     strategy = cutting_strategy("contour3d", strategy)
-    if strategy not in ("meander", "raster_x", "raster_y"):
+    if strategy not in ("raster_x", "raster_y"):
         raise ValueError(f"Unknown 3D Contour cutting strategy '{strategy}'")
+    if direction not in ("climb", "conventional", "meander"):
+        raise ValueError(f"Unknown cutting direction '{direction}'")
     minx, miny, maxx, maxy = region.bounds
-    along_x = strategy == "raster_x" or (strategy == "meander" and (maxx-minx) >= (maxy-miny))
+    along_x = strategy == "raster_x"
+    axis = 0 if along_x else 1
     lo, hi = (miny, maxy) if along_x else (minx, maxx)
     count = max(1, int(math.ceil((hi-lo)/spacing-1e-9)))
     step = surface.resolution
-    if (count+1)*(max(maxx-minx, maxy-miny)/step+2) > SURFACE_MAX_POINTS:
+    if 2*(count+1)*(max(maxx-minx, maxy-miny)/step+2) > SURFACE_MAX_POINTS:
         raise ValueError("3D contour would need too many surface samples; increase stepover or reduce the area")
+    top = ceiling if math.isfinite(ceiling) else None
 
     def sample(a, b):
+        """The cutter along a to b: on the model, never below the floor; at the top outside the area."""
         a, b = np.asarray(a, float), np.asarray(b, float)
         n = max(1, int(math.ceil(np.linalg.norm(b-a)/step)))
         xy = a+(b-a)*np.linspace(0, 1, n+1)[:, None]
-        return np.column_stack((xy, np.maximum(follow_heights(surface, xy, radius, allowance, floors), floor)))
+        z = np.maximum(follow_heights(surface, xy, radius, allowance, floors), floor)
+        inside = contains_xy(area, xy[:, 0], xy[:, 1])
+        if top is not None:
+            z = np.where(inside, z, np.maximum(z, top))
+        run = np.linalg.norm(np.diff(xy, axis=0), axis=1)
+        rise = np.diff(z)
+        # Up a wall (and where the line leaves the area) rise vertically at the lower point, and
+        # descend vertically at the lower point after it: never a near-vertical slant whose XY,
+        # rounded in the program, would move the cutter's height on the wall.
+        wall = (np.abs(rise) > SURFACE_WALL_SLOPE*run) | (inside[1:] != inside[:-1])
+        if not wall.any():
+            return np.column_stack((xy, z))
+        points = []
+        for k in range(len(xy)):
+            if k and wall[k-1] and abs(rise[k-1]) > 1e-9:
+                corner = xy[k-1] if rise[k-1] > 0 else xy[k]
+                points.append((*corner, max(z[k-1], z[k])))
+            points.append((*xy[k], z[k]))
+        return np.asarray(points, float)
 
-    paths, current, reverse = [], None, False
-    cover = prep(region.buffer(1e-7))
+    area = region.buffer(1e-7)
+    # Climb keeps the uncut lines (the next ones) on the right: lines along X step to +Y, so climb
+    # runs -X; lines along Y step to +X, so climb runs +Y.
+    climb_forward = not along_x
+    rows = []
     for i in range(count+1):
         offset = lo+(hi-lo)*i/count if count else (lo+hi)/2
         # Keep the outermost passes fractionally inside so they intersect the region.
@@ -146,36 +179,50 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
         line = LineString([(minx-1, offset), (maxx+1, offset)] if along_x else [(offset, miny-1), (offset, maxy+1)])
         hit = region.intersection(line)
         pieces = [g for g in getattr(hit, "geoms", [hit]) if g.geom_type == "LineString" and g.length > 1e-6]
-        pieces.sort(key=lambda g: g.coords[0][0 if along_x else 1], reverse=reverse)
-        for piece in pieces:
-            ends = np.asarray(piece.coords, float)
-            ends = ends[[0, -1]]
-            if (ends[0][0 if along_x else 1] > ends[1][0 if along_x else 1]) != reverse:
-                ends = ends[::-1]
-            whole = sample(ends[0], ends[1])
-            below = whole[:, 2] < ceiling-1e-6
-            edges = np.flatnonzero(np.diff(np.r_[False, below, False].astype(int)))
-            for first, last in zip(edges[::2], edges[1::2]):
-                run = whole[first:last]
-                if len(run) < 2:
-                    continue
-                if strategy != "meander":
-                    paths.append(run)
-                    continue
-                if current is not None:
-                    link = LineString((current[-1][:2], run[0, :2]))
-                    if link.length <= 2.5*spacing+1e-9 and cover.covers(link):
-                        bridge = sample(current[-1][:2], run[0, :2])
-                        if np.all(bridge[:, 2] < ceiling-1e-6):
-                            current = np.vstack((current, bridge[1:-1], run))
-                            continue
-                    paths.append(current)
-                current = run
-        if pieces and strategy == "meander":
-            reverse = not reverse
-    if current is not None:
-        paths.append(current)
-    result = simplifier(paths) if simplifier is not None else [simplify3d(p) for p in paths]
+        if not pieces:
+            continue
+        ends = np.asarray([q for g in pieces for q in g.coords], float)
+        first, last = ends[:, axis].min(), ends[:, axis].max()
+        a, b = np.array([first, offset]), np.array([last, offset])
+        if not along_x:
+            a, b = a[::-1], b[::-1]
+        forward = climb_forward if direction != "conventional" else not climb_forward
+        if direction == "meander" and len(rows) % 2:
+            forward = not forward
+        rows.append((a, b) if forward else (b, a))
+    if not rows:
+        return []
+    cuts = [sample(a, b) for a, b in rows]
+    if top is not None:
+        # Lines at the start or end of the band that ride entirely on the top of the material
+        # (the cutter overlapping the selection's wall) cut nothing: leave them out. Lines between
+        # are kept, so the step over from one line to the next never grows.
+        cutting = [k for k, cut in enumerate(cuts) if np.any(cut[:, 2] < top-1e-6)]
+        if not cutting:
+            return []
+        keep = slice(cutting[0], cutting[-1]+1)
+        rows, cuts = rows[keep], cuts[keep]
+        if direction == "meander" and cutting[0] % 2:
+            rows = [(b, a) for a, b in rows]
+            cuts = [cut[::-1] for cut in cuts]
+    joins = []
+    for k in range(len(rows)-1):
+        # Meander joins the end of a line to the start of the next; one way comes back along the
+        # line just cut and joins its start to the next one's.
+        start = rows[k][1] if direction == "meander" else rows[k][0]
+        joins.append(sample(start, rows[k+1][0]))
+    reduce = simplifier if simplifier is not None else (lambda paths: [simplify3d(p) for p in paths])
+    reduced = reduce(cuts + joins)
+    cuts, joins = reduced[:len(cuts)], reduced[len(cuts):]
+    pieces = []
+    for k, cut in enumerate(cuts):
+        pieces.append(cut)
+        if k < len(joins):
+            if direction != "meander":
+                pieces.append(cut[::-1][1:])     # back over the line just cut: exactly the same points
+            pieces.append(joins[k][1:])
+    path = np.vstack(pieces)
     if log:
-        log(f"    {sum(len(p) for p in paths)} surface samples reduced to {sum(len(p) for p in result)} points")
-    return [p for p in result if len(p) >= 2]
+        log(f"    {len(rows)} raster lines in one path of {len(path)} points"
+            + ("" if direction == "meander" else ", each line cut one way and travelled back over"))
+    return [path] if len(path) >= 2 else []

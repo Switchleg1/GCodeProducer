@@ -243,7 +243,7 @@ cut in the air above it.
 
 Existing saved depth definitions are preserved. **Use selection depths**
 explicitly switches both fields to these defaults and resets offsets; it is
-available on Pocket, 3D Waterfall and 3D Contour operations. See the
+available on Pocket, 3D Pocket and 3D Contour operations. See the
 [illustrated annular pocket example](operations.md#bounds-and-automatic-removal-height).
 
 The minimum/maximum selector affects geometry references and the machining
@@ -291,7 +291,7 @@ is still semantically correct after remeshing or replacing a model.
 - **Select closed edges or a horizontal face:** a required boundary is open.
 - **Horizontal face / constant-Z edges required:** selected cutting geometry
   does not satisfy the restrictions of Pocket, Profile, Slot, Engrave or Drill. Sloped
-  edges are valid boundaries for 3D Waterfall and 3D Contour
+  edges are valid boundaries for 3D Pocket and 3D Contour
   ([3D operations](3d-operations.md)).
 - **Reference no longer exists:** geometry topology/indices no longer match;
   reselect rather than guessing another index.

@@ -21,3 +21,4 @@ DEEP_CUT_MM2 = 1.  # warn when a depth sweeps more than this of stock still stan
 STEP_UP_SHORTEST = .2  # mm; shorter stretches of a step-in pass are not cut
 SLOPE_SAME = 1e-4  # mm; a stretch of a step-in pass this close to the pass before is the same stretch
 STEP_UP_CLEAR = .02  # mm; the step-in passes start this clear of the stock
+RASTER_LINK_STEPS = 2.5  # Meander raster lines join the next without lifting when it starts within this many stepovers

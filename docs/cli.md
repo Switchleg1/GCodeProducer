@@ -158,7 +158,7 @@ category; legacy profile stepdown parameters still control axial passes rather
 than the GUI's automatic material/process depth setting.
 
 The CLI currently has **no tree/setup/stock import flags** for GUI Pocket,
-Drill, Engrave, Slot, 3D Waterfall / 3D Contour, holding tabs, reference
+Drill, Engrave, Slot, 3D Pocket / 3D Contour, holding tabs, reference
 geometry or multi-tool setups. `--config` loads a pipeline, not a
 `CAMSetup` or GUI model state. Legacy CAM does not automatically allocate
 stock or run the setup-dependent stock checks. Safe Z and all output still

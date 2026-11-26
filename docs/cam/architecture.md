@@ -170,7 +170,7 @@ available and delegate to the new modules.
 ## 5. Migration status
 
 All five steps are complete. Steps 3–5 (0.1.10) changed structure only: seven
-reference programs (Pocket, raster Pocket, Profile, Slot, Engrave, Waterfall,
+reference programs (Pocket, raster Pocket, Profile, Slot, Engrave, 3D Pocket,
 Contour) and the operator's tail-top part (40,335 lines) are byte-identical to
 0.1.9.
 
@@ -192,7 +192,7 @@ and the flat-cutter surface sampling are unchanged. On the 182-band Baby Yoda
 job, path generation dropped from 154 s to 79 s with identical XYZ paths.
 This timing excludes motion planning and the independent output replay.
 
-A profile on the tail-top Waterfall job identified repeated height-grid sweep
+A profile on the tail-top 3D Pocket job identified repeated height-grid sweep
 construction as a hot spot. In 0.1.12 the grid uses broadcast coordinate slices
 and caches the last move's sweep geometry per grid. Contact, engagement and
 removal reuse that geometry but always read current material heights. Flat
@@ -206,12 +206,12 @@ Single-run local `slice_job` timings (seconds; same inputs before and after):
 | Job | G-code lines | 0.1.11 | 0.1.12 |
 |---|---:|---:|---:|
 | Dragon Head — 3D Contour | 119,995 | 71.14 | 31.55 |
-| Tail-top — 3D Waterfall | 38,553 | 39.87 | 22.08 |
+| Tail-top — 3D Pocket | 38,553 | 39.87 | 22.08 |
 
 G-code line data, warnings, and material height grids and display meshes
 matched exactly. These timings cover generation and its output checks, not GUI
 rendering. Each job retained its saved tool and machine settings; tail-top's
-sloped Pocket was switched to Waterfall in memory for both runs.
+sloped Pocket was switched to 3D Pocket in memory for both runs.
 
 **Why not thread the motion loop?** A move's entry, engagement and feed depend
 on the material left by preceding moves. Independent geometry, such as some

@@ -75,7 +75,7 @@ SCHEMA = [
                "one area before moving to the next; each depth visits all areas before stepping down."),
     Param("default_overcut", "float", 0.0, min=0, max=1000, unit="mm", group="Default operation settings",
           label="Overcut",
-          help="Initial overcut for new Pocket and 3D Waterfall operations."),
+          help="Initial overcut for new Pocket and 3D Pocket operations."),
 ]
 
 MESSAGES = {

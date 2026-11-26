@@ -18,8 +18,8 @@ class OperationGenerator:
         op = run.op
         if not selection.flat and not self.allows_sloped:
             from gcodeproducer.core.cam.cam_constants import KIND_LABELS
-            raise ValueError(f"{op.name}: {KIND_LABELS[op.kind]} needs constant-Z edges; 3D Waterfall "
-                             "and 3D Contour accept sloped boundaries; use 3D Waterfall for surface-limited clearing")
+            raise ValueError(f"{op.name}: {KIND_LABELS[op.kind]} needs constant-Z edges; 3D Pocket "
+                             "and 3D Contour accept sloped boundaries; use 3D Pocket for surface-limited clearing")
         if self.needs_closed and not selection.closed:
             raise ValueError(f"{op.name}: select closed edges or a horizontal face")
 

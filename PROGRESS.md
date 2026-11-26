@@ -2,6 +2,11 @@
 
 - Goal: finish the saved Stormtrooper CAM session with verified adaptive coverage, then improve cutting and slicing time without relaxing engagement or clearance.
 
+## 3D Pocket / raster directions (0.2.65)
+
+- Operator: rename 3D Waterfall to 3D Pocket (display only; kind stays `waterfall`). 3D Contour strategies X/Y only; Meander is the cutting direction (unlock enabled for 3D Contour); same for Pocket/3D Pocket raster lines. 3D Contour lines run the whole width as one unbroken path per depth, no lifting; only 3D Pocket may lift/travel/optimize. Area order hidden.
+- Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
+
 ## Depth of cut along walls (0.2.64)
 
 - Pinned fixture: `%TEMP%/yoda_pinned_session.json` (the operator's session changed mid-run: Waterfall is now disabled there, raster, Overcut 0). Pinned as Waterfall adaptive, Overcut 0, material boundary 0, step 2, follow on. It reproduces the 0.2.63 finding exactly (631 fronts; 234.4 mm / 24.89 mm² at Z-4, 119.9 mm / 7.9 mm² at Z-5). With Overcut 3 the finding almost vanishes (6.5 mm of feed): the crescents are at the blank edge.

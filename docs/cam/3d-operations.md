@@ -1,6 +1,9 @@
 [Documentation](../README.md) / [CAM](README.md)
 
-# 3-axis surface operations: 3D Waterfall and 3D Contour
+# 3-axis surface operations: 3D Pocket and 3D Contour
+
+(**3D Pocket** was called *3D Waterfall* before 0.2.65; saved operations open
+unchanged.)
 
 Both operations clear material in **depth-limited passes**, stopping at the
 model surface. They use a vertical flat-endmill footprint: no undercuts,
@@ -9,50 +12,50 @@ ball-nose compensation, fixtures or holder simulation.
 | Operation | What it produces | Typical use |
 |---|---|---|
 | **Pocket** | Planar clearing to a flat End Z; level boundaries required | Ordinary 2.5D pockets |
-| **3D Waterfall** | Full-area clearing at successive Z levels, with the model protected at each level | Roughing sloped, stepped or curved floors and walls |
+| **3D Pocket** | Full-area clearing at successive Z levels, with the model protected at each level | Roughing sloped, stepped or curved floors and walls |
 | **3D Contour** | Successive surface-following raster passes, each limited to the next depth band | Clearing and refining sloped or gently curved surfaces |
 
-A useful sequence is **3D Waterfall → 3D Contour**: Waterfall clears terraces;
+A useful sequence is **3D Pocket → 3D Contour**: 3D Pocket clears terraces;
 Contour refines the surface. Contour also works on its own: it no longer makes
 a single finishing pass straight through uncleared material.
 
 ## Depth of cut and material above Start
 
 Both kinds use the resolved **depth of cut**, including the operation unlock
-and the tool's positive **Max depth/pass** cap. Waterfall automatic depth uses
+and the tool's positive **Max depth/pass** cap. 3D Pocket automatic depth uses
 the active material's **Pocket** axial percentage; Contour uses **Slot**.
 
 If the selected Start is below the original stock/model surface, clearing
 begins at that surface so the material above Start is not skipped. For example,
 Start −4, End −10, stock top 0 and depth/pass 1 require passes starting at −1,
-not a first entry at −5. Waterfall can omit passes already cleared by earlier
-operations when **Remove air cutting** is enabled. Contour still plans every
-depth band, but with **Remove air cutting** on the motion planner checks each
-measured sub-move against the current material left by all earlier passes and
-tools. Stretches that touch nothing are not written: air gaps longer than two
-cutter diameters become a retract and re-entry, shorter ones are fed through,
-and paths entirely in air are dropped. The remaining pieces of each depth band
-are visited nearest-first (each keeps its cutting direction) instead of in
-raster order, which would rapid back and forth across cleared areas. The log
-reports the skipped length.
-Material only decreases, so skipping cannot leave material uncut. The usual
-rapid-clearance and entry checks apply to the new travels.
+not a first entry at −5. 3D Pocket can omit passes already cleared by earlier
+operations when **Remove air cutting** is enabled. With **Remove air cutting**
+on, the motion planner checks each measured sub-move of a 3D Pocket path that
+follows the surface against the current material left by all earlier passes
+and tools. Stretches that touch nothing are not written: air gaps longer than
+two cutter diameters become a retract and re-entry, shorter ones are fed
+through, and paths entirely in air are dropped. The remaining pieces of each
+depth band are visited nearest-first (each keeps its cutting direction). The
+log reports the skipped length. Material only decreases, so skipping cannot
+leave material uncut. **3D Contour is never cut short** (0.2.65): each depth
+band is one unbroken path the cutter follows from end to end, over cleared
+ground or not; only 3D Pocket lifts, travels and optimizes its paths.
 
 Every depth is visited across all reachable areas before descending: the
 reachable area changes with depth, so surface operations do not use
 *each area to full depth* ordering. Safe Z must still clear the stock/model.
 
-## 3D Waterfall
+## 3D Pocket
 
 **Full-area surface-limited clearing.**
 
-![Waterfall clearing in depth bands](../pictures/cam-waterfall-clearing.png)
+![3D Pocket clearing in depth bands](../pictures/cam-waterfall-clearing.png)
 
-At each depth, Waterfall subtracts the XY shadow of all model material above
+At each depth, 3D Pocket subtracts the XY shadow of all model material above
 that depth from the selected area. It then clears the **whole remaining
 cutter-accessible region**, not just one contour along its wall.
 
-1. Add **3D Waterfall** and select closed part/material/reference outlines.
+1. Add **3D Pocket** and select closed part/material/reference outlines.
    Sloped edge boundaries are allowed. A selected horizontal material edge
    identifies its complete stock rim, as in Pocket.
 2. Set Start/End. Selection-linked defaults use the selection's extrema. A
@@ -81,7 +84,7 @@ lead ramps in down the slope. A lifted path follows the surface by the same
 rule as 3D Contour (see *Surface heights* below). Lifted paths are 3D moves, so they are entered
 and linked like 3D Contour paths rather than with stay-down links. On the
 Mini Yoda (4 mm endmill, 2 mm depths, 1 mm stock to leave, wall-parallel
-contours) the material left above the model after the Waterfall fell from
+contours) the material left above the model after the 3D Pocket fell from
 3,205 to 1,931 mm³, for 147 s more machining (622 to 769 s estimated) and
 18 s more compute. A wall that is vertical or overhangs is unchanged: a flat
 cutter cannot reach it from above.
@@ -143,11 +146,11 @@ See [Overcut](operations.md#overcut-into-void-material).
 ## Pocket migration
 
 The **Stop at model surface** checkbox has been removed from Pocket. Its old
-behaviour is now **3D Waterfall**, with full-area depth-limited clearing.
-Saved Pocket operations with that flag enabled reopen as Waterfall, preserving
+behaviour is now **3D Pocket**, with full-area depth-limited clearing.
+Saved Pocket operations with that flag enabled reopen as 3D Pocket, preserving
 their name, selections, depths and other settings. Pocket without the flag
 remains a flat-floor operation; old nonlevel Pocket boundaries must be changed
-to Waterfall explicitly rather than silently choosing a different strategy.
+to 3D Pocket explicitly rather than silently choosing a different strategy.
 
 ## 3D Contour
 
@@ -163,13 +166,17 @@ uncleared stock.
 
 - **Area:** selected closed XY outlines; the cutter centre stays inside them.
 - **Stepover:** raster spacing as a percentage of cutter diameter.
-- **Cutting strategy:** **Meander** zigzags along the longer side with short
-  in-region surface links. **Raster lines X / Y** cuts separate single-direction
-  lines along the chosen work-coordinate axis, with retract/travel between them.
-  Climb/conventional is not a selectable hand for these XYZ paths.
+- **Cutting strategy:** **Raster lines X** or **Raster lines Y**. Every line
+  runs the whole width of the area and traces the model under the cutter down
+  to the depth of the current pass, without lifting; the whole depth band is
+  one path. See [Cutting strategy](operations.md#cutting-strategy).
+- **Cutting direction** (the machine's, or *Unlock cutting direction*):
+  **Meander** cuts the lines both ways, stepping over at the end of each.
+  **Climb** / **Conventional** cut every line one way and come back along the
+  line just cut, over cut ground, to step over at its start (no lifting).
 - **Surface heights:** the safe-height grid holds one height per cell, which a
   path crossing a slope would follow as a staircase of tiny plunges. 3D Contour
-  and Waterfall's *Follow the surface* share one rule (`follow_heights`):
+  and 3D Pocket's *Follow the surface* share one rule (`follow_heights`):
   heights are interpolated between cells of the grid raised to each cell's
   neighbourhood, so never below the grid, on slopes up to about 50°; across a
   steeper step (a wall) the cell height is kept, so the path does not climb
@@ -228,7 +235,7 @@ for the speed/size trade-offs.
 
 ## Limits and safety
 
-These are not adaptive or rest-machining algorithms. Waterfall uses planar
+These are not adaptive or rest-machining algorithms. 3D Pocket uses planar
 removal history across operations for air removal and engagement; Contour XYZ
 removal updates emitted height-field material but not planar history. Later
 operations therefore cannot assume a Contour pass cleared their planar region.

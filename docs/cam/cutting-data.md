@@ -173,7 +173,7 @@ Every material remains separately editable.
 
 These captures use illustrative 4 mm tool values, not qualified cutting data.
 
-3D Waterfall and 3D Contour have no axial column of their own: Waterfall uses
+3D Pocket and 3D Contour have no axial column of their own: 3D Pocket uses
 the material's **Pocket** percentage and Contour uses **Slot**. Both generate
 successive depth-limited passes. Unlock *depth of cut* to choose the increment
 directly; the tool's positive Max depth/pass still caps it.

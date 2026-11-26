@@ -8,7 +8,7 @@ settings: selecting Climb does not by itself convert raster lines to contours.
 
 ## Adaptive clearing
 
-Choose **Adaptive clearing** for Pocket or 3D Waterfall. It needs a flat
+Choose **Adaptive clearing** for Pocket or 3D Pocket. It needs a flat
 endmill, **Lead-in ramp**, **Stay down between contours** and the **Climb**
 cutting direction. It is planned by the wavefront described in
 [Wavefront clearing](wavefront-clearing.md): a helix and an outward spiral
@@ -29,7 +29,7 @@ transient where the cut joins the wall.
 Each stay-down chain of cuts and links is one path. A chain that begins at
 a start leads with one lap of its helix orbit as a closed contour, so the
 normal CAM lead planner ramps down on it at the operation's lead-in angle;
-the chain follows at depth without lifting. Waterfall plans each depth
+the chain follows at depth without lifting. 3D Pocket plans each depth
 from the stock left by earlier passes, and only up to a cutter's width past
 the edge of that stock; a planar Pocket plans one depth from the full pocket
 and repeats it.
@@ -149,7 +149,7 @@ proof, chip-load model or rest-machining system.
 | Conventional | Request the opposite remaining-material hand |
 | Meander | Alternate the hand of successive one-sided passes; neutral slots do not choose/advance it |
 
-Pocket/Profile/3D Waterfall **Unlock cutting direction**, immediately below
+Pocket/Profile/3D Pocket **Unlock cutting direction**, immediately below
 the plunge feed unlock, defaults to unchecked: the disabled box then shows
 the machine's direction that will be used. Check it to choose an explicit
 direction for that operation. Unchecking restores inheritance.

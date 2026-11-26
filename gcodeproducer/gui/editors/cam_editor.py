@@ -8,6 +8,7 @@ from .editors_constants import (
     OPERATION_SIDES,
     CUTTING_STRATEGIES,
     CUT_DIRECTIONS,
+    DIRECTED_KINDS,
     ENGAGEMENT_CONTROLS,
     MACHINE_FEED_DEFAULTS,
     RATE_FIELDS,
@@ -206,7 +207,9 @@ class CAMEditor(QWidget):
         self.direction_override.toggled.connect(self._edit)
         self.direction = QComboBox()
         self.direction.setPlaceholderText("Machine default")
-        self.direction.setToolTip("M3: choose hand from remaining material. A full-width first slot has no unique climb/conventional hand.")
+        self.direction.setToolTip("M3: choose hand from remaining material. A full-width first slot has no unique climb/conventional hand. "
+                                  "Raster lines: Meander cuts them both ways, joined without lifting; Climb and Conventional "
+                                  "cut every line the same way.")
         for label, key in CUT_DIRECTIONS:
             self.direction.addItem(label, key)
         self.direction.currentIndexChanged.connect(self._edit)
@@ -253,13 +256,13 @@ class CAMEditor(QWidget):
         for k in OPERATION_SIDES:
             self.side.addItem(k.title(), k)
         self.stock = self.spin(0, 100, 0)
-        self.stock.setToolTip("Pocket/Profile/Waterfall: radial material left on walls/islands. 3D Contour: axial stock above the surface.")
+        self.stock.setToolTip("Pocket/Profile/3D Pocket: radial material left on walls/islands. 3D Contour: axial stock above the surface.")
         self.overcut = self.spin(0, 1000, 0)
-        self.overcut.setToolTip("Pocket / 3D Waterfall: extend the removal region outward into stock that is not part of the model "
+        self.overcut.setToolTip("Pocket / 3D Pocket: extend the removal region outward into stock that is not part of the model "
                                 "at the sampled pass depths, within the material boundary limit. "
                                 "Use this to overlap the next operation and avoid leaving a thin wall.")
         self.material_limit = self.spin(-1000, 1000, 0)
-        self.material_limit.setToolTip("Pocket / Waterfall, where the region reaches the blank edge: how far the cutter's outer edge may go "
+        self.material_limit.setToolTip("Pocket / 3D Pocket, where the region reaches the blank edge: how far the cutter's outer edge may go "
                                        "relative to that edge. 0 touches it, -1 leaves 1 mm of material, +1 passes 1 mm beyond. "
                                        "Default comes from Settings → Default operation settings.")
         self.strategy = QComboBox()
@@ -283,7 +286,7 @@ class CAMEditor(QWidget):
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
         self.follow_surface = QCheckBox("Follow the surface within each depth")
-        self.follow_surface.setToolTip("3D Waterfall: each depth also works the area up to the depth above, riding up the "
+        self.follow_surface.setToolTip("3D Pocket: each depth also works the area up to the depth above, riding up the "
                                        "model surface instead of stopping at it, so slopes are not left as steps.")
         self.follow_surface.toggled.connect(self._edit)
         form.addRow(self.follow_surface)
@@ -411,7 +414,8 @@ class CAMEditor(QWidget):
             return
         kind = self.kind.currentData()
         tool = next((t for t in self.tools if t.id == self.setup.groups[gi].tool_id), None)
-        op = Operation(name=KIND_LABELS[kind], kind=kind, auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
+        op = Operation(name=KIND_LABELS[kind], kind=kind, strategy="raster_x" if kind == "contour3d" else "contour",
+                       auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
                        area_order=self.defaults.get("default_area_order", DEFAULTS["default_area_order"]),
                        material_limit=float(self.defaults.get("default_material_limit", DEFAULTS["default_material_limit"])),
                        overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind in ("pocket", "waterfall") else 0.0)
@@ -456,6 +460,8 @@ class CAMEditor(QWidget):
         self.details.setEnabled(op is not None)
         choices = CUTTING_STRATEGIES.get(op.kind, ()) if op else ()
         self.operation_form.setRowVisible(self.strategy, bool(choices))
+        # Area order is decided by the operation (3D Pocket works each depth across all areas).
+        self.operation_form.setRowVisible(self.area_order, False)
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
         self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
         self.operation_form.setRowVisible(self.follow_surface, op is not None and op.kind == "waterfall")
@@ -506,8 +512,8 @@ class CAMEditor(QWidget):
                 sb.setValue(getattr(op, key))
                 sb.setEnabled(op.kind != "drill")
             self.strategy.setEnabled(bool(choices))
-            self.direction_override.setEnabled(op.kind in ("pocket", "profile", "waterfall"))
-            self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
+            self.direction_override.setEnabled(op.kind in DIRECTED_KINDS)
+            self.direction.setEnabled(op.kind in DIRECTED_KINDS and self.direction_override.isChecked())
             self.stepover.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
@@ -553,7 +559,7 @@ class CAMEditor(QWidget):
             self.direction.setCurrentIndex(0)
             self.direction.blockSignals(False)
         op.cut_direction = self.direction.currentData() if self.direction_override.isChecked() else "machine"
-        self.direction.setEnabled(op.kind in ("pocket", "profile", "waterfall") and self.direction_override.isChecked())
+        self.direction.setEnabled(op.kind in DIRECTED_KINDS and self.direction_override.isChecked())
         op.stay_down = self.stay_down.isChecked()
         op.follow_surface = self.follow_surface.isChecked()
         for key, sb in self.feed_controls.items():

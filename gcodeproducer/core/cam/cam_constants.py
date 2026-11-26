@@ -10,14 +10,15 @@ import math
 KINDS = ("pocket", "profile", "drill", "engrave", "slot", "waterfall", "contour3d")
 
 KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engrave": "Engrave", "slot": "Slot",
-               "waterfall": "3D Waterfall", "contour3d": "3D Contour"}
+               "waterfall": "3D Pocket", "contour3d": "3D Contour"}
 
 SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
 
 STRATEGY_ALIASES = {
     "pocket": {"raster": "raster_y", "trochoidal": "adaptive"},
     "waterfall": {"raster": "raster_y", "trochoidal": "adaptive"},
-    "contour3d": {"contour": "meander", "raster": "meander"},
+    # 3D Contour lines run along X or Y; Meander is now the cutting direction, not a strategy.
+    "contour3d": {"contour": "raster_x", "raster": "raster_x", "meander": "raster_x"},
 }
 
 SURFACE_TOLERANCE = 1e-3       # mm: model material this far above a level blocks the cutter at that level
@@ -26,6 +27,7 @@ SURFACE_MIN_RESOLUTION = .05   # mm: finest drop-cutter height grid
 SURFACE_CELLS_PER_DIAMETER = 40
 SURFACE_REUSE_MIN_POINTS = 16  # cache simplification only for longer spans
 SURFACE_SIMPLIFY = .005        # mm: 3D polyline simplification tolerance
+SURFACE_WALL_SLOPE = 5.        # 3D Contour rises/descends vertically where the cutter climbs steeper than this
 SURFACE_MAX_POINTS = 2_000_000
 SURFACE_ENGAGEMENT_STATIONS = (.25, .75, 1.)
 SURFACE_ENGAGEMENT_FORWARD = (0., .25, .5, .75)

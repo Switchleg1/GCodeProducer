@@ -512,7 +512,7 @@ class WaterfallGenerator(OperationGenerator):
             raise ValueError(f"{op.name}: no machinable paths between the selection and the model surface "
                              f"from Z{run.start:g} to Z{run.end:g}. Check that End Z is below the surface to machine "
                              "(link it to a lower edge/face) and that the cutter fits.")
-        ctx.log(f"  {op.name}: 3D Waterfall limited by the model surface, {produced} area/depth passes, "
+        ctx.log(f"  {op.name}: 3D Pocket limited by the model surface, {produced} area/depth passes, "
                 f"Z{run.start:g} to Z{run.end:g}" + (f"; {lifted} paths follow the surface up to the depth above"
                                                       if follow else "")
                 + (f"; {raised} adaptive step-up levels on the slopes" if raised else ""))

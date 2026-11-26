@@ -298,7 +298,8 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
         assert KIND_LABELS[kind] in editor.tree.currentItem().text(0)
         assert not editor.b_selection_depths.isHidden()
         assert editor.stepover.isEnabled()
-        assert editor.direction_override.isEnabled() == (kind != "contour3d")
+        assert editor.direction_override.isEnabled()          # 3D Contour too: Meander is a direction
+        assert editor.area_order.isHidden()
         assert editor.strategy.isEnabled()
         assert not hasattr(editor, "protect_model")
         assert not op.protect_model

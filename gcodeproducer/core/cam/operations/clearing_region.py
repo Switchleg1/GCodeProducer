@@ -1,4 +1,4 @@
-"""Shared removal-region geometry for Pocket and 3D Waterfall."""
+"""Shared removal-region geometry for Pocket and 3D Pocket."""
 from __future__ import annotations
 
 import math

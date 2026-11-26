@@ -33,7 +33,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
             expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Adaptive clearing']
                         if kind in ('pocket', 'waterfall') else
-                        ['Meander', 'Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
+                        ['Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
             assert labels == expected
             form = editor.operation_form
             assert form.labelForField(editor.strategy).text() == 'Cutting strategy'
@@ -105,23 +105,57 @@ def test_planar_clearing_raster_axis(libset, kind, strategy, axis):
 
 
 @pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
-def test_contour_raster_has_separate_single_direction_lines(strategy, axis):
+@pytest.mark.parametrize('direction', ['climb', 'conventional'])
+def test_contour_one_way_lines_cut_the_same_way_and_return_over_the_cut_line(strategy, axis, direction):
+    """One unbroken path: each line cut one way, travelled back over exactly, then a step over."""
     surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
-    paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy)
-    assert len(paths) > 2
-    for p in paths:
-        assert np.ptp(p[:, 1-axis]) < 1e-9
-        assert np.all(np.diff(p[:, axis]) >= -1e-9)
-        assert np.ptp(p[:, axis]) > 1
+    paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction=direction)
+    assert len(paths) == 1
+    p = paths[0]
+    p = p[np.r_[True, np.any(np.abs(np.diff(p, axis=0)) > 1e-9, axis=1)]]   # no repeated points
+    across = p[:, 1-axis]
+    rows = np.unique(np.round(across, 6))
+    assert len(rows) > 5 and np.all(np.diff(across) >= -1e-9)           # steps over one way only
+    # Climb keeps the uncut lines on the right (M3): along X that is travelling -X, along Y +Y.
+    climb_sign = -1 if axis == 0 else 1
+    sign = climb_sign if direction == 'climb' else -climb_sign
+    for row in rows[:-1]:
+        on = p[np.isclose(across, row)]
+        travel = np.diff(on[:, axis])
+        first_turn = np.flatnonzero(np.sign(travel) == -sign)[0]
+        assert np.all(np.sign(travel[:first_turn]) == sign)              # the cut: one way
+        assert np.allclose(on[:first_turn+1][::-1], on[first_turn:2*first_turn+1])   # back over exactly
+        assert np.ptp(on[:first_turn+1, axis]) > (10 if axis == 0 else 6) - .01   # the whole width
 
 
-def test_contour_meander_alternates_and_links():
+@pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
+def test_contour_meander_alternates_and_links_without_lifting(strategy, axis):
     surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
-    paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy='meander')
+    paths = surface_raster(box(0, 0, 10, 6), surface, 1, 1, -5, 0, strategy=strategy, direction='meander')
     assert len(paths) == 1
     delta = np.diff(paths[0][:, :2], axis=0)
-    assert delta[:, 0].min() < -1 and delta[:, 0].max() > 1
-    assert np.ptp(paths[0][:, 1]) > 5
+    assert delta[:, axis].min() < -1 and delta[:, axis].max() > 1
+    assert np.ptp(paths[0][:, 1-axis]) > 5
+    assert np.ptp(paths[0][:, 2]) < 1e-9                                 # never lifts
+
+
+def test_contour_lines_cross_cleared_ground_and_gaps_without_stopping():
+    """A line traces the whole contour: over ground already at its floor, and over a gap in the selection
+    at the top of the material (rising and descending vertically), never cutting outside the selection."""
+    from shapely.geometry import Polygon
+    surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.where(xy[:, 0] < 5, -6., 1.))
+    region = box(0, 0, 4, 6).union(box(6, 0, 10, 6))            # a 2 mm gap in the selection at x 4..6
+    paths = surface_raster(region, surface, 1, 1, -5, 0, strategy='raster_x', direction='meander', ceiling=0.)
+    assert len(paths) == 1
+    p = paths[0]
+    gap = (p[:, 0] > 4 + 1e-6) & (p[:, 0] < 6 - 1e-6)
+    assert gap.any() and np.all(p[gap, 2] >= 0.)                 # at or above the top in the gap
+    inside = ~gap
+    assert np.all(p[inside & (p[:, 0] < 4), 2] == -5.)          # down at the floor, model below it
+    assert np.all(p[inside & (p[:, 0] > 6), 2] == 1.)           # on the model where it stands above
+    moves = np.diff(p, axis=0)
+    crossing = np.abs(moves[:, 2]) > 1e-9
+    assert np.all((np.linalg.norm(moves[crossing][:, :2], axis=1) < 1e-9) | (np.abs(moves[crossing][:, 2]) < 1.5))
 
 
 @pytest.mark.parametrize('strategy', ['raster_x', 'raster_y'])
@@ -185,8 +219,12 @@ def test_old_strategy_names_preserve_existing_behaviour():
         assert setup.groups[0].operations[0].strategy == 'adaptive'
     assert Operation(kind='pocket', strategy='raster').strategy == 'raster_y'
     assert Operation(kind='waterfall', strategy='raster').strategy == 'raster_y'
-    assert Operation(kind='contour3d').strategy == 'meander'
-    assert Operation(kind='contour3d', strategy='raster').strategy == 'meander'
+    # Meander moved from the 3D Contour strategy to the cutting direction: saved files keep it.
+    for old in ('meander', 'contour', 'raster'):
+        op = Operation(kind='contour3d', strategy=old)
+        assert (op.strategy, op.cut_direction) == ('raster_x', 'meander')
+    assert Operation(kind='contour3d', strategy='meander', cut_direction='climb').cut_direction == 'climb'
+    assert Operation(kind='contour3d', strategy='raster_y').cut_direction == 'machine'
     assert Operation(kind='pocket', protect_model=True, strategy='raster').strategy == 'raster_y'
 
 

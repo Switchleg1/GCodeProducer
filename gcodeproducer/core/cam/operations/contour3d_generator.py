@@ -14,7 +14,8 @@ class Contour3dGenerator(OperationGenerator):
         from gcodeproducer.core.cam.surface_paths import surface_raster
         op = run.op
         return surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, z, op.stock,
-                              planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier)
+                              planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier,
+                              direction=run.direction)
 
     def generate(self, run, selection, planning):
         from shapely.geometry import box

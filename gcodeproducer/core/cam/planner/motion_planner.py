@@ -283,6 +283,14 @@ class MotionPlanner:
         self.air_skipped += sum(float(np.linalg.norm(s[1][:2]-s[0][:2])) for s in subs) - kept
         return runs
 
+    def skips_air(self, state):
+        """Whether surface paths may be cut short where they cross cleared ground.
+
+        Only 3D Pocket (waterfall) paths may lift, travel and be optimized: a 3D
+        Contour band is one unbroken path the cutter follows from end to end.
+        """
+        return self.skip_air and state is not None and getattr(self.config, 'kind', None) != 'contour3d'
+
     def surface_layer(self, paths):
         """One XYZ depth band: drop air, then visit the remaining pieces nearest-first.
 
@@ -292,7 +300,7 @@ class MotionPlanner:
         the material before the band, which stays valid: material only decreases.
         """
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
-        if not (self.skip_air and state is not None):
+        if not self.skips_air(state):
             for n, pts in enumerate(paths):
                 self._surface_run(state, pts, last=n == len(paths)-1)
             return
@@ -310,7 +318,7 @@ class MotionPlanner:
     def surface_path(self, pts, last=True):
         """XYZ surface path, skipping stretches already cleared by earlier moves or tools."""
         state = self.material.height if self.material.height is not None else self.material.estimate_height()
-        if not (self.skip_air and state is not None):
+        if not self.skips_air(state):
             return self._surface_run(state, pts, last=last)
         runs = self._material_runs(state, pts)
         if not runs:

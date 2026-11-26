@@ -219,8 +219,10 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         active = (engagement > 1e-6) & (engagement < slot_limit)
         vote = float(((right-left)*lengths*active).sum())
         desired = mode
-        if mode == "meander" and not neutral and abs(vote) > 1e-9 and not spiral:
-            # (An adaptive chain cut both ways has both hands by design: nothing to alternate or flag.)
+        both_ways = spiral or (mode == "meander" and not path.closed
+                               and operation.strategy in ("raster_x", "raster_y"))
+        if mode == "meander" and not neutral and abs(vote) > 1e-9 and not both_ways:
+            # (An adaptive chain, or Meander raster lines, are cut both ways by design: nothing to alternate.)
             desired = "climb" if handed % 2 == 0 else "conventional"
         if mode and not neutral and abs(vote) > 1e-9:
             reverse = (desired == "climb" and vote < 0) or (desired == "conventional" and vote > 0)

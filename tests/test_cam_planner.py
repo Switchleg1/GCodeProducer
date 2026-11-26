@@ -252,8 +252,9 @@ def test_lead_modes_every_layer_none_for_flat_and_surface_paths(libset, kind):
         if kind == "planar":
             job, op = emitted(libset, lead_in=mode_in, lead_out=mode_out)
         else:
-            job, op = surface_job(libset, kind="contour3d")
-            op.lead_in, op.lead_out, op.strategy = mode_in, mode_out, "raster_x"   # separate lines: many entries
+            # 3D Pocket raster lines riding the slope: separate lines, many entries (3D Contour is one path).
+            job, op = surface_job(libset, kind="waterfall", strategy="raster_x", follow_surface=True)
+            op.lead_in, op.lead_out = mode_in, mode_out
             generate(job, StageContext())
             CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
         entries, exits, segments = {}, {}, job.motion_plan.segments
@@ -270,8 +271,8 @@ def test_lead_modes_every_layer_none_for_flat_and_surface_paths(libset, kind):
     assert layer_in and all(n == 1 for n in layer_in.values()) and set(layer_in) <= set(every_in)
     if kind == "surface":
         assert sum(every_in.values()) > sum(layer_in.values())
-        # These raster lines end at the walls: carrying on would cut, so they retract straight out.
-        assert not every_out
+        # Lead-outs only where carrying on along the line would not cut (others retract straight out).
+        assert sum(every_out.values()) >= sum(layer_out.values())
     assert all(n == 1 for n in layer_out.values())
     none_in, none_out, job = leads("none", "none")
     assert not none_in and not none_out
@@ -346,8 +347,8 @@ def test_lead_out_carries_on_forward_at_the_cutting_feed(libset):
 
 def test_lead_out_is_skipped_and_the_tool_retracts_straight_up_when_carrying_on_would_cut(libset):
     from tests.test_cam_surface import surface_job
-    job, op = surface_job(libset, kind="contour3d")
-    op.strategy = "raster_x"       # separate lines, each ending against a wall of the pocket
+    # 3D Pocket raster lines riding the slope: separate lines, each ending against a wall of the pocket.
+    job, op = surface_job(libset, kind="waterfall", strategy="raster_x", follow_surface=True)
     generate(job, StageContext())
     ctx = StageContext()
     CAMEmit().run(job, CAMEmit.resolve({}), ctx)

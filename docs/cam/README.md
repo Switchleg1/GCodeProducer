@@ -17,7 +17,7 @@ T3 — drill
   Drill: selected hole rims
 ```
 
-Pocket and 3D Waterfall default to **wall-parallel contours**. They also offer
+Pocket and 3D Pocket default to **wall-parallel contours**. They also offer
 X/Y raster and
 [Adaptive clearing](toolpaths.md#adaptive-clearing). The CAM machine
 stores a default cutting direction—**Climb**, Conventional or Meander—with
@@ -54,7 +54,7 @@ Read [stock allocation and safety](stock-and-safety.md) before relying on it.
 3. Choose an allowed tool and **Add tool change**. A group references the tool
    library ID. Check its T number, diameter, feed, plunge feed, RPM and max DOC.
 4. Select the group, choose the operation kind (Pocket, Profile, Drill, Engrave,
-   Slot, 3D Waterfall or 3D Contour), then **Add operation**.
+   Slot, 3D Pocket or 3D Contour), then **Add operation**.
 5. Select machining faces/edges (part, material blank or
    [drawn reference geometry](reference-geometry.md)) and define start/end
    heights. Uncheck a row's **Use for machining** when it should supply depth
@@ -141,7 +141,7 @@ if the current blank is no longer suitable.
 Implemented machining is 2.5D from STL-derived topology, plus three 3-axis
 operations limited by the model surface:
 
-- [3D Waterfall clearing and depth-limited 3D Contour](3d-operations.md)
+- [3D Pocket clearing and depth-limited 3D Contour](3d-operations.md)
 
 - [Geometry selection and linked depths](selection-and-depths.md)
 - [Draw circles and rectangles as reference geometry](reference-geometry.md)

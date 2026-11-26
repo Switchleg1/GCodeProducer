@@ -11,6 +11,8 @@ def pocket_paths(op, loops, region, diameter, direction, log=None, **adaptive_op
     from gcodeproducer.core.geometry.infill import scan_fill
     from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths
     from gcodeproducer.core.cam.strategy import cutting_strategy
+    from shapely.geometry import LineString
+    from .operations_constants import RASTER_LINK_STEPS
     strategy = cutting_strategy(op.kind, op.strategy)
     paths = []
     if strategy == "contour":
@@ -27,13 +29,29 @@ def pocket_paths(op, loops, region, diameter, direction, log=None, **adaptive_op
         regions = [p for p, _ in boundary_paths(centre_region, direction)]
         if not regions:
             raise ValueError(f"{op.name}: pocket is too small for this tool")
-        # scan_fill's angle is the line NORMAL, not its travel direction.
+        # scan_fill's angle is the line NORMAL, not its travel direction. Its lines step along the
+        # normal and run from a to b with the next (uncut) line on their right: climb with M3.
         normal = math.pi/2 if strategy == "raster_x" else 0.
-        for a, b in scan_fill(regions, normal, diameter * op.stepover / 100, 0, 0, 0.01):
-            pts = np.array([a, b])
-            if direction == "conventional" or (direction == "meander" and len(paths) % 2):
-                pts = pts[::-1]
-            paths.append(Path("cut", pts, width=diameter))
+        spacing = diameter * op.stepover / 100
+        lines = scan_fill(regions, normal, spacing, 0, 0, 0.01)
+        n = np.array([math.cos(normal), math.sin(normal)])
+        rows = {}
+        for a, b in lines:
+            rows.setdefault(round(float(np.dot(a, n))/spacing), []).append(np.array([a, b]))
+        room = centre_region.buffer(1e-6)
+        for k, row in enumerate(rows[key] for key in sorted(rows)):
+            backwards = direction == "conventional" or (direction == "meander" and k % 2)
+            if backwards:
+                row = [pts[::-1] for pts in row[::-1]]
+            for pts in row:
+                path = Path("cut", pts, width=diameter)
+                if direction == "meander" and paths and not paths[-1].closed:
+                    # Meander: carry on to the next line along the area's edge without lifting.
+                    end = tuple(paths[-1].points[-1])
+                    link = LineString([end, tuple(pts[0])])
+                    if link.length <= RASTER_LINK_STEPS*spacing+1e-9 and room.covers(link):
+                        path.stay_down, path.stay_down_from = True, end
+                paths.append(path)
         paths.extend(Path("cut", p, closed=True, width=diameter) for p in regions)
     else:
         raise ValueError(f"Unknown pocket strategy '{op.strategy}'")
