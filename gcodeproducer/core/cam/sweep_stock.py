@@ -60,19 +60,50 @@ class SweepStock:
         window = self.blank if window is None else self.blank.intersection(window)
         if window.is_empty or z == self.top:
             return window.difference(window)
-        x0,y0,x1,y1 = window.bounds
-        cuts = []
-        for n in sorted({n for k in self._tiles(window.bounds) for n in self.index.get(k, ())}):
+        ids = sorted({n for k in self._tiles(window.bounds) for n in self.index.get(k, ())})
+        cut = self.cut_at(ids, z, tolerance, window.bounds)
+        return window if cut is None else window.difference(cut)
+
+    def cut_at(self, ids, z, tolerance, bounds):
+        """What the sweeps ``ids`` (in order) cleared at z within ``bounds``, as one geometry, or None."""
+        x0, y0, x1, y1 = bounds
+        # Buffering every sweep and uniting thousands of small polygons (a path sampled every tenth
+        # of a millimetre) cost almost all of the time. Consecutive sweeps of one path that lie wholly
+        # below z are one polyline, buffered once (and GEOS buffers a polyline far faster than it
+        # unites its pieces); only a sweep cut off by z, or a break in the path, starts another.
+        cuts, chain, last = [], None, None
+
+        def quads(r):
+            return max(1, math.ceil(math.pi/(8*math.asin(math.sqrt(min(1., tolerance/r)/2)))))
+
+        def close():
+            if chain is not None:
+                points, r = chain
+                line = Point(*points[0]) if len(points) == 1 else LineString(points)
+                cuts.append(line.buffer(r, quad_segs=quads(r)))
+
+        for n in ids:
             a, b, r = self.sweeps[n]
             if (max(a[0],b[0])+r<x0 or min(a[0],b[0])-r>x1 or
-                    max(a[1],b[1])+r<y0 or min(a[1],b[1])-r>y1): continue
+                    max(a[1],b[1])+r<y0 or min(a[1],b[1])-r>y1):
+                continue
+            if min(a[2], b[2]) > z:
+                continue
+            if max(a[2], b[2]) <= z:
+                if chain is not None and last == n-1 and chain[1] == r and chain[0][-1] == a[:2]:
+                    chain[0].append(b[:2])
+                else:
+                    close()
+                    chain = ([a[:2]] if a[:2] == b[:2] else [a[:2], b[:2]], r)
+                last = n
+                continue
+            close()
+            chain, last = None, None
             if a[2] > b[2]:
                 a, b = b, a
-            if a[2] > z:
-                continue
-            t = 1 if b[2] <= z else (z-a[2])/(b[2]-a[2])
+            t = (z-a[2])/(b[2]-a[2])
             end = tuple(a[i]+t*(b[i]-a[i]) for i in (0, 1))
             line = Point(*end) if end == a[:2] else LineString([a[:2], end])
-            segments = max(1, math.ceil(math.pi/(8*math.asin(math.sqrt(min(1., tolerance/r)/2)))))
-            cuts.append(line.buffer(r, quad_segs=segments))
-        return window.difference(unary_union(cuts))
+            cuts.append(line.buffer(r, quad_segs=quads(r)))
+        close()
+        return unary_union(cuts) if cuts else None

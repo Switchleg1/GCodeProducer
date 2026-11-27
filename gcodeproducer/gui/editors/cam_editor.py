@@ -36,7 +36,7 @@ from gcodeproducer.core.cam.depth import Depth
 from gcodeproducer.core.cam.operation import Operation
 from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, LEAD_OUT_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
+from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, LEAD_OUT_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
 
 
@@ -243,7 +243,11 @@ class CAMEditor(QWidget):
                                        "0 keeps the lead-out level on the path.")
         self.lead_out_angle.valueChanged.connect(self._edit)
         form.addRow("Lead-out angle (°)", self.lead_out_angle)
-        self.stepover = self.spin(1, 100, 40)
+        self.stepover = self.spin(.1, 100, 40)
+        self.stepover.setToolTip("Distance between neighbouring passes, as a percentage of the cutter diameter. "
+                                 "With Adaptive clearing it is the engagement limit instead: the most of the "
+                                 "cutter's width (measured square to its travel) any cut may engage; the "
+                                 "spacing of the passes follows from the material. Does not apply to the lead-in.")
         self.area_order = QComboBox()
         self.area_order.addItem("Each area to full depth", "area")
         self.area_order.addItem("Each depth across all areas", "depth")
@@ -277,10 +281,6 @@ class CAMEditor(QWidget):
                 w.currentIndexChanged.connect(self._edit)
             else:
                 w.valueChanged.connect(self._edit)
-        self.adaptive_engagement = self.spin(.1, 100, ADAPTIVE_CAM_LIMIT*100)
-        self.adaptive_engagement.setToolTip("Maximum sampled cutter-width engagement for adaptive peels and checked finish cuts. Does not apply to lead-in.")
-        self.adaptive_engagement.valueChanged.connect(self._edit)
-        form.addRow("Adaptive engagement (%)", self.adaptive_engagement)
         self.stay_down = QCheckBox("Stay down between contours")
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists. "
                                   "3D Contour cut one way (Climb/Conventional): come back along the line just cut instead of "
@@ -468,7 +468,6 @@ class CAMEditor(QWidget):
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
         self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
         self.operation_form.setRowVisible(self.follow_surface, op is not None and op.kind == "waterfall")
-        self.operation_form.setRowVisible(self.adaptive_engagement, bool(op and op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive'))
         self.strategy.clear()
         for label, value in choices:
             self.strategy.addItem(label, value)
@@ -497,7 +496,6 @@ class CAMEditor(QWidget):
             self.lead_length.setValue(op.lead_length)
             self.lead_angle.setValue(op.lead_angle)
             self.lead_out_angle.setValue(op.lead_out_angle)
-            self.adaptive_engagement.setValue(op.adaptive_engagement)
             self.stepover.setValue(op.stepover)
             self.area_order.setCurrentIndex(self.area_order.findData(op.area_order))
             self.side.setCurrentIndex(self.side.findData(op.side))
@@ -524,7 +522,6 @@ class CAMEditor(QWidget):
         self.selectionChanged.emit()
 
     def _update_stay_down(self, op):
-        self.operation_form.setRowVisible(self.adaptive_engagement, op.kind in ('pocket', 'waterfall') and op.strategy == 'adaptive')
         self.stay_down.setEnabled((op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "adaptive"))
                                   or op.kind == "contour3d")
 
@@ -551,7 +548,6 @@ class CAMEditor(QWidget):
         op.lead_length = self.lead_length.value()
         op.lead_angle = self.lead_angle.value()
         op.lead_out_angle = self.lead_out_angle.value()
-        op.adaptive_engagement = self.adaptive_engagement.value()
         if op.kind == "profile" and self.side.currentData() is not None:
             op.side = self.side.currentData()
         op.stock = self.stock.value()

@@ -17,7 +17,7 @@ class HybridStock(SweepStock):
         self.low = np.full((ny,nx),float(top)); self.high = self.low.copy()
         self.stamp = np.zeros((ny,nx),dtype=np.int64)
         self.cache = {}  # last exact point per block, tagged by last local cut
-        self.sections = {}  # one fixed-depth residual per queried block, versioned by local stamp
+        self.sections = {}  # one fixed-depth residual per index tile, versioned by its sweep count
         self.fast = self.detailed = 0
 
     @classmethod
@@ -80,11 +80,35 @@ class HybridStock(SweepStock):
                 continue
             if self.low[i,j]>z:
                 return False
-            token = (self.stamp[i,j],z,tolerance)
-            entry = self.sections.get((i,j))
-            if entry is None or entry[0] != token:
-                entry = (token,self.remaining(z,tolerance,block))
-                self.sections[i,j] = entry
-            if entry[1].intersects(footprint):
-                return False
+            # The section of the stock at z is worked out a whole tile at a time (the sweeps are indexed
+            # by tile) and kept until a cut touches the tile: one union per tile, not per block.
+            for key in self._tiles(block.bounds):
+                if self._tile_section(key, z, tolerance).intersects(block.intersection(footprint)):
+                    return False
         return True
+
+    def _tile_section(self, key, z, tolerance):
+        """The stock left above z within one index tile.
+
+        Kept per tile and depth. Cuts only ever remove stock, so when cuts have
+        touched the tile since, only those new sweeps are taken away from the
+        section kept, instead of working the whole tile out again.
+        """
+        from shapely import prepare
+        ids = self.index.get(key, ())
+        entry = self.sections.get(key)
+        if entry is not None and entry[0] == (z, tolerance):
+            count, section = entry[1], entry[2]
+            if count == len(ids):
+                return section
+            if not section.is_empty:
+                cut = self.cut_at(ids[count:], z, tolerance, section.bounds)
+                if cut is not None:
+                    section = section.difference(cut)
+                    prepare(section)
+        else:
+            i, j = key
+            section = self.remaining(z, tolerance, box(i*self.tile, j*self.tile, (i+1)*self.tile, (j+1)*self.tile))
+            prepare(section)
+        self.sections[key] = ((z, tolerance), len(ids), section)
+        return section

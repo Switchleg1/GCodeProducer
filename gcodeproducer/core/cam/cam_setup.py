@@ -34,6 +34,12 @@ class CAMSetup:
             for item in g.get("operations", []):
                 d = dict(item)
                 d.pop('adaptive_peels', None)  # retired per-depth planning cutoff
+                # Adaptive's engagement limit was its own field until 0.2.71; it is now the stepover.
+                engagement = d.pop('adaptive_engagement', None)
+                if engagement is not None:
+                    from .strategy import cutting_strategy
+                    if cutting_strategy(d.get('kind', 'pocket'), d.get('strategy', 'contour')) == 'adaptive':
+                        d['stepover'] = float(engagement)
                 d["geometry"] = [Reference(**r) for r in d.get("geometry", [])]
                 d["height_references"] = [Reference(**r) for r in d.get("height_references", [])]
                 d["start"], d["end"] = depth(d["start"]), depth(d["end"])

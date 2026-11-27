@@ -33,9 +33,9 @@ def adaptive_paths(op, region, diameter, direction, log=None, *, material=None, 
     if tabs or tool_type != 'endmill' or Operation.lead_mode(op.lead_in) == 'none' or not op.stay_down:
         raise ValueError(f'{op.name}: Adaptive clearing requires a flat endmill, lead-in and stay-down, '
                          'and does not support this tab-protected area. No contour fallback was generated.')
-    limit = op.adaptive_engagement/100
+    limit = op.stepover/100
     if not math.isfinite(limit) or not .001 <= limit <= 1.:
-        raise ValueError('Adaptive engagement limit must be between 0.1 and 100%')
+        raise ValueError('Adaptive stepover (the engagement limit) must be between 0.1 and 100%')
     radius = diameter/2
     contours = contour_pocket([], radius, op.stock, op.stepover, direction, region=region)
     centre = region.buffer(-(radius+op.stock))

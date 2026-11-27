@@ -8,6 +8,11 @@
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
 - 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
+## 0.2.71
+
+- Operator: Adaptive engagement % merged into Stepover %. `Operation.adaptive_engagement` removed; `CAMSetup.from_dict` moves a saved value into `stepover` for Adaptive operations only; `engagement_width` and the step-up passes read `op.stepover`. Stepover spin now 0.1-100 %.
+- Operator: spiral contour slow to slice. Profiled on the Mini Yoda: spiral generation 2 s; nearly all the rest was the hybrid stock (0.2.53-0.2.55) answering clearance and Preview queries by buffering every 0.1 mm sweep and uniting thousands of polygons. `SweepStock.cut_at` buffers consecutive wholly-below sweeps as one polyline; `HybridStock` keeps one section per index tile and depth and only subtracts new sweeps from it. Same NC byte for byte (spiral stay-down and 3D Pocket contours). Spiral lifting 83 s -> 44-47 s, spiral staying down 235 s -> 37 s. What is left is per move (about 45,000 feed moves): height-grid sweeps and engagement in the motion planner, and the material Preview replay.
+
 ## 0.2.70
 
 - Operator: a spiral strategy for 3D Contour, from the centre of the boundary zone outwards, following the contour like the rasters; at a wall walk it if Stay down is checked, else lift to where it is back in bounds. `surface_spiral` (+ `_cutter_track`, `_along_the_wall`); strategy `spiral`. Added without being asked: a closing pass round each edge of the area, because the clipped spiral leaves up to a stepover beside the walls (test shows the gap without it).

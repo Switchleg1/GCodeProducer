@@ -15,10 +15,10 @@ from .wavefront_constants import WALL_HOOKS, MIRROR_FOR_CLIMB, END_ALLOWANCE, MA
 
 
 def engagement_width(op):
-    """The operation's sampled width limit as a share of the cutter diameter."""
-    width = op.adaptive_engagement/100
+    """The operation's sampled width limit as a share of the cutter diameter (its stepover)."""
+    width = op.stepover/100
     if not math.isfinite(width) or not .001 <= width <= 1.:
-        raise ValueError('Adaptive engagement limit must be between 0.1 and 100%')
+        raise ValueError(f'{op.name}: Adaptive stepover (the engagement limit) must be between 0.1 and 100%')
     return width
 
 
@@ -140,7 +140,7 @@ def wavefront_paths(op, region, diameter, direction, log=None, *, material=None,
 
     See plan_level. planned, if given, is plan_level's result for exactly these
     arguments, worked out ahead (several depths at once in worker processes).
-    The limit is the sampled engaged width (op.adaptive_engagement, percent
+    The limit is the sampled engaged width (op.stepover, percent
     of the cutter diameter), measured square to the cutter's travel. Stock the
     plan cannot reach is reported as an incomplete, debug-only result, never
     silently left.

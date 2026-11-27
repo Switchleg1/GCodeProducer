@@ -125,6 +125,16 @@ class MotionPlanner:
         self.add("travel", np.r_[xy, self.position[2]], rate=float(self.rapid_feed),
                  comment="stay at depth: cleared by the previous pass")
 
+    def endmill(self):
+        """Whether the current tool is a flat endmill (looked up once per tool, not per move)."""
+        tool = self.tool
+        if tool is None:
+            return False
+        cached = getattr(self, '_endmill', None)
+        if cached is None or cached[0] is not tool:
+            self._endmill = cached = (tool, tool.get('type', 'endmill') == 'endmill')
+        return cached[1]
+
     def sampler(self, state):
         from .height_sampler import HeightSampler
         return HeightSampler(state) if state is not None else None
@@ -142,8 +152,8 @@ class MotionPlanner:
         # Every flat-endmill operation: a move the height grid reads as air is checked against a second
         # grid that only credits cells a cutter covered whole, and is fed as a cut where that one
         # still shows stock (a skin thinner than a cell beside a wall, the edge of a ring).
-        bounded = (state is not None and self.config is not None and self.tool is not None
-                   and self.tool.get('type', 'endmill') == 'endmill')
+        endmill = self.endmill()
+        bounded = state is not None and self.config is not None and endmill
         if bounded:
             if self.air_bound is None or self.air_bound[0] is not state:
                 from copy import copy
@@ -155,8 +165,7 @@ class MotionPlanner:
             # Half the cell diagonal encloses every point in the cell; allow
             # for XY rounding too. Credit only cells fully under the disk.
             margin = .5*math.hypot(state.dx, state.dy) + .002
-        track = (state is not None and self.tool is not None and not state.tabs
-                 and self.tool.get('type', 'endmill') == 'endmill')
+        track = state is not None and not state.tabs and endmill
         if track and not hasattr(state, 'hybrid'):
             from ..hybrid_stock import HybridStock
             state.hybrid = HybridStock.for_height_state(state)

@@ -54,7 +54,7 @@ def probe(nc, passes=4, layer=0, targeted_passes=4, previous=()):
     initial=slope_excess(); air_hits=0
     # Branch from the last cutting endpoint, before the existing layer retract.
     here=np.array(b); assert abs(here[2]-floor)<.01, here
-    width=radius*2*op['adaptive_engagement']/100
+    width=radius*2*op.get('adaptive_engagement', op['stepover'])/100
     proposals=front_proposals(stock,surface,area,here,floor,ceiling,radius,width,'climb',op['stock'],90.)
     print('start',here,'proposals',len(proposals), 'non-flat',sum(a[2]!=b[2] for a,b in proposals),flush=True)
     # Attempt all nonflat proposals; every decision sees all preceding cuts.

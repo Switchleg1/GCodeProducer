@@ -214,7 +214,7 @@ class WaterfallGenerator(OperationGenerator):
         inner, outer = (flat.buffer(-offset) if inner is None else inner), wide.buffer(-offset)
         if inner.is_empty or outer.difference(inner).area < 1e-3:
             return []
-        step = max(SLOPE_STEP_MIN, run.diameter*op.adaptive_engagement/100)
+        step = max(SLOPE_STEP_MIN, run.diameter*op.stepover/100)
         width = outer.hausdorff_distance(inner)
         pieces = []   # (step number, points, closed)
         least = run.radius if shortest is None else shortest

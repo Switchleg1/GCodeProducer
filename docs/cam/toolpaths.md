@@ -18,9 +18,13 @@ needed, with corner moves and a finish only where stock is left on a wall.
 Every cut is replayed against the stock and refused if its sampled contact
 angle exceeds the limit; a lighter stepover is tried instead.
 
-**Adaptive engagement (%)** is the largest engaged width, as a share of the
-cutter diameter: how far across the cutter, square to its travel, the
-material it touches reaches (default 18 %). A straight cut that wide is a
+With Adaptive clearing the **Stepover (%)** is the engagement limit (0.2.71;
+before, a separate *Adaptive engagement* field): the largest engaged width, as
+a share of the cutter diameter, how far across the cutter, square to its
+travel, the material it touches reaches. Adaptive does not space its passes by
+it; the spacing follows from the material. Saved Adaptive operations open with
+their old engagement value as the stepover; other strategies keep theirs. New
+operations start at 40 %, so set it before slicing an Adaptive job. A straight cut that wide is a
 radial depth of that share of the diameter. In a hole the spiral widens,
 and in concave curves, the same width comes at a smaller stepover. The
 first and last 3 mm of each front may reach 1.25 times the limit, a short

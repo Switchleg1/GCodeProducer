@@ -63,7 +63,6 @@ ADAPTIVE_ENTRY_RADIUS_FACTOR = .9  # less than cutter radius: the flat lap must 
 ADAPTIVE_ENTRY_LIMIT = 20_000
 ADAPTIVE_CAM_POINT_LIMIT = 20_000  # resource guard; exceeding it never authorizes a cut
 ADAPTIVE_CAM_COMPONENTS = 4
-ADAPTIVE_CAM_LIMIT = .18  # default sampled width limit for peels and finish moves
 ADAPTIVE_BLEND_RADIUS_FACTORS = (1., .5, .25)
 ADAPTIVE_BLEND_TURN_THRESHOLD = math.radians(15.)
 ADAPTIVE_BLEND_MAX_CHORD_ANGLE = math.radians(10.)

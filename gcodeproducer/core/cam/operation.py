@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.depth import Depth
-from gcodeproducer.core.cam.cam_constants import ADAPTIVE_CAM_LIMIT, RAMP_ANGLE, LEAD_MODE_KEYS
+from gcodeproducer.core.cam.cam_constants import RAMP_ANGLE, LEAD_MODE_KEYS
 
 @dataclass
 class Operation:
@@ -13,7 +13,7 @@ class Operation:
     start: Depth = field(default_factory=Depth)
     end: Depth = field(default_factory=lambda: Depth("bottom"))
     stepdown: float = 1.0
-    stepover: float = 40.0
+    stepover: float = 40.0  # % of the cutter diameter; Adaptive: the most of its width a cut may engage
     side: str = "outside"
     stock: float = 0.0
     enabled: bool = True
@@ -49,7 +49,6 @@ class Operation:
     lead_angle: float = RAMP_ANGLE      # maximum lead-in descent, in degrees
     lead_out_angle: float = RAMP_ANGLE  # lead-out climb along the cleared path, in degrees (0 = level)
 
-    adaptive_engagement: float = ADAPTIVE_CAM_LIMIT * 100  # sampled width, percent of cutter diameter
 
     @staticmethod
     def lead_mode(value):

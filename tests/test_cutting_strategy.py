@@ -56,10 +56,11 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
                 assert restored.groups[0].operations[-1].strategy == strategy
-                assert form.isRowVisible(editor.adaptive_engagement) == (strategy == 'adaptive')
+                assert not hasattr(editor, 'adaptive_engagement')      # the stepover is Adaptive's limit
+                assert 'engagement limit' in editor.stepover.toolTip()
                 if strategy == 'adaptive':
-                    editor.adaptive_engagement.setValue(24)
-                    assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].adaptive_engagement == 24
+                    editor.stepover.setValue(12.5)
+                    assert CAMSetup.from_dict(editor.setup.to_dict()).groups[0].operations[-1].stepover == 12.5
     finally:
         editor.close()
 
@@ -367,3 +368,15 @@ def test_contour_spiral_staying_down_walks_the_wall_instead_of_lifting():
     assert LineString(way).length == pytest.approx(2.)
     holed = region.difference(box(4, 2, 6, 4))
     assert _along_the_wall(holed, (1, 0), (4, 3), .1) is None
+
+
+def test_saved_adaptive_engagement_becomes_the_stepover_only_for_adaptive():
+    def load(strategy, **extra):
+        return CAMSetup.from_dict({'groups': [{'tool_id': 't', 'operations': [
+            dict({'kind': 'waterfall', 'strategy': strategy, 'stepover': 40., 'start': {}, 'end': {}}, **extra)]}]}
+        ).groups[0].operations[0]
+    assert load('adaptive', adaptive_engagement=10.).stepover == 10.
+    assert load('trochoidal', adaptive_engagement=12.).stepover == 12.       # old name of Adaptive
+    assert load('contour', adaptive_engagement=10.).stepover == 40.          # not Adaptive: kept
+    assert load('adaptive').stepover == 40.
+    assert not hasattr(load('adaptive', adaptive_engagement=10.), 'adaptive_engagement')
