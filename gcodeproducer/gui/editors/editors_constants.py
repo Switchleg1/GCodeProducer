@@ -98,3 +98,5 @@ STOCK_FIELDS = (
 
 SECTION_BODY_MARGINS = (6, 4, 4, 6)
 SECTION_STATE_PREFIX = "sections/"
+
+CAPPED_COLOUR = "#e8890c"   # orange: a value the tool or machine has cut down

@@ -9,6 +9,7 @@ from .editors_constants import (
     CUTTING_STRATEGIES,
     CUT_DIRECTIONS,
     DIRECTED_KINDS,
+    CAPPED_COLOUR,
     ENGAGEMENT_CONTROLS,
     MACHINE_FEED_DEFAULTS,
     RATE_FIELDS,
@@ -672,6 +673,17 @@ class CAMEditor(QWidget):
                 value.blockSignals(True);value.setValue(values[key]);value.blockSignals(False)
         if not self.doc_override.isChecked() and "stepdown" in values:
             self.stepdown.blockSignals(True);self.stepdown.setValue(values["stepdown"]);self.stepdown.blockSignals(False)
+        if "stepdown" in values:
+            self.flag_stepdown_cap(values.get("requested_stepdown", values["stepdown"]), values["stepdown"])
+
+    def flag_stepdown_cap(self, requested, used):
+        """Orange depth of cut, with the reason in its tooltip, when the tool's Max depth/pass cuts it down."""
+        capped = requested > used + 1e-9
+        self.stepdown.setStyleSheet(f"QDoubleSpinBox {{ color: {CAPPED_COLOUR}; }}" if capped else "")
+        self.stepdown.setToolTip(
+            f"Capped by the tool: this operation asks for {requested:g} mm per pass, but the tool's Max depth/pass "
+            f"is {used:g} mm, so passes are {used:g} mm deep. Raise or clear (0) Max depth/pass in the tool "
+            f"library to cut deeper." if capped else self.doc_override.toolTip())
 
     def use_selection_depths(self):
         op = self.operation()

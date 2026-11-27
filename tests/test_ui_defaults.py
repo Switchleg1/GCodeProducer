@@ -358,3 +358,28 @@ def test_every_pane_in_the_window_uses_the_shared_section(app, tmp_path, monkeyp
     finally:
         win.dirty = {k: False for k in win.dirty}
         win.close()
+
+
+def test_depth_of_cut_turns_orange_and_explains_when_the_tool_caps_it(app):
+    from gcodeproducer.core.cam.cutting import resolve_cutting
+    from dataclasses import asdict
+    from gcodeproducer.core.profiles import Profile
+    from gcodeproducer.gui.cam_editor import CAMEditor
+    from gcodeproducer.gui.editors.editors_constants import CAPPED_COLOUR
+    editor = CAMEditor()
+    tool = Profile("tool", "Test cutter", values={"diameter": 4., "max_doc": 2.})
+    editor.set_tools([tool])
+    editor.add_tool(); editor.add_operation()
+    plain = editor.stepdown.toolTip()
+    editor.doc_override.setChecked(True)
+    editor.stepdown.setValue(2.5)
+    data = resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())
+    assert (data.requested_stepdown, data.stepdown) == (2.5, 2.)
+    editor.set_calculated(asdict(data))
+    assert CAPPED_COLOUR in editor.stepdown.styleSheet()
+    tip = editor.stepdown.toolTip()
+    assert "2.5 mm" in tip and "Max depth/pass is 2 mm" in tip and "passes are 2 mm" in tip
+    editor.stepdown.setValue(1.5)
+    editor.set_calculated(asdict(resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())))
+    assert editor.stepdown.styleSheet() == "" and editor.stepdown.toolTip() == plain
+    editor.close()
