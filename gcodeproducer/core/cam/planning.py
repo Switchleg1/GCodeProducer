@@ -190,6 +190,8 @@ def highlight_geometry(payload):
             out["cutting_values"]["cut_direction"] = (context["machine"].get("cut_direction", "climb")
                                                        if op.cut_direction == "machine" else op.cut_direction)
             out["cutting"] = data.summary()
+            from gcodeproducer.core.cam.value_overrides import operation_overrides
+            out["overrides"] = operation_overrides(context["machine"], context["tool"], op_stock, op)
         except ValueError as exc:
             out["cutting"] = str(exc)
     try:

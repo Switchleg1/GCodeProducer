@@ -222,6 +222,29 @@ inside an unnecessarily narrow column.
 
 ![Single-line CAM clearance and material labels](pictures/cam-operation-label-widths.png)
 
+## Values shown in orange
+
+A number shown in **orange** is valid but will not be used as entered. Its
+tooltip starts with the reason, above the field's usual help. The value
+itself is never changed: fix the limit (or the value) to clear it.
+
+| Where | Field | Why |
+|---|---|---|
+| CAM operation | Depth per pass | Above the tool's **Max depth/pass**: passes use the tool's value |
+| CAM operation | Spindle RPM | Above the machine's **Spindle max** or the tool's **Max spindle RPM** |
+| CAM operation | Cut, lead-in and plunge base feeds; engagement feed % | Above the machine's **Max feed** (for a %, the cut feed times it) |
+| CAM operation | Lead-in / plunge feed % | Not used: that base feed is unlocked |
+| CAM operation | Stepover | Wall-parallel contours over 50 %: used as 50 % |
+| Process (FDM output) | Speeds, acceleration | Above the machine's **Max print / travel speed** or **Max acceleration** |
+| Library: material | Nozzle, bed, chamber temperatures | Above the machine's limits; a chamber temperature on a machine without a heated chamber is ignored |
+| Library: tool | Fixed spindle RPM, cut and lead-in feeds | Above the active machine's **Spindle max** / **Max feed** or the tool's own **Max spindle RPM** |
+
+Library values are judged against the machine selected in the main window.
+Not shown here: caps that depend on the geometry or the path, such as the
+volumetric flow cap on each FDM path (see the slicing log), the overcut kept
+inside the material boundary, or the material and surface grids coarsened by
+the cell limit (job warnings).
+
 ## Collapsible panes
 
 Every panel is built from the same collapsible pane as the FDM process sections

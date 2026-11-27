@@ -152,6 +152,20 @@ class LibraryDialog(QDialog):
 
             show_bridge_fields(editor.values)
             editor.changed.connect(show_bridge_fields)
+        if p.kind in ('material', 'tool'):
+            # Values the active machine will not use as entered (temperatures, spindle speed, feeds).
+            machine = getattr(self.parent(), '_machine', lambda: None)()
+
+            def show_overrides(values, kind=p.kind, machine=machine):
+                if kind == 'material':
+                    from gcodeproducer.core.fdm.value_overrides import material_overrides
+                    editor.set_warnings(material_overrides(values, machine))
+                else:
+                    from gcodeproducer.core.cam.value_overrides import tool_overrides
+                    editor.set_warnings(tool_overrides(values, machine))
+
+            show_overrides(editor.values)
+            editor.changed.connect(show_overrides)
         if p.kind == 'machine' and 'auto_tool_change' in editor.values:
             def show_changer_fields(values):
                 editor.set_field_visible('max_tool_number', bool(values['auto_tool_change']))

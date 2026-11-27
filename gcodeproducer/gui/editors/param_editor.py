@@ -82,6 +82,12 @@ class ParamEditor(QWidget):
                 self._form_fields[p.name] = form, w
         outer.addStretch(1)
 
+    def set_warnings(self, messages):
+        """Warn on each number field named in ``messages`` (its value is not used as entered); clear the rest."""
+        for name, widget in self._widgets.items():
+            if hasattr(widget, "set_warning"):
+                widget.set_warning(messages.get(name))
+
     def set_field_visible(self, name, visible):
         """Show or hide a standalone field and its label without changing its value."""
         form, widget = self._form_fields[name]

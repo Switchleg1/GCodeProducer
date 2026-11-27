@@ -668,16 +668,18 @@ class CAMEditor(QWidget):
                 value.blockSignals(True);value.setValue(values[key]);value.blockSignals(False)
         if not self.doc_override.isChecked() and "stepdown" in values:
             self.stepdown.blockSignals(True);self.stepdown.setValue(values["stepdown"]);self.stepdown.blockSignals(False)
-        if "stepdown" in values:
-            self.flag_stepdown_cap(values.get("requested_stepdown", values["stepdown"]), values["stepdown"])
 
-    def flag_stepdown_cap(self, requested, used):
-        """Orange depth of cut, with the reason in its tooltip, when the tool's Max depth/pass cuts it down."""
-        capped = requested > used + 1e-9
-        self.stepdown.set_warning(
-            f"Capped by the tool: this operation asks for {requested:g} mm per pass, but the tool's Max depth/pass "
-            f"is {used:g} mm, so passes are {used:g} mm deep. Raise or clear (0) Max depth/pass in the tool "
-            f"library to cut deeper." if capped else None)
+    def override_fields(self):
+        """The operation's number boxes by field name (operation attribute), for value warnings."""
+        fields = {"stepdown": self.stepdown, "stepover": self.stepover}
+        fields.update({key: value for key, (_unlock, value) in self.rate_controls.items()})
+        fields.update(self.feed_controls)
+        return fields
+
+    def show_overrides(self, messages):
+        """Warn on every field whose value is not used as entered (see value_overrides); clear the rest."""
+        for key, box in self.override_fields().items():
+            box.set_warning(messages.get(key))
 
     def use_selection_depths(self):
         op = self.operation()

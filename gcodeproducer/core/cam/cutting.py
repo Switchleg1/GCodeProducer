@@ -26,6 +26,8 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
     if not math.isfinite(rpm) or rpm<=0 or any(not math.isfinite(c) or c<=0 for c in caps):
         raise ValueError("RPM request and machine/tool ceilings must be positive and finite")
     max_rpm = min(caps)
+    requested_rpm = rpm
+    limit_source = "machine Spindle max" if caps[0] <= caps[1] else "tool Max spindle RPM"
     rpm = math.floor(min(rpm, max_rpm))  # highest whole RPM within all ceilings, never round above SFM
     minimum = float(machine.get("spindle_min",0) or 0)
     if not math.isfinite(minimum) or minimum<0:
@@ -72,4 +74,4 @@ def resolve_cutting(machine, tool, stock=None, operation=None):
         step = min(step,maximum)
     if step <= 0 or not math.isfinite(step):
         raise ValueError("Depth per pass must be positive and finite")
-    return CuttingData(rpm,feed,lead,step,key,depth_source,requested_stepdown,plunge)
+    return CuttingData(rpm,feed,lead,step,key,depth_source,requested_stepdown,plunge,requested_rpm,limit_source)

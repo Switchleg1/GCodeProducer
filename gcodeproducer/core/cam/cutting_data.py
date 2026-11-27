@@ -13,6 +13,8 @@ class CuttingData:
     depth_source: str = ""
     requested_stepdown: float = 0.0
     plunge_feed: float = 0.0          # 0: same as the lead-in feed (older saved data)
+    requested_rpm: float = 0.0        # before the machine/tool spindle ceilings
+    rpm_limit_source: str = ""        # which ceiling capped it
 
     @property
     def plunge(self):

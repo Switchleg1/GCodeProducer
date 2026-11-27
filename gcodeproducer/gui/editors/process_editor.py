@@ -55,6 +55,12 @@ class ProcessEditor(QWidget):
             out.append((f"{step.stage}#{counts[step.stage]}", counts[step.stage]))
         return out
 
+    def show_overrides(self, messages):
+        """Warn on the output (speed) settings the machine caps; see core.fdm.value_overrides."""
+        self._overrides = dict(messages)
+        if getattr(self, "_seam_editor", None) is not None:
+            self._seam_editor.set_warnings(self._overrides)
+
     def set_pipeline(self, pipeline: SlicePipeline) -> None:
         self.pipeline = pipeline
         self._seam_editor = None
@@ -123,6 +129,7 @@ class ProcessEditor(QWidget):
         editor.setEnabled(step.enabled)
         if step is self.pipeline.step('fdm_emit'):
             self._seam_editor = editor
+            editor.set_warnings(getattr(self, "_overrides", {}))
 
             def show_retraction_fields(values):
                 mode = values['retraction_mode']

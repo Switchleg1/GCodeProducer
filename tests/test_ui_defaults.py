@@ -360,29 +360,46 @@ def test_every_pane_in_the_window_uses_the_shared_section(app, tmp_path, monkeyp
         win.close()
 
 
-def test_depth_of_cut_turns_orange_and_explains_when_the_tool_caps_it(app):
-    from gcodeproducer.core.cam.cutting import resolve_cutting
-    from dataclasses import asdict
+def test_values_not_used_as_entered_turn_orange_and_say_why(app):
+    """Depth of cut capped by the tool, spindle speed and feeds capped by the machine, a lead-in
+    percentage that an unlocked lead-in feed makes unused, and a contour stepover over 50 %."""
+    from gcodeproducer.core.cam.value_overrides import operation_overrides
     from gcodeproducer.core.profiles import Profile
     from gcodeproducer.gui.cam_editor import CAMEditor
     from gcodeproducer.gui.controls.controls_constants import WARNING_COLOUR
+    machine = {"spindle_max": 12000, "max_feed": 1500}             # a CAM machine (any mapping)
+    tool = Profile("tool", "Test cutter", values={"diameter": 4., "max_doc": 2., "spindle_rpm": 18000,
+                                                  "feed": 1000, "high_engagement_feed": 200})
     editor = CAMEditor()
-    tool = Profile("tool", "Test cutter", values={"diameter": 4., "max_doc": 2.})
     editor.set_tools([tool])
     editor.add_tool(); editor.add_operation()
-    plain = editor.stepdown.toolTip()
-    editor.doc_override.setChecked(True)
-    editor.stepdown.setValue(2.5)
-    data = resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())
-    assert (data.requested_stepdown, data.stepdown) == (2.5, 2.)
-    editor.set_calculated(asdict(data))
-    assert WARNING_COLOUR in editor.stepdown.styleSheet()
-    tip = editor.stepdown.toolTip()
-    assert "2.5 mm" in tip and "Max depth/pass is 2 mm" in tip and "passes are 2 mm" in tip
-    assert tip.endswith(plain)                         # the warning leads; the normal tooltip is kept
-    editor.stepdown.setValue(1.5)
-    editor.set_calculated(asdict(resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())))
-    assert editor.stepdown.styleSheet() == "" and editor.stepdown.toolTip() == plain
+    op = editor.operation()
+    fields = editor.override_fields()
+    plain = {key: box.toolTip() for key, box in fields.items()}
+
+    def show():
+        editor.show_overrides(operation_overrides(machine, tool, None, op))
+        return {key for key, box in fields.items() if box.warning()}
+
+    assert show() == {"rpm"}                                   # 18000 asked, the machine stops at 12000
+    assert "12000 rpm (machine Spindle max)" in fields["rpm"].toolTip()
+    editor.doc_override.setChecked(True); editor.stepdown.setValue(2.5)
+    editor.feed_controls["high_engagement_feed"].setValue(200)
+    editor.stepover.setValue(60)
+    unlock, lead = editor.rate_controls["lead_feed"]
+    unlock.setChecked(True); lead.setValue(2000)
+    editor.feed_controls["lead_in_feed_modifier"].setValue(40)
+    assert show() == {"rpm", "stepdown", "high_engagement_feed", "stepover", "lead_feed", "lead_in_feed_modifier"}
+    assert WARNING_COLOUR in fields["stepdown"].styleSheet()
+    tip = fields["stepdown"].toolTip()
+    assert "2.5 mm" in tip and "Max depth/pass is 2 mm" in tip and tip.endswith(plain["stepdown"])
+    assert "2000 mm/min" in fields["high_engagement_feed"].toolTip() and "1500" in fields["high_engagement_feed"].toolTip()
+    assert "Not used" in fields["lead_in_feed_modifier"].toolTip()
+    assert "50 %" in fields["stepover"].toolTip()
+    editor.stepdown.setValue(1.5); editor.stepover.setValue(40); lead.setValue(800)
+    editor.feed_controls["high_engagement_feed"].setValue(100); unlock.setChecked(False)
+    assert show() == {"rpm"}
+    assert all(box.toolTip() == plain[key] and box.styleSheet() == "" for key, box in fields.items() if key != "rpm")
     editor.close()
 
 

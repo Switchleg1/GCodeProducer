@@ -67,7 +67,8 @@ feature across the whole layer.
 ## Effective speed and volumetric flow
 
 Print moves are capped by machine maximum print speed. Travel is capped by
-machine maximum travel speed. The lowest positive machine/nozzle volumetric
+machine maximum travel speed. A speed above them is shown in orange in the
+process settings, with the cap in its tooltip. The lowest positive machine/nozzle volumetric
 limit additionally restricts print speed according to actual extrusion volume
 per path length, including width, height and material flow multiplier.
 

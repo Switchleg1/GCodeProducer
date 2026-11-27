@@ -369,6 +369,7 @@ class MainWindow(QMainWindow):
         prl.addLayout(r2)
         self.process_editor = ProcessEditor()
         self.process_editor.changed.connect(self._mark_dirty)
+        self.process_editor.changed.connect(self._show_process_overrides)
         self.process_editor.seamTargetChanged.connect(self._show_seam_target)
         self.process_editor.seamPickRequested.connect(self._pick_seam_target)
         self.model_viewer.seamPicked.connect(self.process_editor.set_seam_target)
@@ -986,6 +987,7 @@ class MainWindow(QMainWindow):
         self._refresh_model_list()
         self._reload_processes()
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._show_process_overrides()
         self._update_dirty()
         self._sync_support_controls()
         self._update_scene()
@@ -1029,6 +1031,21 @@ class MainWindow(QMainWindow):
         self._update_scene()
         self._set_stale()
         self._update_enabled()
+        self._show_process_overrides()
+
+    def _show_process_overrides(self):
+        """Orange process settings the selected machine caps (FDM speeds, acceleration)."""
+        from gcodeproducer.core.fdm.value_overrides import process_overrides
+        editor = getattr(self, 'process_editor', None)
+        if editor is None:
+            return
+        machine = self._machine()
+        step = editor.pipeline.step('fdm_emit') if editor.pipeline is not None else None
+        if step is None or machine is None or self.workflow != wf.FDM:
+            editor.show_overrides({})
+            return
+        from gcodeproducer.stages.fdm.fdm_emit import FDMEmit
+        editor.show_overrides(process_overrides(FDMEmit.resolve(step.params), machine))
 
     def _machine(self):
         mid = self.cb_machine.currentData()
@@ -1102,6 +1119,7 @@ class MainWindow(QMainWindow):
         self.cb_process.setCurrentIndex(max(0, self.cb_process.findData(pid)))
         self._loading = False
         self.process_editor.set_pipeline(self.pipelines[self.workflow])
+        self._show_process_overrides()
         self._update_dirty()
         self._set_stale()
 
@@ -1235,6 +1253,7 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self.pipelines[self.workflow] = dlg.pipeline
             self.process_editor.set_pipeline(dlg.pipeline)
+            self._show_process_overrides()
             self._mark_dirty()
 
     # model
@@ -1752,6 +1771,8 @@ class MainWindow(QMainWindow):
                     data=resolve_cutting(self._machine(),tool,self.cam_editor.setup.stock,op)
                     self.cam_editor.cutting_summary.setText(data.summary())
                     self.cam_editor.set_calculated(asdict(data))
+                    from gcodeproducer.core.cam.value_overrides import operation_overrides
+                    self.cam_editor.show_overrides(operation_overrides(self._machine(),tool,self.cam_editor.setup.stock,op))
                 except ValueError as exc:self.cam_editor.cutting_summary.setText(str(exc))
         self._cam_highlight_task = None
         self._cam_highlight_timer.stop()
@@ -2216,6 +2237,8 @@ class MainWindow(QMainWindow):
                 self.cam_editor.depth_summary.setText(result['depths'])
                 self.cam_editor.cutting_summary.setText(result.get('cutting',''))
                 self.cam_editor.set_calculated(result.get('cutting_values',{}))
+                if 'overrides' in result:
+                    self.cam_editor.show_overrides(result['overrides'])
             return
         if tid == self._worker:
             self._slice_done(result)

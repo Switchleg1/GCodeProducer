@@ -549,3 +549,38 @@ def test_every_spin_box_in_the_window_is_a_shared_number_box(win):
     spins = win.findChildren(QAbstractSpinBox)
     assert len(spins) > 20
     assert [type(s).__name__ for s in spins if not isinstance(s, (NumberBox, IntegerBox))] == []
+
+
+def test_process_speeds_the_machine_caps_turn_orange(win):
+    from gcodeproducer.core.fdm.value_overrides import material_overrides, process_overrides
+    from gcodeproducer.gui.controls.controls_constants import WARNING_COLOUR
+    machine = win._machine()
+    assert machine is not None and win.workflow == 'fdm'
+    top = float(machine.get('max_print_speed'))
+    editor = win.process_editor._seam_editor
+    box = editor._widgets['infill_speed']
+    box.setValue(top + 50)
+    assert WARNING_COLOUR in box.styleSheet() and f'{top:g} mm/s' in box.toolTip()
+    assert editor._widgets['outer_wall_speed'].warning() is None
+    box.setValue(top - 1)
+    assert box.warning() is None and box.styleSheet() == ''
+    assert set(process_overrides({'travel_speed': 1e4, 'infill_speed': 1.}, {'max_travel_speed': 300})) == {'travel_speed'}
+    assert set(material_overrides({'temp_nozzle': 300, 'temp_bed': 50, 'temp_chamber': 40},
+                                  {'max_nozzle_temp': 280, 'max_bed_temp': 110})) == {'temp_nozzle', 'temp_chamber'}
+
+
+def test_library_material_temperatures_above_the_machine_limit_turn_orange(win):
+    from gcodeproducer.gui.library_dialog import LibraryDialog
+    machine = win._machine()
+    limit = float(machine.get('max_nozzle_temp'))
+    material = win.libset['material'].all()[0]
+    d = LibraryDialog(win.libset, win, 'material', material.id)
+    editor = d.editor_area.widget()
+    box = editor._widgets['temp_nozzle']
+    box.setValue(limit + 20)
+    box.editingFinished.emit()
+    assert box.warning() and f'{limit:g} °C' in box.toolTip()
+    box.setValue(limit - 20)
+    box.editingFinished.emit()
+    assert box.warning() is None
+    d.reject()
