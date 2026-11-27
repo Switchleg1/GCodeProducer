@@ -113,7 +113,8 @@ especially for CAM feeds, tool geometry, units, and reserved cooling fields.
 | `type` — Type | choice | `endmill` | `endmill` = endmill; `ballnose` = ballnose; `vbit` = vbit; `drill` = drill; `chamfer` = chamfer; `facemill` = facemill; `engraver` = engraver | General.  |
 | `diameter` — Diameter | float / mm | `6.0` | No schema bound | General.  |
 | `flutes` — Flutes | int | `2` | No schema bound | General.  |
-| `length` — Length | float / mm | `20.0` | No schema bound | General. Flute / cutting length. |
+| `length` — Flute length | float / mm | `20.0` | minimum 0 | General. Length of the cutting flutes. An operation may not cut deeper than this below the material around it (the shank would rub the wall). 0 = not checked. |
+| `stickout` — Stickout length | float / mm | `0.0` | minimum 0 | General. From the collet face to the tip, as the tool is set in the spindle. An operation may not reach deeper than this below the top of the stock (the collet would hit it). 0 = not set: not checked. |
 | `vangle` — V angle | float / ° | `0.0` | No schema bound | General. Included angle for v-bits / engravers. |
 | `feed` — Fixed cut feed | float / mm/min | `800.0` | No schema bound | Fixed rates (calculation off). Used with SFM calculation off; operation unlocks can override calculated or fixed bases. |
 | `plunge_feed` — Fixed lead-in feed | float / mm/min | `300.0` | No schema bound | Fixed rates (calculation off). Lead-in ramps, arcs and lead-outs with calculation off. The plunge feed is the machine's Plunge feed modifier (operations may override). |

@@ -56,8 +56,15 @@ def operation_overrides(machine, tool, stock, op):
 
 
 def tool_overrides(values, machine):
-    """A tool's fixed rates above what the machine allows (the tool library editor)."""
+    """A tool's fixed rates above what the machine allows, and its reach (the tool library editor)."""
     messages = {}
+    flute, stickout = float(values.get("length", 0) or 0), float(values.get("stickout", 0) or 0)
+    if stickout <= 0:
+        messages["stickout"] = ("Not set: how deep this tool may reach before the collet meets the stock is not "
+                                "checked. Measure from the collet face to the tip.")
+    elif flute > stickout+1e-9:
+        messages["stickout"] = (f"Shorter than the flute length ({flute:g} mm): the collet would grip the flutes. "
+                                f"Check both lengths.")
     if machine is None:
         return messages
     if not values.get("auto_cutting_data", False):

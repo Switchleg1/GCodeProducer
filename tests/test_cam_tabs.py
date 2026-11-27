@@ -18,6 +18,7 @@ from gcodeproducer.stages.cam_emit import CAMEmit
 def cube_job(cube_stl, libset):
     mesh = Placement(z_anchor="top").apply(load_stl(cube_stl))
     tool = libset["tool"].get("3-mm-flat-endmill")
+    tool.values.update(length=25., stickout=30.)     # the profile goes 22 mm down, through the 20 mm cube
     machine = libset.machines.get("generic-300-router")
     tri = mesh.vertices[mesh.triangles]
     seed = int(np.flatnonzero(np.all(np.isclose(tri[:, :, 2], 0), axis=1))[0])

@@ -195,7 +195,16 @@ def highlight_geometry(payload):
         except ValueError as exc:
             out["cutting"] = str(exc)
     try:
-        out["depths"] = f"Resolved Z: start {op.start.resolve(mesh, topo, op.geometry, op_stock):.3f}, end {op.end.resolve(mesh, topo, op.geometry, op_stock):.3f} mm"
+        start, end = op.start.resolve(mesh, topo, op.geometry, op_stock), op.end.resolve(mesh, topo, op.geometry, op_stock)
+        out["depths"] = f"Resolved Z: start {start:.3f}, end {end:.3f} mm"
+        if len(stocks) > 1 and stocks[1]:
+            from gcodeproducer.core.cam.tool_reach import reach_problems
+            top = op_stock.top if op_stock is not None and op_stock.allocated else float(mesh.bounds[1][2])
+            # Before slicing: the flute check against the top too (earlier cuts are not known yet).
+            too_long, too_deep = reach_problems(stocks[1]["tool"], op.name, max(top, start)-end, max(top, start)-end)
+            problem = " ".join(m for m in (too_deep, too_long) if m)
+            if problem:
+                out.setdefault("overrides", {})["end"] = problem
     except ValueError as exc:
         out["depths"] = str(exc)
     return out

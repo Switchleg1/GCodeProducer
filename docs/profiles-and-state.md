@@ -118,8 +118,11 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   are used; a stored cooling target does not enforce a dwell or speed reduction.
 - Nozzle minimum/maximum layer heights are stored; the layer stage does not
   automatically validate or clamp its height to those nozzle recommendations.
-- Flute count now participates in SFM/chip-load feed calculation. Cutter type,
-  cutting length and V angle still do not provide full cutter-shape/holder
+- Flute count now participates in SFM/chip-load feed calculation. Tools have
+  a **Flute length** and a **Stickout length** (collet face to tip; 0 = not
+  set), and an operation cutting deeper than either is refused (see
+  [material state](cam/material-state-and-leads.md)). Cutter type,
+  these lengths and V angle still do not provide full cutter-shape/holder
   collision geometry or automatic V-carving depth. Per-material cutting tables
   need calibration; see [cutting data](cam/cutting-data.md).
 - CAM machine `cut_direction` defaults to Climb; Pocket/Profile/3D Pocket

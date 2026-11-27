@@ -188,21 +188,44 @@ def test_emitter_recolours_flagged_rapid_as_collision(libset):
     assert len(collisions) == len({int(w.split()[1][:-1]) for w in flagged_lines})
 
 
-def test_reach_check_uses_current_material_surface(libset):
+def test_flute_length_is_checked_against_the_current_material_surface(libset):
+    """The first operation cuts 3 mm into fresh stock with 2.5 mm flutes: refused. The second works
+    only 1 mm below the floor the first one left: allowed, though it ends 4 mm below the top."""
     mesh = stepped_part()
     job, first = job_for(mesh, [floor_ref(mesh)], libset)
     first.end = Depth("top", -3)
     tool = job.tools[0]
-    tool.values["length"] = 2.5                        # shorter than the 4 mm total floor depth
+    tool.values["length"] = 2.5
+    with pytest.raises(ValueError, match="flute length is 2.5 mm"):
+        generate(job, StageContext())
+    tool.values["length"] = 3
     second = Operation(kind="pocket", name="finish", geometry=[floor_ref(mesh)],
                        start=Depth("stock_top"), end=Depth("top", -4), stepdown=1)
     job.cam_setup.groups[0].operations.append(second)
+    generate(job, StageContext())                        # the second: only 1 mm below Z-3
+    assert job.layers
+
+
+def test_stickout_is_checked_against_the_depth_below_the_top_of_the_stock(libset):
+    mesh = stepped_part()
+    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    op.end = Depth("top", -3)
+    tool = job.tools[0]
+    tool.values.update(length=20, stickout=2.5)
+    with pytest.raises(ValueError, match="sticks out of the collet only 2.5 mm"):
+        generate(job, StageContext())
+    tool.values["stickout"] = 0                           # not set: not checked
     generate(job, StageContext())
-    reach = [w for w in job.warnings if "cutting length" in w]
-    assert reach and not any(w.startswith("finish") for w in reach)   # first op: 3 mm > 2.5; second: only 1 mm below Z-3
-    tool.values["length"] = 20
+    tool.values["stickout"] = 3.5
     generate(job, StageContext())
-    assert not [w for w in job.warnings if "cutting length" in w]
+    assert job.layers
+
+
+def test_tool_library_flags_a_missing_or_too_short_stickout():
+    from gcodeproducer.core.cam.value_overrides import tool_overrides
+    assert "Not set" in tool_overrides({"length": 20}, None)["stickout"]
+    assert "Shorter than the flute" in tool_overrides({"length": 20, "stickout": 15}, None)["stickout"]
+    assert "stickout" not in tool_overrides({"length": 20, "stickout": 30}, None)
 
 
 @pytest.mark.parametrize("kind", ["pocket", "waterfall"])

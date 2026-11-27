@@ -1772,7 +1772,8 @@ class MainWindow(QMainWindow):
                     self.cam_editor.cutting_summary.setText(data.summary())
                     self.cam_editor.set_calculated(asdict(data))
                     from gcodeproducer.core.cam.value_overrides import operation_overrides
-                    self.cam_editor.show_overrides(operation_overrides(self._machine(),tool,self.cam_editor.setup.stock,op))
+                    self.cam_editor.show_overrides(operation_overrides(self._machine(),tool,self.cam_editor.setup.stock,op),
+                                                   skip=("end",))
                 except ValueError as exc:self.cam_editor.cutting_summary.setText(str(exc))
         self._cam_highlight_task = None
         self._cam_highlight_timer.stop()

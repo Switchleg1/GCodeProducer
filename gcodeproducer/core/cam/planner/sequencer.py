@@ -98,6 +98,11 @@ class Sequencer:
         selection = Selection.resolve(op, topo, setup, generator.clearing)
         if op.area_order not in ("area", "depth"):
             raise ValueError(f"{op.name}: unknown area order '{op.area_order}'")
+        from gcodeproducer.core.cam.tool_reach import reach_problems
+        top = setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
+        _, too_deep = reach_problems(tool, op.name, 0., max(top, start)-end)
+        if too_deep:
+            raise ValueError(too_deep)
         run = OperationRun(op, tool, gi, oi, cutting, start, end, step, count, direction_for(job, op))
         generator.validate(run, selection)
         generator.generate(run, selection, planning)

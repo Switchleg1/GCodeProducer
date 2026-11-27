@@ -172,7 +172,12 @@ _TOOL_SCHEMA = [
           choices=["endmill", "ballnose", "vbit", "drill", "chamfer", "facemill", "engraver"]),
     Param("diameter", "float", 6.0, unit="mm", group="General"),
     Param("flutes", "int", 2, group="General"),
-    Param("length", "float", 20.0, unit="mm", group="General", help="Flute / cutting length."),
+    Param("length", "float", 20.0, unit="mm", min=0, group="General", label="Flute length",
+          help="Length of the cutting flutes. An operation may not cut deeper than this below the material "
+               "around it (the shank would rub the wall). 0 = not checked."),
+    Param("stickout", "float", 0.0, unit="mm", min=0, group="General", label="Stickout length",
+          help="From the collet face to the tip, as the tool is set in the spindle. An operation may not reach "
+               "deeper than this below the top of the stock (the collet would hit it). 0 = not set: not checked."),
     Param("vangle", "float", 0.0, unit="\u00b0", group="General", label="V angle",
           help="Included angle for v-bits / engravers."),
     Param("feed", "float", 800.0, unit="mm/min", group="Fixed rates (calculation off)", label="Fixed cut feed",
@@ -232,10 +237,10 @@ BUILTIN_PROFILE_SPECS = (
     {"kind": "nozzle", "name": "0.4 mm", "values": {"diameter": 0.4, "line_width": 0.45, "max_flow": 12}},
     {"kind": "nozzle", "name": "0.6 mm", "values": {"diameter": 0.6, "line_width": 0.68, "max_flow": 20}},
     {"kind": "tool", "name": "6 mm flat endmill", "values": {
-            "tool_number": 1, "type": "endmill", "diameter": 6.0, "flutes": 2,
+            "tool_number": 1, "type": "endmill", "diameter": 6.0, "flutes": 2, "length": 20.0, "stickout": 30.0,
             "feed": 1000, "plunge_feed": 300, "spindle_rpm": 18000, "max_doc": 2.0}},
     {"kind": "tool", "name": "3 mm flat endmill", "values": {
-            "tool_number": 2, "type": "endmill", "diameter": 3.0, "flutes": 2,
+            "tool_number": 2, "type": "endmill", "diameter": 3.0, "flutes": 2, "length": 12.0, "stickout": 20.0,
             "feed": 600, "plunge_feed": 200, "spindle_rpm": 20000, "max_doc": 1.0}},
 )
 

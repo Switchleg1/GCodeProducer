@@ -671,15 +671,20 @@ class CAMEditor(QWidget):
 
     def override_fields(self):
         """The operation's number boxes by field name (operation attribute), for value warnings."""
-        fields = {"stepdown": self.stepdown, "stepover": self.stepover}
+        fields = {"stepdown": self.stepdown, "stepover": self.stepover, "end": self.depth_controls["end"][1]}
         fields.update({key: value for key, (_unlock, value) in self.rate_controls.items()})
         fields.update(self.feed_controls)
         return fields
 
-    def show_overrides(self, messages):
-        """Warn on every field whose value is not used as entered (see value_overrides); clear the rest."""
+    def show_overrides(self, messages, skip=()):
+        """Warn on every field whose value is not used as entered (see value_overrides); clear the rest.
+
+        ``skip``: fields left as they are (End Z is judged with the resolved depths, which only the
+        background planning result has).
+        """
         for key, box in self.override_fields().items():
-            box.set_warning(messages.get(key))
+            if key not in skip:
+                box.set_warning(messages.get(key))
 
     def use_selection_depths(self):
         op = self.operation()

@@ -385,7 +385,8 @@ def test_saved_adaptive_engagement_becomes_the_stepover_only_for_adaptive():
 def test_tool_library_rates_the_machine_caps_are_reported():
     from gcodeproducer.core.cam.value_overrides import tool_overrides
     machine = {'spindle_max': 12000, 'max_feed': 1500}
-    found = tool_overrides({'spindle_rpm': 18000, 'feed': 2000, 'plunge_feed': 300, 'max_spindle_rpm': 24000}, machine)
+    found = tool_overrides({'spindle_rpm': 18000, 'feed': 2000, 'plunge_feed': 300, 'max_spindle_rpm': 24000,
+                            'length': 20, 'stickout': 30}, machine)
     assert set(found) == {'spindle_rpm', 'feed'} and '12000 rpm' in found['spindle_rpm']
-    assert tool_overrides({'spindle_rpm': 18000, 'max_spindle_rpm': 16000}, {}) .keys() == {'spindle_rpm'}
-    assert tool_overrides({'auto_cutting_data': True, 'spindle_rpm': 1e6}, machine) == {}
+    assert tool_overrides({'spindle_rpm': 18000, 'max_spindle_rpm': 16000, 'stickout': 30}, {}) .keys() == {'spindle_rpm'}
+    assert tool_overrides({'auto_cutting_data': True, 'spindle_rpm': 1e6, 'stickout': 30}, machine) == {}

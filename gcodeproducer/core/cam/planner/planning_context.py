@@ -45,8 +45,8 @@ class PlanningContext:
                 self.job.warnings.append(warning)
 
     def reach(self, run, surface):
-        """Warn when the depth below the current material exceeds the tool's flute length."""
-        reach = float(run.tool.get("length", 0) or 0)
-        if reach > 0 and surface-run.end > reach+1e-3:
-            self.warn(f"{run.op.name}: {surface-run.end:g} mm below the current material surface (Z{surface:g}) exceeds the "
-                      f"tool cutting length {reach:g} mm; verify reach, shank and holder clearance.", "REACH")
+        """Refuse an operation that cuts deeper below the material at ``surface`` than the tool's flutes."""
+        from gcodeproducer.core.cam.tool_reach import reach_problems
+        too_long, _ = reach_problems(run.tool, run.op.name, surface-run.end, 0.)
+        if too_long:
+            raise ValueError(too_long)

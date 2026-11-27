@@ -223,12 +223,24 @@ engagement analysis are not a substitute for a controller-aware simulator.
 
 Warnings are logged, shown after generation and retained for export
 confirmation. Mixed-hand and lead warnings are not discarded when stock checks
-run. Tool-number reuse across different profiles and cut depths beyond stored tool
-cutting length are also warnings, not full holder/reach tests. The reach
-check measures from the **current** material top within the operation's
-sweep (material removed by earlier operations does not consume flute length),
-but shank or holder contact with higher material next to the cut is not
-modelled: validate
+run. Tool-number reuse across different profiles is also a warning.
+
+**Tool reach** (0.2.76) refuses the operation, with no output, when:
+
+- it cuts deeper below the material around it than the tool's **Flute
+  length**: the shank above the flutes would rub the wall. Measured from the
+  **current** material top within the operation's sweep, so material removed
+  by earlier operations does not use flute length up;
+- it reaches deeper below the top of the stock than the tool's **Stickout
+  length** (collet face to tip): the collet would hit the stock. Measured from
+  the top of the stock wherever the tool works, because the holder's width is
+  not modelled.
+
+0 for either length means not set, and that check is skipped; the tool
+library shows an unset (or flute-shorter) stickout in orange, and the
+operation shows its End Z in orange before slicing when it is too deep for
+either length. Shank or holder contact with higher material beside the cut is
+otherwise not modelled: validate
 what tool is actually installed, not just the simulated requested tool.
 
 [Stock allocation](stock-and-safety.md) · [Cutting data](cutting-data.md) ·
