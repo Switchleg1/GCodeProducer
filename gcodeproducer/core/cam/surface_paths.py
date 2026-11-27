@@ -10,7 +10,8 @@ from shapely import BufferJoinStyle, contains_xy
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
-from .cam_constants import SURFACE_MAX_POINTS, SURFACE_DIP_FILL, SURFACE_DIP_DEPTH, SURFACE_WALL_SLOPE
+from .cam_constants import (SURFACE_MAX_POINTS, SURFACE_DIP_FILL, SURFACE_DIP_DEPTH, SURFACE_WALL_SLOPE,
+                            SPIRAL_ON_WALL)
 from .surface_simplifier import simplify3d
 from .paths import _polygons, orient_contour, pocket_region
 
@@ -106,6 +107,145 @@ def fill_dips(height, reach, depth=np.inf):
     return np.maximum(np.minimum(closed, height+depth), height)
 
 
+def _cutter_track(xy, surface, radius, allowance, floors, floor, top, area):
+    """XYZ of the cutter along the points ``xy``: on the model, never below the floor.
+
+    Outside ``area`` (a gap in the selection) it rides at ``top``. Up a wall,
+    and where the path leaves the area, it rises vertically at the lower point
+    and descends vertically at the lower point after it: never a near-vertical
+    slant whose XY, rounded in the program, would move the cutter's height on
+    the wall.
+    """
+    xy = np.asarray(xy, float)
+    z = np.maximum(follow_heights(surface, xy, radius, allowance, floors), floor)
+    inside = contains_xy(area, xy[:, 0], xy[:, 1])
+    if top is not None:
+        z = np.where(inside, z, np.maximum(z, top))
+    run = np.linalg.norm(np.diff(xy, axis=0), axis=1)
+    rise = np.diff(z)
+    wall = (np.abs(rise) > SURFACE_WALL_SLOPE*run) | (inside[1:] != inside[:-1])
+    if not wall.any():
+        return np.column_stack((xy, z))
+    points = []
+    for k in range(len(xy)):
+        if k and wall[k-1] and abs(rise[k-1]) > 1e-9:
+            corner = xy[k-1] if rise[k-1] > 0 else xy[k]
+            points.append((*corner, max(z[k-1], z[k])))
+        points.append((*xy[k], z[k]))
+    return np.asarray(points, float)
+
+
+def _along_the_wall(region, a, b, step):
+    """XY points from a to b along the boundary of ``region`` they both lie on (the shorter way), or None."""
+    from shapely.ops import substring
+    from shapely import segmentize
+    pa, pb = Point(a), Point(b)
+    for polygon in _polygons(region):
+        for ring in (polygon.exterior, *polygon.interiors):
+            if ring.distance(pa) > SPIRAL_ON_WALL or ring.distance(pb) > SPIRAL_ON_WALL:
+                continue
+            line = LineString(ring.coords)
+            length, da, db = line.length, line.project(pa), line.project(pb)
+
+            def forward(start, end):
+                if end >= start:
+                    return list(substring(line, start, end).coords)
+                return list(substring(line, start, length).coords) + list(substring(line, 0., end).coords)[1:]
+            way = forward(da, db) if (db-da) % length <= (da-db) % length else forward(db, da)[::-1]
+            if len(way) < 2:
+                return np.array([a, b], float)[:, :2]
+            return np.asarray(segmentize(LineString(way), step).coords, float)[:, :2]
+    return None
+
+
+def surface_spiral(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
+                   *, simplifier=None, direction="climb", stay_down=False):
+    """One depth band of 3D Contour as a spiral out from the centre of the area.
+
+    The spiral starts at the centre of the area's bounds and grows by
+    ``spacing`` a turn until it has passed the area's farthest corner. Like the
+    raster lines it follows the model under the cutter, never below ``floor``.
+    Only its stretches inside ``region`` (where the cutter's centre may go) are
+    cut, in order from the centre outwards. Where it runs into the edge of the
+    area: with ``stay_down`` the cutter walks along that edge to where the
+    spiral comes back in, without lifting (a new path only where the two points
+    are on different edges); without it each stretch is a path of its own, the
+    cutter lifting to the start of the next. It ends with one pass round each
+    edge of the area: the turn that would clear the strip beside an edge lies
+    outside the area, so without that pass strips would be left along the walls.
+
+    Climb turns counter-clockwise (M3: the uncut turns outside are on the
+    cutter's right), Conventional clockwise. A spiral cannot alternate, so
+    Meander turns as Climb.
+    """
+    if region.is_empty or spacing <= 0:
+        return []
+    if direction not in ("climb", "conventional", "meander"):
+        raise ValueError(f"Unknown cutting direction '{direction}'")
+    minx, miny, maxx, maxy = region.bounds
+    centre = np.array([(minx+maxx)/2, (miny+maxy)/2])
+    reach = math.hypot(maxx-minx, maxy-miny)/2 + spacing
+    step = surface.resolution
+    if math.pi*reach*reach/spacing/step > SURFACE_MAX_POINTS:
+        raise ValueError("3D contour would need too many surface samples; increase stepover or reduce the area")
+    # Equal steps of arc along r = spacing*angle/2pi: angle = sqrt(4pi*length/spacing).
+    count = int(math.ceil(math.pi*reach*reach/spacing/step)) + 1
+    angle = np.sqrt(4*math.pi*step*np.arange(count+1)/spacing)
+    angle = angle[angle <= 2*math.pi*reach/spacing]
+    r = spacing*angle/(2*math.pi)
+    turn = angle if direction != "conventional" else -angle
+    spiral = centre + np.column_stack((r*np.cos(turn), r*np.sin(turn)))
+    if len(spiral) < 2:
+        return []
+    line = LineString(spiral)
+    hit = line.intersection(region)
+    pieces = [g for g in getattr(hit, "geoms", [hit]) if g.geom_type == "LineString" and g.length > 1e-6]
+    if not pieces:
+        return []
+    # GEOS keeps the spiral's direction within each piece; put them in order from the centre out.
+    pieces.sort(key=lambda g: line.project(Point(g.coords[0])))
+    top = ceiling if math.isfinite(ceiling) else None
+    area = region.buffer(1e-7)
+
+    def track(xy):
+        return _cutter_track(xy, surface, radius, allowance, floors, floor, top, area)
+
+    runs = [track(np.asarray(g.coords, float)) for g in pieces]
+    if top is not None:
+        runs = [run for run in runs if np.any(run[:, 2] < top-1e-6)]   # riding on the top all the way: cuts nothing
+    if not runs:
+        return []
+    paths, walked = [runs[0]], 0
+    for run in runs[1:]:
+        wall = _along_the_wall(region, paths[-1][-1, :2], run[0, :2], step) if stay_down else None
+        if wall is None or len(wall) < 2:
+            paths.append(run)
+            continue
+        walked += 1
+        link = track(wall)
+        paths[-1] = np.vstack((paths[-1], link[1:-1], run))
+    # Where the spiral is cut off at an edge, the turn that would have cleared the strip beside that
+    # edge lies outside the area. One pass round each edge of the area takes those strips. The stock
+    # left is inside the area: climb keeps it on the right (clockwise round the outside, the other
+    # way round a hole).
+    from shapely import segmentize
+    from shapely.geometry.polygon import orient
+    edges = 0
+    for polygon in _polygons(region):
+        polygon = orient(polygon, sign=-1. if direction != "conventional" else 1.)
+        for ring in (polygon.exterior, *polygon.interiors):
+            lap = track(np.asarray(segmentize(LineString(ring.coords), step).coords, float)[:, :2])
+            if top is None or np.any(lap[:, 2] < top-1e-6):
+                paths.append(lap)
+                edges += 1
+    result = simplifier(paths) if simplifier is not None else [simplify3d(p) for p in paths]
+    if log:
+        log(f"    spiral of {len(runs)} stretches from the centre out in {len(result)-edges} paths"
+            + (f", {walked} joined along the edge of the area" if walked else "")
+            + f", then {edges} pass(es) round the edge")
+    return [p for p in result if len(p) >= 2]
+
+
 def surface_raster(region, surface, radius, spacing, floor, allowance, log=None, floors=(), ceiling=math.inf,
                    strategy="raster_x", *, simplifier=None, direction="climb", stay_down=False):
     """One depth band of 3D Contour: XYZ raster lines along X or Y, in order across the area.
@@ -149,26 +289,8 @@ def surface_raster(region, surface, radius, spacing, floor, allowance, log=None,
         """The cutter along a to b: on the model, never below the floor; at the top outside the area."""
         a, b = np.asarray(a, float), np.asarray(b, float)
         n = max(1, int(math.ceil(np.linalg.norm(b-a)/step)))
-        xy = a+(b-a)*np.linspace(0, 1, n+1)[:, None]
-        z = np.maximum(follow_heights(surface, xy, radius, allowance, floors), floor)
-        inside = contains_xy(area, xy[:, 0], xy[:, 1])
-        if top is not None:
-            z = np.where(inside, z, np.maximum(z, top))
-        run = np.linalg.norm(np.diff(xy, axis=0), axis=1)
-        rise = np.diff(z)
-        # Up a wall (and where the line leaves the area) rise vertically at the lower point, and
-        # descend vertically at the lower point after it: never a near-vertical slant whose XY,
-        # rounded in the program, would move the cutter's height on the wall.
-        wall = (np.abs(rise) > SURFACE_WALL_SLOPE*run) | (inside[1:] != inside[:-1])
-        if not wall.any():
-            return np.column_stack((xy, z))
-        points = []
-        for k in range(len(xy)):
-            if k and wall[k-1] and abs(rise[k-1]) > 1e-9:
-                corner = xy[k-1] if rise[k-1] > 0 else xy[k]
-                points.append((*corner, max(z[k-1], z[k])))
-            points.append((*xy[k], z[k]))
-        return np.asarray(points, float)
+        return _cutter_track(a+(b-a)*np.linspace(0, 1, n+1)[:, None], surface, radius, allowance, floors, floor,
+                             top, area)
 
     area = region.buffer(1e-7)
     # Climb keeps the uncut lines (the next ones) on the right: lines along X step to +Y, so climb

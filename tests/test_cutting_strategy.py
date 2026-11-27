@@ -33,7 +33,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
             expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Adaptive clearing']
                         if kind in ('pocket', 'waterfall') else
-                        ['Raster lines X', 'Raster lines Y'] if kind == 'contour3d' else [])
+                        ['Raster lines X', 'Raster lines Y', 'Spiral from the centre'] if kind == 'contour3d' else [])
             assert labels == expected
             form = editor.operation_form
             assert form.labelForField(editor.strategy).text() == 'Cutting strategy'
@@ -315,3 +315,55 @@ def test_adaptive_walks_up_to_a_cutter_radius_from_the_area_edge_whatever_the_st
     assert gap.min() == pytest.approx(2., abs=.02)               # and right up to it
     shrunk = wavefront_paths(op, area, 4., 'climb', material=area)   # the old rule: stock from every wall
     assert distance(area.exterior, points(np.vstack([np.asarray(p.points)[:, :2] for p in shrunk]))).min() > 2.9
+
+
+@pytest.mark.parametrize('direction', ['climb', 'conventional', 'meander'])
+def test_contour_spiral_starts_at_the_centre_and_covers_the_area(direction):
+    from shapely.geometry import LineString, Point
+    from shapely.ops import unary_union
+    from gcodeproducer.core.cam.surface_paths import surface_spiral
+    surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.full(len(xy), -2.))
+    region = box(0, 0, 10, 6)
+    paths = surface_spiral(region, surface, 1, 1, -5, 0, direction=direction)
+    *paths, edge = paths
+    # The last pass goes round the edge of the area, the stock inside it on the climb side.
+    from shapely.geometry import LinearRing
+    assert region.exterior.buffer(1e-6).covers(LineString(edge[:, :2])) and LineString(edge[:, :2]).length == pytest.approx(32)
+    assert LinearRing(edge[:-1, :2]).is_ccw == (direction == 'conventional')
+    assert np.allclose(paths[0][0], (5, 3, -2))                           # the centre of the area
+    first = paths[0][:, :2] - (5, 3)
+    turned = np.unwrap(np.arctan2(first[5:, 1], first[5:, 0]))
+    # Climb (M3) keeps the uncut turns outside on the right: counter-clockwise. Meander as climb.
+    assert (turned[-1] > turned[0]) == (direction != 'conventional')
+    assert np.all(np.diff(np.hypot(first[:, 0], first[:, 1])) > -1e-9)   # only ever outwards
+    assert len(paths) > 3                                                 # cut off at the walls: lifts between
+    for p in paths:
+        assert region.buffer(1e-6).covers(LineString(p[:, :2])) and np.all(p[:, 2] == -2)
+    swept = unary_union([LineString(p[:, :2]).buffer(.5 + .02) for p in paths])   # a turn apart: 1 mm
+    assert region.difference(swept).area > .5                             # strips by the walls without the edge pass
+    swept = swept.union(LineString(edge[:, :2]).buffer(.5 + .02))
+    assert region.difference(swept).area < .01
+    order = [float(np.hypot(*(p[0, :2] - (5, 3)))) for p in paths]
+    assert order == sorted(order)                                         # from the centre outwards, in order
+
+
+def test_contour_spiral_staying_down_walks_the_wall_instead_of_lifting():
+    from shapely.geometry import LineString
+    from gcodeproducer.core.cam.surface_paths import surface_spiral, _along_the_wall
+    surface = SimpleNamespace(resolution=.1, heights=lambda xy, radius: np.where(xy[:, 0] > 8, -1., -2.))
+    region = box(0, 0, 10, 6)
+    lifting = surface_spiral(region, surface, 1, 1, -5, 0)[:-1]
+    path, _ = surface_spiral(region, surface, 1, 1, -5, 0, stay_down=True)
+    assert region.buffer(1e-6).covers(LineString(path[:, :2]))            # never outside the area
+    assert LineString(path[:, :2]).length > sum(LineString(p[:, :2]).length for p in lifting)
+    for piece in lifting:                                                  # the same cuts, joined along the edge
+        assert LineString(path[:, :2]).distance(LineString(piece[:, :2])) < 1e-9
+    on_wall = [k for k in range(len(path)-1) if region.exterior.distance(LineString(path[k:k+2, :2])) < 1e-9
+               and region.exterior.buffer(1e-6).covers(LineString(path[k:k+2, :2]))]
+    assert on_wall                                                         # stretches along the edge itself
+    assert set(np.round(path[:, 2], 6)) <= {-2., -1.}                      # following the model there too
+    # The shorter way round, and none where the points are on different edges of the area.
+    way = _along_the_wall(region, (1, 0), (0, 1), .1)
+    assert LineString(way).length == pytest.approx(2.)
+    holed = region.difference(box(4, 2, 6, 4))
+    assert _along_the_wall(holed, (1, 0), (4, 3), .1) is None

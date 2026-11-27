@@ -8,6 +8,11 @@
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
 - 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
+## 0.2.70
+
+- Operator: a spiral strategy for 3D Contour, from the centre of the boundary zone outwards, following the contour like the rasters; at a wall walk it if Stay down is checked, else lift to where it is back in bounds. `surface_spiral` (+ `_cutter_track`, `_along_the_wall`); strategy `spiral`. Added without being asked: a closing pass round each edge of the area, because the clipped spiral leaves up to a stepover beside the walls (test shows the gap without it).
+- Mini Yoda: lifting 34 entries/depth, 2,855 s; staying down 2 entries/depth, 3,110 s. Replay: sloped moves typed `air` over slivers up to 0.5 mm tall (17-22 moves), and 1-3 mm of feed per job through slivers up to 1.25 mm tall on a 0.6 mm step (0.01 mm²). Not fixed: the whole-cutter air check outside Adaptive covers level moves only.
+
 ## 0.2.69
 
 - Operator: 3D Contour limited the cutter's centre, not its edge, to the selection, overcutting by a radius. `Contour3dGenerator.centre_region`: selection set back by the radius; at the blank edge the cutter's edge goes to edge + Material boundary (spinbox enabled for 3D Contour).

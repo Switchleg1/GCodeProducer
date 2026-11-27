@@ -711,3 +711,21 @@ def test_3d_contour_keeps_the_cutters_edge_inside_the_selection_and_follows_the_
     assert centre(half, 1.5).bounds == pytest.approx((lo[0]-1.5+2, lo[1]+7, lo[0]+13, lo[1]+13))
     with pytest.raises(ValueError, match="too small"):
         centre(box(lo[0]+5, lo[1]+5, lo[0]+8, lo[1]+8), 0.)
+
+
+@pytest.mark.parametrize("stay_down", [False, True])
+def test_3d_contour_spiral_generates_depth_limited_passes_clear_of_the_model(libset, stay_down):
+    job, op = surface_job(libset, kind="contour3d", strategy="spiral", stay_down_lines=stay_down)
+    generate(job, StageContext())
+    assert_clear_of_model(job)
+    assert len(job.layers) == 10 and np.all(-np.diff([0] + [layer.z for layer in job.layers]) <= 1+1e-9)
+    counts = [len(layer.paths) for layer in job.layers]
+    for layer in job.layers:
+        points = np.vstack([np.asarray(p.points) for p in layer.paths])
+        assert points[:, 0].min() >= 10+RADIUS-1e-6 and points[:, 0].max() <= 30-RADIUS+1e-6   # cutter edge in the rim
+        assert points[:, 1].min() >= 8+RADIUS-1e-6 and points[:, 1].max() <= 22-RADIUS+1e-6
+    assert (max(counts) <= 2) == stay_down          # staying down: the spiral in one path, then the edge pass
+    CAMEmit().run(job, CAMEmit.defaults(), StageContext())
+    assert_program_clear(job.program)
+    assert Operation.__dataclass_fields__["strategy"] and CAMSetup.from_dict(
+        job.cam_setup.to_dict()).groups[0].operations[0].strategy == "spiral"

@@ -11,8 +11,12 @@ class Contour3dGenerator(OperationGenerator):
 
     def band_paths(self, run, region, surface, floors, z, ceiling, planning, *, simplifier=None):
         """XYZ raster lines for one depth band — pure geometry on the drop surface."""
-        from gcodeproducer.core.cam.surface_paths import surface_raster
+        from gcodeproducer.core.cam.surface_paths import surface_raster, surface_spiral
         op = run.op
+        if op.strategy == "spiral":
+            return surface_spiral(region, surface, run.radius, run.diameter*op.stepover/100, z, op.stock,
+                                  planning.ctx.log, floors, ceiling, simplifier=simplifier,
+                                  direction=run.direction, stay_down=op.stay_down_lines)
         return surface_raster(region, surface, run.radius, run.diameter*op.stepover/100, z, op.stock,
                               planning.ctx.log, floors, ceiling, strategy=op.strategy, simplifier=simplifier,
                               direction=run.direction, stay_down=op.stay_down_lines)

@@ -30,7 +30,7 @@ boundaries, or can be retained as per-selection height-only references.
 | Lead-in angle | 10° | Maximum ramp descent angle for this operation |
 | Lead length | 0 (auto) | The ramp length increases as needed to stay within the lead-in angle |
 | Clearing / 3D Contour stepover | 40% | Pocket / 3D Pocket: offset/raster spacing as percentage of cutter diameter; wall-parallel spacing is limited to 50% for meeting-front coverage. 3D Contour: distance between passes |
-| Cutting strategy | Pocket / 3D Pocket: Wall-parallel contours; 3D Contour: Raster lines X | Pocket / 3D Pocket also offer Raster lines Y and Adaptive clearing. 3D Contour offers Raster lines X or Y; whether its lines are cut both ways is the cutting direction. Hidden for Profile and other operations |
+| Cutting strategy | Pocket / 3D Pocket: Wall-parallel contours; 3D Contour: Raster lines X | Pocket / 3D Pocket also offer Raster lines Y and Adaptive clearing. 3D Contour offers Raster lines X or Y, or Spiral from the centre; whether its lines are cut both ways is the cutting direction. Hidden for Profile and other operations |
 | Unlock cutting direction | Off | Immediately below Unlock Lead / plunge base feed. Off inherits the machine; on enables Climb/Conventional/Meander for this operation (Pocket, Profile, 3D Pocket and 3D Contour). For raster lines, Meander cuts them both ways, each joined to the next without lifting |
 | Stay down between contours | On | Wall-parallel and Adaptive clearing: nearby paths use checked same-depth cutting-feed links; unsafe/disconnected links retract |
 | HSM / Cut / High engagement / Slot feed | Inherited (0) | HSM/Cut use tool defaults; High/Slot use machine defaults; thresholds are machine settings (High above 80% initially) |
@@ -289,7 +289,7 @@ The operation's **Cutting strategy** field has operation-specific choices:
 | Operation | Choices |
 |---|---|
 | Pocket, 3D Pocket | Wall-parallel contours, Raster lines X, Raster lines Y, Adaptive clearing |
-| 3D Contour | Raster lines X, Raster lines Y |
+| 3D Contour | Raster lines X, Raster lines Y, Spiral from the centre |
 | Profile, Slot, Drill, Engrave | Row hidden (no strategy control) |
 
 X/Y means the cutting-line axis in CAM work coordinates. The **cutting
@@ -326,6 +326,31 @@ selection is cut; up a steep wall it also rises vertically. Lines at the
 start or end of a band that ride entirely on the top of the material are left
 out. Only 3D Pocket paths may be reordered, cut short over cleared ground or
 sent to other places (Remove air cutting applies to them, not to 3D Contour).
+
+**3D Contour: Spiral from the centre** (0.2.70). One spiral per depth, starting
+at the centre of the area's bounds and growing by the stepover each turn,
+following the model under the cutter like the raster lines and never below
+the depth of the pass. Climb turns counter-clockwise (the uncut turns outside
+are on the cutter's right with M3), Conventional clockwise; a spiral cannot
+alternate, so Meander turns as Climb. Where the spiral runs into the edge of
+the area:
+
+- **Stay down between contours** unchecked (the default): that stretch ends
+  there; the cutter lifts and goes to where the spiral comes back into the
+  area. The stretches are cut in order from the centre outwards.
+- checked: the cutter walks along the edge of the area (the shorter way) to
+  where the spiral comes back in, following the model, without lifting. It
+  lifts only where the two points are on different edges (the outline and a
+  hole in the selection).
+
+Each depth ends with one pass round every edge of the area. The turn that
+would clear the strip beside an edge lies outside the area, so without that
+pass up to a stepover of material would be left along the walls. Stretches
+that would ride on the top of the material all the way are left out.
+
+Mini Yoda (4 mm cutter, 40 % stepover, 0.6 mm depths, climb): lifting, 34
+entries a depth and 2,855 s estimated; staying down, 2 entries a depth and
+3,110 s (Raster lines X: 44 entries, 3,009 s).
 
 **Adaptive clearing** grows the cleared area by an even, contact-checked
 stepover from helical starts and marks the result incomplete if it cannot

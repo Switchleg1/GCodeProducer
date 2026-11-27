@@ -27,6 +27,7 @@ SURFACE_MIN_RESOLUTION = .05   # mm: finest drop-cutter height grid
 SURFACE_CELLS_PER_DIAMETER = 40
 SURFACE_REUSE_MIN_POINTS = 16  # cache simplification only for longer spans
 SURFACE_SIMPLIFY = .005        # mm: 3D polyline simplification tolerance
+SPIRAL_ON_WALL = 1e-4          # mm: a spiral stretch ends on an edge of the area when this close to it
 SURFACE_WALL_SLOPE = 5.        # 3D Contour rises/descends vertically where the cutter climbs steeper than this
 SURFACE_MAX_POINTS = 2_000_000
 SURFACE_ENGAGEMENT_STATIONS = (.25, .75, 1.)

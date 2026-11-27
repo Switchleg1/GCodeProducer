@@ -284,7 +284,8 @@ class CAMEditor(QWidget):
         self.stay_down = QCheckBox("Stay down between contours")
         self.stay_down.setToolTip("Use short cutting-feed links inside the cutter-clearance region. Retract when no direct safe link exists. "
                                   "3D Contour cut one way (Climb/Conventional): come back along the line just cut instead of "
-                                  "lifting back to the start of the next (off by default).")
+                                  "lifting back to the start of the next (off by default). 3D Contour spiral: where it "
+                                  "runs into the edge of the area, walk along the edge to where it comes back in.")
         self.stay_down.toggled.connect(self._edit)
         form.addRow(self.stay_down)
         self.follow_surface = QCheckBox("Follow the surface within each depth")

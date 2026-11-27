@@ -172,7 +172,8 @@ uncleared stock.
   plus **Material boundary**: 0 touches it, −1 leaves 1 mm of material, +1
   passes 1 mm beyond.
 - **Stepover:** raster spacing as a percentage of cutter diameter.
-- **Cutting strategy:** **Raster lines X** or **Raster lines Y**. Every line
+- **Cutting strategy:** **Raster lines X**, **Raster lines Y** or **Spiral from
+  the centre** (see [Cutting strategy](operations.md#cutting-strategy)). Raster: Every line
   runs the whole width of the area and traces the model under the cutter down
   to the depth of the current pass, without lifting or stopping along it. The
   lines are cut in order across the area, never reordered or skipped. See [Cutting strategy](operations.md#cutting-strategy).
