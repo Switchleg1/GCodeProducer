@@ -23,7 +23,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDockWidget,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGridLayout,
@@ -80,6 +79,7 @@ from gcodeproducer.gui.rendering.gcode_viewer import GCodeViewer
 from gcodeproducer.gui.runtime.compute_service import ComputeService
 from gcodeproducer.gui.inspection.gcode_text_panel import GCodeTextPanel
 from gcodeproducer.gui.editors.widgets import small_button
+from gcodeproducer.gui.controls import NumberBox
 
 
 class MainWindow(QMainWindow):
@@ -530,12 +530,7 @@ class MainWindow(QMainWindow):
         g.setVerticalSpacing(3)
 
         def spin(lo, hi, dec, suffix, step=1.0):
-            sb = QDoubleSpinBox()
-            sb.setRange(lo, hi)
-            sb.setDecimals(dec)
-            sb.setSuffix(suffix)
-            sb.setSingleStep(step)
-            sb.setKeyboardTracking(False)
+            sb = NumberBox(lo, hi, decimals=dec, suffix=suffix, step=step, tracking=False)
             sb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             return sb
 
@@ -618,12 +613,8 @@ class MainWindow(QMainWindow):
                                    "the support blocks below")
         self.cb_support.currentIndexChanged.connect(self._on_support_combo)
         row.addWidget(self.cb_support, 1)
-        self.sp_overhang = QDoubleSpinBox()
-        self.sp_overhang.setRange(0, 89)
-        self.sp_overhang.setDecimals(0)
-        self.sp_overhang.setSuffix("\u00b0")
-        self.sp_overhang.setToolTip("Overhang angle (from vertical) that needs support")
-        self.sp_overhang.setKeyboardTracking(False)
+        self.sp_overhang = NumberBox(0, 89, decimals=0, suffix="\u00b0", tracking=False,
+                                     tooltip="Overhang angle (from vertical) that needs support")
         self.sp_overhang.valueChanged.connect(self._on_overhang_spin)
         row.addWidget(self.sp_overhang)
         self.cb_show_over = QCheckBox("Show")
@@ -634,12 +625,7 @@ class MainWindow(QMainWindow):
         v.addLayout(row)
         row = QHBoxLayout()
         row.addWidget(QLabel("Extend past edge"))
-        self.sp_extend = QDoubleSpinBox()
-        self.sp_extend.setRange(0, 20)
-        self.sp_extend.setDecimals(2)
-        self.sp_extend.setSingleStep(0.1)
-        self.sp_extend.setSuffix(" mm")
-        self.sp_extend.setKeyboardTracking(False)
+        self.sp_extend = NumberBox(0, 20, decimals=2, step=0.1, suffix=" mm", tracking=False)
         self.sp_extend.setToolTip("How far the support reaches past the model's edges (and into holes too large "
                                   "to fill) so the perimeters along every edge sit on support. 0 = stop at the "
                                   "edge. Process setting (Support section).")
@@ -647,13 +633,8 @@ class MainWindow(QMainWindow):
         row.addWidget(self.sp_extend)
         row.addSpacing(8)
         row.addWidget(QLabel("Fill holes \u2264"))
-        self.sp_fill_holes = QDoubleSpinBox()
-        self.sp_fill_holes.setRange(0, 100000)
-        self.sp_fill_holes.setDecimals(0)
-        self.sp_fill_holes.setSingleStep(10)
-        self.sp_fill_holes.setSuffix(" mm\u00b2")
-        self.sp_fill_holes.setSpecialValueText("off")
-        self.sp_fill_holes.setKeyboardTracking(False)
+        self.sp_fill_holes = NumberBox(0, 100000, decimals=0, step=10, suffix=" mm\u00b2", special="off",
+                                       tracking=False)
         self.sp_fill_holes.setToolTip("Off: holes are edges like the outside of the model (support stops "
                                       "'Extend past edge' into them). Otherwise holes up to this area are "
                                       "treated as solid and supported right across. Process setting.")
@@ -694,11 +675,7 @@ class MainWindow(QMainWindow):
         bl.addLayout(rp)
         rp = QHBoxLayout()
         rp.addWidget(QLabel("Block size"))
-        self.sp_place_size = QDoubleSpinBox()
-        self.sp_place_size.setRange(0.5, 500)
-        self.sp_place_size.setDecimals(1)
-        self.sp_place_size.setSingleStep(1.0)
-        self.sp_place_size.setSuffix(" mm")
+        self.sp_place_size = NumberBox(0.5, 500, decimals=1, step=1.0, suffix=" mm")
         self.sp_place_size.setToolTip("Width and depth of the blocks placed by clicking and of the tiles "
                                       "Auto-generate covers the support with")
         self.sp_place_size.setValue(float(self.settings.value("place_block_size", 5.0)))
@@ -730,12 +707,7 @@ class MainWindow(QMainWindow):
                 "w": "Width (X)", "d": "Depth (Y)", "h": "Height (Z)"}
         for k, (key, label, lo) in enumerate((("cx", "X", -5000), ("cy", "Y", -5000), ("z0", "Z", 0),
                                               ("w", "W", 0.1), ("d", "D", 0.1), ("h", "H", 0.1))):
-            sb = QDoubleSpinBox()
-            sb.setRange(lo, 5000)
-            sb.setDecimals(2)
-            sb.setPrefix(f"{label} ")
-            sb.setKeyboardTracking(False)
-            sb.setToolTip(tips[key] + " (mm)")
+            sb = NumberBox(lo, 5000, decimals=2, prefix=f"{label} ", tracking=False, tooltip=tips[key] + " (mm)")
             sb.valueChanged.connect(self._on_block_spin)
             self.sp_block[key] = sb
             ge.addWidget(sb, k // 3, 1 + k % 3)

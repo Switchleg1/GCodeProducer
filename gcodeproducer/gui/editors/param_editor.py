@@ -6,7 +6,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -15,7 +14,6 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +22,7 @@ from gcodeproducer.core.parameters.param import Param
 from .section import Section
 from .editors_constants import SECTION_BODY_MARGINS
 from gcodeproducer.core.parameters.resolution import resolve_params
+from gcodeproducer.gui.controls import IntegerBox, NumberBox
 
 class ParamEditor(QWidget):
     """Builds a form from a list of :class:`Param` and edits a value dict."""
@@ -91,20 +90,13 @@ class ParamEditor(QWidget):
     def _make(self, p: Param) -> QWidget:
         v = self.values[p.name]
         if p.type in ("float", "int"):
-            if p.type == "float":
-                sb = QDoubleSpinBox()
-                sb.setDecimals(p.decimals)
-                sb.setSingleStep(p.step or (1.0 if p.decimals <= 1 else 0.1))
-            else:
-                sb = QSpinBox()
-                sb.setSingleStep(int(p.step or 1))
             lo = p.min if p.min is not None else -1e6
             hi = p.max if p.max is not None else 1e6
-            if p.type == "int":
-                lo, hi = int(max(lo, -2**31)), int(min(hi, 2**31 - 1))
-            sb.setRange(lo, hi)
-            sb.setToolTip(p.help)
-            sb.setKeyboardTracking(False)
+            if p.type == "float":
+                sb = NumberBox(lo, hi, decimals=p.decimals, step=p.step or (1.0 if p.decimals <= 1 else 0.1),
+                               tooltip=p.help, tracking=False)
+            else:
+                sb = IntegerBox(lo, hi, step=p.step or 1, tooltip=p.help, tracking=False)
             sb.setMinimumWidth(70)
             if v != AUTO and v is not None:
                 sb.setValue(v)

@@ -9,7 +9,6 @@ from .editors_constants import (
     CUTTING_STRATEGIES,
     CUT_DIRECTIONS,
     DIRECTED_KINDS,
-    CAPPED_COLOUR,
     ENGAGEMENT_CONTROLS,
     MACHINE_FEED_DEFAULTS,
     RATE_FIELDS,
@@ -25,7 +24,6 @@ from PyQt6.QtWidgets import (
     QTreeWidgetItem,
     QPushButton,
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -39,6 +37,7 @@ from gcodeproducer.core.cam.strategy import cutting_strategy
 from gcodeproducer.core.cam.tool_group import ToolGroup
 from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, LEAD_ANGLE_RANGE, LEAD_MODES, LEAD_OUT_ANGLE_RANGE, RAMP_ANGLE, SURFACE_KINDS
 from gcodeproducer.core.settings.settings_constants import DEFAULTS
+from gcodeproducer.gui.controls import NumberBox
 
 
 class CAMEditor(QWidget):
@@ -350,11 +349,7 @@ class CAMEditor(QWidget):
 
     @staticmethod
     def spin(lo, hi, value):
-        w = QDoubleSpinBox()
-        w.setRange(lo, hi)
-        w.setDecimals(3)
-        w.setValue(value)
-        return w
+        return NumberBox(lo, hi, value)
 
     def set_tools(self, tools):
         self.tools = list(tools)
@@ -679,11 +674,10 @@ class CAMEditor(QWidget):
     def flag_stepdown_cap(self, requested, used):
         """Orange depth of cut, with the reason in its tooltip, when the tool's Max depth/pass cuts it down."""
         capped = requested > used + 1e-9
-        self.stepdown.setStyleSheet(f"QDoubleSpinBox {{ color: {CAPPED_COLOUR}; }}" if capped else "")
-        self.stepdown.setToolTip(
+        self.stepdown.set_warning(
             f"Capped by the tool: this operation asks for {requested:g} mm per pass, but the tool's Max depth/pass "
             f"is {used:g} mm, so passes are {used:g} mm deep. Raise or clear (0) Max depth/pass in the tool "
-            f"library to cut deeper." if capped else self.doc_override.toolTip())
+            f"library to cut deeper." if capped else None)
 
     def use_selection_depths(self):
         op = self.operation()

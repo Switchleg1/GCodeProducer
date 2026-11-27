@@ -5,7 +5,6 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -14,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from gcodeproducer.core.cam.holding_tab import HoldingTab
 from .section import Section
+from gcodeproducer.gui.controls import NumberBox
 
 
 class CAMTabsEditor(Section):
@@ -64,12 +64,7 @@ class CAMTabsEditor(Section):
 
     @staticmethod
     def spin(value):
-        w = QDoubleSpinBox()
-        w.setRange(.05, 10000)
-        w.setDecimals(3)
-        w.setValue(value)
-        w.setKeyboardTracking(False)
-        return w
+        return NumberBox(.05, 10000, value, tracking=False)
 
     def set_setup(self, setup):
         if self.setup is setup:

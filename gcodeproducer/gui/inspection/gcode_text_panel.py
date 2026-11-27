@@ -2,8 +2,9 @@
 from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFontDatabase
-from PyQt6.QtWidgets import QAbstractItemView, QLineEdit, QListView, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QAbstractItemView, QLineEdit, QListView, QVBoxLayout, QWidget
 from gcodeproducer.gui.inspection.gcode_model import GCodeModel
+from gcodeproducer.gui.controls import IntegerBox
 
 class GCodeTextPanel(QWidget):
     lineClicked = pyqtSignal(int)
@@ -24,10 +25,7 @@ class GCodeTextPanel(QWidget):
         self.find = QLineEdit()
         self.find.setPlaceholderText("Find text (Enter = next)")
         self.find.returnPressed.connect(self._find_next)
-        self.goto = QSpinBox()
-        self.goto.setRange(1, 1)
-        self.goto.setPrefix("Line ")
-        self.goto.setKeyboardTracking(False)
+        self.goto = IntegerBox(1, 1, prefix="Line ", tracking=False)
         self.goto.editingFinished.connect(lambda: self._goto(self.goto.value() - 1))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(2, 2, 2, 2)

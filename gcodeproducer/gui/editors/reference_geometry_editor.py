@@ -1,13 +1,14 @@
 """Model-owned reference outlines: draw, select, move, resize and delete."""
 import numpy as np
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QListWidget,
+from PyQt6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel, QListWidget,
                              QListWidgetItem, QMessageBox, QPushButton, QWidget)
 from gcodeproducer.core.cam.reference_shape import ReferenceShape
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.reference_geometry import plane_point
 from .editors_constants import REFERENCE_DRAW_MODES, REFERENCE_MODES, REFERENCE_HINTS
 from .section import Section
+from gcodeproducer.gui.controls import NumberBox
 
 
 def default_confirm(parent, text):
@@ -44,11 +45,9 @@ class ReferenceGeometryEditor(Section):
             self.method.addItem(label)
         self.method.currentIndexChanged.connect(self._cancel_drawing)
         form.addRow("New shape", self.method)
-        self.z = QDoubleSpinBox()
-        self.z.setRange(-10000, 10000)
-        self.z.setDecimals(3)
-        self.z.setSuffix(" mm")
-        self.z.setToolTip("Z of new shapes. Fixed CAM work coordinates: references do not follow later model placement.")
+        self.z = NumberBox(-10000, 10000, suffix=" mm",
+                           tooltip="Z of new shapes. Fixed CAM work coordinates: references do not follow later "
+                                   "model placement.")
         self.z.valueChanged.connect(self._cancel_drawing)
         form.addRow("Drawing plane Z", self.z)
         self.items = QListWidget()
@@ -76,10 +75,7 @@ class ReferenceGeometryEditor(Section):
         self.fields = {}
 
         def spin(key, lo):
-            sb = QDoubleSpinBox()
-            sb.setRange(lo, 10000)
-            sb.setDecimals(3)
-            sb.setKeyboardTracking(False)
+            sb = NumberBox(lo, 10000, tracking=False)
             sb.valueChanged.connect(self._edit)
             self.fields[key] = sb
             return sb

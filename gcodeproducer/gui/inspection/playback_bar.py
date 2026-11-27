@@ -3,10 +3,11 @@ from __future__ import annotations
 import time
 import numpy as np
 from PyQt6.QtCore import QSignalBlocker, Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSlider, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget
 from gcodeproducer.gui.editors.widgets import small_button
 from .inspection_constants import (TRANSPORT_BUTTONS, PLAY_ICON, PAUSE_ICON, PLAY_INTERVAL_MS,
                                    PLAY_SPEED_STEPS, PLAY_SPEED_DECADES, PLAY_SPEED_DEFAULT)
+from gcodeproducer.gui.controls import IntegerBox
 
 
 class PlaybackBar(QWidget):
@@ -38,20 +39,14 @@ class PlaybackBar(QWidget):
         self.line_slider = QSlider(Qt.Orientation.Horizontal)
         self.line_slider.setToolTip("Position in the whole program")
         self.line_slider.valueChanged.connect(lambda v: self.set_cursor(v))
-        self.line_spin = QSpinBox()
-        self.line_spin.setPrefix("line ")
-        self.line_spin.setKeyboardTracking(False)
+        self.line_spin = IntegerBox(0, 0, prefix="line ", tracking=False)
         self.line_spin.valueChanged.connect(lambda v: self.set_cursor(v-1))
         self.layer_line_slider = QSlider(Qt.Orientation.Horizontal)
         self.layer_line_slider.setToolTip("Position within the top visible layer")
         self.layer_line_slider.valueChanged.connect(lambda v: self.set_cursor(v, follow=False))
-        self.layer_min_spin = QSpinBox()
-        self.layer_min_spin.setPrefix("from ")
-        self.layer_min_spin.setToolTip("Lowest visible layer")
+        self.layer_min_spin = IntegerBox(0, 0, prefix="from ", tooltip="Lowest visible layer")
         self.layer_min_spin.valueChanged.connect(self._on_layer_min)
-        self.layer_max_spin = QSpinBox()
-        self.layer_max_spin.setPrefix("to ")
-        self.layer_max_spin.setToolTip("Highest visible layer")
+        self.layer_max_spin = IntegerBox(0, 0, prefix="to ", tooltip="Highest visible layer")
         self.layer_max_spin.valueChanged.connect(lambda v: self.set_layer_max(v-1))
         self.single_layer = QCheckBox("Single layer")
         self.single_layer.setToolTip("Show only the top visible layer")

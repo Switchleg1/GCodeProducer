@@ -540,3 +540,12 @@ def test_compute_face_pick_hits_and_misses():
     mesh = load_mesh('examples/cube20.stl')
     assert np.allclose(run_placement_face((mesh, [10, 10, 50], [0, 0, -1])), [0, 0, 1])
     assert run_placement_face((mesh, [100, 100, 50], [0, 0, -1])) is None
+
+
+def test_every_spin_box_in_the_window_is_a_shared_number_box(win):
+    """Limits and the warning state are available everywhere: no plain Qt spin boxes are left."""
+    from PyQt6.QtWidgets import QAbstractSpinBox
+    from gcodeproducer.gui.controls import IntegerBox, NumberBox
+    spins = win.findChildren(QAbstractSpinBox)
+    assert len(spins) > 20
+    assert [type(s).__name__ for s in spins if not isinstance(s, (NumberBox, IntegerBox))] == []

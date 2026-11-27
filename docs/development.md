@@ -18,6 +18,7 @@
 | `gui/runtime/` | Compute process service and separate queue-reader class |
 | `gui/history/` | Bounded transactional history, structural widget mementos, main-window and modal domain adapters; shared Help shortcut table |
 | `gui/rendering/` | Cameras, separate GL mesh classes, Prepare/Preview and plate/material rendering |
+| `gui/controls/` | `NumberBox` / `IntegerBox`: every numeric input, with limits and a warning state |
 | `gui/editors/`, `gui/inspection/` | Parameter/process/CAM/stock/tab/reference/template editors (`section.py` is the one collapsible pane used by every panel); G-code table/panel and `playback_bar.py`, the Preview cursor/layer/transport controller shared by FDM and CAM |
 | `gui/dialogs/`, `gui/messages/` | Libraries/Settings dialogs, message panel and pop-ups |
 | `importers/`, `stages/base/`, `stages/fdm/`, `stages/cam/` | One-class importer/stage implementations and public stage API |
@@ -271,6 +272,16 @@ and either a ready body widget or fill `section.body`. Lists with actions put
 the buttons directly under the list. Checkable viewport tools (Place blocks,
 Place tabs, Draw/Move/Resize) are highlighted while active and end on Esc or a
 second click.
+
+Make every numeric input with `gui.controls.NumberBox` (decimals) or
+`gui.controls.IntegerBox` (whole numbers), never a bare `QDoubleSpinBox` /
+`QSpinBox` (a test enforces this for the main window). Both take their limits,
+decimals, step, prefix/suffix, special-value text, tooltip and keyboard
+tracking in the constructor, and `set_limits(minimum, maximum)` later. Call
+`set_warning(message)` when a valid value is changed or limited where it is
+used (for example a depth of cut capped by the tool's Max depth/pass): the
+value turns orange and the message leads its tooltip, above the normal one.
+`set_warning(None)` restores both; a warning never changes the value.
 
 ## Tests and checks
 

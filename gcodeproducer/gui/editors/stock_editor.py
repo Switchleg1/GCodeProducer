@@ -7,11 +7,11 @@ from PyQt6.QtWidgets import (
     QWidget,
     QFormLayout,
     QLineEdit,
-    QDoubleSpinBox,
     QPushButton,
     QLabel,
     QComboBox,
 )
+from gcodeproducer.gui.controls import NumberBox
 
 
 class StockEditor(QWidget):
@@ -42,11 +42,7 @@ class StockEditor(QWidget):
         self.category.currentIndexChanged.connect(self._edit)
         form.addRow("Machining material",self.category)
         for key, label, lo, hi, unit in STOCK_FIELDS:
-            sb = QDoubleSpinBox()
-            sb.setRange(lo, hi)
-            sb.setDecimals(3)
-            sb.setSuffix(unit)
-            sb.setKeyboardTracking(False)
+            sb = NumberBox(lo, hi, suffix=unit, tracking=False)
             sb.valueChanged.connect(self._edit)
             self.fields[key] = sb
             form.addRow(label, sb)

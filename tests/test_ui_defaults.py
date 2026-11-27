@@ -365,7 +365,7 @@ def test_depth_of_cut_turns_orange_and_explains_when_the_tool_caps_it(app):
     from dataclasses import asdict
     from gcodeproducer.core.profiles import Profile
     from gcodeproducer.gui.cam_editor import CAMEditor
-    from gcodeproducer.gui.editors.editors_constants import CAPPED_COLOUR
+    from gcodeproducer.gui.controls.controls_constants import WARNING_COLOUR
     editor = CAMEditor()
     tool = Profile("tool", "Test cutter", values={"diameter": 4., "max_doc": 2.})
     editor.set_tools([tool])
@@ -376,10 +376,35 @@ def test_depth_of_cut_turns_orange_and_explains_when_the_tool_caps_it(app):
     data = resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())
     assert (data.requested_stepdown, data.stepdown) == (2.5, 2.)
     editor.set_calculated(asdict(data))
-    assert CAPPED_COLOUR in editor.stepdown.styleSheet()
+    assert WARNING_COLOUR in editor.stepdown.styleSheet()
     tip = editor.stepdown.toolTip()
     assert "2.5 mm" in tip and "Max depth/pass is 2 mm" in tip and "passes are 2 mm" in tip
+    assert tip.endswith(plain)                         # the warning leads; the normal tooltip is kept
     editor.stepdown.setValue(1.5)
     editor.set_calculated(asdict(resolve_cutting(Profile("machine", "M"), tool, None, editor.operation())))
     assert editor.stepdown.styleSheet() == "" and editor.stepdown.toolTip() == plain
     editor.close()
+
+
+def test_number_boxes_share_limits_and_a_warning_state(app):
+    from PyQt6.QtWidgets import QAbstractSpinBox, QApplication
+    from gcodeproducer.gui.controls import IntegerBox, NumberBox
+    from gcodeproducer.gui.controls.controls_constants import WARNING_COLOUR
+    box = NumberBox(0, 10, 2.5, decimals=2, suffix=" mm", tooltip="How deep")
+    assert (box.minimum(), box.maximum(), box.value(), box.text()) == (0, 10, 2.5, "2.50 mm")
+    box.setValue(42)
+    assert box.value() == 10                                   # held inside its limits
+    box.set_limits(0, 100); box.setValue(42)
+    assert box.value() == 42
+    box.set_warning("Capped at 2 mm")
+    assert box.warning() == "Capped at 2 mm" and WARNING_COLOUR in box.styleSheet()
+    assert box.toolTip() == "Capped at 2 mm\n\nHow deep"
+    box.setToolTip("How deep, per pass")                       # changing the normal tooltip keeps the warning
+    assert box.toolTip().startswith("Capped at 2 mm") and box.toolTip().endswith("How deep, per pass")
+    box.set_warning(None)
+    assert box.warning() is None and box.styleSheet() == "" and box.toolTip() == "How deep, per pass"
+    assert box.value() == 42                                   # a warning never changes the value
+    whole = IntegerBox(1, 5, 9, prefix="line ")
+    assert whole.value() == 5 and whole.text() == "line 5"
+    whole.set_warning("past the end"); whole.clear_warning()
+    assert whole.styleSheet() == ""
