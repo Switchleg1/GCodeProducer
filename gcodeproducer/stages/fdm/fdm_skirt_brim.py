@@ -47,14 +47,26 @@ class FDMSkirtBrim(SliceStage):
         elif kind in ("brim", "both") and params["brim_width"] > 0:
             n = max(1, int(math.ceil(params["brim_width"] / lw)))
             gap = params["brim_gap"]
+            # The brim goes round the first layer as a whole: parts (or teeth) closer together than
+            # the brim is wide share its loops instead of each getting rings that cross the others.
+            # Each loop is the true offset of that union, so the innermost touches the outer wall.
+            from shapely import BufferJoinStyle
+            from shapely.geometry import Polygon
+            from shapely.geometry.polygon import orient
+            from shapely.ops import unary_union
+            part = unary_union([Polygon(c).buffer(0) for c in outers])
             loops = []
-            for c in outers:
-                rings = []
-                for k in range(n):
-                    got = geometry.offset(c, gap + lw * (0.5 + k))
-                    if got:
-                        rings.append(got[0])
-                loops.extend(reversed(rings))          # outermost first, finish next to the part
+            for k in reversed(range(n)):                 # outermost first, finish next to the part
+                grown = part.buffer(gap + lw * (0.5 + k), join_style=BufferJoinStyle.round, quad_segs=8)
+                for g in sorted(getattr(grown, "geoms", [grown]), key=lambda g: -g.area):
+                    if g.geom_type != "Polygon" or g.is_empty:
+                        continue
+                    g = orient(g, 1.)
+                    # Rings inside the grown outline lie between parts: brim there too.
+                    for ring in (g.exterior, *g.interiors):
+                        loop = np.asarray(ring.coords, float)[:-1]
+                        if len(loop) >= 3:
+                            loops.append(loop)
             first.paths[0:0] = [Path("skirt", r, closed=True, width=lw) for r in loops]
             brim_extent = gap + n * lw
             msgs.append(f"brim {n} loops")

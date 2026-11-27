@@ -29,3 +29,5 @@ MEDIAL_KEY_DECIMALS = 6
 # Slicing planes in parallel worker processes (only for enough planes).
 SLICE_PARALLEL_MIN_PLANES = 32
 SLICE_PARALLEL_GROUPS = 32
+
+OFFSET_MITRE_LIMIT = 10.  # sharp corners of an offset outline are clamped at this many times the offset distance

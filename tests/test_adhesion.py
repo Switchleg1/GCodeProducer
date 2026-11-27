@@ -88,3 +88,36 @@ def test_disabled_skirt_stage_becomes_type_none():
                                          "params": {"type": "brim", "brim_width": 7}}]}
     step = SlicePipeline.from_dict(old).step("fdm_skirt_brim")
     assert step.enabled and step.params["type"] == "none" and step.params["brim_width"] == 7
+
+
+def test_brim_round_a_toothed_outline_is_nested_loops_that_never_cross():
+    """A gear's teeth are closer together than the brim is wide: each brim loop is the true offset
+    of the whole outline (simple, nested, a line width apart, the innermost touching the part),
+    not rings that cross each other where corners moved along their bisectors."""
+    import math
+    from types import SimpleNamespace
+    from shapely.geometry import LinearRing, Polygon
+    from gcodeproducer.stages.fdm.fdm_skirt_brim import FDMSkirtBrim
+    t = np.linspace(0, 2*math.pi, 1200, endpoint=False)
+    r = 60 + 2.5*np.sign(np.sin(70*t))
+    gear = np.column_stack((150 + r*np.cos(t), 150 + r*np.sin(t)))
+    hole = np.column_stack((150 + 10*np.cos(t[::10]), 150 + 10*np.sin(t[::10])))
+    layer = SimpleNamespace(outline=[gear, hole], contours=[gear, hole], paths=[])
+    job = SimpleNamespace(layers=[layer], line_width=.6)
+    FDMSkirtBrim().run(job, dict(type="brim", line_width=.6, brim_width=5., brim_gap=0., skirt_distance=3.,
+                                 skirt_loops=1, skirt_height=1), None)
+    loops = [np.asarray(p.points, float) for p in layer.paths]
+    assert len(loops) == 9 and all(p.feature == "skirt" and p.closed for p in layer.paths)
+    part = Polygon(gear)
+    previous = None
+    for k, loop in enumerate(reversed(loops)):                    # innermost first
+        ring = LinearRing(loop)
+        assert ring.is_simple                                     # never crosses itself
+        assert Polygon(loop).contains(part.buffer(-1e-6))         # round the whole part, outside it
+        from shapely import distance, points
+        gaps = distance(part.exterior, points(loop))
+        assert gaps.min() == pytest.approx(.3 + .6*k, abs=.03) and gaps.max() == pytest.approx(.3 + .6*k, abs=.03)
+        if previous is not None:
+            assert Polygon(loop).contains(Polygon(previous))      # nested
+        previous = loop
+    assert not any(Polygon(loop).within(Polygon(hole)) for loop in loops)   # holes are not brimmed

@@ -16,7 +16,14 @@ Adhesion paths are inserted before other paths on their layer and tagged
   primes extrusion and helps inspect first-layer behaviour; it does not trace
   every concavity or attach the model to the bed.
 - **Brim:** loops adjacent to first-layer outer contours. Intended to increase
-  bed attachment; hole interiors are not brimmed.
+  bed attachment; hole interiors are not brimmed. Each loop is the true offset
+  of the whole first-layer outline, one line width further out than the last,
+  the innermost touching the outer wall (after Brim gap). Where parts, or the
+  teeth of a gear, are closer together than the brim is wide, the loops merge
+  across the gap instead of crossing each other (before 0.2.75 each corner was
+  moved along its bisector, which tangled the loops round gears and other
+  finely toothed outlines). Gaps enclosed between separate parts are brimmed
+  too.
 - **Skirt + brim:** both; skirt distance is measured beyond the brim's extent.
 
 ## Settings and defaults

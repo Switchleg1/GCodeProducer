@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from gcodeproducer.core.geometry.mesh import Mesh
 from gcodeproducer.core.geometry.region_mask import RegionMask
-from gcodeproducer.core.geometry.geometry_constants import _STL_RECORD
+from gcodeproducer.core.geometry.geometry_constants import _STL_RECORD, OFFSET_MITRE_LIMIT
 import math, struct, numpy as np
 
 
@@ -310,41 +310,31 @@ def signed_orient(poly: np.ndarray, ccw: bool = True) -> np.ndarray:
 
 
 def offset(poly: np.ndarray, delta: float) -> list:
-    """Offset a closed polygon by ``delta`` (negative = inward for CCW outer).
+    """Offset a closed polygon by ``delta`` (positive = outward, negative = inward).
 
-    Miter offset by edge normals.  Returns [] if the loop collapses.
+    Returns the offset outlines, largest first, each counter-clockwise without
+    a repeated end point; [] if the loop collapses. Corners keep a mitre (sharp
+    ones clamped at OFFSET_MITRE_LIMIT times the distance). The offset is the
+    true one: where parts of the outline come closer than twice the distance
+    (gear teeth, a narrow slot) they merge, or split into separate loops,
+    instead of crossing over each other as moving each corner along its
+    bisector does.
     """
+    from shapely import BufferJoinStyle
+    from shapely.geometry import Polygon
+    from shapely.geometry.polygon import orient
     p = np.asarray(poly, float)
     if len(p) < 3:
         return []
-    # ensure CCW so that negative delta moves inward
-    if area(p) < 0:
-        p = p[::-1]
-        delta = delta
-    n = len(p)
-    out = np.zeros_like(p)
-    for i in range(n):
-        prev = p[i - 1]
-        cur = p[i]
-        nxt = p[(i + 1) % n]
-        e1 = cur - prev
-        e2 = nxt - cur
-        n1 = _norm_left(e1)
-        n2 = _norm_left(e2)
-        bis = n1 + n2
-        bl = np.linalg.norm(bis)
-        if bl < 1e-9:
-            out[i] = cur + n1 * delta
-            continue
-        bis = bis / bl
-        cos_half = float(np.dot(bis, n1))
-        cos_half = max(cos_half, 0.1)       # clamp sharp corners
-        # n1/n2 are inward normals of a CCW loop, so negative delta = inward
-        out[i] = cur - bis * (delta / cos_half)
-    # drop collapse: if the offset reversed the loop area sign, it vanished
-    if np.sign(area(out)) != np.sign(area(p)) or abs(area(out)) < 1e-6:
+    shape = Polygon(p)
+    if not shape.is_valid:
+        shape = shape.buffer(0)
+    if shape.is_empty:
         return []
-    return [out]
+    grown = shape.buffer(float(delta), join_style=BufferJoinStyle.mitre, mitre_limit=OFFSET_MITRE_LIMIT)
+    parts = [g for g in getattr(grown, "geoms", [grown]) if g.geom_type == "Polygon" and g.area >= 1e-6]
+    parts.sort(key=lambda g: -g.area)
+    return [np.asarray(orient(g, 1.).exterior.coords, float)[:-1] for g in parts]
 
 
 def point_in_polygon(pt, poly: np.ndarray) -> bool:
