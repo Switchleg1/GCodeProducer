@@ -12,6 +12,9 @@ KINDS = ("pocket", "profile", "drill", "engrave", "slot", "waterfall", "contour3
 KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engrave": "Engrave", "slot": "Slot",
                "waterfall": "3D Pocket", "contour3d": "3D Contour"}
 
+SIDES = ("a", "b")            # two-sided machining: the side shown, planned and exported
+FLIP_AXES = ("x", "y")        # the stock is turned over about its X or its Y axis for Side B
+
 SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
 
 STRATEGY_ALIASES = {

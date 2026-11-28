@@ -8,6 +8,11 @@
 - Mini Yoda, operator's session (3D Contour raster X, machine direction): 9 layers, each one entry and one path (no other rapids); deepest cut per layer 0.6 mm (step 0.6); 4,323 s; air-feed replay shows 7 grazes of 0.002 mm (grid level, present before).
 - 0.2.66, operator: lifting back to the start of the next line is allowed; changing the order or jumping elsewhere is not. Climb/Conventional 3D Contour: one path per full-width line, in order, lift and return (no travel back over the cut line).
 
+## 0.2.78
+
+- Operator: two-sided 3-axis machining in one job; Workflow box FDM / CAM 3D / CAM 3D 2Sided (CAM 4D later); after the flip the old top lies on the bed; a machine option for Z0 at the bed. Done: `CAMSetup.two_sided/side/flip_axis/other_groups` (`switch_side`), `core/cam/two_sided.py` (`flip_mesh` about the stock box centre, X or Y), `place_mesh` and the scene turn the model for Side B, Side/Turn rows, header comment and `_sideA/_sideB` export name, `docs/cam/two-sided.md`. Side B is planned on a full block (conservative).
+- Not done: Z0-at-bed machine option (needs stock top != 0 audited through planning, safe Z relative to the top); registration pins / fence (operator has not answered the pin questions); carrying Side A's remaining material to Side B.
+
 ## 0.2.71
 
 - Operator: Adaptive engagement % merged into Stepover %. `Operation.adaptive_engagement` removed; `CAMSetup.from_dict` moves a saved value into `stepover` for Adaptive operations only; `engagement_width` and the step-up passes read `op.stepover`. Stepover spin now 0.1-100 %.

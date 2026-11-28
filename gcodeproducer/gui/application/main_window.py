@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from .application_constants import SHOW_OPTIONS, ROTATION_BUTTONS, ACTION_BUTTON_HEIGHT, ACTION_BUTTON_STRETCH
 from gcodeproducer.gui.application.application_constants import MODEL_FILTER, WORK_SESSION_FILTER, WORK_SESSION_KEY
+from gcodeproducer.gui.application.application_constants import (WORKFLOW_CHOICES, TWO_SIDED_CHOICE, SIDE_CHOICES,
+                                                                 FLIP_CHOICES)
 import copy, hashlib, json, os, time, numpy as np, gcodeproducer.core.settings.preferences as app_settings, gcodeproducer.core.libraries.defaults as defaults, gcodeproducer.core.plugins.discovery as plugins, gcodeproducer.core.workflows.validation as wf
 from pathlib import Path
 from PyQt6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
@@ -283,10 +285,26 @@ class MainWindow(QMainWindow):
         self.setup_form.setContentsMargins(0, 0, 0, 0)
         setup.body.addLayout(self.setup_form)
         self.cb_workflow = QComboBox()
-        for w in wf.ALL:
-            self.cb_workflow.addItem(wf.label(w), w)
+        for label, choice in WORKFLOW_CHOICES:
+            self.cb_workflow.addItem(label, choice)
         self.cb_workflow.currentIndexChanged.connect(self._on_workflow)
         self.setup_form.addRow("Workflow", self.cb_workflow)
+        # Two-sided machining: which side is shown, planned and exported, and how the stock is turned.
+        self.cb_side = QComboBox()
+        for label, side in SIDE_CHOICES:
+            self.cb_side.addItem(label, side)
+        self.cb_side.setToolTip("Two-sided machining: the side shown, planned, sliced and exported. Each side has its "
+                                "own tool groups and operations; the stock, holding tabs and reference shapes are "
+                                "shared. Side B shows the model as it lies once the stock is turned over.")
+        self.cb_side.currentIndexChanged.connect(self._on_side)
+        self.setup_form.addRow("Side", self.cb_side)
+        self.cb_flip = QComboBox()
+        for label, axis in FLIP_CHOICES:
+            self.cb_flip.addItem(label, axis)
+        self.cb_flip.setToolTip("How the stock is turned over for Side B. It goes back in the same place on the table, "
+                                "its old top face on the bed, turned about this axis through its centre.")
+        self.cb_flip.currentIndexChanged.connect(self._on_side)
+        self.setup_form.addRow("Turn the stock about", self.cb_flip)
         self.cb_machine = QComboBox()
         self.cb_machine.currentIndexChanged.connect(self._on_machine)
         self.setup_form.addRow("Machine", self._with_edit(self.cb_machine, "machine"))
@@ -855,6 +873,8 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
         w = s.value("workflow") or wf.FDM
+        if w == wf.CAM and str(s.value("cam_two_sided", "")).lower() in ("true", "1"):
+            w = TWO_SIDED_CHOICE
         self._loading = True
         self.cb_workflow.setCurrentIndex(max(0, self.cb_workflow.findData(w)))
         self._loading = False
@@ -921,6 +941,7 @@ class MainWindow(QMainWindow):
         s.setValue("windowState", self.saveState())
         s.setValue("messagesDockPlaced", True)
         s.setValue("workflow", self.workflow)
+        s.setValue("cam_two_sided", self.cb_workflow.currentData() == TWO_SIDED_CHOICE)
         for w in wf.ALL:
             s.setValue(f"process/{w}", self.process_id[w] or "")
             s.setValue(f"working/{w}", json.dumps(self.pipelines[w].to_dict()) if self.dirty[w] else "")
@@ -963,7 +984,8 @@ class MainWindow(QMainWindow):
             return
         if self.model_path:
             self._save_placement()
-        workflow = self.cb_workflow.currentData()
+        choice = self.cb_workflow.currentData()
+        workflow = wf.CAM if choice == TWO_SIDED_CHOICE else choice
         if workflow != self.workflow and self.plate_models:
             from gcodeproducer.core.fdm.plate import reanchor_models
             reanchor_models(self.plate_models, 'top' if workflow == wf.CAM else 'bottom', self._auto_xy())
@@ -993,6 +1015,14 @@ class MainWindow(QMainWindow):
         self._show_process_overrides()
         self._update_dirty()
         self._sync_support_controls()
+        if self.workflow == wf.CAM:
+            # The Workflow box decides one- or two-sided for the setup now shown (a saved setup keeps
+            # both sides' operations either way).
+            setup, two = self.cam_editor.setup, choice == TWO_SIDED_CHOICE
+            if setup.two_sided != two:
+                setup.set_two_sided(two)
+                self.cam_editor.set_setup(setup)
+        self._sync_sides()
         self._update_scene()
         self._set_stale()
         self._update_enabled()
@@ -1305,6 +1335,8 @@ class MainWindow(QMainWindow):
             setup = CAMSetup.from_dict(json.loads(raw)) if raw else CAMSetup()
         except (ValueError, KeyError, TypeError):
             setup = CAMSetup()
+        if not raw:      # a model without a saved setup starts in the mode chosen in the Workflow box
+            setup.set_two_sided(self.cb_workflow.currentData() == TWO_SIDED_CHOICE)
         current = fingerprint(mesh)
         if setup.fingerprint and setup.fingerprint != current:
             self.log("CAM geometry changed: cleared old operations to avoid stale geometry references")
@@ -1312,8 +1344,40 @@ class MainWindow(QMainWindow):
         setup.fingerprint = current
         self._show_cam_setup(setup)
 
+    def _on_side(self, _i=0):
+        """Show the other side (or turn the stock about the other axis): its operations and the model as it lies."""
+        if self._loading or getattr(self, "_syncing_sides", False):
+            return
+        setup = self.cam_editor.setup
+        setup.flip_axis = self.cb_flip.currentData()
+        if setup.two_sided:
+            setup.switch_side(self.cb_side.currentData())
+        self._cam_pick_mode("")
+        self.cam_editor.set_setup(setup)
+        if self.material_results:
+            self._reset_material_outputs()
+        self._update_scene()
+        self._cam_changed()
+
+    def _sync_sides(self):
+        """Workflow choice and side controls follow the CAM setup shown."""
+        setup = self.cam_editor.setup
+        two = self.workflow == wf.CAM and setup.two_sided
+        self._syncing_sides = True
+        try:
+            if self.workflow == wf.CAM:
+                with QSignalBlocker(self.cb_workflow):
+                    self.cb_workflow.setCurrentIndex(self.cb_workflow.findData(TWO_SIDED_CHOICE if two else wf.CAM))
+            self.cb_side.setCurrentIndex(self.cb_side.findData(setup.side))
+            self.cb_flip.setCurrentIndex(self.cb_flip.findData(setup.flip_axis))
+        finally:
+            self._syncing_sides = False
+        for box in (self.cb_side, self.cb_flip):
+            self.setup_form.setRowVisible(box, two)
+
     def _show_cam_setup(self, setup):
         self.cam_editor.set_setup(setup)
+        self._sync_sides()
         self.reference_editor.set_setup(setup)
         self.model_viewer.set_reference_geometry()
         self.stock_editor.set_stock(setup.stock)
@@ -1658,7 +1722,11 @@ class MainWindow(QMainWindow):
             self.lbl_size.setText("")
             self.model_viewer.set_scene(None, rect, (0, 0))
             return
-        self.placed = self.placement.apply(self.mesh, self._auto_xy())
+        from gcodeproducer.core.cam.two_sided import side_mesh
+        turn = (lambda mesh: side_mesh(mesh, self.cam_editor.setup)) if self.workflow == wf.CAM else (lambda mesh: mesh)
+        upright = self.placement.apply(self.mesh, self._auto_xy())
+        self.placed = turn(upright)          # Side B of a two-sided setup: as it lies turned over
+        self._upright = upright              # the stock is fitted to the model as it lies for Side A
         lo, hi = self.placed.bounds
         sz = hi - lo
         inside = fits(self.placed, rect)
@@ -1671,10 +1739,12 @@ class MainWindow(QMainWindow):
         self.assembly = self.placed
         if len(self.plate_models) > 1:
             from gcodeproducer.core.fdm.plate import combine_meshes
-            meshes = [self.placed if i == self.plate_row else model.placement.apply(model.mesh, self._auto_xy())
-                      for i, model in enumerate(self.plate_models)]
+            uprights = [upright if i == self.plate_row else model.placement.apply(model.mesh, self._auto_xy())
+                        for i, model in enumerate(self.plate_models)]
+            meshes = [turn(mesh) for mesh in uprights]
             ends = np.cumsum([len(mesh.triangles) for mesh in meshes])
             self.assembly = combine_meshes(meshes)
+            self._upright = combine_meshes(uprights)
             self.model_viewer.set_scene(self.assembly, rect, center,
                                         angle, all(fits(m, rect) for m in meshes),
                                         model_ends=ends, active_model=self.plate_row)
@@ -1691,7 +1761,7 @@ class MainWindow(QMainWindow):
     def _auto_stock(self):
         if self.placed is None:
             return
-        self.cam_editor.setup.stock.auto(self.assembly)
+        self.cam_editor.setup.stock.auto(self._upright)   # (Side B shows the model turned over inside it)
         self.stock_editor.set_stock(self.cam_editor.setup.stock)
         self._stock_changed()
 
@@ -2347,6 +2417,8 @@ class MainWindow(QMainWindow):
             return
         ext = ".nc" if is_cam else ".gcode"
         base = Path(self.model_path).with_suffix(ext) if self.model_path else Path("out" + ext)
+        if is_cam and self.cam_editor.setup.two_sided:
+            base = base.with_name(f"{base.stem}_side{self.cam_editor.setup.side.upper()}{ext}")
         path, _ = QFileDialog.getSaveFileName(self, "Save G-code", str(base), "G-code (*.gcode *.nc *.g *.tap)")
         if path:
             written = program.save(path)

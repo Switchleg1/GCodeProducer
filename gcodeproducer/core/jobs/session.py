@@ -36,6 +36,14 @@ def build_job(workflow: str, machine: Profile, *, material: Optional[Profile] = 
                preferences=dict(preferences or {}), plate_models=list(plate_models or []))
 
 
+def _side(job, mesh):
+    """The placed mesh as it lies for the CAM setup's active side (turned over for Side B)."""
+    if job.workflow != wf.CAM or job.cam_setup is None:
+        return mesh
+    from gcodeproducer.core.cam.two_sided import side_mesh
+    return side_mesh(mesh, job.cam_setup)
+
+
 def place_mesh(job: Job) -> None:
     """Apply the job's placement to its mesh (default: centred on the bed for FDM,
     original XY for CAM; FDM bottom at Z0, CAM top at Z0)."""
@@ -45,7 +53,7 @@ def place_mesh(job: Job) -> None:
         from gcodeproducer.core.fdm.plate import combine_meshes
         auto = bed_xy(job.machine, job.workflow)
         job.placed_models = [model.placement.apply(model.mesh, auto_xy=auto) for model in job.plate_models]
-        job.mesh = combine_meshes(job.placed_models)
+        job.mesh = _side(job, combine_meshes(job.placed_models))
         if job.workflow == wf.FDM and len(job.plate_models) == 1:
             job.support = job.plate_models[0].support
             job.support_blocks = job.plate_models[0].blocks
@@ -54,7 +62,7 @@ def place_mesh(job: Job) -> None:
         return
     pl = job.placement or Placement(z_anchor="top" if job.workflow == wf.CAM else "bottom")
     auto = bed_xy(job.machine, job.workflow) if job.workflow == wf.FDM else None
-    job.mesh = pl.apply(job.mesh, auto_xy=auto)
+    job.mesh = _side(job, pl.apply(job.mesh, auto_xy=auto))
 
 
 def slice_job(job: Job, pipeline: Optional[SlicePipeline] = None,

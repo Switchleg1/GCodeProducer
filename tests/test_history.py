@@ -603,3 +603,46 @@ def test_drawing_reference_geometry_shows_the_outline_and_size_in_the_view(win):
     assert len(view.reference_preview) == 0 and len(refs.setup.reference_shapes) == 1
     refs.cancel()
     assert 'Diameter' not in view.info.text()
+
+
+def test_two_sided_workflow_shows_each_sides_operations_on_the_model_as_it_lies(win):
+    import numpy as np
+    assert [win.cb_workflow.itemText(i) for i in range(win.cb_workflow.count())] == ['FDM', 'CAM 3D', 'CAM 3D 2Sided']
+    ed = cam(win)                                             # CAM 3D with one operation
+    form = win.setup_form
+    assert not form.isRowVisible(win.cb_side) and not form.isRowVisible(win.cb_flip)
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam2'))
+    flush(win)
+    setup = ed.setup
+    assert win.workflow == 'cam' and setup.two_sided and setup.side == 'a'
+    assert form.isRowVisible(win.cb_side) and form.isRowVisible(win.cb_flip)
+    assert len(setup.groups) == 1 and len(setup.groups[0].operations) == 1
+    win._auto_stock()
+    lo, hi = setup.stock.bounds
+    upright = np.asarray(win.placed.vertices, float).copy()
+    win.cb_side.setCurrentIndex(win.cb_side.findData('b'))
+    flush(win)
+    assert setup.side == 'b' and setup.groups == [] and ed.tree.topLevelItemCount() == 0   # Side B starts empty
+    turned = np.asarray(win.placed.vertices, float)
+    assert np.allclose(turned[:, 0], upright[:, 0])                         # about X: X kept
+    assert np.allclose(turned[:, 2], lo[2]+hi[2]-upright[:, 2])             # upside down in the same stock
+    assert np.allclose(np.asarray(win.model_viewer.vertices, float), turned)  # and shown that way
+    ed.add_tool(); ed.add_operation(); flush(win)
+    ed.operation().name = 'underside'
+    win._auto_stock()                                                        # fitted to Side A's model: unchanged
+    assert np.allclose(setup.stock.bounds[0], lo) and np.allclose(setup.stock.bounds[1], hi)
+    win.cb_flip.setCurrentIndex(win.cb_flip.findData('y'))
+    flush(win)
+    assert np.allclose(np.asarray(win.placed.vertices)[:, 1], upright[:, 1])   # about Y now
+    win.cb_side.setCurrentIndex(win.cb_side.findData('a'))
+    flush(win)
+    assert np.allclose(win.placed.vertices, upright) and len(setup.groups[0].operations) == 1
+    assert setup.other_groups[0].operations[0].name == 'underside'
+    win.history.undo()                                                       # back on Side B
+    assert win.cam_editor.setup.side == 'b' and win.cb_side.currentData() == 'b'
+    win.history.redo()
+    win.cb_workflow.setCurrentIndex(win.cb_workflow.findData('cam'))         # one-sided again: Side A, B kept
+    flush(win)
+    setup = win.cam_editor.setup
+    assert not setup.two_sided and setup.side == 'a' and not form.isRowVisible(win.cb_side)
+    assert setup.other_groups[0].operations[0].name == 'underside'

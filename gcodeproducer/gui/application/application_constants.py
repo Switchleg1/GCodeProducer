@@ -43,3 +43,10 @@ THEME_STYLESHEET = ("QToolButton#sectionHeader { background: #3a3d44; border: no
 
 ACTION_BUTTON_HEIGHT = 34          # Slice / Generate paths and Save G-code
 ACTION_BUTTON_STRETCH = (7, 3)     # width share of the two buttons
+
+# Workflow drop-down: (label, choice). "cam2" is the CAM workflow with a two-sided setup.
+TWO_SIDED_CHOICE = "cam2"
+WORKFLOW_CHOICES = (("FDM", "fdm"), ("CAM 3D", "cam"), ("CAM 3D 2Sided", TWO_SIDED_CHOICE))
+SIDE_CHOICES = (("Side A (top)", "a"), ("Side B (turned over)", "b"))
+FLIP_CHOICES = (("Its X axis (front edge stays at the front)", "x"),
+                ("Its Y axis (left edge stays on the left)", "y"))

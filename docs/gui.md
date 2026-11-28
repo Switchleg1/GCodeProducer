@@ -42,7 +42,9 @@ affect generated output for every model: air-cut removal, short retracts and
 lead clearances, material grid resolution and cell limit, conflict colouring,
 default operation settings and which message pop-ups appear.
 
-Choose the workflow before configuring a machine. FDM offers allowed material
+Choose the workflow before configuring a machine: **FDM**, **CAM 3D**, or **CAM 3D
+2Sided** (CAM with a setup for both sides of the stock; see
+[two-sided machining](cam/two-sided.md)). FDM offers allowed material
 and nozzle profiles. CAM tools are added in the tool-change tree rather than
 selected as a single global tool. Profile edit buttons open Libraries on the
 relevant entry. Changing machines refreshes the permitted consumables; a saved

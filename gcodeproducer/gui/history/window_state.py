@@ -167,6 +167,7 @@ class WindowState:
         w.reference_editor.set_setup(setup)
         w.stock_editor.set_stock(setup.stock)
         w.stock_editor.tabs.set_setup(setup)
+        w._sync_sides()                 # one- or two-sided, and the side shown, as restored
         w._sync_placement_controls()
         w._sync_support_controls()
         w._refresh_block_list(keep=True)

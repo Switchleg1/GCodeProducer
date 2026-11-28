@@ -183,6 +183,12 @@ class CAMEmit(SliceStage):
     def _start(self, b, job, tool, rpm, safe_z, log=None, cutting=None):
         from gcodeproducer.core.gcode.variables import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
+        from gcodeproducer.core.cam.two_sided import side_label
+        side = side_label(job.cam_setup)
+        if side:
+            turned = (f": stock turned over about its {job.cam_setup.flip_axis.upper()} axis, old top face on the bed"
+                      if job.cam_setup.side == "b" else "")
+            b.comment(f"{side} of 2{turned}")
         extra=_tool_variables(tool)
         if cutting:extra.update(tool=int(tool.get("tool_number",1)),spindle_rpm=cutting.rpm,feed=cutting.feed,plunge_feed=cutting.plunge,
                                 machining_material=cutting.material,sfm=tool.get(f"{cutting.material}_sfm",0),
