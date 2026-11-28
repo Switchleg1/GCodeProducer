@@ -26,6 +26,7 @@ class ReferenceGeometryEditor(Section):
     changed = pyqtSignal()
     modeRequested = pyqtSignal(str)
     anchorChanged = pyqtSignal(object)
+    previewChanged = pyqtSignal(object, str)   # outline line pairs and readout of the shape at the mouse
     selectionChanged = pyqtSignal()
 
     def __init__(self, setup, parent=None):
@@ -187,6 +188,7 @@ class ReferenceGeometryEditor(Section):
         self.first = None
         self._set_checked("")
         self.anchorChanged.emit(None)
+        self.previewChanged.emit((), "")
 
     def cancel(self):
         self.end_mode()
@@ -195,6 +197,60 @@ class ReferenceGeometryEditor(Section):
     def _cancel_drawing(self, *_):
         if self.mode == "draw":
             self.cancel()
+
+    # ---------------------------------------------------------- viewport hover
+    def hover_ray(self, origin, direction):
+        """Preview what a click here would make: its outline in the view, its position and size as text."""
+        shape, readout = self.preview(origin, direction)
+        edges = ()
+        if shape is not None:
+            line = shape.polyline()
+            edges = np.stack((line[:-1], line[1:]), axis=1).reshape(-1, 3)
+        self.previewChanged.emit(edges, readout)
+
+    def preview(self, origin, direction):
+        """(shape a click at this ray would make or None, readout text)."""
+        if self.mode == "draw":
+            point = plane_point(origin, direction, self.z.value())
+            if point is None:
+                return None, ""
+            _, kind, method, first, second = REFERENCE_DRAW_MODES[self.method.currentIndex()]
+            if self.first is None:
+                return None, f"{first.capitalize()}: X{point[0]:.3f} Y{point[1]:.3f} Z{self.z.value():g}"
+            try:
+                shape = ReferenceShape(kind, method, self.first, tuple(point[:2]), self.z.value(), "preview")
+                shape.segment_count()
+            except ValueError:
+                return None, f"{second.capitalize()}: X{point[0]:.3f} Y{point[1]:.3f} (too small)"
+            return shape, self.readout(shape)
+        current = self.current()
+        if self.mode not in ("move", "resize") or current is None:
+            return None, ""
+        point = plane_point(origin, direction, current.z)
+        if point is None:
+            return None, ""
+        import copy
+        shape = copy.copy(current)
+        center, _ = shape.dimensions()
+        try:
+            if self.mode == "move":
+                shape.set_geometry(center=point[:2])
+            elif shape.kind == "circle":
+                shape.set_geometry(size=float(np.linalg.norm(point[:2]-center)))
+            else:
+                shape.set_geometry(size=np.abs(point[:2]-center))
+        except ValueError:
+            return None, ""
+        return shape, self.readout(shape)
+
+    @staticmethod
+    def readout(shape):
+        """Position and size of a shape: centre, then diameter (circle) or width x height (rectangle)."""
+        center, size = shape.dimensions()
+        where = f"Center X{center[0]:.3f} Y{center[1]:.3f} Z{shape.z:g}"
+        if shape.kind == "circle":
+            return f"{where} \u2022 Diameter {2*size:.3f} mm"
+        return f"{where} \u2022 Width {2*size[0]:.3f} \u00d7 Height {2*size[1]:.3f} mm"
 
     # ---------------------------------------------------------- viewport clicks
     def accept_ray(self, origin, direction):
@@ -225,6 +281,7 @@ class ReferenceGeometryEditor(Section):
         self.setup.reference_shapes.append(shape)
         self.first = None
         self.anchorChanged.emit(None)
+        self.previewChanged.emit((), "")
         self.refresh(shape.id)
         self.status.setText(shape.summary()+f". Click {first} for another; Draw or Esc to finish.")
         self.changed.emit()

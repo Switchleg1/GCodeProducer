@@ -13,6 +13,7 @@ from gcodeproducer.core.job import CutCondition, Job, Layer, Path
 from gcodeproducer.core.profiles import Profile
 from gcodeproducer.core.stock import Stock
 from gcodeproducer.stages.base import StageContext
+from gcodeproducer.stages.cam_emit import CAMEmit
 from gcodeproducer.stages.cam_emit import CAMEmit, mark_collisions
 from tests.test_pocket_bounds import floor_ref, job_for, stepped_part
 from tests.test_gui import win, app  # noqa: F401  (GUI fixtures)
@@ -212,7 +213,7 @@ def test_stickout_is_checked_against_the_depth_below_the_top_of_the_stock(libset
     op.end = Depth("top", -3)
     tool = job.tools[0]
     tool.values.update(length=20, stickout=2.5)
-    with pytest.raises(ValueError, match="sticks out of the collet only 2.5 mm"):
+    with pytest.raises(ValueError, match="sticks out of the chuck only 2.5 mm"):
         generate(job, StageContext())
     tool.values["stickout"] = 0                           # not set: not checked
     generate(job, StageContext())
@@ -276,3 +277,32 @@ def test_messages_migration_and_validation(tmp_path):
     prefs = app_settings.load(tmp_path)
     assert prefs["messages"]["cam_warnings"] is False and prefs["messages"]["slice_failed"] is True
     assert set(app_settings.validated({"messages": {"junk": False}})["messages"]) == set(app_settings.MESSAGES)
+
+
+def test_chuck_may_enter_the_part_where_it_clears_the_material(libset):
+    """With a chuck diameter the chuck goes below the top of the stock: fine in a pocket wider than
+    the chuck (or with enough stickout), refused where it would meet the pocket's rim, and never
+    further than its own stickout below the top (the spindle body)."""
+    mesh = stepped_part()
+    job, op = job_for(mesh, [floor_ref(mesh)], libset)
+    op.end = Depth("top", -3)
+    tool = job.tools[0]
+    tool.values.update(length=20, stickout=2.)
+    emit = lambda: CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
+    with pytest.raises(ValueError, match="chuck would hit the stock"):        # no chuck size: stock top is the limit
+        generate(job, StageContext())
+    job.machine.values.update(chuck_diameter=1000., chuck_stickout=20.)       # far wider than the pocket
+    generate(job, StageContext())
+    with pytest.raises(ValueError, match="the chuck .* would hit the material near X"):
+        emit()
+    # (Any chuck wider than the cutter meets the pocket's wall on the passes along it.)
+    job.machine.values.update(chuck_diameter=2.8)                             # slimmer than the 3 mm cutter
+    generate(job, StageContext()); emit()
+    assert job.program.lines
+    job.machine.values.update(chuck_diameter=1000.)
+    tool.values["stickout"] = 3.5                                             # the chuck stays above the stock
+    generate(job, StageContext()); emit()
+    tool.values["stickout"] = 2.
+    job.machine.values.update(chuck_diameter=2.8, chuck_stickout=.5)          # spindle body 2.5 mm above the tip
+    with pytest.raises(ValueError, match="spindle body would hit the stock"):
+        generate(job, StageContext())

@@ -584,3 +584,22 @@ def test_library_material_temperatures_above_the_machine_limit_turn_orange(win):
     box.editingFinished.emit()
     assert box.warning() is None
     d.reject()
+
+
+def test_drawing_reference_geometry_shows_the_outline_and_size_in_the_view(win):
+    import numpy as np
+    cam(win)
+    refs, view = win.reference_editor, win.model_viewer
+    refs.start()
+    assert view.cam_pick_mode.startswith('sketch_draw_')
+    down = np.array([0., 0., -1.])
+    view.camHovered.emit((view.cam_pick_mode, np.array([100., 100., 50.]), down))
+    assert len(view.reference_preview) == 0 and 'X100.000 Y100.000' in view.info.text()
+    refs.accept_ray([100., 100., 50.], down)
+    view.camHovered.emit((view.cam_pick_mode, np.array([104., 103., 50.]), down))
+    assert len(view.reference_preview) >= 8                    # the circle the next click would make
+    assert 'Diameter 10.000 mm' in view.info.text() and 'Center X100.000 Y100.000' in view.info.text()
+    refs.accept_ray([104., 103., 50.], down)
+    assert len(view.reference_preview) == 0 and len(refs.setup.reference_shapes) == 1
+    refs.cancel()
+    assert 'Diameter' not in view.info.text()

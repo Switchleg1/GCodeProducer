@@ -78,6 +78,7 @@ class MotionPlanner:
         self.stay_count = self.short_count = self.samples = 0
         self.surface_totals = Counter()
         self.air_bound = None
+        self.chuck = None            # (tool stickout, (chuck radius, chuck stickout)) when both are set
         self._path_cut_material = False
         self._layer_entered = False
         self.lead_outs_skipped = 0
@@ -93,6 +94,15 @@ class MotionPlanner:
             words=None, force_feed=False, start=None, payload=None):
         if end is not None and start is None:
             start = self.position.copy()
+        if end is not None and self.chuck is not None:
+            from gcodeproducer.core.cam.tool_reach import chuck_contact
+            stickout, chuck = self.chuck
+            if chuck_contact(self.material.height, start, end, stickout, chuck):
+                e = np.asarray(end, float)
+                raise ValueError(
+                    f"{self.name or 'CAM'}: the chuck ({2*chuck[0]:g} mm across, {stickout:g} mm above the tip) would hit "
+                    f"the material near X{e[0]:.2f} Y{e[1]:.2f} with the tip at Z{e[2]:.2f}. Extend the tool's "
+                    f"stickout, clear the material around this cut first, or cut less deep.")
         segment = MotionSegment(phase, start, None if end is None else np.asarray(end, float).copy(),
                                 condition, rate, feature, comment, self.layer, self.op, words, force_feed, payload)
         self.plan.add(segment)
@@ -557,6 +567,9 @@ class MotionPlanner:
                 previous_group = group
             tool = self.tool = next_tool
             self.radius = float(tool.get("diameter", 0))/2 if tool else 0.
+            from gcodeproducer.core.cam.tool_reach import chuck_of
+            stickout, chuck = float(tool.get("stickout", 0) or 0) if tool else 0., chuck_of(self.machine)
+            self.chuck = (stickout, chuck) if stickout > 0 and chuck is not None else None
             self.entries = EntryExitPlanner(self.safe_z, self.lead_clearance, self.radius,
                                             getattr(config, 'lead_angle', RAMP_ANGLE),
                                             getattr(config, 'lead_out_angle', 0.))

@@ -201,7 +201,8 @@ def highlight_geometry(payload):
             from gcodeproducer.core.cam.tool_reach import reach_problems
             top = op_stock.top if op_stock is not None and op_stock.allocated else float(mesh.bounds[1][2])
             # Before slicing: the flute check against the top too (earlier cuts are not known yet).
-            too_long, too_deep = reach_problems(stocks[1]["tool"], op.name, max(top, start)-end, max(top, start)-end)
+            too_long, too_deep = reach_problems(stocks[1]["tool"], op.name, max(top, start)-end, max(top, start)-end,
+                                                stocks[1]["machine"])
             problem = " ".join(m for m in (too_deep, too_long) if m)
             if problem:
                 out.setdefault("overrides", {})["end"] = problem

@@ -389,6 +389,9 @@ class MainWindow(QMainWindow):
         refs = self.reference_editor
         refs.set_setup(self.cam_editor.setup)
         refs.anchorChanged.connect(self.model_viewer.set_reference_anchor)
+        refs.previewChanged.connect(self.model_viewer.set_reference_preview)
+        self.model_viewer.camHovered.connect(
+            lambda payload: refs.hover_ray(payload[1], payload[2]) if self.placed is not None else None)
         refs.modeRequested.connect(self._cam_pick_mode)
         # Ignore picks computed from an older outline list (especially deleted/moved shapes).
         refs.changed.connect(lambda: setattr(self, "_cam_pick_task", None))

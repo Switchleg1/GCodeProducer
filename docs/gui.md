@@ -205,6 +205,11 @@ circles by center/rim or diameter endpoints and rectangles by center/corner or
 opposite corners on a chosen Z plane, then move or resize the selected shape by
 typing its center/size or with the **Move** / **Resize** click tools. **Draw**,
 Move and Resize are highlighted while active; click again or press Esc to stop.
+While one of them is active, moving the mouse shows what a click would make
+(0.2.77): the outline in the view, and above the tool hint its position and
+size. Before the first click of a new shape that is the cursor position on the
+drawing plane; after it, the centre and the diameter (circle) or width and
+height (rectangle). The pane's own status line is unchanged.
 Saved outlines are cyan. The pane-selected shape has a bright lime outline
 and translucent fill; operation-picked shapes have magenta outlines and fill.
 Material selection remains green. They are selectable boundaries or per-selection height-only

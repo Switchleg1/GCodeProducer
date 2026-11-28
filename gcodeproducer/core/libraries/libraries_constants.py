@@ -47,6 +47,14 @@ def _machine_schema(workflow: str) -> list:
                        "tool group uses a higher one. 0 = no limit. Ignored without an automatic tool changer."),
             Param("spindle_min", "float", 6000.0, unit="rpm", group="Spindle"),
             Param("spindle_max", "float", 24000.0, unit="rpm", group="Spindle"),
+            Param("chuck_diameter", "float", 0.0, unit="mm", min=0, group="Spindle", label="Chuck diameter",
+                  help="Widest diameter of the chuck or collet nut. With it set, the chuck may go down into the "
+                       "part: every move is checked so that the chuck (its face a tool stickout above the tip) "
+                       "never meets material. 0 = not set: the chuck may not go below the top of the stock."),
+            Param("chuck_stickout", "float", 0.0, unit="mm", min=0, group="Spindle", label="Chuck stickout",
+                  help="How far the chuck or collet nut stands out below the spindle body. The chuck may go this "
+                       "far below the top of the stock before the spindle body would meet it. Used with Chuck "
+                       "diameter."),
             Param("units", "choice", "mm", choices=["mm", "inch"], group="Work area"),
             Param("cut_direction", "choice", "climb", label="Default cutting direction", group="Toolpaths",
                   choices=[("climb", "Climb"), ("conventional", "Conventional"), ("meander", "Meander")],

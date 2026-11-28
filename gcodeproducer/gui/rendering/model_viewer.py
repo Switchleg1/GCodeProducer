@@ -62,6 +62,7 @@ def ray_box(o, d, b):
 
 class ModelViewer(QOpenGLWidget):
     camPickRequested = pyqtSignal(object)
+    camHovered = pyqtSignal(object)       # (mode, ray origin, ray direction) while a sketch tool is active
     camSelectionExited = pyqtSignal()
     moved = pyqtSignal(float, float)          # new model centre X, Y while dragging
     moveFinished = pyqtSignal()
@@ -101,6 +102,8 @@ class ModelViewer(QOpenGLWidget):
         self.reference_geometry = np.empty((0, 3))
         self.reference_selection = np.empty((0, 3))
         self.reference_anchor = np.empty((0, 3))
+        self.reference_preview = np.empty((0, 3))   # outline of the shape being drawn, following the mouse
+        self.tool_readout = ""                      # its position and size, shown with the tool hint
         self.reference_focus = np.empty((0, 3))
         self.reference_selection_fill = np.empty((0, 3))
         self.reference_focus_fill = np.empty((0, 3))
@@ -183,6 +186,17 @@ class ModelViewer(QOpenGLWidget):
         self.reference_focus_fill = np.asarray(focus_fill,float).reshape(-1,3)
         self._reference_dirty = True
         self.update()
+
+    def set_reference_preview(self, edges=(), readout=""):
+        """Outline (GL line pairs) and readout of the shape a sketch tool would make at the mouse."""
+        edges = np.asarray(edges, float).reshape(-1, 3)
+        if len(edges) or len(self.reference_preview):
+            self.reference_preview = edges
+            self._reference_dirty = True
+            self.update()
+        if readout != self.tool_readout:
+            self.tool_readout = readout
+            self._update_info()
 
     def set_reference_anchor(self, point):
         self.reference_anchor = (np.asarray(REFERENCE_ANCHOR_OFFSETS)+np.asarray(point) if point is not None
@@ -289,6 +303,8 @@ class ModelViewer(QOpenGLWidget):
             txt = "Import a model (Ctrl+O) or drop an STL here"
         elif self.cam_pick_mode:
             txt = self._cam_pick_hint(self.cam_pick_mode)
+            if self.tool_readout:
+                txt = self.tool_readout + "\n" + txt
         elif self.place_on_face:
             txt = "Click a face of the model to place it on the bed  (Esc = cancel)"
         elif self.place_block:
@@ -436,7 +452,8 @@ class ModelViewer(QOpenGLWidget):
             GL.glEnable(GL.GL_DEPTH_TEST)
         if self._reference_dirty:
             self.m_reference.upload(self.reference_geometry)
-            self.m_reference_selection.upload(np.vstack((self.reference_selection,self.reference_anchor)))
+            self.m_reference_selection.upload(np.vstack((self.reference_selection, self.reference_anchor,
+                                                         self.reference_preview)))
             self.m_reference_focus.upload(self.reference_focus)
             self.m_reference_selection_fill.upload(self.reference_selection_fill)
             self.m_reference_focus_fill.upload(self.reference_focus_fill)
@@ -644,6 +661,8 @@ class ModelViewer(QOpenGLWidget):
         elif b & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton) or \
                 (b & Qt.MouseButton.LeftButton and ev.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             self.camera.pan(dx, dy, self.height())
+        elif not b and self.cam_pick_mode.startswith("sketch_"):
+            self.camHovered.emit((self.cam_pick_mode, *self.ray(ev.position().x(), ev.position().y())))
         elif not b and self.remove_block:
             hb = self.pick_block(ev.position().x(), ev.position().y())[0]
             if hb != self.hover_block:

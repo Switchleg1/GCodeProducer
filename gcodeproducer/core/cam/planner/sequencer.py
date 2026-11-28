@@ -100,7 +100,7 @@ class Sequencer:
             raise ValueError(f"{op.name}: unknown area order '{op.area_order}'")
         from gcodeproducer.core.cam.tool_reach import reach_problems
         top = setup.stock.top if setup.stock.allocated else float(job.mesh.bounds[1][2])
-        _, too_deep = reach_problems(tool, op.name, 0., max(top, start)-end)
+        _, too_deep = reach_problems(tool, op.name, 0., max(top, start)-end, job.machine)
         if too_deep:
             raise ValueError(too_deep)
         run = OperationRun(op, tool, gi, oi, cutting, start, end, step, count, direction_for(job, op))

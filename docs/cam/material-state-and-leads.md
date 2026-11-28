@@ -232,9 +232,19 @@ run. Tool-number reuse across different profiles is also a warning.
   **current** material top within the operation's sweep, so material removed
   by earlier operations does not use flute length up;
 - it reaches deeper below the top of the stock than the tool's **Stickout
-  length** (collet face to tip): the collet would hit the stock. Measured from
-  the top of the stock wherever the tool works, because the holder's width is
-  not modelled.
+  length** (chuck face to tip), when the machine has no **Chuck diameter**:
+  the chuck's width is then unknown, so it may not go below the top of the
+  stock anywhere;
+- with a **Chuck diameter** set on the machine (Libraries, machine, Spindle;
+  0.2.77), the chuck may go down into the part. Every move, cutting or not, is
+  then checked against the material as it stands at that moment: the chuck is
+  a cylinder of that diameter whose face is a tool stickout above the tip, and
+  a move on which it would meet material (or a holding tab) stops slicing with
+  the position. The operation may reach at most the tool's stickout plus the
+  machine's **Chuck stickout** (how far the chuck stands out below the spindle
+  body) below the top of the stock: beyond that the spindle body would meet
+  it. A chuck wider than the cutter can never follow it down a wall the cutter
+  is cutting along, only into space already cleared wider than the chuck.
 
 0 for either length means not set, and that check is skipped; the tool
 library shows an unset (or flute-shorter) stickout in orange, and the

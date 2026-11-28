@@ -425,3 +425,44 @@ def test_number_boxes_share_limits_and_a_warning_state(app):
     assert whole.value() == 5 and whole.text() == "line 5"
     whole.set_warning("past the end"); whole.clear_warning()
     assert whole.styleSheet() == ""
+
+
+@pytest.mark.parametrize("method", range(4))
+def test_reference_drawing_previews_the_shape_and_its_size_at_the_mouse(app, method):
+    """Moving the mouse shows the outline a click would make and its position and size: before the
+    first click the cursor position, after it the shape; the preview equals what the click then saves."""
+    import numpy as np
+    from gcodeproducer.core.cam import CAMSetup
+    from gcodeproducer.gui.editors.reference_geometry_editor import ReferenceGeometryEditor
+    setup = CAMSetup()
+    editor = ReferenceGeometryEditor(setup)
+    seen = []
+    editor.previewChanged.connect(lambda edges, text: seen.append((np.asarray(edges, float).reshape(-1, 3), text)))
+    editor.method.setCurrentIndex(method)
+    editor.z.setValue(-3)
+    editor.start()
+    editor.hover_ray([2, 3, 10], [0, 0, -1])
+    edges, text = seen[-1]
+    assert len(edges) == 0 and "X2.000 Y3.000 Z-3" in text          # only the position so far
+    editor.accept_ray([2, 3, 10], [0, 0, -1])
+    editor.hover_ray([6, 8, 10], [0, 0, -1])
+    edges, text = seen[-1]
+    assert len(edges) >= 8 and np.all(edges[:, 2] == -3) and not setup.reference_shapes   # a preview only
+    circle = method < 2
+    assert ("Diameter" in text) == circle and ("Width" in text and "Height" in text) != circle
+    editor.accept_ray([6, 8, 10], [0, 0, -1])
+    shape = setup.reference_shapes[0]
+    line = shape.polyline()
+    assert np.allclose(edges, np.stack((line[:-1], line[1:]), axis=1).reshape(-1, 3))
+    assert text == editor.readout(shape)
+    centre, size = shape.dimensions()
+    assert f"X{centre[0]:.3f} Y{centre[1]:.3f}" in text
+    assert (f"{2*size:.3f}" if circle else f"{2*size[0]:.3f} \u00d7 Height {2*size[1]:.3f}") in text
+    assert len(seen[-1][0]) == 0 and seen[-1][1] == ""                # cleared once the shape exists
+    # Move and resize preview the selected shape too.
+    editor.start("resize")
+    editor.hover_ray([centre[0]+10, centre[1]+5, 10], [0, 0, -1])
+    assert len(seen[-1][0]) and (("22.361" if circle else "Width 20.000 × Height 10.000") in seen[-1][1])
+    editor.cancel()
+    assert len(seen[-1][0]) == 0
+    editor.close()
