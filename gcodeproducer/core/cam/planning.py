@@ -163,7 +163,8 @@ def highlight_geometry(payload):
     try:
         out["reference_geometry"] = line_segments(shapes)
         focus = stocks[4] if len(stocks) > 4 else None
-        focused = [s for s in shapes if s.id == focus]
+        focus_group = next((s.group for s in shapes if s.id == focus), None)
+        focused = [s for s in shapes if s.id == focus or (focus_group and s.group == focus_group)]
         out["reference_focus"] = line_segments(focused)
         out["reference_focus_fill"] = filled_shapes(focused)
         selected_ids = {ref.indices[0] for ref in refs if ref.kind == "drawing" and ref.indices}

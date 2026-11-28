@@ -120,15 +120,15 @@ def test_stock_pocket_uses_material_limit_even_without_overcut(libset,limit):
 
 @pytest.mark.parametrize("limit", [-1., 0., 1.])
 @pytest.mark.parametrize("stock", [0., 1.])
-def test_waterfall_stock_to_leave_protects_the_part_not_the_blank_edge(libset, limit, stock):
+def test_pocket3d_stock_to_leave_protects_the_part_not_the_blank_edge(libset, limit, stock):
     mesh=stepped_part()
-    mesh.triangles=mesh.triangles[:,::-1].copy()   # outward normals: Waterfall's model shadow needs them
+    mesh.triangles=mesh.triangles[:,::-1].copy()   # outward normals: 3D Pocket's model shadow needs them
     job,op=job_for(mesh,[Reference("stock_face",[1])],libset)
     job.cam_setup.stock.margin=6;job.cam_setup.stock.auto(mesh)
-    op.kind="waterfall";op.start=Depth("stock_top");op.end=Depth("absolute",-2)
+    op.kind="pocket3d";op.start=Depth("stock_top");op.end=Depth("absolute",-2)
     op.material_limit=limit;op.stock=stock
     generate(job,StageContext())
-    # Waterfall writes each machining area at a depth as its own layer: take them all.
+    # 3D Pocket writes each machining area at a depth as its own layer: take them all.
     points=np.concatenate([p.points for l in job.layers if l.z==-2 for p in l.paths])
     # The cutter edge (radius 1.5) meets the blank edge (26) plus the material limit, whatever the
     # stock to leave: no wall of raw stock is left around the blank.

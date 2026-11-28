@@ -158,7 +158,7 @@ replacement for productive full loops.
 synthetic planar outline in millimetres, inspired by the screenshot rather
 than copied from an original CAD file. At this scale a 4 mm cutter can traverse
 its narrow neck. Use it along with a square corner, a pocket with an island,
-separated areas and the saved three-depth Waterfall case. The WKT is geometry
+separated areas and the saved three-depth 3D Pocket case. The WKT is geometry
 for Shapely or test scripts, not a GUI import format.
 
 Geometry-only baseline on the synthetic pocket: wall-parallel clearing

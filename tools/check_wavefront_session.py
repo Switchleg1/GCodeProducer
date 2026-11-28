@@ -2,7 +2,7 @@
 
 The setup, placement and machine come from the desktop settings for the given
 model file; nothing is saved back. Each strategy is run in memory on the
-clearing operations (pocket and waterfall) and the run time, the preview's
+clearing operations (pocket and pocket3d) and the run time, the preview's
 machine-time estimate and any incomplete or safety warnings are reported.
 """
 from pathlib import Path
@@ -47,16 +47,16 @@ def run(path, settings, library, strategy, follow_surface=None, material_limit=N
     changed = []
     for group in data.get('groups', []):
         for op in group.get('operations', []):
-            if strategy and op.get('kind') in ('pocket', 'waterfall'):
+            if strategy and op.get('kind') in ('pocket', 'pocket3d'):
                 changed.append(f"{op.get('name')}: {op.get('strategy')} → {strategy}")
                 op['strategy'] = strategy
-            if follow_surface is not None and op.get('kind') == 'waterfall':
+            if follow_surface is not None and op.get('kind') == 'pocket3d':
                 op['follow_surface'] = follow_surface
                 changed.append(f"{op.get('name')}: follow the surface within each depth {'on' if follow_surface else 'off'}")
-            if direction is not None and op.get('kind') in ('pocket', 'waterfall'):
+            if direction is not None and op.get('kind') in ('pocket', 'pocket3d'):
                 changed.append(f"{op.get('name')}: cutting direction {op.get('cut_direction')} → {direction}")
                 op['cut_direction'] = direction
-            if material_limit is not None and op.get('kind') in ('pocket', 'waterfall'):
+            if material_limit is not None and op.get('kind') in ('pocket', 'pocket3d'):
                 changed.append(f"{op.get('name')}: material boundary {op.get('material_limit')} → {material_limit:g} mm")
                 op['material_limit'] = material_limit
     setup = CAMSetup.from_dict(copy.deepcopy(data))
@@ -77,7 +77,7 @@ def run(path, settings, library, strategy, follow_surface=None, material_limit=N
                 left_above_model=left_above_model(job, data),
                 compute_s=round(seconds, 1), machine_s=round(build_toolpath(job.program).stats['est_time_s'], 1),
                 layers=len(job.layers), lines=len(job.program.lines),
-                clearing_log=[m.strip() for m in messages if 'Adaptive' in m or 'Waterfall' in m or 'Pocket' in m][:12],
+                clearing_log=[m.strip() for m in messages if 'Adaptive' in m or '3D Pocket' in m or 'Pocket' in m][:12],
                 warnings=job.warnings[:12])
 
 
@@ -121,10 +121,10 @@ def main():
     parser.add_argument('model', help='model file the CAM setup was saved for, or "session" for the current work session')
     parser.add_argument('--strategy', action='append', default=[],
                         help='clearing strategy to try (repeatable); "saved" keeps the saved one')
-    parser.add_argument('--follow-surface', choices=('on', 'off'), help='override Waterfall "Follow the surface within each depth"')
-    parser.add_argument('--material-limit', type=float, help='override Pocket/Waterfall "Material boundary" (mm)')
+    parser.add_argument('--follow-surface', choices=('on', 'off'), help='override 3D Pocket "Follow the surface within each depth"')
+    parser.add_argument('--material-limit', type=float, help='override Pocket/3D Pocket "Material boundary" (mm)')
     parser.add_argument('--direction', choices=('machine', 'climb', 'conventional', 'meander'),
-                        help='override Pocket/Waterfall cutting direction')
+                        help='override Pocket/3D Pocket cutting direction')
     args = parser.parse_args()
     settings = QSettings('GCodeProducer', 'GCodeProducer')
     library = LibrarySet().load()

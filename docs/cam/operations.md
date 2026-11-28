@@ -282,6 +282,8 @@ automatic rough/finish stock tracking, helical entry or machining from a full
 in [selection and depths](selection-and-depths.md#start-and-end-depth-fields) and
 [global settings](../settings.md).
 
+Saved setups must use `pocket3d` as the operation kind for **3D Pocket**. Unsupported operation kinds are rejected rather than converted by display name.
+
 ## Cutting strategy
 
 The operation's **Cutting strategy** field has operation-specific choices:
@@ -474,7 +476,7 @@ variable-Z engraving, ballnose surface following or collision-aware linking.
 
 **Purpose:** clear the full reachable region at each depth while protecting
 all model material above that level. This replaces surface-limited Pocket and
-the former wall-only Waterfall paths.
+the former wall-only 3D Pocket paths.
 
 Select closed outlines, set Start/End and depth per pass (automatic: the tool's
 Pocket axial percentage). Stepover, wall-parallel/raster strategy, stay-down

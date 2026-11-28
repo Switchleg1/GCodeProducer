@@ -22,7 +22,7 @@ def probe(nc, passes=4, layer=0, targeted_passes=4, previous=()):
     model,=session['models']; assert Path(model['path']).stem.lower()=='mini_yoda'
     mesh=Placement.from_dict(model['placement']).apply(load_mesh(model['path']),auto_xy=None)
     data=session['cam']['setup']; blank=data['stock']; op=next(o for g in data['groups'] for o in g['operations'] if o['enabled'])
-    assert op['kind']=='waterfall' and op['geometry']==[{'kind':'stock_face','indices':[1]}]
+    assert op['kind'] == 'pocket3d' and op['geometry']==[{'kind':'stock_face','indices':[1]}]
     lo=np.array([blank['x'],blank['y']]); hi=lo+[blank['width'],blank['depth']]; top=blank['top']; radius=2.
     stock=HybridStock((*lo,*hi),top-blank['height'],top,4.,.5)
     area=box(*lo,*hi).buffer(min(op['overcut'],op['material_limit']),join_style='mitre').buffer(-radius)

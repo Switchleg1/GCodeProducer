@@ -11,7 +11,7 @@ jobs. The previous planner is a failed comparison case, not a release target.
 - [Sandvik on inside corners](https://www.sandvik.coromant.com/en-us/knowledge/milling/milling-inside-corners) explains why engagement grows in a concave turn even if the straight passes on either side are acceptable. Round the *cutting toolpath* with tangent transitions, then check the resulting cut against remaining stock. A round curve alone is not proof of low engagement. A larger roughing radius can deliberately leave material for a smaller tool; it must not be reported as cleared.
 - [MATHSM, Elber, Cohen and Drake](https://doi.org/10.1016/j.cad.2004.05.008) uses a pocket's medial axis and tangent connections to organize circular cuts. [Held and Pfeiffer](https://doi.org/10.14733/cadaps.2025.731-747) adapt advance to bound engagement and track already cut stock. That is relevant to necks and lobes, not evidence that a fixed local-loop search will finish. Their published engagement-control construction does not directly cover islands.
 - [FACEOM, Jacsó et al.](https://doi.org/10.1007/s00170-019-03834-8) proposes non-equidistant offsets to control engagement along adjacent passes. The publisher blocked full-text access during this review; only the abstract was available. Treat this as a candidate for advancing along one front, not a demonstrated recipe for covering an entire pocket.
-- [Fusion Adaptive Roughing](https://help.autodesk.com/cloudhelp/ENU/Fusion-CAM/files/GUID09E44604-DAD8-47D6-ADC6-C100869DE724.htm) separates load, cutting radius, depth, and linking. Its 3D depth schedule is not our Waterfall schedule and is outside this rewrite. Do not copy advertised material-removal rates or stepdowns into defaults.
+- [Fusion Adaptive Roughing](https://help.autodesk.com/cloudhelp/ENU/Fusion-CAM/files/GUID09E44604-DAD8-47D6-ADC6-C100869DE724.htm) separates load, cutting radius, depth, and linking. Its 3D depth schedule is not our 3D Pocket schedule and is outside this rewrite. Do not copy advertised material-removal rates or stepdowns into defaults.
 
 ## More examples: what the paths are doing
 
@@ -595,7 +595,7 @@ Measure after output coordinate quantization as well as on the proposal; a
 coarse sample can miss a short overload, so check convergence on a finer
 replay before setting acceptance tolerances.
 
-Then compare the two-lobe fixture and the first saved Waterfall plane with
+Then compare the two-lobe fixture and the first saved 3D Pocket plane with
 identical stock, tool and target. Freeze tolerances before comparing output.
 An incomplete path or one with unsafe transfers cannot win on time. Only
 after offline coverage and engagement checks pass should we attempt a
@@ -635,9 +635,9 @@ shaped it, each prompted by reviewing a preview:
 | Links as tangent curves through the route's corners, checked like the route | Links left and joined cuts at sharp angles and turned square at their own corners | Sharp turns: rectangle 134 → 40, L 285 → 64, cross 302 → 149, ring 461 → 18; links 5-17 % longer |
 | Machine time with a trapezoidal planner (acceleration, junction deviation) | Feed distance is not time | Curved links save 1-4 % despite being 5-17 % longer; ring 238.7 → 229.8 s |
 | Levels and an XYZ program (`clear_depths`, `write_program`) | The trials were one XY plane without helices | Three levels to Z-5: boss 956 s machine, 13 s compute (planned once, moved down); parses with the application reader, its estimate 964 s |
-| Wavefront behind Adaptive in the application (`gcodeproducer/core/cam/wavefront/`) | The old peel picker stalled with stock left | Stormtrooper Waterfall, two depths: complete, no safety findings; 1,553 s machine against 236 s contours and 495 s raster at the same feed; 151 s compute |
-| Waterfall depths planned at once in worker processes; no second air check; output thinned to 0.01 mm; array polyline pieces, prepared range tests, vectorised easing, lazy fallback hooks | 151 s to compute the Stormtrooper Waterfall | 58 s; 37 → 22 s processor time per depth; test shapes 10-40 % faster |
-| Width limit in the application; spots no stepover can take left and gone round; fresh helix entries beyond; spiral laps spaced by radius; work only a cutter's width past the material | Mini Yoda waterfall at 10 % stopped at Z-2 with 1,754 mm² left | Z-2: 12 mm² left; other depths 6-175 mm²; still incomplete |
+| Wavefront behind Adaptive in the application (`gcodeproducer/core/cam/wavefront/`) | The old peel picker stalled with stock left | Stormtrooper 3D Pocket, two depths: complete, no safety findings; 1,553 s machine against 236 s contours and 495 s raster at the same feed; 151 s compute |
+| 3D Pocket depths planned at once in worker processes; no second air check; output thinned to 0.01 mm; array polyline pieces, prepared range tests, vectorised easing, lazy fallback hooks | 151 s to compute the Stormtrooper 3D Pocket | 58 s; 37 → 22 s processor time per depth; test shapes 10-40 % faster |
+| Width limit in the application; spots no stepover can take left and gone round; fresh helix entries beyond; spiral laps spaced by radius; work only a cutter's width past the material | Mini Yoda 3D Pocket at 10 % stopped at Z-2 with 1,754 mm² left | Z-2: 12 mm² left; other depths 6-175 mm²; still incomplete |
 
 Two ideas were measured and not adopted as first tried. A neck bow — one
 curve per cut, tangent to both walls — held contact constant on a straight,

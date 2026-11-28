@@ -6,7 +6,7 @@ from .operation_generator import OperationGenerator
 
 
 def pocket_paths(op, loops, region, diameter, direction, log=None, **adaptive_options):
-    """Clearing paths for one planar pocket region (also used by Waterfall)."""
+    """Clearing paths for one planar pocket region (also used by 3D Pocket)."""
     from gcodeproducer.core.jobs.path import Path
     from gcodeproducer.core.geometry.infill import scan_fill
     from gcodeproducer.core.cam.paths import contour_pocket, link_contours, boundary_paths

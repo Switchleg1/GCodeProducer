@@ -27,7 +27,7 @@ class Selection:
     def resolve(cls, op, topo, setup, clearing):
         """Edges of every picked face/edge/material/drawn reference, chained into polylines.
 
-        ``clearing`` operations (Pocket, Waterfall) treat a face as its pocket
+        ``clearing`` operations (Pocket, 3D Pocket) treat a face as its pocket
         boundary and one horizontal material edge as the whole blank rim.
         """
         from gcodeproducer.core.cam.planning import chains

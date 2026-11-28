@@ -184,14 +184,15 @@ def test_drawing_registration_pins_previews_the_box_then_the_circles(app):
     editor.accept_ray([84, 38, 10], down)
     shapes = setup.reference_shapes
     assert len(shapes) == 4 and all(s.kind == "circle" and s.dimensions()[1] == pytest.approx(5.) and s.z == -1 for s in shapes)
-    assert editor.items.count() == 4 and editor.current() is shapes[0]
+    assert editor.items.count() == 1 and editor.items.item(0).text() == 'Pins'
+    assert editor.current() is shapes[0]
+    assert [editor.fields[k].value() for k in ('x','y')] == [60.,30.]
     # Refining one pin's diameter in the form changes all four; so does moving it.
     editor.fields["a"].setValue(6.)
     assert all(s.dimensions()[1] == pytest.approx(3.) for s in shapes)
-    editor.fields["x"].setValue(25.)
+    editor.fields["x"].setValue(50.)
     assert np.allclose(sorted(s.dimensions()[0][0] for s in shapes), [25, 25, 75, 75])
-    editor.fields["x"].setValue(50.)                                  # on the centre line: refused, unchanged
-    assert np.allclose(sorted(s.dimensions()[0][0] for s in shapes), [25, 25, 75, 75])
+    assert editor.fields['y'].value() == 30. and editor.fields['x'].minimum() > 0
     editor.start("resize")
     editor.hover_ray([27, 35, 10], down)
     assert "Diameter 4.000 mm" in seen[-1][1] and len(seen[-1][0]) > 8*4

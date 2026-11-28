@@ -1,4 +1,4 @@
-"""Depth-limited 3D Pocket (kind "waterfall") clearing and 3D Contour surface passes."""
+"""Depth-limited 3D Pocket (kind "pocket3d") clearing and 3D Contour surface passes."""
 import numpy as np
 import pytest
 from shapely.geometry import Point, Polygon, box
@@ -8,7 +8,7 @@ from gcodeproducer.core.cam.cam_constants import KINDS, KIND_LABELS, SURFACE_KIN
 from gcodeproducer.core.cam.drop_surface import DropSurface
 from gcodeproducer.core.cam.model_shadow import ModelShadow, clip_band
 from gcodeproducer.core.cam.reference_shape import ReferenceShape
-from gcodeproducer.core.cam.surface_paths import selection_region, simplify3d, surface_raster, waterfall_paths
+from gcodeproducer.core.cam.surface_paths import selection_region, simplify3d, surface_raster, pocket3d_paths
 from gcodeproducer.core.geometry import Mesh
 from gcodeproducer.stages.base import StageContext
 from gcodeproducer.stages.cam_emit import CAMEmit
@@ -53,7 +53,7 @@ def sloped_floor_edges(mesh):
     return refs
 
 
-def surface_job(libset, kind="waterfall", refs=None, **fields):
+def surface_job(libset, kind="pocket3d", refs=None, **fields):
     mesh = wedge_pocket()
     job, op = job_for(mesh, refs or sloped_floor_edges(mesh), libset)
     op.kind = kind
@@ -94,9 +94,9 @@ def assert_program_clear(program, tolerance=.02):
 
 
 def test_kind_tables_cover_the_new_operations():
-    assert {"waterfall", "contour3d"} <= set(KINDS) and set(SURFACE_KINDS) == {"waterfall", "contour3d"}
+    assert {"pocket3d", "contour3d"} <= set(KINDS) and set(SURFACE_KINDS) == {"pocket3d", "contour3d"}
     assert set(KIND_LABELS) == set(KINDS)
-    assert KIND_LABELS["waterfall"] == "3D Pocket" and KIND_LABELS["contour3d"] == "3D Contour"
+    assert KIND_LABELS["pocket3d"] == "3D Pocket" and KIND_LABELS["contour3d"] == "3D Contour"
 
 
 def test_clip_band_and_shadow_levels():
@@ -189,7 +189,7 @@ def test_overlapping_selection_boundaries_merge_instead_of_failing():
     assert nested.area == pytest.approx(96)
 
 
-def test_waterfall_with_sloped_boundary_follows_the_floor_in_terraces(libset):
+def test_pocket3d_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     job, op = surface_job(libset)
     ctx = StageContext()
     generate(job, ctx)
@@ -207,7 +207,7 @@ def test_waterfall_with_sloped_boundary_follows_the_floor_in_terraces(libset):
     assert_program_clear(job.program)
 
 
-def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
+def test_pocket3d_can_vary_each_depth_to_follow_the_slope(libset):
     flat, _ = surface_job(libset)
     generate(flat, StageContext())
     job, op = surface_job(libset, follow_surface=True)
@@ -244,7 +244,7 @@ def test_waterfall_can_vary_each_depth_to_follow_the_slope(libset):
 
 
 @pytest.mark.parametrize("strategy", ["raster_x", "adaptive"])
-def test_waterfall_varies_depth_for_raster_and_adaptive_stays_planar(libset, strategy):
+def test_pocket3d_varies_depth_for_raster_and_adaptive_stays_planar(libset, strategy):
     job, op = surface_job(libset, follow_surface=True, strategy=strategy)
     generate(job, StageContext())
     assert_clear_of_model(job)
@@ -272,8 +272,8 @@ def test_surface_following_heights_are_smooth_and_never_below_the_safe_grid():
     assert np.all(fill_dips(saw, 1, .25) == np.minimum(filled, saw+.25))   # a corner is not filled in
 
 
-def test_3d_contour_follows_the_same_smoothed_heights_as_waterfall():
-    """3D Contour samples its rasters with follow_heights, the rule Waterfall's lifted paths use."""
+def test_3d_contour_follows_the_same_smoothed_heights_as_pocket3d():
+    """3D Contour samples its rasters with follow_heights, the rule 3D Pocket's lifted paths use."""
     from gcodeproducer.core.cam.surface_paths import follow_heights
     surface = DropSurface(wedge_pocket(), (-2, -2), (42, 32), .3, 10**7)
     path, = surface_raster(box(14, 10, 26, 20), surface, 1.5, 1.5, -20, 0., strategy="raster_x", direction="meander")
@@ -299,19 +299,19 @@ def test_flat_pocket_and_legacy_surface_stop_migration(libset):
     data["groups"][0]["operations"][0]["protect_model"] = True
     job, op = surface_job(libset, refs=ref, end=Depth("absolute", -6))
     job.cam_setup = CAMSetup.from_dict(data)
-    assert job.cam_setup.groups[0].operations[0].kind == "waterfall"
+    assert job.cam_setup.groups[0].operations[0].kind == "pocket3d"
     generate(job, StageContext())
     assert_clear_of_model(job)
     assert min(layer.z for layer in job.layers) == -6
     restored = CAMSetup.from_dict(job.cam_setup.to_dict()).groups[0].operations[0]
-    assert restored.kind == "waterfall" and not restored.protect_model
-    assert Operation(kind="pocket", protect_model=True).kind == "waterfall"
+    assert restored.kind == "pocket3d" and not restored.protect_model
+    assert Operation(kind="pocket", protect_model=True).kind == "pocket3d"
     data["groups"][0]["operations"][0].pop("protect_model")
     assert CAMSetup.from_dict(data).groups[0].operations[0].kind == "pocket"
 
 
-def test_waterfall_clears_the_interior_not_just_one_wall_contour(libset):
-    job, op = surface_job(libset, kind="waterfall")
+def test_pocket3d_clears_the_interior_not_just_one_wall_contour(libset):
+    job, op = surface_job(libset, kind="pocket3d")
     generate(job, StageContext())
     assert_clear_of_model(job)
     levels = sorted({layer.z for layer in job.layers}, reverse=True)
@@ -337,15 +337,15 @@ def test_waterfall_clears_the_interior_not_just_one_wall_contour(libset):
     assert_program_clear(job.program)
 
 
-def test_waterfall_clips_to_the_selection_and_honours_stock_to_leave():
+def test_pocket3d_clips_to_the_selection_and_honours_stock_to_leave():
     blocked = box(0, 0, 10, 10)
-    full = waterfall_paths(blocked, box(-20, -20, 30, 30), 1., .5, "climb")
+    full = pocket3d_paths(blocked, box(-20, -20, 30, 30), 1., .5, "climb")
     assert len(full) == 1 and full[0][1]
     assert np.allclose([blocked.distance(Point(q)) for q in full[0][0]], 1.5, atol=1e-3)
-    half = waterfall_paths(blocked, box(-20, -20, 5, 30), 1., 0., "climb")
+    half = pocket3d_paths(blocked, box(-20, -20, 5, 30), 1., 0., "climb")
     assert half and all(not closed for _, closed in half)
     assert max(float(p[:, 0].max()) for p, _ in half) <= 5+1e-6
-    assert waterfall_paths(Polygon(), box(0, 0, 1, 1), 1., 0., "climb") == []
+    assert pocket3d_paths(Polygon(), box(0, 0, 1, 1), 1., 0., "climb") == []
 
 
 def test_contour3d_clears_in_depth_limited_passes_then_follows_the_surface(libset):
@@ -412,7 +412,7 @@ def test_second_tool_skips_3d_moves_through_material_already_removed(libset):
     from gcodeproducer.core.cam import ToolGroup
     from gcodeproducer.core.gcode.simulation import simulate
 
-    def emitted(skip, kind="waterfall"):
+    def emitted(skip, kind="pocket3d"):
         job, op = surface_job(libset, kind=kind, strategy="raster_x", follow_surface=True)
         finish = copy.deepcopy(op)
         finish.name = "Finish"
@@ -536,7 +536,7 @@ def test_planar_operations_still_reject_sloped_edges_clearly(libset, kind):
         generate(job, StageContext())
 
 
-@pytest.mark.parametrize("kind", ["waterfall", "contour3d"])
+@pytest.mark.parametrize("kind", ["pocket3d", "contour3d"])
 def test_3d_depth_of_cut_clears_stock_above_start_and_obeys_tool_cap(libset, kind):
     job, op = surface_job(libset, kind=kind, stepdown=.8)
     job.tools[0].values["max_doc"] = .5
@@ -556,7 +556,7 @@ def test_3d_depth_of_cut_clears_stock_above_start_and_obeys_tool_cap(libset, kin
     assert not any("uncleared entry depth" in warning for warning in job.warnings)
 
 
-def test_waterfall_removes_air_already_cleared_by_an_earlier_operation(libset):
+def test_pocket3d_removes_air_already_cleared_by_an_earlier_operation(libset):
     import copy
     job, op = surface_job(libset)
     duplicate = copy.deepcopy(op)
@@ -569,7 +569,7 @@ def test_waterfall_removes_air_already_cleared_by_an_earlier_operation(libset):
 
 
 def test_surface_operation_reports_when_nothing_is_reachable(libset):
-    job, op = surface_job(libset, kind="waterfall", start=Depth("absolute", 5), end=Depth("absolute", 4))
+    job, op = surface_job(libset, kind="pocket3d", start=Depth("absolute", 5), end=Depth("absolute", 4))
     job.machine.values["safe_z"] = 30
     with pytest.raises(ValueError, match="End Z is below the surface"):
         generate(job, StageContext())
@@ -618,7 +618,7 @@ def test_adaptive_following_the_surface_adds_flat_step_up_levels_on_the_slope(li
 
 def test_slope_passes_finish_one_patch_before_moving_to_the_next():
     from shapely.geometry import box
-    from gcodeproducer.core.cam.operations.waterfall_generator import WaterfallGenerator
+    from gcodeproducer.core.cam.operations.pocket3d_generator import Pocket3DGenerator
     step = .4
     pieces = []
     for k in (1, 2, 3, 4):                      # each step's pass crosses both patches, as round a model
@@ -626,7 +626,7 @@ def test_slope_passes_finish_one_patch_before_moving_to_the_next():
             y = k*step
             pieces.append((k, np.array([[x0, y], [x0 + 5., y]]), False))
     band = box(-1, 0, 6, 2).union(box(29, 0, 36, 2))
-    paths = WaterfallGenerator.chain_band(pieces, band, step, 3.)
+    paths = Pocket3DGenerator.chain_band(pieces, band, step, 3.)
     assert len(paths) == 2                      # one path per patch: one lead-in, one lead-out each
     for path in paths:
         xs = np.asarray(path.points)[:, 0]
@@ -668,7 +668,7 @@ def test_a_full_width_first_cut_goes_the_way_the_following_passes_do(libset):
     lo, hi = job.cam_setup.stock.bounds
     blank = box(lo[0], lo[1], hi[0], hi[1])
     for direction, clockwise in (('climb', True), ('conventional', False)):
-        op = Operation(kind='waterfall', strategy='contour', cut_direction=direction, stepover=40)
+        op = Operation(kind='pocket3d', strategy='contour', cut_direction=direction, stepover=40)
         paths = pocket_paths(op, [], blank, 3., direction)
         plan_engagement(paths, job, op, job.tools[0], None, blank)
         rings = [p for p in paths if p.closed and len(p.points) > 2]

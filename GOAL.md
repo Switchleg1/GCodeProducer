@@ -1,6 +1,6 @@
 # HSM/adaptive rewrite — until verified
 
-Replace the adaptive generator for Pocket and Waterfall. Keep CAM scheduling,
+Replace the adaptive generator for Pocket and 3D Pocket. Keep CAM scheduling,
 postprocessing, feed policy and other strategies outside the replacement.
 Incomplete paths stay debug-only. Do not qualify output for a physical machine.
 

@@ -36,7 +36,7 @@ def selection_region(loops, log=None, name=""):
         return region
 
 
-def waterfall_paths(shadow, allowed, radius, allowance, direction):
+def pocket3d_paths(shadow, allowed, radius, allowance, direction):
     """Cutter-centre contours around everything standing above this level.
 
     Returns ``(points, closed)``. Contours leaving ``allowed`` are clipped to
@@ -75,7 +75,7 @@ def waterfall_paths(shadow, allowed, radius, allowance, direction):
 
 
 def follow_heights(surface, xy, radius, allowance, floors=()):
-    """Cutter heights along a path sampled every grid cell: the one rule 3D Contour and Waterfall follow.
+    """Cutter heights along a path sampled every grid cell: the one rule 3D Contour and 3D Pocket follow.
 
     Interpolated safe heights (``DropSurface.follow``) plus stock to leave,
     never below a holding tab's top, with dips narrower than

@@ -253,7 +253,7 @@ def test_lead_modes_every_layer_none_for_flat_and_surface_paths(libset, kind):
             job, op = emitted(libset, lead_in=mode_in, lead_out=mode_out)
         else:
             # 3D Pocket raster lines riding the slope: separate lines, many entries (3D Contour is one path).
-            job, op = surface_job(libset, kind="waterfall", strategy="raster_x", follow_surface=True)
+            job, op = surface_job(libset, kind="pocket3d", strategy="raster_x", follow_surface=True)
             op.lead_in, op.lead_out = mode_in, mode_out
             generate(job, StageContext())
             CAMEmit().run(job, CAMEmit.resolve({}), StageContext())
@@ -348,7 +348,7 @@ def test_lead_out_carries_on_forward_at_the_cutting_feed(libset):
 def test_lead_out_is_skipped_and_the_tool_retracts_straight_up_when_carrying_on_would_cut(libset):
     from tests.test_cam_surface import surface_job
     # 3D Pocket raster lines riding the slope: separate lines, each ending against a wall of the pocket.
-    job, op = surface_job(libset, kind="waterfall", strategy="raster_x", follow_surface=True)
+    job, op = surface_job(libset, kind="pocket3d", strategy="raster_x", follow_surface=True)
     generate(job, StageContext())
     ctx = StageContext()
     CAMEmit().run(job, CAMEmit.resolve({}), ctx)

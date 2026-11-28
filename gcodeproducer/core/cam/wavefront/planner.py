@@ -673,7 +673,7 @@ def clear_depths(pocket, radius, *, top=0., bottom, step_down, **options):
     stock at its own depth, with the floor of the level above as the top its
     helices start from. pocket is one outline for every level (a 2.5D
     pocket), or a function of Z giving each level's outline (the slices of a
-    3D waterfall). With one outline the plan is the same at every level, so
+    3D pocket3d). With one outline the plan is the same at every level, so
     it is worked out once and moved down: only the helices differ in Z.
     clear_pocket options pass through.
     """

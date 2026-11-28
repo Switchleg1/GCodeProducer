@@ -27,12 +27,12 @@ def test_operation_specific_choices_and_hidden_rows(app):
     editor.set_tools([Profile('tool', 'Cutter')])
     editor.add_tool()
     try:
-        for kind in ('pocket', 'waterfall', 'contour3d', 'profile', 'slot', 'drill', 'engrave'):
+        for kind in ('pocket', 'pocket3d', 'contour3d', 'profile', 'slot', 'drill', 'engrave'):
             editor.kind.setCurrentIndex(editor.kind.findData(kind))
             editor.add_operation()
             labels = [editor.strategy.itemText(i) for i in range(editor.strategy.count())]
             expected = (['Wall-parallel contours', 'Raster lines X', 'Raster lines Y', 'Adaptive clearing']
-                        if kind in ('pocket', 'waterfall') else
+                        if kind in ('pocket', 'pocket3d') else
                         ['Raster lines X', 'Raster lines Y', 'Spiral from the centre'] if kind == 'contour3d' else [])
             assert labels == expected
             form = editor.operation_form
@@ -51,7 +51,7 @@ def test_operation_specific_choices_and_hidden_rows(app):
                 editor.feed_controls['slotting_feed'].setValue(42)
                 assert editor.operation().slotting_feed == 42
             if expected:
-                strategy = 'adaptive' if kind in ('pocket', 'waterfall') else 'raster_y'
+                strategy = 'adaptive' if kind in ('pocket', 'pocket3d') else 'raster_y'
                 editor.strategy.setCurrentIndex(editor.strategy.findData(strategy))
                 assert editor.operation().strategy == strategy
                 restored = CAMSetup.from_dict(editor.setup.to_dict())
@@ -88,7 +88,7 @@ def test_hidden_fields_and_legacy_on_are_not_silently_overwritten(app):
         editor.close()
 
 
-@pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
+@pytest.mark.parametrize('kind', ['pocket', 'pocket3d'])
 @pytest.mark.parametrize('strategy,axis', [('raster_x', 0), ('raster_y', 1)])
 def test_planar_clearing_raster_axis(libset, kind, strategy, axis):
     from gcodeproducer.core.cam import generate
@@ -185,7 +185,7 @@ def test_contour_axis_strategies_keep_depth_cap_and_model_clearance(libset, stra
     assert not any('uncleared entry depth' in w for w in job.warnings)
 
 
-@pytest.mark.parametrize('kind', ['pocket', 'waterfall'])
+@pytest.mark.parametrize('kind', ['pocket', 'pocket3d'])
 def test_adaptive_incomplete_pass_exports_only_debug_prefix(libset, kind, monkeypatch):
     from copy import deepcopy
     from gcodeproducer.core.cam import generate
@@ -214,7 +214,7 @@ def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():
 
     area = box(-3, -3, 3, 3)
     stock = Point(0, 0).buffer(1)
-    op = Operation(kind='waterfall', strategy='adaptive')
+    op = Operation(kind='pocket3d', strategy='adaptive')
     paths = pocket_paths(op, [], area, 3., 'climb', material=stock)
     assert paths and paths[0].closed and not any(p.closed for p in paths[1:])  # Orbit, then stay-down cuts.
     assert all(p.stay_down and p.stay_down_from == tuple(paths[i].points[-1 if not paths[i].closed else 0])
@@ -226,13 +226,19 @@ def test_adaptive_can_return_a_covered_cut_but_never_falls_back_for_tabs():
         pocket_paths(op, [], area, 3., 'climb', tabs=True)
 
 
+def test_loading_setup_rejects_unsupported_operation_kind():
+    op = {'kind': 'retired_kind', 'name': '3D Pocket', 'start': {}, 'end': {}}
+    with pytest.raises(ValueError, match='Unsupported CAM operation kind'):
+        CAMSetup.from_dict({'groups': [{'tool_id': 'tool', 'operations': [op]}]})
+
+
 def test_old_strategy_names_preserve_existing_behaviour():
-    for kind in ('pocket', 'waterfall'):
+    for kind in ('pocket', 'pocket3d'):
         setup = CAMSetup.from_dict({'groups': [{'tool_id': 'tool', 'operations': [
             {'kind': kind, 'strategy': 'trochoidal', 'adaptive_peels': 8, 'start': {}, 'end': {}}]}]})
         assert setup.groups[0].operations[0].strategy == 'adaptive'
     assert Operation(kind='pocket', strategy='raster').strategy == 'raster_y'
-    assert Operation(kind='waterfall', strategy='raster').strategy == 'raster_y'
+    assert Operation(kind='pocket3d', strategy='raster').strategy == 'raster_y'
     # Meander moved from the 3D Contour strategy to the cutting direction: saved files keep it.
     for old in ('meander', 'contour', 'raster'):
         op = Operation(kind='contour3d', strategy=old)
@@ -266,7 +272,7 @@ def test_adaptive_follows_the_cutting_direction_and_its_orbit_turns_the_same_way
     from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
 
     area = box(0, 0, 30, 20)
-    op = Operation(kind='waterfall', strategy='adaptive')
+    op = Operation(kind='pocket3d', strategy='adaptive')
     paths = pocket_paths(op, [], area, 4., direction, material=area)
     left, right = _hands(paths, area)
     assert (right > 5*left) if direction == 'climb' else (left > 5*right)
@@ -281,7 +287,7 @@ def test_adaptive_follows_the_cutting_direction_and_its_orbit_turns_the_same_way
 def test_adaptive_meander_cuts_fronts_from_the_nearer_end_instead_of_travelling_back():
     from gcodeproducer.core.cam.operations.pocket_generator import pocket_paths
     area = box(0, 0, 60, 30)
-    op = Operation(kind='waterfall', strategy='adaptive')
+    op = Operation(kind='pocket3d', strategy='adaptive')
     travel = {}
     for direction in ('climb', 'meander'):
         paths = pocket_paths(op, [], area, 4., direction, material=area)
@@ -308,7 +314,7 @@ def test_adaptive_walks_up_to_a_cutter_radius_from_the_area_edge_whatever_the_st
     from shapely import distance, points
     from gcodeproducer.core.cam.wavefront.app_paths import wavefront_paths
     area = box(0, 0, 40, 25)
-    op = Operation(kind='waterfall', strategy='adaptive', stock=1.)
+    op = Operation(kind='pocket3d', strategy='adaptive', stock=1.)
     paths = wavefront_paths(op, area, 4., 'climb', material=area, stock_applied=True)
     xy = np.vstack([np.asarray(p.points, float)[:, :2] for p in paths])
     gap = distance(area.exterior, points(xy))
@@ -373,7 +379,7 @@ def test_contour_spiral_staying_down_walks_the_wall_instead_of_lifting():
 def test_saved_adaptive_engagement_becomes_the_stepover_only_for_adaptive():
     def load(strategy, **extra):
         return CAMSetup.from_dict({'groups': [{'tool_id': 't', 'operations': [
-            dict({'kind': 'waterfall', 'strategy': strategy, 'stepover': 40., 'start': {}, 'end': {}}, **extra)]}]}
+            dict({'kind': 'pocket3d', 'strategy': strategy, 'stepover': 40., 'start': {}, 'end': {}}, **extra)]}]}
         ).groups[0].operations[0]
     assert load('adaptive', adaptive_engagement=10.).stepover == 10.
     assert load('trochoidal', adaptive_engagement=12.).stepover == 12.       # old name of Adaptive

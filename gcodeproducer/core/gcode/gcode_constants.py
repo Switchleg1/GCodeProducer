@@ -101,6 +101,7 @@ VARIABLES = [
     Var("max_nozzle_temp", "Machine", "Machine maximum nozzle temperature (\u00b0C)", 280.0, TEMPLATE_FDM),
     Var("max_bed_temp", "Machine", "Machine maximum bed temperature (\u00b0C)", 110.0, TEMPLATE_FDM),
     Var("max_chamber_temp", "Machine", "Machine maximum chamber temperature (\u00b0C)", 60.0, TEMPLATE_FDM),
+    Var("clearance_z", "Machine", "Entry clearance Z in work coordinates (mm)", 5.0, TEMPLATE_CAM),
     Var("safe_z", "Machine", "Safe Z for rapids (mm)", 15.0, TEMPLATE_CAM),
     # ---- temperatures (material values, already capped at the machine limits)
     Var("nozzle_temp", "Temperatures", "Nozzle temperature (\u00b0C)", 205.0, TEMPLATE_FDM),

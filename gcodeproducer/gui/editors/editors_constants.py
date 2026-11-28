@@ -63,7 +63,7 @@ CLEARING_STRATEGIES = (("Wall-parallel contours", "contour"), ("Raster lines X",
                        ("Adaptive clearing", "adaptive"))
 CUTTING_STRATEGIES = {
     "pocket": CLEARING_STRATEGIES,
-    "waterfall": CLEARING_STRATEGIES,
+    "pocket3d": CLEARING_STRATEGIES,
     "contour3d": (("Raster lines X", "raster_x"), ("Raster lines Y", "raster_y"),
                   ("Spiral from the centre", "spiral")),
 }
@@ -71,7 +71,7 @@ CUTTING_STRATEGIES = {
 CUT_DIRECTIONS = (("Climb", "climb"), ("Conventional", "conventional"), ("Meander", "meander"))
 # Operations whose cutting direction can be unlocked. For raster lines Meander cuts them both ways,
 # joined without lifting; Climb and Conventional cut every line one way.
-DIRECTED_KINDS = ("pocket", "profile", "waterfall", "contour3d")
+DIRECTED_KINDS = ("pocket", "profile", "pocket3d", "contour3d")
 
 ENGAGEMENT_CONTROLS = (("low_engagement_feed", "HSM"),
                            ("standard_engagement_feed", "Cut"),

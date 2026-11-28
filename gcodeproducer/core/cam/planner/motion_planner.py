@@ -59,7 +59,9 @@ class MotionPlanner:
         from .feed_smoother import FeedSmoother
         self.smoother = FeedSmoother(pref(job, "cam_feed_smoothing"), bool(pref(job, "cam_merge_moves")))
         self.plan = MotionPlan(consume, smoother=self.smoother)
-        self.safe_z = job.m("safe_z", 15.0)
+        from ..work_datum import clearance_height, safe_height
+        self.safe_z = safe_height(job)
+        self.entry_plane = clearance_height(job) if job.m('cam_z0_at_bed', False) else None
         self.rapid_feed = job.m("rapid_xy", 3000)
         self.short_retracts = bool(pref(job, "short_retracts"))
         self.lead_clearance = max(.05, float(pref(job, "lead_clearance")))
@@ -267,12 +269,16 @@ class MotionPlanner:
     def enter(self, state, xy, z, lead):
         """Shared travel to an entry: short retract, XY rapid, rapid descent, feed descent."""
         travel = self.links.travel_height(state, self.position, xy, z)
+        if self.entry_plane is not None:
+            travel = max(travel, self.entry_plane)
         if self.position[2] < travel-1e-9:
             self.rapid_z(travel)
         if state is not None and self.links.short_retracts and self.position[2] < self.safe_z-1e-9:
             self.short_count += 1
         self.rapid_xy(xy)
         rapid_to = self.links.descent_height(state, self.position[2], xy, z, lead)
+        if self.entry_plane is not None:
+            rapid_to = max(rapid_to, self.entry_plane)
         if rapid_to < self.position[2]-1e-9:
             if state is not None and state.contact(self.position, np.r_[self.position[:2], rapid_to], self.links.reach):
                 raise ValueError(f"{self.name}: rapid descent to the entry is not clear of current material")
@@ -320,7 +326,7 @@ class MotionPlanner:
     def skips_air(self, state):
         """Whether surface paths may be cut short where they cross cleared ground.
 
-        Only 3D Pocket (waterfall) paths may be cut short, reordered or sent to a
+        Only 3D Pocket (pocket3d) paths may be cut short, reordered or sent to a
         new place: 3D Contour lines are followed from end to end, in order (it
         may lift at the end of a line to go back to the start of the next).
         """

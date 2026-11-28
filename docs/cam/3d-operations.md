@@ -2,9 +2,6 @@
 
 # 3-axis surface operations: 3D Pocket and 3D Contour
 
-(**3D Pocket** was called *3D Waterfall* before 0.2.65; saved operations open
-unchanged.)
-
 Both operations clear material in **depth-limited passes**, stopping at the
 model surface. They use a vertical flat-endmill footprint: no undercuts,
 ball-nose compensation, fixtures or holder simulation.
@@ -14,6 +11,8 @@ ball-nose compensation, fixtures or holder simulation.
 | **Pocket** | Planar clearing to a flat End Z; level boundaries required | Ordinary 2.5D pockets |
 | **3D Pocket** | Full-area clearing at successive Z levels, with the model protected at each level | Roughing sloped, stepped or curved floors and walls |
 | **3D Contour** | Successive surface-following raster passes, each limited to the next depth band | Clearing and refining sloped or gently curved surfaces |
+
+**2.5D vs 3D:** Choose **Pocket** for a flat floor at the specified depth. Choose **3D Pocket** when the model surface must limit how deep the cutter goes at each XY position.
 
 A useful sequence is **3D Pocket → 3D Contour**: 3D Pocket clears terraces;
 Contour refines the surface. Contour also works on its own: it no longer makes
@@ -50,7 +49,7 @@ reachable area changes with depth, so surface operations do not use
 
 **Full-area surface-limited clearing.**
 
-![3D Pocket clearing in depth bands](../pictures/cam-waterfall-clearing.png)
+![3D Pocket clearing in depth bands](../pictures/cam-3d-pocket-clearing.png)
 
 At each depth, 3D Pocket subtracts the XY shadow of all model material above
 that depth from the selected area. It then clears the **whole remaining
@@ -255,7 +254,7 @@ do not provide cutter-shape compensation. Preview, grid checks and warnings
 remain approximate; independently verify reach, shanks, holders, fixtures and
 workholding. A warning-free program is not collision certification.
 
-Older captures `cam-3d-pocket-terraces.png`, `cam-3d-waterfall.png`,
+Older captures `cam-3d-pocket-terraces.png`, `cam-3d-pocket-historical.png`,
 `cam-3d-contour.png` and `cam-3d-rough-and-finish.png` predate this change:
-they show the old Pocket toggle, wall-only Waterfall or single-pass Contour,
+they show the old Pocket toggle, wall-only 3D Pocket or single-pass Contour,
 and are retained as historical pictures, not current workflow instructions.

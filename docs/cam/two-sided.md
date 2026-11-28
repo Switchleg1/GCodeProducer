@@ -53,6 +53,12 @@ carried over. That is on the safe side for loads and collisions (Side A's
 cuts can only make Side B's lighter), but Side B may cut air where Side A
 already cleared, and the material Preview of Side B starts from a full block.
 
+## Work Z origin
+
+For either side, **Libraries → Machines → Work area → Z0 at bed** places work Z0 at the underside of the allocated stock. With 20 mm stock and Safe Z set to 5 mm, the top is Z20, a 2 mm pocket floor is Z18, and the safe retract is Z25. With Clearance Z set to 2 mm, the entry rapid stops at or above Z22 and the remaining descent is fed. `{safe_z}` and `{clearance_z}` both resolve to these work coordinates in CAM templates. Set the controller’s **work offset** accordingly; the checkbox does not home the machine or set its offset. Stock thickness must be known and the safe retract must fit within machine Z travel.
+
+Prepare retains the saved setup coordinates, including absolute depths and drawing planes. During slicing the placed part, references and depths are translated together. Preview and NC show the resulting work coordinates. Unchecked (default) retains the existing CAM coordinates. In custom start/end G-code, use `{safe_z}` rather than a literal retract Z: literal machine commands are not rewritten.
+
 ## Output
 
 Slice and export each side with that side selected. The program begins with
@@ -78,8 +84,10 @@ about the stock centre, then pin size**, then **Draw**:
    box, with their diameter (the distance from the mouse to the nearest
    corner is the radius). Click to add them.
 
-They are four ordinary reference circles, `Pin 1.1` to `Pin 1.4`, that form a
-set:
+Each set appears as one **Pins** row. Select it to highlight all four holes.
+**Pin spacing X/Y** is the full centre-to-centre distance across the box in
+each direction, not the coordinates of one hole. Diameter and Z apply to all
+four. The individual circles remain pickable for machining:
 
 - the box is always centred on the stock, so turned over about either axis
   every hole lands exactly on a hole;
@@ -97,6 +105,4 @@ The stock must be allocated first. Pins may lie outside the stock.
 
 - Registration against a fence along one edge: nothing is generated or
   checked for it (the turn itself is the same).
-- The machine's Z0 is always the top of the material; a "Z0 at the bed"
-  option is planned.
 - Side A's remaining material is not carried to Side B (see above).

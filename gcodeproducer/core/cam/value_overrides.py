@@ -49,7 +49,7 @@ def operation_overrides(machine, tool, stock, op):
     if getattr(op, "unlock_plunge_feed", False) and float(getattr(op, field, 0) or 0) > 0:
         messages[field] = ("Not used: the plunge feed is unlocked, so it is the plunge feed whatever this "
                            "percentage says.")
-    if op.kind in ("pocket", "waterfall") and cutting_strategy(op.kind, op.strategy) == "contour" and op.stepover > 50:
+    if op.kind in ("pocket", "pocket3d") and cutting_strategy(op.kind, op.strategy) == "contour" and op.stepover > 50:
         messages["stepover"] = (f"Capped: wall-parallel contours are at most 50 % of the cutter apart (so the "
                                 f"offset fronts still cover where they meet); {op.stepover:g} % is used as 50 %.")
     return messages

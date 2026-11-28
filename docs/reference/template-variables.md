@@ -15,7 +15,7 @@ Values are evaluated for the job, not taken from these examples. See
 | `model` | General | fdm, cam | Model file name | `bracket.stl` |
 | `date` | General | fdm, cam | Date the G-code was produced (YYYY-MM-DD) | `2025-01-31` |
 | `time` | General | fdm, cam | Time the G-code was produced (HH:MM) | `14:05` |
-| `version` | General | fdm, cam | GCodeProducer version | `0.2.79` |
+| `version` | General | fdm, cam | GCodeProducer version | `0.2.85` |
 | `bed_x` | Machine | fdm, cam | Bed / work area size X (mm) | `220.0` |
 | `bed_y` | Machine | fdm, cam | Bed / work area size Y (mm) | `220.0` |
 | `max_height` | Machine | fdm, cam | Build / work height (mm) | `250.0` |
@@ -27,6 +27,7 @@ Values are evaluated for the job, not taken from these examples. See
 | `max_nozzle_temp` | Machine | fdm | Machine maximum nozzle temperature (°C) | `280.0` |
 | `max_bed_temp` | Machine | fdm | Machine maximum bed temperature (°C) | `110.0` |
 | `max_chamber_temp` | Machine | fdm | Machine maximum chamber temperature (°C) | `60.0` |
+| `clearance_z` | Machine | cam | Entry clearance Z in work coordinates (mm) | `5.0` |
 | `safe_z` | Machine | cam | Safe Z for rapids (mm) | `15.0` |
 | `nozzle_temp` | Temperatures | fdm | Nozzle temperature (°C) | `205.0` |
 | `nozzle_temp_first` | Temperatures | fdm | First-layer nozzle temperature (°C) | `210.0` |

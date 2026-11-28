@@ -1,10 +1,10 @@
-"""WaterfallGenerator — full-area clearing at each depth, protecting all model material above it."""
+"""Pocket3DGenerator — full-area clearing at each depth, protecting all model material above it."""
 from __future__ import annotations
 from .operation_generator import OperationGenerator
 
 
-class WaterfallGenerator(OperationGenerator):
-    kinds = ("waterfall",)
+class Pocket3DGenerator(OperationGenerator):
+    kinds = ("pocket3d",)
     clearing = True
     needs_closed = True
     allows_sloped = True
@@ -246,8 +246,8 @@ class WaterfallGenerator(OperationGenerator):
             if outer.difference(grown).area < 1e-3:
                 break
         if follow is not None:
-            pieces = WaterfallGenerator.on_the_slope(pieces, run, follow, ceiling)
-        return WaterfallGenerator.chain_band(pieces, outer.difference(inner), step, run.diameter, outer)
+            pieces = Pocket3DGenerator.on_the_slope(pieces, run, follow, ceiling)
+        return Pocket3DGenerator.chain_band(pieces, outer.difference(inner), step, run.diameter, outer)
 
     @staticmethod
     def on_the_slope(pieces, run, follow, ceiling):

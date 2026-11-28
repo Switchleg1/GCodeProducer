@@ -264,7 +264,7 @@ complete, no safety findings.
 
 ## Low limits and complex parts
 
-At a low limit on a part with narrow necks (the Mini Yoda waterfall at 10 %)
+At a low limit on a part with narrow necks (the Mini Yoda 3D Pocket at 10 %)
 some fronts cannot be cut at any stepover, typically a thin wedge where a
 front meets the wall at a shallow angle. The planner then:
 
@@ -292,7 +292,7 @@ front meets the wall at a shallow angle. The planner then:
   taken from the polygons of the overlay only; a stray line in it made the
   search find no place, and a 14 × 7 mm corner was left to rest passes).
 
-With rest passes the Mini Yoda waterfall at 10 % (eight depths, follow the
+With rest passes the Mini Yoda 3D Pocket at 10 % (eight depths, follow the
 surface on) is **complete**, with no safety findings: before them it left
 6–270 mm² at every depth after the first and was marked DEBUG ONLY. Rest
 passes were 0–8 % of each depth's cutting (52–930 mm, most of it over the
@@ -308,7 +308,7 @@ bottom Z, none deeper than the step-down. Each level starts from intact
 stock at its own depth; its helices start from the floor of the level
 above. Given one outline (a 2.5D pocket) the plan is the same at every
 level, so it is worked out once and moved down, with only the helices
-changed; given a function of Z (the slices of a 3D waterfall) every level
+changed; given a function of Z (the slices of a 3D Pocket) every level
 is planned from its own outline.
 
 `write_program()` writes all levels as one XYZ program for a viewer or
@@ -426,7 +426,7 @@ material model and the motion planner. One depth of the test shapes takes
   area is built in stretches of 200 points**: one buffer of a whole chain
   that doubles back on itself took 7 s a depth, the stretches 0.4 s.
 
-The Mini Yoda waterfall at 10 % (eight depths, follow the surface on) now
+The Mini Yoda 3D Pocket at 10 % (eight depths, follow the surface on) now
 computes in 310 s in the application, from 473 s with the first rest passes:
 the depths plan in 4–75 s each in worker processes, and most of the rest is
 the motion planner measuring the paths that follow the surface move by move.
@@ -518,7 +518,7 @@ cross still spend most of their cutting distance again on links.
   cannot turn into at a low limit are now finished by rest passes, which do
   not refuse a cut (up to full width on the Mini Yoda). The feed rules slow
   them, but the limit is not held there.
-- **Machining time at a low limit.** The Mini Yoda waterfall at 10 % takes
+- **Machining time at a low limit.** The Mini Yoda 3D Pocket at 10 % takes
   about 3 hours estimated (Wall-parallel contours: about 10 minutes). Cutting
   feed in air (links and fronts crossing cleared space) is about as long as
   cutting in contact, and with Follow the surface the fronts ride up and down

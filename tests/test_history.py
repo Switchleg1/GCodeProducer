@@ -128,7 +128,7 @@ def test_cam_overrides_lists_and_operation_deletion(win):
     assert len(ed.setup.groups[0].operations) == 0
 
 
-@pytest.mark.parametrize('kind,default', [('pocket', 'contour'), ('waterfall', 'contour'), ('contour3d', 'raster_x')])
+@pytest.mark.parametrize('kind,default', [('pocket', 'contour'), ('pocket3d', 'contour'), ('contour3d', 'raster_x')])
 def test_cutting_strategy_changes_undo_redo_across_rebuilt_forms(win, kind, default):
     ed = cam(win)
     if kind != 'pocket':
@@ -672,4 +672,4 @@ def test_registration_pins_follow_the_stock_and_show_in_the_view(win):
     setup.stock.x += 5                                              # the stock is moved
     win._stock_changed()
     assert np.allclose(np.mean([s.dimensions()[0] for s in setup.reference_shapes], axis=0), centre+(5., 0.))
-    assert refs.items.count() == 4
+    assert refs.items.count() == 1 and refs.items.item(0).text() == 'Pins'

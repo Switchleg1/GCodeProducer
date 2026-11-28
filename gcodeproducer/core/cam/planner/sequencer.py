@@ -91,7 +91,8 @@ class Sequencer:
         count = max(1, math.ceil((start - end) / step))
         if count > 10000:
             raise ValueError(f"{op.name}: too many depth passes")
-        safe = float(job.m("safe_z", 15))
+        from ..work_datum import safe_height
+        safe = safe_height(job)
         if safe <= max(float(job.mesh.bounds[1][2]), start, setup.stock.top if setup.stock.allocated else -math.inf):
             raise ValueError("Safe Z must be above the model and all operation start heights")
         generator = generator_for(op.kind)

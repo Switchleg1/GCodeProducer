@@ -417,7 +417,7 @@ class CAMEditor(QWidget):
                        auto_stepdown=True, stepdown=float(tool.get("max_doc", 1) or 1) if tool else 1,
                        area_order=self.defaults.get("default_area_order", DEFAULTS["default_area_order"]),
                        material_limit=float(self.defaults.get("default_material_limit", DEFAULTS["default_material_limit"])),
-                       overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind in ("pocket", "waterfall") else 0.0)
+                       overcut=float(self.defaults.get("default_overcut", DEFAULTS["default_overcut"])) if kind in ("pocket", "pocket3d") else 0.0)
         if kind == "pocket" or kind in SURFACE_KINDS:
             op.start = Depth("selection", extreme="max")
             op.end = Depth("selection", extreme="min")
@@ -462,8 +462,8 @@ class CAMEditor(QWidget):
         # Area order is decided by the operation (3D Pocket works each depth across all areas).
         self.operation_form.setRowVisible(self.area_order, False)
         self.operation_form.setRowVisible(self.side, op is not None and op.kind == "profile")
-        self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "waterfall"))
-        self.operation_form.setRowVisible(self.follow_surface, op is not None and op.kind == "waterfall")
+        self.operation_form.setRowVisible(self.overcut, op is not None and op.kind in ("pocket", "pocket3d"))
+        self.operation_form.setRowVisible(self.follow_surface, op is not None and op.kind == "pocket3d")
         self.strategy.clear()
         for label, value in choices:
             self.strategy.addItem(label, value)
@@ -498,7 +498,7 @@ class CAMEditor(QWidget):
             self.stock.setValue(op.stock)
             self.overcut.setValue(op.overcut)
             self.material_limit.setValue(op.material_limit)
-            self.material_limit.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
+            self.material_limit.setEnabled(op.kind in ("pocket", "pocket3d", "contour3d"))
             self.strategy.setCurrentIndex(self.strategy.findData(cutting_strategy(op.kind, op.strategy)))
             self.direction_override.setChecked(op.cut_direction != "machine")
             self.direction.setCurrentIndex(self.direction.findData(op.cut_direction))
@@ -512,13 +512,13 @@ class CAMEditor(QWidget):
             self.strategy.setEnabled(bool(choices))
             self.direction_override.setEnabled(op.kind in DIRECTED_KINDS)
             self.direction.setEnabled(op.kind in DIRECTED_KINDS and self.direction_override.isChecked())
-            self.stepover.setEnabled(op.kind in ("pocket", "waterfall", "contour3d"))
+            self.stepover.setEnabled(op.kind in ("pocket", "pocket3d", "contour3d"))
             self.side.setEnabled(op.kind == "profile")
         self._loading = False
         self.selectionChanged.emit()
 
     def _update_stay_down(self, op):
-        self.stay_down.setEnabled((op.kind in ("pocket", "waterfall") and op.strategy in ("contour", "adaptive"))
+        self.stay_down.setEnabled((op.kind in ("pocket", "pocket3d") and op.strategy in ("contour", "adaptive"))
                                   or op.kind == "contour3d")
 
     def _edit(self, *_):

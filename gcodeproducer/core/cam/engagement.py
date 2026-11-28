@@ -187,7 +187,7 @@ def plan_engagement(paths, job, operation, tool, log=None, initial_material=None
         log("  engagement uses a conservative XY blank estimate (stock not allocated)")
     points = np.concatenate([np.asarray(p.points)[:, :2] for p in paths]) if paths else np.zeros((1, 2))
     sampler = MaterialModel(job, stock).planar_sampler(material=initial_material, fallback_points=points, radius=radius)
-    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot", "waterfall") else None
+    mode = direction_for(job, operation) if operation.kind in ("pocket", "profile", "slot", "pocket3d") else None
     totals = Counter()
     flipped = slots = handed = conflicts = 0
     previous = None

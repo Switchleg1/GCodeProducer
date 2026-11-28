@@ -6,7 +6,7 @@ raising its point guard. Keep that implementation available as a diagnostic
 baseline until a replacement passes the same jobs. Do not change generated
 motion in this planning step.
 
-The 40,000-point Stormtrooper run stalled at the **first** Waterfall depth:
+The 40,000-point Stormtrooper run stalled at the **first** 3D Pocket depth:
 257 peels, 15 entries, and 238.594 mm² of reference stock still present. It
 stopped before the resource limit. The current search can rank individual
 turns, but it does not ensure that the remaining pocket is reachable by later
@@ -36,7 +36,7 @@ complete coverage.
 
 1. **Make the failure observable.** Export diagnostic stock, reachable target,
    residual and ordered path geometry per depth from the read-only session
-   harness. Pin the two-lobe fixture and first saved Waterfall depth. Preserve
+   harness. Pin the two-lobe fixture and first saved 3D Pocket depth. Preserve
    cutter, stock, allowance, lead angle and stepdown in comparisons. Save the
    old planner's output as a comparison artifact, not machine-ready code.
 2. **Build an independent verifier.** Replay swept geometry in execution order.
@@ -49,7 +49,7 @@ complete coverage.
    shortcut is a failure even if average engagement is low.
 3. **Run the backend comparison offline.** Compare identical stock and targets
    on rectangle, concave corner, narrow neck/two-lobe, island, disconnected
-   regions, and the saved Waterfall first depth. Use a declared geometric
+   regions, and the saved 3D Pocket first depth. Use a declared geometric
    tolerance for remaining reachable stock; measure rather than ignore
    unmachinable corners. Score coverage first, then peak/P95 cutting engagement
    and slot distance, then cut/link/retract time and planning time. An incomplete

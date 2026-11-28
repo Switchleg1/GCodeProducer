@@ -1713,10 +1713,14 @@ class MainWindow(QMainWindow):
         rect = bed_rect(machine, self.workflow) if machine is not None else (0, 0, 220, 220, 250)
         show_blocks = self._support_mode() == "blocks"
         self.model_viewer.set_blocks(self.blocks, self.sel_block, show_blocks)
-        self.viewer.set_bed(rect)                     # Preview shows the same machine plate
         stock = self.cam_editor.setup.stock if self.workflow == wf.CAM else None
         self.model_viewer.set_stock(stock)
-        self.viewer.set_stock(stock)
+        bed_zero = stock is not None and machine is not None and machine.get('cam_z0_at_bed', False)
+        self.viewer.set_bed((*rect[:4], abs(rect[4])) if bed_zero else rect)
+        preview_stock = copy.copy(stock) if bed_zero else stock
+        if bed_zero:
+            preview_stock.top = preview_stock.height
+        self.viewer.set_stock(preview_stock)
         if self.mesh is None:
             self.placed = self.assembly = None
             self.lbl_size.setText("")
@@ -2305,7 +2309,12 @@ class MainWindow(QMainWindow):
                                                          result.get('reference_selection_fill', []),
                                                          result.get('reference_focus_fill', []))
                 self.model_viewer.set_tab_bounds(result.get('tabs', []))
-                self.viewer.set_tab_bounds(result.get('tabs', []))
+                bounds = result.get('tabs', [])
+                stock = self.cam_editor.setup.stock
+                if stock.allocated and self._machine() and self._machine().get('cam_z0_at_bed',False):
+                    shift = np.array([0.,0.,stock.height-stock.top])
+                    bounds = [(lo+shift,hi+shift) for lo,hi in bounds]
+                self.viewer.set_tab_bounds(bounds)
                 if result.get('tab_error'):
                     self.stock_editor.tabs.status.setText(result['tab_error'])
                 else:
@@ -2350,7 +2359,7 @@ class MainWindow(QMainWindow):
             return
         warnings = out.get("warnings", [])
         self.cam_warnings = warnings if out["program"].machine == wf.CAM else []
-        self.model_viewer.set_tab_bounds(out.get("tab_bounds", []))
+        # Prepare already has its setup-frame tabs; the worker returns machine-frame bounds.
         self.viewer.set_tab_bounds(out.get("tab_bounds", []))
         self.program, self.tp = out["program"], out["toolpath"]
         self._filament_mm = out["filament_mm"]

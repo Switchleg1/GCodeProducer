@@ -137,7 +137,7 @@ The schema reference lists stored fields, not a guarantee of output enforcement:
   40%, independently of the tool profile's stored stepover field.
 - CAM `safe_z` and XY rapid feed are used. Lead-in start height and short
   retract height come from the [global settings](settings.md); the machine's
-  stored `clearance_z` is **not** used by the current emitter, and `rapid_z`
+  `clearance_z` additionally sets the minimum entry rapid height when **Z0 at bed** is checked. Both `safe_z` and `clearance_z` then measure from the stock top. `rapid_z`
   does not provide explicit Z rapid feed control. The old
   reserved pipeline ramp flag was removed; actual lead-in/out settings belong
   to operations. See [material state/leads](cam/material-state-and-leads.md).

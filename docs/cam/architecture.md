@@ -50,7 +50,7 @@ flowchart LR
         PF["ProfileGenerator"]
         OP["OpenPathGenerator<br/>(Slot, Engrave)"]
         DR["DrillGenerator"]
-        WF["WaterfallGenerator"]
+        WF["3D Pocket generator"]
         CT["Contour3dGenerator"]
     end
     subgraph PLANNER["core/cam/planner/"]
@@ -159,7 +159,7 @@ base(phase) = lead/plunge base for approach, plunge, lead_in, lead_out; cut base
 | Entries/exits, links, feeds | `planner/entry_exit_planner.py`, `link_planner.py`, `feed_policy.py` |
 | Records | `planner/motion_segment.py`, `motion_plan.py`, `planner_constants.py` |
 | Kind registry | `operations/__init__.py` (`generator_for`), `operations/operations_constants.py` |
-| Per-kind geometry | `operations/pocket_generator.py`, `profile_generator.py`, `open_path_generator.py`, `drill_generator.py`, `waterfall_generator.py`, `contour3d_generator.py`, `surface_common.py` |
+| Per-kind geometry | `operations/pocket_generator.py`, `profile_generator.py`, `open_path_generator.py`, `drill_generator.py`, `contour3d_generator.py`, `surface_common.py` |
 | Serialization, templates, output checks | `stages/cam/cam_emit.py` |
 
 Compatibility: `planning.generate`, `_pocket_paths`, `_drop_air_paths`,

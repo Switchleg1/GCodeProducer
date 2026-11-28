@@ -93,6 +93,7 @@ def job_variables(job, temps: dict | None = None, extra: dict | None = None) -> 
                  retract_speed=_num(job.mat("retract_speed", 35.0)),
                  layer_height=lh, first_layer_height=flh, current_layer_height=flh)
     else:
+        from gcodeproducer.core.cam.work_datum import clearance_height, safe_height
         wx, wy = _num(m.get("work_x", 300)), _num(m.get("work_y", 300))
         center = m.get("origin") == "center"
         tool = job.tools[0] if job.tools else None
@@ -107,7 +108,7 @@ def job_variables(job, temps: dict | None = None, extra: dict | None = None) -> 
                  stock_top=stock.top, stock_bottom=stock.top - stock.height)
         v.update(bed_x=wx, bed_y=wy, max_height=_num(m.get("work_z", 100)),
                  bed_center_x=0.0 if center else wx / 2, bed_center_y=0.0 if center else wy / 2,
-                 safe_z=_num(m.get("safe_z", 15.0)),
+                 safe_z=safe_height(job), clearance_z=clearance_height(job),
                  tool=int(tool.get("tool_number", 1)) if tool else 0,
                  tool_name=tool.name if tool else "",
                  tool_diameter=_num(tool.get("diameter", 0)) if tool else 0.0,

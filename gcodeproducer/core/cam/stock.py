@@ -80,7 +80,8 @@ def check_stock(job, program, sim=None, progressive=False):
         ml, mh = job.mesh.bounds
         if np.any(ml < lo - 1e-3) or np.any(mh > hi + 1e-3):
             warn("The part is not fully contained in the allocated material; resize the stock or use Auto.")
-    if float(job.m("safe_z", 15)) <= stock.top + 1e-4:
+    from .work_datum import safe_height
+    if safe_height(job) <= stock.top + 1e-4:
         warn("Safe Z is at or below the material surface; rapid moves may strike the stock.")
     tools = {} if progressive else {int(t.get("tool_number", 1)): t.resolved() for t in job.tools}
     radius = 0 if progressive else max((float(t.get("diameter", 0))/2 for t in job.tools), default=0)

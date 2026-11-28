@@ -7,21 +7,21 @@ from gcodeproducer.core.geometry.geometry_constants import (
 from gcodeproducer.core.parameters.param import Param
 import math
 
-KINDS = ("pocket", "profile", "drill", "engrave", "slot", "waterfall", "contour3d")
+KINDS = ("pocket", "profile", "drill", "engrave", "slot", "pocket3d", "contour3d")
 
 KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engrave": "Engrave", "slot": "Slot",
-               "waterfall": "3D Pocket", "contour3d": "3D Contour"}
+               "pocket3d": "3D Pocket", "contour3d": "3D Contour"}
 
 # Registration pins: the corners of the box centred on the stock, in the order the four circles are kept.
 PIN_CORNERS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
 SIDES = ("a", "b")            # two-sided machining: the side shown, planned and exported
 FLIP_AXES = ("x", "y")        # the stock is turned over about its X or its Y axis for Side B
 
-SURFACE_KINDS = ("waterfall", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
+SURFACE_KINDS = ("pocket3d", "contour3d")   # always limited by the model surface (3-axis, no undercuts)
 
 STRATEGY_ALIASES = {
     "pocket": {"raster": "raster_y", "trochoidal": "adaptive"},
-    "waterfall": {"raster": "raster_y", "trochoidal": "adaptive"},
+    "pocket3d": {"raster": "raster_y", "trochoidal": "adaptive"},
     # 3D Contour lines run along X or Y; Meander is now the cutting direction, not a strategy.
     "contour3d": {"contour": "raster_x", "raster": "raster_x", "meander": "raster_x"},
 }
@@ -130,7 +130,7 @@ def material_parameters():
                                 help=f"Automatic {process} stepdown for {label} only (choose the machining category in Material / stock). "
                                      "Percentage of tool diameter, capped by Max depth/pass; the operation depth override takes precedence."))
     return params
-# Surface-following paths (3D Contour, Waterfall following the surface): dips narrower
+# Surface-following paths (3D Contour, 3D Pocket following the surface): dips narrower
 # than SURFACE_DIP_FILL are filled, by at most SURFACE_DIP_DEPTH (raise only), so
 # height-grid noise does not saw the cutter up and down while real corners are kept.
 SURFACE_DIP_FILL = .5    # mm

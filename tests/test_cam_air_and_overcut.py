@@ -126,11 +126,11 @@ def test_part_section_samples_each_depth_and_adds_clearance():
     assert part_section(mesh, [-4], 1).covers(Point(0, 10.5))   # clearance ring around the boss
 
 
-@pytest.mark.parametrize("kind", ["pocket", "waterfall"])
+@pytest.mark.parametrize("kind", ["pocket", "pocket3d"])
 def test_clearing_overcut_only_outward_of_flange(libset, kind):
     mesh = stepped_part()
     ref = floor_ref(mesh)
-    mesh.triangles = mesh.triangles[:, ::-1].copy()  # outward normals for Waterfall's shadow
+    mesh.triangles = mesh.triangles[:, ::-1].copy()  # outward normals for 3D Pocket's shadow
     job, op = job_for(mesh, [ref], libset)
     op.kind = kind
     job.cam_setup.stock.margin = 6
@@ -229,7 +229,7 @@ def test_tool_library_flags_a_missing_or_too_short_stickout():
     assert "stickout" not in tool_overrides({"length": 20, "stickout": 30}, None)
 
 
-@pytest.mark.parametrize("kind", ["pocket", "waterfall"])
+@pytest.mark.parametrize("kind", ["pocket", "pocket3d"])
 @pytest.mark.parametrize("limit", [0.0, -1.0, 1.0])
 @pytest.mark.parametrize("clearance", [0.0, 0.5])
 def test_material_limit_places_cutter_edge_relative_to_blank_edge(libset, kind, limit, clearance):
@@ -262,10 +262,10 @@ def test_material_limit_default_comes_from_global_settings(win):
     ed.add_tool()
     form = ed.operation_form
     assert form.labelForField(ed.overcut).text() == "Overcut (mm)"
-    for kind in ("pocket", "waterfall", "profile", "contour3d", "drill"):
+    for kind in ("pocket", "pocket3d", "profile", "contour3d", "drill"):
         ed.kind.setCurrentIndex(ed.kind.findData(kind))
         ed.add_operation()
-        clearing = kind in ("pocket", "waterfall")
+        clearing = kind in ("pocket", "pocket3d")
         assert ed.operation().overcut == (2.0 if clearing else 0.0)
         assert form.isRowVisible(ed.overcut) == clearing
         if clearing:

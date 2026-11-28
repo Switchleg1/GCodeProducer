@@ -77,4 +77,7 @@ def slice_job(job: Job, pipeline: Optional[SlicePipeline] = None,
         if current != job.cam_setup.fingerprint:
             raise ValueError("CAM model geometry changed; reselect operation geometry")
     place_mesh(job)
+    if job.workflow == wf.CAM:
+        from gcodeproducer.core.cam.work_datum import apply_bed_datum
+        apply_bed_datum(job)
     return pipeline.run(job, log=log, progress=progress)

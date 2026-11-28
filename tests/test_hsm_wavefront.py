@@ -391,7 +391,7 @@ def test_fast_polyline_pieces_match_shapely_substring():
 def test_levels_planned_in_workers_match_planning_them_one_by_one(monkeypatch):
     from gcodeproducer.core.cam import Operation
     from gcodeproducer.core.cam.wavefront import plan_level, plan_levels
-    op = Operation(kind='waterfall', strategy='adaptive')
+    op = Operation(kind='pocket3d', strategy='adaptive')
     region = box(0, 0, 16, 12)
     levels = [(region, None, 1.), (region, region.difference(box(0, 0, 6, 12)), 1.)]
     one_by_one = [plan_level(op, r, 4., m, d) for r, m, d in levels]

@@ -177,7 +177,7 @@
 - Several starts go one way round only when the centre region is one polygon with one hole and every start's spiral
   reaches both walls; forward is the outer outline's direction. Pockets with several bosses are not handled.
 - Every level starts from intact stock at its depth and every XY rapid rises to 2 mm above the top. Rapids down stop
-  0.5 mm above the level above; below that the cutter feeds. Safe for a 2.5D pocket; a waterfall needs the stock
+  0.5 mm above the level above; below that the cutter feeds. Safe for a 2.5D pocket; a 3D Pocket needs the stock
   the level above left.
 - (Superseded in 0.2.20: Adaptive engagement is now a width, see below.) The application feeds links at the cutting feed;
   the wavefront's own estimate assumes a faster link feed.

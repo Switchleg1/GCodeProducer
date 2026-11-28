@@ -86,7 +86,8 @@ class ReferenceGeometryEditor(Section):
         for key, prefix in (("x", "X "), ("y", "Y "), ("z", "Z ")):
             centre.addWidget(spin(key, -10000))
             self.fields[key].setPrefix(prefix)
-        edit.addRow("Center", centre)
+        self.centre_label = QLabel("Center")
+        edit.addRow(self.centre_label, centre)
         size = QHBoxLayout()
         for key, prefix in (("a", "W "), ("b", "H ")):
             size.addWidget(spin(key, .001))
@@ -115,11 +116,17 @@ class ReferenceGeometryEditor(Section):
         select = select if select is not None else (current.id if current else None)
         self.items.blockSignals(True)
         self.items.clear()
+        seen = set()
+        selected_group = next((s.group for s in self.setup.reference_shapes if s.id == select), None)
         for shape in self.setup.reference_shapes:
-            item = QListWidgetItem(shape.summary())
+            if shape.group:
+                if shape.group in seen:
+                    continue
+                seen.add(shape.group)
+            item = QListWidgetItem("Pins" if shape.group else shape.summary())
             item.setData(Qt.ItemDataRole.UserRole, shape.id)
             self.items.addItem(item)
-            if shape.id == select:
+            if shape.id == select or (shape.group and shape.group == selected_group):
                 self.items.setCurrentItem(item)
         self.items.blockSignals(False)
         self._selected()
@@ -144,6 +151,14 @@ class ReferenceGeometryEditor(Section):
         center, size = shape.dimensions()
         circle = shape.kind == "circle"
         self._loading = True
+        if shape.group:
+            group = pins.members(self.setup.reference_shapes, shape.group)
+            centers = np.array([pin.dimensions()[0] for pin in group])
+            center = np.ptp(centers, axis=0)  # full centre-to-centre spacing, not one corner's XY
+        self.centre_label.setText("Pin spacing" if shape.group else "Center")
+        for key in ('x', 'y'):
+            self.fields[key].setMinimum(.001 if shape.group else -10000)
+            self.fields[key].setToolTip('Centre-to-centre distance between pins (mm)' if shape.group else '')
         for key, value in (("x", center[0]), ("y", center[1]), ("z", shape.z),
                            ("a", 2*size if circle else 2*size[0]), ("b", 0 if circle else 2*size[1])):
             self.fields[key].setValue(value)
@@ -398,7 +413,13 @@ class ReferenceGeometryEditor(Section):
         size = f["a"]/2 if shape.kind == "circle" else (f["a"]/2, f["b"]/2)
         before = (*shape.dimensions(), shape.z)
         try:
-            shape.set_geometry((f["x"], f["y"]), size, f["z"])
+            at = (f['x'], f['y'])
+            if shape.group:
+                centre = pins.stock_centre(self.setup)
+                if centre is None:
+                    raise ValueError(REFERENCE_HINTS['no_stock'])
+                at = centre + np.asarray(PIN_CORNERS[0])*np.asarray(at)/2
+            shape.set_geometry(at, size, f["z"])
             try:
                 self._sync_pins(shape)
             except ValueError:

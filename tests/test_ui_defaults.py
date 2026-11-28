@@ -289,7 +289,7 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
     assert [editor.kind.itemText(i) for i in range(editor.kind.count())] == [KIND_LABELS[k] for k in KINDS]
     editor.set_tools([Profile("tool", "Test cutter")])
     editor.add_tool()
-    for kind in ("waterfall", "contour3d", "pocket"):
+    for kind in ("pocket3d", "contour3d", "pocket"):
         editor.kind.setCurrentIndex(editor.kind.findData(kind))
         editor.add_operation()
         op = editor.operation()
@@ -310,7 +310,7 @@ def test_3d_operation_kinds_labels_defaults_and_model_surface_option(app):
         assert not hasattr(editor, "protect_model")
         assert not op.protect_model
     restored = CAMSetup.from_dict(editor.setup.to_dict())
-    assert [o.kind for o in restored.groups[0].operations] == ["waterfall", "contour3d", "pocket"]
+    assert [o.kind for o in restored.groups[0].operations] == ["pocket3d", "contour3d", "pocket"]
     assert not restored.groups[0].operations[2].protect_model
     editor.close()
 

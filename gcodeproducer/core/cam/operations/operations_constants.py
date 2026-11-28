@@ -6,10 +6,10 @@ GENERATORS = {
     "slot": ("open_path_generator", "OpenPathGenerator"),
     "engrave": ("open_path_generator", "OpenPathGenerator"),
     "drill": ("drill_generator", "DrillGenerator"),
-    "waterfall": ("waterfall_generator", "WaterfallGenerator"),
+    "pocket3d": ("pocket3d_generator", "Pocket3DGenerator"),
     "contour3d": ("contour3d_generator", "Contour3dGenerator"),
 }
-# Adaptive Waterfall following the surface: passes stepping up the slope between depths.
+# Adaptive 3D Pocket following the surface: passes stepping up the slope between depths.
 SLOPE_STEP_MIN = .1  # mm; least step between them
 SLOPE_PASSES = 200  # most of them at one depth
 SLOPE_JOIN_STEPS = 3.  # a slope pass joins the one before when it starts within this many steps of its end

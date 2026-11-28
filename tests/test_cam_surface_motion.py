@@ -101,7 +101,7 @@ def test_surface_exit_follows_the_cleared_xyz_profile():
 
 def motion_job(libset, lead_in=True, lead_out=True, repeat=False, parallel=False):
     # 3D Pocket: its XYZ paths are the ones the planner may cut short over cleared ground.
-    job, op = surface_job(libset, kind='waterfall')
+    job, op = surface_job(libset, kind='pocket3d')
     op.lead_in, op.lead_out = lead_in, lead_out
     op.unlock_feed, op.feed = True, 1000
     op.unlock_lead_feed, op.lead_feed = True, 300

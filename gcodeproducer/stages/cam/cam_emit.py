@@ -63,7 +63,8 @@ class CAMEmit(SliceStage):
             raise ValueError("Automatic CAM tools need a machining material category (CLI: --cam-material)")
         first_op = getattr(job.layers[0],"cam_operation_config",None) if job.layers else None
         first_data = resolve_cutting(job.machine,tool,stock,first_op) if tool else None
-        safe_z = job.m("safe_z", 15.0)
+        from gcodeproducer.core.cam.work_datum import safe_height
+        safe_z = safe_height(job)
         rpm = first_data.rpm if first_data else (tool.get("spindle_rpm",18000) if tool else job.m("spindle_max",18000))
         debug = [w for w in job.warnings if w.startswith('DEBUG ONLY — incomplete adaptive clearing:')]
         for warning in debug:
@@ -184,6 +185,8 @@ class CAMEmit(SliceStage):
         from gcodeproducer.core.gcode.variables import render_box
         b.comment(f"GCodeProducer CAM - {job.machine.name}")
         from gcodeproducer.core.cam.two_sided import side_label
+        if job.m('cam_z0_at_bed', False):
+            b.comment(f"Work Z0: bed; stock top Z{job.cam_setup.stock.top:g}; safe Z{safe_z:g}")
         side = side_label(job.cam_setup)
         if side:
             turned = (f": stock turned over about its {job.cam_setup.flip_axis.upper()} axis, old top face on the bed"

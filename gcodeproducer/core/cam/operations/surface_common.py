@@ -1,4 +1,4 @@
-"""Shared preparation of the model-surface-limited operations (Waterfall, Contour)."""
+"""Shared preparation of the model-surface-limited operations (3D Pocket, Contour)."""
 from __future__ import annotations
 import math
 
