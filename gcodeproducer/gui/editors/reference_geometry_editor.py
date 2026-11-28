@@ -4,6 +4,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel, QListWidget,
                              QListWidgetItem, QMessageBox, QPushButton, QWidget)
 from gcodeproducer.core.cam.reference_shape import ReferenceShape
+from gcodeproducer.core.cam import registration_pins as pins
+from gcodeproducer.core.cam.cam_constants import PIN_CORNERS
 from gcodeproducer.core.cam.reference import Reference
 from gcodeproducer.core.cam.reference_geometry import plane_point
 from .editors_constants import REFERENCE_DRAW_MODES, REFERENCE_MODES, REFERENCE_HINTS
@@ -201,12 +203,10 @@ class ReferenceGeometryEditor(Section):
     # ---------------------------------------------------------- viewport hover
     def hover_ray(self, origin, direction):
         """Preview what a click here would make: its outline in the view, its position and size as text."""
-        shape, readout = self.preview(origin, direction)
-        edges = ()
-        if shape is not None:
-            line = shape.polyline()
-            edges = np.stack((line[:-1], line[1:]), axis=1).reshape(-1, 3)
-        self.previewChanged.emit(edges, readout)
+        shapes, readout = self.preview(origin, direction)
+        shapes = [] if shapes is None else shapes if isinstance(shapes, list) else [shapes]
+        edges = [np.stack((line[:-1], line[1:]), axis=1).reshape(-1, 3) for line in (s.polyline() for s in shapes)]
+        self.previewChanged.emit(np.vstack(edges) if edges else (), readout)
 
     def preview(self, origin, direction):
         """(shape a click at this ray would make or None, readout text)."""
@@ -215,6 +215,8 @@ class ReferenceGeometryEditor(Section):
             if point is None:
                 return None, ""
             _, kind, method, first, second = REFERENCE_DRAW_MODES[self.method.currentIndex()]
+            if kind == "pins":
+                return self._preview_pins(point)
             if self.first is None:
                 return None, f"{first.capitalize()}: X{point[0]:.3f} Y{point[1]:.3f} Z{self.z.value():g}"
             try:
@@ -230,7 +232,9 @@ class ReferenceGeometryEditor(Section):
         if point is None:
             return None, ""
         import copy
-        shape = copy.copy(current)
+        # (A pin's whole set follows it: preview all four.)
+        shapes = [copy.copy(s) for s in self.setup.reference_shapes if s is current or (current.group and s.group == current.group)]
+        shape = next(s for s in shapes if s.id == current.id)
         center, _ = shape.dimensions()
         try:
             if self.mode == "move":
@@ -239,9 +243,42 @@ class ReferenceGeometryEditor(Section):
                 shape.set_geometry(size=float(np.linalg.norm(point[:2]-center)))
             else:
                 shape.set_geometry(size=np.abs(point[:2]-center))
+            if shape.group:
+                pins.sync(shapes, shape, pins.stock_centre(self.setup))
+                return shapes, self.pin_readout(shapes)
         except ValueError:
             return None, ""
         return shape, self.readout(shape)
+
+    def _preview_pins(self, point):
+        """Registration pins: first the box about the stock's centre, then the four circles."""
+        centre = pins.stock_centre(self.setup)
+        if centre is None:
+            return None, REFERENCE_HINTS["no_stock"]
+        z = self.z.value()
+        try:
+            if self.first is None:
+                box = ReferenceShape("rectangle", "center", tuple(centre), tuple(point[:2]), z, "preview")
+                _, size = box.dimensions()
+                return box, (f"Pin box about the stock centre X{centre[0]:.3f} Y{centre[1]:.3f} \u2022 "
+                             f"Width {2*size[0]:.3f} \u00d7 Height {2*size[1]:.3f} mm")
+            shapes = pins.make_pins(centre, self.first, self._pin_radius(centre, point), z)
+            box = ReferenceShape("rectangle", "center", tuple(centre), self.first, z, "preview")
+            return [box, *shapes], self.pin_readout(shapes)
+        except ValueError:
+            return None, ""
+
+    def _pin_radius(self, centre, point):
+        """The pin size the mouse gives: its distance from the nearest corner of the pin box."""
+        half = np.abs(np.asarray(self.first, float)-centre)
+        corners = centre+half*np.asarray(PIN_CORNERS, float)
+        return float(np.min(np.linalg.norm(corners-np.asarray(point[:2], float), axis=1)))
+
+    def pin_readout(self, shapes):
+        centre = pins.stock_centre(self.setup)
+        hx, hy, radius = pins.box_of(shapes, centre)
+        return (f"4 pins \u2022 Diameter {2*radius:.3f} mm \u2022 Box {2*hx:.3f} \u00d7 {2*hy:.3f} mm "
+                f"about the stock centre X{centre[0]:.3f} Y{centre[1]:.3f} Z{shapes[0].z:g}")
 
     @staticmethod
     def readout(shape):
@@ -263,6 +300,8 @@ class ReferenceGeometryEditor(Section):
             self.status.setText(REFERENCE_HINTS["edge_on"])
             return
         _, kind, method, first, second = REFERENCE_DRAW_MODES[self.method.currentIndex()]
+        if kind == "pins":
+            return self._accept_pins(point, first)
         if self.first is None:
             self.first = tuple(point[:2])
             self.anchorChanged.emit(point)
@@ -286,6 +325,42 @@ class ReferenceGeometryEditor(Section):
         self.status.setText(shape.summary()+f". Click {first} for another; Draw or Esc to finish.")
         self.changed.emit()
 
+    def _accept_pins(self, point, first):
+        """Two clicks: a corner of the box about the stock's centre, then the pin size."""
+        centre = pins.stock_centre(self.setup)
+        if centre is None:
+            self.status.setText(REFERENCE_HINTS["no_stock"])
+            return
+        if self.first is None:
+            if not np.all(np.abs(point[:2]-centre) > 1e-6):
+                self.status.setText("The pin box needs a width and a height; click away from the stock's centre lines.")
+                return
+            self.first = tuple(point[:2])
+            self.anchorChanged.emit(point)
+            self.status.setText("Pin box set. Move out from a corner and click to set the pin size.")
+            return
+        try:
+            shapes = pins.make_pins(centre, self.first, self._pin_radius(centre, point), self.z.value(),
+                                    pins.next_number(self.setup.reference_shapes))
+            for shape in shapes:
+                shape.segment_count()
+        except ValueError as exc:
+            self.status.setText(str(exc)+"; click further from the corner.")
+            return
+        self.setup.reference_shapes.extend(shapes)
+        self.first = None
+        self.anchorChanged.emit(None)
+        self.previewChanged.emit((), "")
+        self.refresh(shapes[0].id)
+        self.status.setText(self.pin_readout(shapes)+f". Edit one pin's diameter or position to change all four. "
+                            f"Click {first} for another set; Draw or Esc to finish.")
+        self.changed.emit()
+
+    def _sync_pins(self, shape):
+        """A pin's set follows it (raises ValueError, shape unchanged by the caller, if it cannot)."""
+        if shape.group:
+            pins.sync(self.setup.reference_shapes, shape, pins.stock_centre(self.setup))
+
     def _reshape(self, origin, direction):
         shape = self.current()
         if shape is None:
@@ -294,7 +369,7 @@ class ReferenceGeometryEditor(Section):
         if point is None:
             self.status.setText(REFERENCE_HINTS["edge_on"])
             return
-        center, _ = shape.dimensions()
+        center, size = shape.dimensions()
         try:
             if self.mode == "move":
                 shape.set_geometry(center=point[:2])
@@ -302,6 +377,11 @@ class ReferenceGeometryEditor(Section):
                 shape.set_geometry(size=float(np.linalg.norm(point[:2]-center)))
             else:
                 shape.set_geometry(size=np.abs(point[:2]-center))
+            try:
+                self._sync_pins(shape)
+            except ValueError:
+                shape.set_geometry(center=center, size=size)
+                raise
         except ValueError as exc:
             self.status.setText(f"{exc}; click another point.")
             return
@@ -316,8 +396,14 @@ class ReferenceGeometryEditor(Section):
             return
         f = {key: sb.value() for key, sb in self.fields.items()}
         size = f["a"]/2 if shape.kind == "circle" else (f["a"]/2, f["b"]/2)
+        before = (*shape.dimensions(), shape.z)
         try:
             shape.set_geometry((f["x"], f["y"]), size, f["z"])
+            try:
+                self._sync_pins(shape)
+            except ValueError:
+                shape.set_geometry(*before)
+                raise
         except ValueError as exc:
             self.status.setText(str(exc))
             self._selected()
@@ -327,7 +413,7 @@ class ReferenceGeometryEditor(Section):
 
     # ---------------------------------------------------------- delete
     def _in_use(self, reference):
-        for group in self.setup.groups:
+        for group in [*self.setup.groups, *getattr(self.setup, "other_groups", [])]:   # both sides
             for operation in group.operations:
                 refs = operation.geometry + operation.height_references
                 refs += [d.reference for d in (operation.start, operation.end) if d.source == "geometry"]
@@ -341,17 +427,22 @@ class ReferenceGeometryEditor(Section):
             return
         if self.mode:
             self.cancel()
-        reference = Reference("drawing", [shape.id])
-        if self._in_use(reference):
+        # A registration pin goes with its whole set.
+        doomed = [s for s in self.setup.reference_shapes if s is shape or (shape.group and s.group == shape.group)]
+        in_use = lambda: any(self._in_use(Reference("drawing", [s.id])) for s in doomed)
+        if in_use():
             self.status.setText("This reference is used by an operation. Remove its picks and unlink Start/End before deletion.")
             return
-        if not self.confirm(self, f"Delete unused reference '{shape.name or shape.kind}'? This cannot be undone."):
+        what = (f"the {len(doomed)} registration pins of this set" if len(doomed) > 1
+                else f"unused reference '{shape.name or shape.kind}'")
+        if not self.confirm(self, f"Delete {what}? This cannot be undone."):
             return
         # A queued compute result can add a pick while the confirmation runs its event loop.
-        if self._in_use(reference):
+        if in_use():
             self.status.setText("This reference is now used by an operation; deletion cancelled.")
             return
-        self.setup.reference_shapes[:] = [s for s in self.setup.reference_shapes if s.id != shape.id]
+        gone = {s.id for s in doomed}
+        self.setup.reference_shapes[:] = [s for s in self.setup.reference_shapes if s.id not in gone]
         self.refresh()
         self.status.setText("Reference removed; other reference IDs are unchanged.")
         self.changed.emit()

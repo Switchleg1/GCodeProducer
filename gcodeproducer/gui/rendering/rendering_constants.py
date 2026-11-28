@@ -16,6 +16,8 @@ CAM_PICK_HINTS = {
 }
 CAM_PICK_PREFIX_HINTS = (
     ('tab', 'CAM: click side walls to place holding tabs to the material edge • Esc = navigate'),
+    ('sketch_draw_pins', 'CAM: registration pins • click a corner of the pin box (it is centred on the stock), '
+                         'then click to set the pin size • Esc cancels'),
     ('sketch_', 'CAM: draw reference on XY plane • click two points • Esc cancels'),
     ('reference_', 'CAM: select reference geometry • Esc = navigate'),
     ('stock_', 'CAM: select material {suffix}s • Esc = navigate'),

@@ -1755,6 +1755,9 @@ class MainWindow(QMainWindow):
 
     # --------------------------------------------------------------- CAM
     def _stock_changed(self):
+        from gcodeproducer.core.cam.registration_pins import recentre
+        if recentre(self.cam_editor.setup):      # registration pins stay centred on the stock
+            self.reference_editor.refresh()
         self._cam_changed()
         self._update_scene()
 

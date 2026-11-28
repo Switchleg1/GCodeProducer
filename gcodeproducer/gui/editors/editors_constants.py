@@ -5,6 +5,8 @@ REFERENCE_DRAW_MODES = (
     ("Circle — diameter endpoints", "circle", "edge", "first diameter endpoint", "opposite diameter endpoint"),
     ("Rectangle — center then corner", "rectangle", "center", "center", "corner"),
     ("Rectangle — opposite corners", "rectangle", "edge", "first corner", "opposite corner"),
+    ("Registration pins — box about the stock centre, then pin size", "pins", "center",
+     "a corner of the pin box", "the pin size"),
 )
 
 REFERENCE_MODES = {
@@ -21,6 +23,7 @@ REFERENCE_HINTS = {
     "resize": "Click a new rim point / corner.",
     "leave": "Esc or the highlighted button ends this tool.",
     "edge_on": "The drawing plane is edge-on or behind the camera; change the view and click again.",
+    "no_stock": "Registration pins are centred on the stock: allocate it first (Auto \u2014 fit material to part).",
 }
 
 RATE_FIELDS = {

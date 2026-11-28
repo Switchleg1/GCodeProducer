@@ -62,11 +62,41 @@ face on the bed`, and the suggested file name ends in `_sideA` / `_sideB`.
 Switching Workflow back to **CAM 3D** shows Side A only; Side B's operations
 are kept in the setup and return when CAM 3D 2Sided is chosen again.
 
+## Registration pins
+
+Pins in the table, through holes in the stock, locate it on both sides. The
+holes are drawn as **reference geometry** (0.2.79) and cut by an operation
+you set up yourself (drill them, or pocket or profile them, to the depth you
+choose, normally through the stock and into the spoilboard, on Side A).
+
+In the Reference geometry pane choose **New shape: Registration pins — box
+about the stock centre, then pin size**, then **Draw**:
+
+1. Move the mouse: a box is previewed, centred on the stock and reaching the
+   mouse, with its width and height. Click to set it.
+2. Move out from a corner: four circles are previewed at the corners of that
+   box, with their diameter (the distance from the mouse to the nearest
+   corner is the radius). Click to add them.
+
+They are four ordinary reference circles, `Pin 1.1` to `Pin 1.4`, that form a
+set:
+
+- the box is always centred on the stock, so turned over about either axis
+  every hole lands exactly on a hole;
+- editing one pin edits all four: change its diameter or Z in the form, or
+  move it (form, Move or Resize tools), and the set stays a centred box (a pin
+  cannot be put on the stock's centre line);
+- when the stock is moved, resized or refitted, the pins move with its centre
+  and keep their box;
+- deleting one pin deletes its set (refused while an operation on either side
+  uses any of them).
+
+The stock must be allocated first. Pins may lie outside the stock.
+
 ## Not there yet
 
-- Registration: no pin holes or fence are generated. Draw the holes as
-  reference circles (symmetric about the stock's centre) and cut them with an
-  operation on Side A.
+- Registration against a fence along one edge: nothing is generated or
+  checked for it (the turn itself is the same).
 - The machine's Z0 is always the top of the material; a "Z0 at the bed"
   option is planned.
 - Side A's remaining material is not carried to Side B (see above).

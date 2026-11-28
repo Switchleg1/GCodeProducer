@@ -35,6 +35,10 @@ outside material or prove a safe cutting/workholding plan.
 | Rectangle — center then corner | Center | Any corner | Full width/height are twice the absolute X/Y differences |
 | Rectangle — opposite corners | First corner | Diagonally opposite corner | Bounds are the minimum/maximum clicked X/Y coordinates |
 
+| Registration pins | Corner of the box centred on the stock | Rim of any of the four pins | Four linked circular references, symmetric under either stock flip |
+
+For [registration pins](two-sided.md#registration-pins), allocate the stock first. The box is a drawing guide only. Editing one pin’s diameter updates all four without replacing their reference IDs. Drawing pins creates no machining operation and sets no cutting depth.
+
 “From edge” therefore means two opposite diameter endpoints for circles, or two
 opposite corners for rectangles. Rectangles remain aligned to the work X/Y axes.
 

@@ -16,6 +16,7 @@ class ReferenceShape:
     z: float = 0.
     name: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    group: str = ""      # shapes edited together: the four circles of one set of registration pins
 
     def __post_init__(self):
         try:

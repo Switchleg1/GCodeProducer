@@ -12,6 +12,8 @@ KINDS = ("pocket", "profile", "drill", "engrave", "slot", "waterfall", "contour3
 KIND_LABELS = {"pocket": "Pocket", "profile": "Profile", "drill": "Drill", "engrave": "Engrave", "slot": "Slot",
                "waterfall": "3D Pocket", "contour3d": "3D Contour"}
 
+# Registration pins: the corners of the box centred on the stock, in the order the four circles are kept.
+PIN_CORNERS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
 SIDES = ("a", "b")            # two-sided machining: the side shown, planned and exported
 FLIP_AXES = ("x", "y")        # the stock is turned over about its X or its Y axis for Side B
 

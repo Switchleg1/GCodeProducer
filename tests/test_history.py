@@ -646,3 +646,30 @@ def test_two_sided_workflow_shows_each_sides_operations_on_the_model_as_it_lies(
     setup = win.cam_editor.setup
     assert not setup.two_sided and setup.side == 'a' and not form.isRowVisible(win.cb_side)
     assert setup.other_groups[0].operations[0].name == 'underside'
+
+
+def test_registration_pins_follow_the_stock_and_show_in_the_view(win):
+    import numpy as np
+    from gcodeproducer.gui.editors.editors_constants import REFERENCE_DRAW_MODES
+    cam(win)
+    win._auto_stock()
+    refs, view, setup = win.reference_editor, win.model_viewer, win.cam_editor.setup
+    lo, hi = setup.stock.bounds
+    centre = (lo[:2]+hi[:2])/2
+    refs.method.setCurrentIndex(next(i for i, m in enumerate(REFERENCE_DRAW_MODES) if m[1] == 'pins'))
+    refs.start()
+    assert 'registration pins' in view.info.text()
+    down = np.array([0., 0., -1.])
+    corner = np.r_[centre+(8., 6.), 50.]
+    view.camHovered.emit((view.cam_pick_mode, corner, down))
+    assert len(view.reference_preview) == 8 and 'Width 16.000' in view.info.text()      # the box
+    refs.accept_ray(corner, down)
+    view.camHovered.emit((view.cam_pick_mode, corner+(1.5, 0., 0.), down))
+    assert 'Diameter 3.000 mm' in view.info.text() and len(view.reference_preview) > 32
+    refs.accept_ray(corner+(1.5, 0., 0.), down)
+    flush(win)
+    assert len(setup.reference_shapes) == 4
+    setup.stock.x += 5                                              # the stock is moved
+    win._stock_changed()
+    assert np.allclose(np.mean([s.dimensions()[0] for s in setup.reference_shapes], axis=0), centre+(5., 0.))
+    assert refs.items.count() == 4
